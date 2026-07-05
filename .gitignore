@@ -1,0 +1,27 @@
+## Local machine / SDK config — never commit (contains local filesystem paths)
+local.properties
+
+## App secrets — never commit (real Supabase/Claude/Maps/Exotel/Sanity/Razorpay/USDA keys)
+secrets.properties
+
+## Build outputs
+*.apk
+*.aab
+*.ap_
+*.dex
+build/
+.gradle/
+gradle-app.setting
+captures/
+
+## Signing
+*.jks
+*.keystore
+
+## IDE
+.idea/
+*.iml
+.DS_Store
+
+## Kotlin/KSP generated
+**/generated/

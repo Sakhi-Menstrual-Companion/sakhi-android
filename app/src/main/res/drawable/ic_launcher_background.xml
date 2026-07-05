@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Placeholder launcher background — the real brand icon (per 04-Design/Branding)
+     is a tracked follow-up before Play Store submission (plan Section 7, Phase 8). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#F61887" />
+</shape>

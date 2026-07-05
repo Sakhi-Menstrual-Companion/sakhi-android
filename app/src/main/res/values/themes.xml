@@ -1,0 +1,11 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Compose owns all real theming (SakhiTheme, core:designsystem). These XML
+         themes exist only for the manifest/window setup Compose can't cover:
+         the launch theme (pre-Compose splash background) and a plain no-action-bar
+         base so MainActivity's Compose content isn't drawn under a system ActionBar. -->
+    <style name="Theme.Sakhi" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.Sakhi.Splash" parent="Theme.Sakhi">
+        <item name="android:windowBackground">@color/sakhi_splash_background</item>
+    </style>
+</resources>

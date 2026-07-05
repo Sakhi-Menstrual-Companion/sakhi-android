@@ -1,0 +1,17 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- FCM push transport (see SakhiFirebaseMessagingService kdoc), not
+             wired to a live Firebase project yet, no google-services.json in
+             this repo. Registered now so token wiring is real plumbing, not a
+             stub, the moment that file lands. -->
+        <service
+            android:name=".SakhiFirebaseMessagingService"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT" />
+            </intent-filter>
+        </service>
+    </application>
+
+</manifest>
