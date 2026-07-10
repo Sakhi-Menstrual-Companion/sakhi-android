@@ -8,6 +8,23 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-07-11, Codex update: refreshed the main Android checklist so the
+  source-of-truth status matches the current development reality.**
+  This was a checklist-maintenance pass, not new feature work:
+  - Updated `Android-Developent-Final-Plan.md`'s localization item so it now
+    calls out the active remaining development slice honestly: the onboarding
+    content lane in `OnboardingContentStepUi.kt` / `OnboardingFlowHost.kt`.
+  - Corrected the visual-parity gate note in the Testing Checklist. It no
+    longer says release is blocked on one stale Home-specific gap; it now
+    reflects the real blocker, which is that no full side-by-side
+    iOS-vs-Android walkthrough has been run yet on a real device/emulator.
+  - No checkbox counts changed on this pass, so the progress percentages remain
+    the same.
+  - **Verification:** doc-only change, no code/build impact.
+  - **Exact next step:** continue development-first work on the remaining
+    onboarding content localization/parity slice before opening any new
+    testing-only track.
+
 - **2026-07-11, Codex update: finished the first `:feature:onboarding`
   localization-ready slice, health-step lane + onboarding view-model error
   copy, and kept the module compile and full app assemble green.**

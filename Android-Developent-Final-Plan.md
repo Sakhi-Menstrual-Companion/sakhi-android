@@ -347,8 +347,10 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
       preview's month/week labels, the Logging sheet header date, Care's connected/history
       date labels, and onboarding's health-step weekday/unit labels now come from the
       device locale or Android resources instead of enum-name / hand-built English
-      formatting. The rest of onboarding content plus other remaining modules are still
-      partially hardcoded, and the real multi-language / RTL / CMS-driven parity pass is
+      formatting. The current active development slice is the remaining onboarding content
+      lane in `OnboardingContentStepUi.kt` / `OnboardingFlowHost.kt`; after that, the rest
+      of onboarding content plus any smaller remaining modules are still partially
+      hardcoded, and the real multi-language / RTL / CMS-driven parity pass is
       still open `(confirm with Karan whether v1 ships
       English-only or needs this first)`
 
@@ -405,8 +407,9 @@ Same tag key as the Development Checklist above.
 
 ### Visual + flow parity gate
 - [ ] Side-by-side iOS-vs-Android comparison for every screen, flow, and sheet — **real
-      release gate**, per the "100% iOS parity" ground rule; blocked in practice on Home's
-      remaining glass-morph gap since Home is the screen the app opens into by default
+      release gate**, per the "100% iOS parity" ground rule; still open because no full
+      manual side-by-side walkthrough has been run yet on a real device/emulator, not
+      because of one single known screen gap
 
 ### Instrumented / on-device tests
 - [ ] Health Connect read/write verified on a real device
