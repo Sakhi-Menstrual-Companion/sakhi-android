@@ -28,6 +28,7 @@ import team.sakhi.android.feature.auth.OtpScreen
 import team.sakhi.android.feature.auth.PhoneScreen
 import team.sakhi.android.platform.AndroidAppVersionProvider
 import team.sakhi.android.platform.AndroidHapticManager
+import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.ForceUpdateScreen
 import team.sakhi.android.ui.OfflineBanner
@@ -281,6 +282,7 @@ private fun HomeSessionGate(
     sessionManager: SessionManager = koinInject(),
     careStore: CareStore = koinInject(),
     careRealtimeCoordinator: CareRealtimeCoordinator = koinInject(),
+    widgetSnapshotManager: AndroidWidgetSnapshotManager = koinInject(),
 ) {
     var isReady by remember(session.userId) { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -315,6 +317,7 @@ private fun HomeSessionGate(
                 runCatching { careRealtimeCoordinator.startAsOwner(session.userId) }
             }
         }
+        widgetSnapshotManager.refreshAsync()
         isReady = true
     }
 

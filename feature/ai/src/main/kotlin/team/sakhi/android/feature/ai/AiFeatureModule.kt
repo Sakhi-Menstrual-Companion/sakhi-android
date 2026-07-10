@@ -15,6 +15,7 @@ val aiFeatureModule = module {
             safePlaceRanker = get(),
             locationProvider = get(),
             hapticManager = get(),
+            appContext = get(),
         )
     }
 }

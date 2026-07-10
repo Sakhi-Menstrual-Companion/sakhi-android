@@ -13,6 +13,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 
@@ -28,10 +29,11 @@ fun SakhiAlert(
     modifier: Modifier = Modifier,
     title: String? = null,
     tone: SakhiAlertTone = SakhiAlertTone.Info,
-    dismissLabel: String = "Dismiss",
+    dismissLabel: String? = null,
     onDismiss: (() -> Unit)? = null,
     leadingContent: (@Composable () -> Unit)? = null,
 ) {
+    val resolvedDismissLabel = dismissLabel ?: stringResource(R.string.sakhi_alert_dismiss)
     val containerColor = when (tone) {
         SakhiAlertTone.Info -> MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
         SakhiAlertTone.Error -> MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
@@ -74,7 +76,7 @@ fun SakhiAlert(
             if (onDismiss != null) {
                 TextButton(onClick = onDismiss) {
                     Text(
-                        text = dismissLabel,
+                        text = resolvedDismissLabel,
                         color = contentColor,
                     )
                 }

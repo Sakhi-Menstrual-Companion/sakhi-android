@@ -30,6 +30,7 @@ coreKtx = "1.13.1"
 activityCompose = "1.9.2"
 workManager = "2.9.0"
 healthConnect = "1.1.0-alpha12"
+glance = "1.1.1"
 # Messaging transport only (Android has no APNs equivalent -- FCM is the real
 # push transport here, same as iOS keeps Firebase for Crashlytics/Analytics
 # alongside its own raw-APNs push path). No `google-services` Gradle plugin
@@ -62,6 +63,8 @@ androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = 
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
 androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
+androidx-glance-appwidget = { group = "androidx.glance", name = "glance-appwidget", version.ref = "glance" }
+androidx-glance-material3 = { group = "androidx.glance", name = "glance-material3", version.ref = "glance" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-messaging-ktx = { group = "com.google.firebase", name = "firebase-messaging-ktx" }
 androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle" }

@@ -7,6 +7,7 @@ import org.koin.dsl.module
 val careFeatureModule = module {
     viewModel {
         CareViewModel(
+            appContext = get(),
             sessionManager = get(),
             careStore = get(),
             hapticManager = get(),

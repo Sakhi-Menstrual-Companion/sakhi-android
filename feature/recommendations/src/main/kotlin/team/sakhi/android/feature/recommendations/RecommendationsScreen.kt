@@ -15,11 +15,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.phasePrimaryColor
+import team.sakhi.android.ui.PhaseBadge
 import team.sakhi.models.CyclePhase
 
 /**
@@ -32,6 +35,7 @@ fun RecommendationsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val accent = visibleAccent(uiState.phase)
+    val context = LocalContext.current
 
     Column(
         modifier = Modifier
@@ -41,7 +45,11 @@ fun RecommendationsScreen(
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         Text(
-            text = if (uiState.session?.isViewingOwnData == false) "Shared recommendations" else "Recommendations",
+            text = if (uiState.session?.isViewingOwnData == false) {
+                stringResource(R.string.recommendations_shared_title)
+            } else {
+                stringResource(R.string.recommendations_title)
+            },
             style = MaterialTheme.typography.headlineMedium,
         )
         Text(
@@ -49,44 +57,52 @@ fun RecommendationsScreen(
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (uiState.phase != CyclePhase.UNKNOWN) {
+            PhaseBadge(
+                phase = uiState.phase,
+                accentColor = accent,
+            )
+        }
 
         SectionCard(
-            title = "Eat more",
+            title = stringResource(R.string.recommendations_section_eat_more),
             accent = accent,
             items = if (uiState.canViewPhaseRecommendations) {
-                uiState.eatMoreFoods.map(::foodLine)
+                uiState.eatMoreFoods.map { foodLine(context, it) }
             } else {
-                listOf("Phase-based food recommendations are hidden for this care role.")
+                listOf(stringResource(R.string.recommendations_hidden_phase_foods))
             },
         )
 
         SectionCard(
-            title = "Avoid",
+            title = stringResource(R.string.recommendations_section_avoid),
             accent = accent,
             items = if (uiState.canViewPhaseRecommendations) {
-                uiState.avoidFoods.map(::foodLine)
+                uiState.avoidFoods.map { foodLine(context, it) }
             } else {
-                listOf("Avoid-food guidance is hidden for this care role.")
+                listOf(stringResource(R.string.recommendations_hidden_avoid_foods))
             },
         )
 
         SectionCard(
-            title = "Phase tips",
+            title = stringResource(R.string.recommendations_section_phase_tips),
             accent = accent,
             items = if (uiState.canViewPhaseRecommendations) {
-                uiState.phaseTips.ifEmpty { listOf("No phase tips are available right now.") }
+                uiState.phaseTips.ifEmpty { listOf(stringResource(R.string.recommendations_no_phase_tips)) }
             } else {
-                listOf("Phase tips are hidden for this care role.")
+                listOf(stringResource(R.string.recommendations_hidden_phase_tips))
             },
         )
 
         SectionCard(
-            title = "Condition tips",
+            title = stringResource(R.string.recommendations_section_condition_tips),
             accent = MaterialTheme.colorScheme.secondary,
             items = if (uiState.canViewConditionRecommendations) {
-                uiState.conditionTips.ifEmpty { listOf("No condition-specific tips are available right now.") }
+                uiState.conditionTips.ifEmpty {
+                    listOf(stringResource(R.string.recommendations_no_condition_tips))
+                }
             } else {
-                listOf("Condition-specific recommendations are hidden for this care role.")
+                listOf(stringResource(R.string.recommendations_hidden_condition_tips))
             },
         )
 
@@ -101,7 +117,7 @@ fun RecommendationsScreen(
                     verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
                 ) {
                     Text(
-                        text = "AI insight",
+                        text = stringResource(R.string.recommendations_ai_insight),
                         style = MaterialTheme.typography.labelLarge,
                         color = accent,
                     )
@@ -155,8 +171,10 @@ private fun SectionCard(
     }
 }
 
-private fun foodLine(food: RecommendationFoodUi): String {
-    return food.nutritionLabel?.let { "${food.name}, ${it.lowercase()}" } ?: food.name
+private fun foodLine(context: android.content.Context, food: RecommendationFoodUi): String {
+    return food.nutritionLabel?.let { nutrition ->
+        context.getString(R.string.recommendations_food_line, food.name, nutrition.lowercase())
+    } ?: food.name
 }
 
 @Composable
@@ -168,12 +186,13 @@ private fun visibleAccent(phase: CyclePhase): Color {
     }
 }
 
+@Composable
 private fun recommendationsSummary(uiState: RecommendationsUiState): String = when {
-    uiState.isLoading -> "Loading shared recommendations"
+    uiState.isLoading -> stringResource(R.string.recommendations_loading_summary)
     uiState.error != null && uiState.phase == CyclePhase.UNKNOWN ->
-        "Recommendations are available, but the current phase could not be resolved right now."
-    uiState.phase == CyclePhase.UNKNOWN -> "Recommendations are ready, but there is no active phase signal yet."
+        stringResource(R.string.recommendations_phase_unresolved_summary)
+    uiState.phase == CyclePhase.UNKNOWN -> stringResource(R.string.recommendations_no_phase_summary)
     uiState.session?.isViewingOwnData == false ->
-        "Showing ${uiState.phase.displayName.lowercase()} recommendations with care-role visibility applied."
-    else -> "Showing ${uiState.phase.displayName.lowercase()} recommendations for the current phase."
+        stringResource(R.string.recommendations_shared_phase_summary, uiState.phase.displayName.lowercase())
+    else -> stringResource(R.string.recommendations_current_phase_summary, uiState.phase.displayName.lowercase())
 }

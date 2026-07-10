@@ -15,6 +15,7 @@ val reportsFeatureModule = module {
             periodLogRepository = get(),
             reportPdfExporter = get(),
             hapticManager = get(),
+            appContext = get(),
         )
     }
 }

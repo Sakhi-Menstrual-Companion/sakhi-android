@@ -7,9 +7,11 @@ import org.koin.dsl.module
 val loggingFeatureModule = module {
     viewModel {
         LoggingViewModel(
+            appContext = get(),
             sessionManager = get(),
             periodLogRepository = get(),
             hapticManager = get(),
+            widgetSnapshotManager = get(),
         )
     }
 }

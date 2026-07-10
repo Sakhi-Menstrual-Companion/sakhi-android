@@ -8,6 +8,940 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-07-11, Codex update: finished the first `:feature:onboarding`
+  localization-ready slice, health-step lane + onboarding view-model error
+  copy, and kept the module compile and full app assemble green.**
+  Started the last major resource-less feature surface in a controlled way
+  instead of trying to convert all 4,000+ onboarding lines blind in one patch:
+  - Added `feature/onboarding/src/main/res/values/strings.xml`.
+  - Moved `OnboardingHealthStepUi.kt` off hardcoded Android-owned literals for
+    the whole health-step lane: shared Continue/Back CTAs, all health-step
+    titles/subtitles, period/cycle placeholders and info-button copy, unit
+    toggle labels, weekday labels, previous/next-month content descriptions,
+    the day-length info dialog labels/source text, and the supporting range /
+    average copy. Refactored the health-step copy models from raw strings to
+    resource IDs so the slice is structurally ready for the remaining onboarding
+    steps to follow the same pattern.
+  - Moved the onboarding view-model's Android-owned fallback/error literals off
+    raw Kotlin by injecting `appContext` through `OnboardingFeatureModule.kt`:
+    conversion/accept/setup failures, care-invite create/cancel/sign-in errors,
+    Health Connect availability/permission/import failures, and the health-step
+    validation messages now resolve through resources.
+  - Real compile issue hit and fixed on this pass: `weekdayLabels` initially
+    lived only in `OnboardingHealthStepScreen` but was still referenced inside
+    `LastPeriodStepContent`, so the first onboarding compile failed on scope.
+    Passed the labels through explicitly and reran. A separate full app build
+    hit a transient D8 `mergeProjectDexDebug` filesystem error
+    (`NoSuchFileException` under `app/build/intermediates/dex/...`), which did
+    not point to code; a clean rerun of `:app:assembleDebug` succeeded.
+  - Updated the plan-file localization note so it records `:feature:onboarding`
+    as resource-backed foundation-started rather than untouched.
+  - **Verification:** `./gradlew :feature:onboarding:compileDebugKotlin` green,
+    then `./gradlew :app:assembleDebug` green on rerun.
+  - **Exact next step:** keep onboarding as the active target and drain the
+    remaining high-surface content-step copy in `OnboardingContentStepUi.kt`,
+    then the smaller `OnboardingFlowHost.kt` strings after that.
+
+- **2026-07-11, Codex update: finished the `:feature:care`
+  localization-ready slice and kept the module compile and full app assemble
+  green.**
+  Continued the same development-first localization thread through the other
+  feature module that still had no Android resources at all:
+  - Added `feature/care/src/main/res/values/strings.xml`.
+  - Moved `CareScreen.kt` off hardcoded visible literals across the whole care
+    hub: connected-partner detail labels/actions, pending-invite share/cancel
+    copy and content descriptions, create-invite / accept-code form copy,
+    permission-editor section labels and permission rows, activity-history
+    titles/empty/error states, and the destructive leave/remove copy.
+  - Moved the care view-model-owned fallback/info/error copy off literals in
+    `CareViewModel.kt` by injecting `appContext` through
+    `CareFeatureModule.kt`, so load/refresh/create/accept/cancel/remove/update
+    messages now resolve through resources instead of staying embedded in
+    Kotlin.
+  - Tightened two real locale gaps while there: the connected-since date and
+    the activity-history row dates no longer come from hand-built English month
+    arrays / raw `toString()` formatting. They now use locale-aware `java.time`
+    date formatting.
+  - Real Compose issue hit and fixed before build: a few fallback-label lookups
+    initially called `stringResource(...)` from plain Kotlin `ifEmpty`/`ifBlank`
+    lambdas, which is not a composable context. Flattened those branches before
+    rerunning. No XML escape issue on this pass.
+  - Updated the plan-file localization note so it records `:feature:care` as
+    part of the finished foundation slice.
+  - **Verification:** `./gradlew :feature:care:compileDebugKotlin` green, then
+    `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** keep the same development-first localization thread on
+    the last large resource-less feature surface, `:feature:onboarding`, and
+    start with the highest-surface shared onboarding content/health-step copy.
+
+- **2026-07-11, Codex update: finished the `:feature:logging`
+  localization-ready slice and kept the module compile and full app assemble
+  green.**
+  Kept the same development-first localization thread moving through the last
+  feature modules that still had no Android resources at all:
+  - Added `feature/logging/src/main/res/values/strings.xml`.
+  - Moved `LoggingSheet.kt` off hardcoded visible literals for the Android-owned
+    sheet chrome and controls: close-button description, Flow / Symptoms /
+    Notes headers, section labels, weight/BBT labels and value formatters,
+    painkiller / doctor rows, notes placeholder, partner-lock warning, save-bar
+    states, and the selection semantics strings used by the flow cards,
+    discharge chips, and symptom rows.
+  - Moved the logging view-model-owned fallback/error copy off literals in
+    `LoggingViewModel.kt` by injecting `appContext` through
+    `LoggingFeatureModule.kt`, so the stale-session, care-role, date-lock,
+    load-failure, save-failure, and validation messages now resolve through
+    resources instead of staying embedded in Kotlin.
+  - Tightened one real locale gap while there: the sheet header date no longer
+    comes from a hardcoded English month array. It now formats through
+    `java.time` in the device locale, matching the same cleanup already done in
+    Reports and App Integration.
+  - Real build issue hit and resolved on this pass too: the first full
+    `:app:assembleDebug` failed because Android string resources require
+    backslash-escaped apostrophes. Fixed the offending logging string, reran,
+    and both builds went green.
+  - Updated the plan-file localization note so it records `:feature:logging`
+    as part of the finished foundation slice.
+  - **Verification:** `./gradlew :feature:logging:compileDebugKotlin` green,
+    then `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** keep the same development-first localization thread on
+    the remaining resource-less feature modules, with `:feature:care` as the
+    next clean target before tackling the larger onboarding copy surface.
+
+- **2026-07-11, Codex update: finished the main `:feature:reports`
+  localization-ready slice and kept the module compile and full app assemble
+  green.**
+  Switched to the next safer high-surface module instead of localizing the
+  long-form `ContentLibrary.kt` narrative copy blindly:
+  - Added `feature/reports/src/main/res/values/strings.xml`.
+  - Moved the Reports config + preview shell's visible Android-owned copy off
+    hardcoded literals in `ReportsScreen.kt`: share-sheet label, back buttons,
+    screen titles/subtitles, section labels, Medications gap alert, generate /
+    download CTA copy, empty/error states, preview page-count labels, cover and
+    summary stat labels, and the export/privacy footer note.
+  - Moved the Reports view-model-owned fallback/error copy off literals in
+    `ReportsViewModel.kt` by injecting `appContext` through
+    `ReportsFeatureModule.kt`, so stale-session, load-failure, and export
+    failure messages now resolve through resources instead of staying embedded
+    in Kotlin.
+  - Tightened a real locale gap while there: the Reports preview's month title
+    and weekday header no longer come from enum-name / hardcoded English
+    letters. They now resolve via `java.time.Month` / `DayOfWeek` display names
+    in the device locale, and the calendar marker semantics strings are also
+    resource-backed now.
+  - Updated the plan-file localization note so it records `:feature:reports`
+    as part of the finished foundation slice.
+  - **Verification:** `./gradlew :feature:reports:compileDebugKotlin` green,
+    then `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** keep the same development-first localization thread on
+    the remaining high-surface modules, with `:feature:care` or the remaining
+    `:feature:ai` / `:feature:logging` hardcoded copy as the next clean target.
+
+- **2026-07-11, Codex update: finished the `ManageAccountScreen.kt`
+  localization pass and kept the module compile and full app assemble green.**
+  Stayed inside the same profile localization thread and took the biggest
+  remaining product-critical profile-owned copy surface instead of deferring it:
+  - Extended `feature/profile/src/main/res/values/strings.xml` with the full
+    Manage Account string set: route titles, destructive-confirm dialogs, error
+    fallbacks, danger-zone copy, reset/delete explainer text, leave-reason
+    labels, stat/loss-card copy, footer labels, and selection-state semantics.
+  - Moved `ManageAccountScreen.kt` off hardcoded visible literals end to end,
+    including the dynamic count labels through plural resources (`day(s) of
+    period data`, `cycle(s)`, `care connection(s)`, `day(s) logged`) instead of
+    hand-built English string concatenation.
+  - Updated the plan-file localization note so it records that the destructive
+    account-management flow is now part of the resource-backed profile slice.
+  - **Verification:** `./gradlew :feature:profile:compileDebugKotlin` green,
+    then `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** keep the same development-first profile localization
+    thread moving into the remaining static-content family (`About`,
+    `HelpSupport`, `Legal`, `ContentPage`, and/or the `ContentLibrary`
+    payloads), or switch to the next highest-surface hardcoded module if that
+    proves more valuable than draining the profile content pages immediately.
+
+- **2026-07-11, Codex update: finished the next `:feature:profile`
+  localization slice, Privacy & Security + Feedback, and kept the module
+  compile and full app assemble green.**
+  Continued the same profile conversion thread instead of leaving the settings
+  family half-hardcoded:
+  - Extended `feature/profile/src/main/res/values/strings.xml` again with the
+    Privacy & Security + Feedback copy set.
+  - Moved `PrivacySecurityScreen.kt` off hardcoded visible literals: screen
+    title, section headers, privacy toggle labels, export row title/subtitle,
+    export failure fallback, permission-row titles/subtitles, and the Android
+    share-sheet chooser label now all resolve through resources.
+  - Moved `FeedbackScreen.kt` off hardcoded visible literals too: screen title,
+    feedback-type labels/placeholders, success state copy, character counter,
+    send button label, and the generated mail subject now all resolve through
+    resources.
+  - Updated the plan-file localization note so it records this third profile
+    slice honestly.
+  - **Verification:** `./gradlew :feature:profile:compileDebugKotlin` green,
+    then `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** decide between the two remaining big profile
+    hardcoded-copy surfaces, `ManageAccountScreen.kt` and the content/about
+    family, and keep pushing the same development-first localization thread.
+
+- **2026-07-11, Codex update: finished the next `:feature:profile`
+  localization slice, Notifications + Appearance + App Integration, and kept
+  the module compile and full app assemble green.**
+  Stayed inside the same profile development thread instead of stopping after
+  the shell/edit-profile pass:
+  - Extended `feature/profile/src/main/res/values/strings.xml` with the next
+    settings/detail-screen resource set.
+  - Moved `NotificationsScreen.kt` off hardcoded visible literals: screen
+    title, section labels, and every toggle-row title for both owner and
+    partner modes now resolve through resources.
+  - Moved `AppearanceScreen.kt` off hardcoded visible literals: the title,
+    theme-section label, theme mode labels, interaction-section label, and the
+    haptics / reduce-motion toggle labels are now resource-backed.
+  - Moved `AppIntegrationScreen.kt` off hardcoded visible literals too: title,
+    intro copy, Health Connect labels, button copy, subtitle/status copy,
+    imported-summary text, and metric labels/titles all now resolve through
+    resources. Also pushed the visible App Integration view-model copy through
+    resources by injecting `appContext` into `AppIntegrationViewModel`, so the
+    Health Connect permission-denied message, sync-failed fallback, and
+    last-synced label are localized from the same source instead of staying
+    hardcoded in Kotlin.
+  - Tightened one small correctness detail while there: `AppearanceScreen`'s
+    preference toggle rows now key their remembered state by preference key,
+    instead of a bare `remember {}` that could go stale if the row identity
+    changed.
+  - Real compile issue hit and resolved on this pass: `AppIntegrationScreen`
+    initially failed because `stringResource(...)` was being called from plain
+    formatter lambdas. Replaced those lambda-path calls with
+    `context.getString(...)`, reran, and both builds went green.
+  - Updated the plan-file localization note so it records this second profile
+    slice honestly.
+  - **Verification:** `./gradlew :feature:profile:compileDebugKotlin` green,
+    then `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** stay inside `:feature:profile` and take the next
+    still-hardcoded settings/content slice, most likely Manage Account /
+    Privacy & Security / Feedback, before moving to another module.
+
+- **2026-07-11, Codex update: finished the `:feature:profile` shell + edit-profile
+  localization slice and kept both the module compile and full app assemble green.**
+  Stayed on the same development-first localization thread and took the next
+  high-surface profile slice instead of bouncing to testing:
+  - Added `feature/profile/src/main/res/values/strings.xml`.
+  - Moved the main profile shell's Android-owned visible copy off hardcoded
+    literals in `ProfileScreen.kt`: the top title/loading state, sign-out
+    dialog text, owner/partner role labels, sync-state labels, section titles,
+    row titles, fallback profile-name labels, and the footer copy/CTA.
+  - Moved the edit-profile screen's Android-owned visible copy off literals in
+    `EditProfileScreen.kt`: the screen title, field labels, save button/saved
+    label, and load/save failure messages.
+  - Updated the plan-file localization note so it records that the profile
+    shell and edit-profile form are now part of the finished resource-backed
+    foundation slice.
+  - **Verification:** `./gradlew :feature:profile:compileDebugKotlin` green,
+    then `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** stay inside `:feature:profile` and take the remaining
+    settings/detail screens with still-hardcoded visible copy before moving to
+    another module.
+
+- **2026-07-11, Codex update: finished the remaining Home long-copy
+  localization slice and kept the full app assemble green.**
+  Stayed on the same development-first localization thread instead of treating
+  the earlier Home shell pass as "good enough":
+  - Extended `feature/home/src/main/res/values/strings.xml` with the remaining
+    Home educational / explainer copy.
+  - Moved `phaseSnippet(...)` off hardcoded literals by turning it into
+    resource-id backed data, so `PhaseInfoCard` now resolves its overview and
+    body-change bullets through Android resources instead of embedding long
+    English paragraphs in Kotlin.
+  - Moved the full `LearningPhaseCards()` block off hardcoded literals too:
+    cycle-feel intro cards, cycle-overview rows, phase-detail cards, logging
+    guidance, hormone explanations, nutrition guidance, and tracking tips now
+    all come from Android string resources.
+  - Real build issue hit and resolved on this pass too: the first long-copy
+    resource set failed full app packaging because Android string resources want
+    backslash-escaped apostrophes (`\'`) rather than XML apostrophe entities in
+    formatted/resource-compiled strings. Normalized the affected Home strings,
+    reran, and the app went green.
+  - Updated the plan-file localization note so it records that Home's visible
+    UI copy is now largely externalized, not just the shell.
+  - **Verification:** `./gradlew :feature:home:compileDebugKotlin` green, then
+    `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** stay on the same localization-readiness thread and
+    move to the next still-hardcoded high-surface feature module, most likely
+    `:feature:profile`.
+
+- **2026-07-11, Codex update: finished the high-surface `:feature:home`
+  localization-readiness slice, fixed a real Android resource-packaging issue
+  on the way, and kept the full app assemble green.**
+  Stayed on the development-first localization thread and took the biggest
+  still-user-visible home-shell surface instead of switching to testing:
+  - Added `feature/home/src/main/res/values/strings.xml`.
+  - Moved the Home shell's Android-owned visible copy off hardcoded literals in
+    `HomeScreen.kt`: session/sync labels, partner-snapshot status text, the
+    hero/day-count strings, Ask Sakhi rotating placeholders, bottom action-bar
+    labels, log chip categories, cycle-card labels, partner checklist/no-data
+    copy, partner heads-up text, empty-state text, Home recommendation card
+    titles, and top-bar content descriptions / phase labels.
+  - Kept the phase-explainer and learning-card long bodies out of this pass on
+    purpose so the patch stayed coherent and low-risk; those are still open as
+    the second Home localization slice.
+  - Real build issue hit and resolved on this pass: the first full
+    `:app:assembleDebug` failed in Android resource packaging. Root cause was
+    Android string-resource escaping, not Kotlin code. The initial
+    `string-array` approach for Ask Sakhi placeholders hit a resource compiler
+    crash, so I replaced it with plain per-string resources. Then the first
+    string-resource pass still failed because Android wanted backslash-escaped
+    apostrophes (`\'`) instead of XML apostrophe entities in multiple Home
+    strings. After normalizing those strings, resource merge and full assemble
+    both went green.
+  - Updated the plan-file localization note so it records the Home shell slice
+    honestly, including the remaining educational-copy gap inside Home.
+  - **Verification:** `./gradlew :feature:home:compileDebugKotlin` green, then
+    `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** stay on the same localization-readiness thread and
+    finish the remaining Home long-copy slice (`phaseSnippet` +
+    `LearningPhaseCards`) before moving on to another module.
+
+- **2026-07-11, Codex update: finished the `:feature:recommendations`
+  localization-readiness slice and kept the full app assemble green.**
+  Continued the same development-first localization thread instead of bouncing
+  to testing or checklist churn:
+  - Added `feature/recommendations/src/main/res/values/strings.xml`.
+  - Moved the recommendations screen's Android-owned visible copy off
+    hardcoded literals in `RecommendationsScreen.kt`: the owner/partner title,
+    loading and unresolved-phase summaries, section titles, hidden-state
+    fallback copy, empty-state tips, and the AI insight label.
+  - Moved the view-model-owned nutrition labels off literals in
+    `RecommendationsViewModel.kt` by resolving them through Android resources,
+    and threaded `appContext` through `RecommendationsFeatureModule.kt` for
+    that purpose.
+  - Reworked the food-line formatter so the nutrition suffix also comes from
+    string resources instead of a hardcoded `"name • label"` literal.
+  - Updated the plan-file localization note so it records
+    `:feature:recommendations` as part of the finished foundation slice.
+  - **Verification:** `./gradlew :feature:recommendations:compileDebugKotlin`
+    green, then `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** stay on the same localization-readiness thread and
+    take the next high-surface module, most likely `:feature:home`, before any
+    testing-only work.
+
+- **2026-07-11, Codex update: finished the main `:feature:ai` localization-readiness slice,
+  fixed a Gradle cache break on the way, and kept the full app assemble green.**
+  Continued the same development-first localization thread instead of bouncing to testing:
+  - Added `feature/ai/src/main/res/values/strings.xml`.
+  - Moved the main chat lane's visible static copy off hardcoded literals in
+    `ChatScreen.kt`: share-sheet title, Nearby Places sheet labels, header/title/online
+    state, `Today` separator, Nearby card labels, the rotating input placeholders, send
+    content description, and the TalkBack message-status semantics (`You`/`Sakhi`,
+    `Sending`/`Sent`/`Read`/`Failed to send`, `starred`).
+  - Moved the report-card copy used inside the main chat flow off literals in
+    `ChatSubscreens.kt`.
+  - Moved Android-originated fallback/error strings off literals in `ChatViewModel.kt`:
+    location-permission denial message, report-generation retry/ready messages, history
+    load failure, send failure, and fallback welcome text.
+  - Replaced the hand-built English `formattedTime(...)` logic with locale-aware
+    `DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)`, so chat timestamps now follow
+    the device locale instead of hardcoded AM/PM English formatting.
+  - Updated the plan-file localization note so it records `:feature:ai` as part of the
+    completed foundation slice.
+  - Real build issue hit and resolved on this pass: `:feature:ai:compileDebugKotlin`
+    initially failed from stale incremental Kotlin caches, not source errors. Cleared the
+    module's `build/kotlin` and `build/tmp/kotlin-classes`, stopped Gradle daemons, then
+    reran cleanly.
+  - **Verification:** `./gradlew :feature:ai:compileDebugKotlin` green after cache reset,
+    then `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** stay on the same localization-readiness thread and take the next
+    high-surface slice, most likely `:feature:home`, before any testing-only work.
+
+- **2026-07-10, Codex update: finished the full `:feature:calendar` localization-readiness
+  slice and kept the full app assemble green.**
+  Continued the same localization thread without bouncing to another checklist area:
+  - Added `feature/calendar/src/main/res/values/strings.xml` and moved the
+    remaining calendar-owned static English copy into resources:
+    no-access message, month/year nav button descriptions, expand/collapse year view,
+    and today/current-year affordances.
+  - Fixed a deeper localization issue in `CalendarScreen.kt`: month labels no longer come
+    from `month.month.name` English enum text. They now use `java.time.Month` +
+    `TextStyle.FULL` with `Locale.getDefault()`, and weekday headers are generated from
+    localized `DayOfWeek` display names too.
+  - Updated the plan-file localization checklist note so it records that `:feature:calendar`
+    is now part of the finished foundation slice.
+  - **Verification:** `./gradlew :feature:calendar:compileDebugKotlin` green, then
+    `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** stay on the same localization-readiness thread and take the next
+    high-surface feature slice, most likely `:feature:home` or `:feature:ai`, before any
+    testing-only work.
+
+- **2026-07-10, Codex update: started the Android localization foundation for real, moved
+  the first shared/high-surface string slice into resources, and kept the app build green.**
+  Took the next open development gap instead of circling on the checklist wording:
+  - Audited the current resource state and confirmed the real problem: Android had only
+    `app/src/main/res/values/strings.xml` with `app_name`, while `:core:ui`,
+    `:core:platform`, and `:feature:auth` were still rendering hardcoded English literals
+    straight from Kotlin.
+  - Added real per-module `strings.xml` files for `:core:ui`, `:core:platform`, and
+    `:feature:auth`.
+  - Moved the shared-shell copy in `:core:ui` off literals where it was clean to do so:
+    `BackButton`, `OfflineBanner`, `SakhiAlert`, and `ForceUpdateScreen`.
+  - Moved the auth flow's visible copy into resources end to end for this slice:
+    `PhoneScreen`, `OtpScreen`, `CountryPicker`, plus Android-side auth validation /
+    failure strings in `AuthViewModel` by resolving them through `Context` instead of
+    hardcoded literals.
+  - Moved the widget lane's user-facing copy into `:core:platform` resources too:
+    `AndroidWidgetSnapshotManager` now builds localized hero/subtitle text through
+    Android resources and quantity strings, and `SakhiPeriodWidget` no longer hardcodes
+    the `"Logged"` state label.
+  - Updated the localization checklist line in `Android-Developent-Final-Plan.md` to the
+    honest new state: no longer "genuinely unstarted", but still far from complete.
+  - **Verification:** `./gradlew :core:ui:compileDebugKotlin
+    :feature:auth:compileDebugKotlin :core:platform:compileDebugKotlin
+    :app:assembleDebug` green.
+  - **Exact next step:** continue the localization-readiness pass module by module, with
+    the next high-surface extraction slice in `:feature:home`, `:feature:calendar`,
+    `:feature:profile`, and `:feature:ai`, rather than pretending the app is already
+    localization-ready.
+
+- **2026-07-10, Codex update: closed the optional Android home-screen widget gap with
+  a real Glance implementation, queue-drained "log today" tap flow, and full build
+  verification.**
+  Took the next real feature gap instead of another checklist-only cleanup:
+  - Added `core/platform/.../AndroidWidgetSnapshotManager.kt`, Android's equivalent of
+    iOS `WidgetDataManager`: it watches the real `SessionManager` context, builds a
+    persisted widget snapshot from the real `CycleDataRepository` + `PeriodLogRepository`,
+    clears the snapshot on sign-out, and drains `sakhi://widget/log-today` taps through
+    the real period-log repository instead of a second write path.
+  - Added `core/platform/.../SakhiPeriodWidget.kt` plus the widget receiver/resources.
+    Android now has a real Glance widget with the same bottom-left countdown copy and
+    top-right log-today affordance as iOS. The one deliberate rendering gap is visual:
+    Glance uses the exact resolved per-phase mid-tone plus matching text colors, not
+    iOS's full three-stop dynamic gradient, because that widget surface does not expose
+    the same gradient rendering path.
+  - Wired the manager into Koin/Application startup, `MainActivity` deep-link intake
+    (`sakhi://widget/log-today` is intercepted before generic deep-link parsing), and
+    `LoggingViewModel` successful saves so the widget refreshes after real in-app period
+    writes too. `HomeSessionGate` also triggers a refresh after the shared session boot
+    path resolves.
+  - Added the shared preference keys needed for the widget snapshot / pending-log queue,
+    the Glance dependencies/plugin wiring in `:core:platform`, and the merged widget
+    receiver manifest entry/resources.
+  - Ticked the optional `Home-screen widget (cycle day/phase) via Glance` checklist item
+    in `Android-Developent-Final-Plan.md` and recomputed progress totals.
+  - **Verification:** `./gradlew :core:platform:compileDebugKotlin
+    :feature:logging:compileDebugKotlin :app:assembleDebug :SakhiCore:jvmTest` green.
+  - **Exact next step:** move immediately to the next real unblocked development gap,
+    which is no longer another optional widget/UI cleanup, it is the still-open
+    localization foundation work (string externalization / localization readiness) unless
+    a different larger buildable gap is found while re-reading the remaining checklist.
+
+- **2026-07-10, Codex update: closed the shared `PhaseBadge` UI gap and
+  re-verified the app build.**
+  Took the next straightforward buildable UI item while the development-only
+  checklist is still the active focus:
+  - Added `core/ui/.../PhaseBadge.kt`, a reusable phase-status chip built from
+    shared `CyclePhase.displayName` plus the design-system's
+    `phasePrimaryColor(...)`.
+  - Adopted it in `feature/home/HomeScreen.kt` inside `PhaseInfoCard`, so the
+    real Home phase detail now uses a shared phase chip instead of a local
+    one-off.
+  - Adopted it in `feature/recommendations/RecommendationsScreen.kt`, so the
+    current-phase context above the recommendation sections also comes from the
+    same shared component.
+  - Ticked the optional `PhaseBadge` checklist item in
+    `Android-Developent-Final-Plan.md` and recomputed progress totals.
+  - **Verification:** `./gradlew :core:ui:compileDebugKotlin
+    :feature:home:compileDebugKotlin :feature:recommendations:compileDebugKotlin
+    :app:compileDebugKotlin` green, then `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** keep moving down the remaining development-only
+    checklist, with localization, widget, or other still-unchecked buildable
+    work next rather than switching to testing.
+
+- **2026-07-10, Codex update: closed the live Sanity-CMS Legal/About/FAQ
+  parity gap from the shared layer, with real compile and assemble
+  verification.**
+  Took the next real profile-content parity item instead of leaving Android on
+  static-only content:
+  - Extended shared `SakhiCore` `SanityRepository` with typed
+    `legalPage(slug)`, `faqs()`, and `siteSettings()` fetchers that mirror the
+    real iOS `SanityManager.swift` queries, plus shared localized-content /
+    Portable Text models.
+  - Reworked that shared repo to use cross-platform `PlatformKeyValueStore`
+    response caching, so Android can reuse cached Sanity payloads across app
+    launches instead of re-falling back to static every cold start.
+  - Added `SanityContentViewModel` in `feature/profile` and registered it in
+    the profile Koin module.
+  - Updated `ContentPageScreen.kt` so `Legal`, `Help & Support`, `About Us`,
+    and `Meet the Team` now try live CMS content first, while `FAQ` renders the
+    live accordion list when available. Every path still falls back instantly to
+    the static `ContentLibrary` body when CMS data is missing or empty, matching
+    the iOS pattern.
+  - Updated `AboutScreen.kt` to consume live Sanity `siteSettings` for the
+    contact email and Instagram link while keeping the Android Play Store row as
+    an Android-specific destination.
+  - Ticked the optional `Live Sanity-CMS content sync for Legal/About/FAQ`
+    item in `Android-Developent-Final-Plan.md` and recomputed progress totals.
+  - **Verification:** `./gradlew :SakhiCore:compileKotlinJvm
+    :feature:profile:compileDebugKotlin :app:compileDebugKotlin` green, then
+    `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** move to the next real unchecked development gap before
+    any new testing work, most likely the remaining shared-UI / localization /
+    other still-open development items.
+
+- **2026-07-10, Codex update: closed the Exotel Android-adapter checklist item
+  as dormant infrastructure, not a real v1 feature gap.**
+  Followed the same parity-first checklist cleanup pattern as the avatar item:
+  - Re-grepped iOS and KMM for real Exotel/phone-call usage. The shared
+    `PhoneCallRepository` and iOS `ExotelManager` still exist, but the only
+    hits are their own definitions plus the KMM SDK accessor, no real UI flow
+    calls `makeCall(...)` or the shared repo from a shipped screen.
+  - Left the dormant infrastructure untouched, since deleting the symbols would
+    risk breaking iOS without any runtime proof tonight.
+  - Updated `Android-Developent-Final-Plan.md` to convert the optional Exotel
+    adapter item into a checked `(CONFIRMED NOT A GAP)` entry and recomputed the
+    raw progress totals.
+  - **Verification:** source audit only, no code change needed; evidence came
+    from the real iOS `ExotelManager.swift`, `SakhiCore`'s
+    `PhoneCallRepository`, and whole-project call-site grep.
+  - **Exact next step:** continue re-verifying the remaining open development
+    items for whether they are real build gaps, blocked-on-Karan items, or
+    already-closed parity-wise, before switching to testing.
+
+- **2026-07-10, Codex update: closed the avatar photo-picker checklist item as
+  a confirmed non-gap after re-verifying the real iOS profile source.**
+  Chose a parity-driven checklist cleanup instead of inventing a feature:
+  - Re-grepped the iOS profile source for any real avatar/photo editing path
+    (`PhotosPicker`, `PHPicker`, `UIImagePicker`, camera/photo-picker usage,
+    profile image edit flow). The only real profile-avatar code there is the
+    initials/color avatar rendering in `ProfileView+Sections.swift`.
+  - Cross-checked Android's `ProfileScreen.kt`, which already matches that
+    behavior with initials fallback and no photo-upload entry point.
+  - Updated `Android-Developent-Final-Plan.md` to convert the optional
+    camera/photo-picker item into a checked `(CONFIRMED NOT A GAP)` entry and
+    recomputed the raw progress totals.
+  - **Verification:** source audit only, no code change needed; parity evidence
+    came from the real iOS profile files plus the already-green Android
+    profile implementation.
+  - **Exact next step:** keep closing or building the remaining real
+    development gaps, with Exotel / CMS / other still-open items to be
+    re-verified next instead of starting testing.
+
+- **2026-07-10, Codex update: extracted the calendar month-grid primitives into
+  a real reusable `:core:ui` `SakhiCalendar`, and the app compile stayed green.**
+  Kept moving down the remaining buildable shared-UI gaps instead of pivoting to
+  testing:
+  - Added `core/ui/.../SakhiCalendar.kt` with a reusable `SakhiCalendarDay`
+    model, `SakhiCalendarMarkerType`, `SakhiWeekdayHeaderRow`,
+    `SakhiCalendarMonthGrid`, and `SakhiMiniMonthGrid`.
+  - Refactored `feature/calendar/CalendarScreen.kt` so the feature now owns only
+    the month/year container behavior (header controls, swipe pager, year
+    expansion, KMM month-cache mapping) while the month-grid rendering itself
+    lives in `:core:ui`.
+  - Updated `Android-Developent-Final-Plan.md` to tick the optional
+    `SakhiCalendar` extraction item and recomputed the raw progress totals.
+  - **Verification:** `./gradlew :core:ui:compileDebugKotlin
+    :feature:calendar:compileDebugKotlin :app:compileDebugKotlin` green.
+  - **Exact next step:** continue with the next remaining buildable shared UI
+    primitive, most likely `PhaseBadge`, not testing.
+
+- **2026-07-10, Codex update: closed the last real shared-scaffold gap with a
+  reusable keyboard-safe input lane, adopted it across auth/chat/logging, and
+  the app compile stayed green.**
+  Continued directly after the strict-audit cleanup instead of switching into
+  testing:
+  - Added `core/ui/.../KeyboardSafeScaffold.kt`, a shared top/body/footer shell
+    whose footer automatically lifts above the IME and navigation bar. This is
+    the Android-side equivalent of the repeated iOS input-lane pattern and
+    closes the last substantive gap called out in the optional shared
+    app-scaffold checklist item.
+  - Adopted it in the real input-heavy surfaces that were still hand-rolling
+    this layout:
+    `feature/auth/PhoneScreen.kt`, `feature/auth/OtpScreen.kt`,
+    `feature/ai/ChatScreen.kt`, and
+    `feature/logging/LoggingSheet.kt`.
+  - Updated `Android-Developent-Final-Plan.md` to tick the optional shared
+    app-wide scaffold item and recomputed the raw progress totals.
+  - **Verification:** `./gradlew :core:ui:compileDebugKotlin
+    :feature:auth:compileDebugKotlin :feature:ai:compileDebugKotlin
+    :feature:logging:compileDebugKotlin :app:compileDebugKotlin` green.
+  - **Exact next step:** keep moving down the remaining buildable development
+    gaps, with `SakhiCalendar` extraction or another still-unchecked optional
+    UI primitive next, not testing.
+
+- **2026-07-10, Codex update: made the plan explicitly development-first,
+  verified the strict thin-shell CI gate is genuinely clean, and the app
+  compile stayed green.**
+  Closed the stale checklist/documentation gap before moving on:
+  - Added an explicit workflow rule in `Android-Developent-Final-Plan.md` that
+    Development Checklist work stays the active focus until all real dev items
+    are finished or externally blocked.
+  - Rechecked the "strict audit gate" item instead of assuming it was still
+    open. The workflow already ran
+    `python3 Scripts/audit_kmm_thin_shell.py --strict`, but the script still
+    produced 4 false positives from static profile-content/vendor copy and the
+    Android `POST_NOTIFICATIONS` platform permission.
+  - Updated `Scripts/audit_kmm_thin_shell.py`'s allowlist so those static
+    profile files stop tripping the tracked-rule failure path.
+  - Ticked the optional strict-audit checklist item in
+    `Android-Developent-Final-Plan.md` only after re-running the audit and
+    getting a real clean result.
+  - **Verification:** `python3 Scripts/audit_kmm_thin_shell.py --strict` now
+    exits clean with "no tracked thin-shell bypasses found", and
+    `./gradlew :app:compileDebugKotlin` green.
+  - **Exact next step:** take the next unchecked development item, not testing,
+    with the shared app-wide scaffold/keyboard lane as the next best
+    buildable slice.
+
+- **2026-07-10, Codex update: finished the last obvious root-level Profile parity
+  detail too, the iOS footer CTA, and re-verified the full app build.**
+  Stayed in the same screen while the profile context was still loaded:
+  - Ported iOS `ProfileView.swift`'s footer copy and `"Connect with Us"` CTA
+    into Android `ProfileScreen.kt`, using `LocalUriHandler` to open the same
+    `https://sakhi.rachna.co` link instead of leaving Android's profile screen
+    without the footer block iOS has.
+  - Updated the existing checked profile parity item in
+    `Android-Developent-Final-Plan.md` so the plan, not just this log, records
+    that the root profile screen now includes the footer too.
+  - **Verification:** `./gradlew :feature:profile:compileDebugKotlin
+    :app:compileDebugKotlin` green, then full `./gradlew :app:assembleDebug`
+    green.
+  - **Exact next step:** continue with the next remaining real checklist gap,
+    not more profile-root polish unless a new concrete mismatch is found.
+
+- **2026-07-10, Codex update: closed the remaining visible Profile card parity gap
+  with a shared KMM badge helper, avatar initials, and the real secure/offline
+  status line, and the full app build is green.**
+  Took the next user-visible profile mismatch after the scaffold pass instead of
+  inventing lower-value work:
+  - Read the real iOS `ProfileView.swift` / `ProfileView+Sections.swift` first.
+    Confirmed the missing Android pieces were the avatar circle with initials,
+    the "Synced & secure" / "On this device" status line, and the `Cycle Health`
+    badge on the owner card.
+  - Checked the apparent avatar/photo-upload path before writing anything.
+    Confirmed iOS does **not** expose a real profile-photo picker flow here
+    either, only avatar presentation, so I did not invent an Android-only photo
+    feature.
+  - Moved the profile badge decision into shared KMM first, not Android:
+    added `CycleHealthStatus` plus `CycleMath.profileHealthStatus(...)` in
+    `SakhiCore`, a direct shared port of the iOS profile-card heuristic, with
+    4 real JVM tests in
+    `src/commonTest/kotlin/team/sakhi/cycle/CycleMathProfileHealthStatusTest.kt`.
+  - Updated `ProfileViewModel` to load the user's cycles through
+    `CycleDataRepository` and expose the shared `cycleHealthStatus` in
+    `ProfileUiState`, keeping Android as a thin renderer over shared cycle
+    logic.
+  - Updated `ProfileScreen.kt` so the owner card now shows:
+    - a real pink avatar circle with initials fallback,
+    - the iOS-matched secure/offline status copy,
+    - the `Cycle Health` badge instead of the wrong phone-number value row.
+  - Updated `Android-Developent-Final-Plan.md` directly to add a checked
+    profile-card parity item and recomputed progress totals.
+  - **Verification:** `./gradlew jvmTest --tests
+    "team.sakhi.cycle.CycleMathProfileHealthStatusTest"` green in
+    `SakhiCore`, then `./gradlew :feature:profile:compileDebugKotlin
+    :app:compileDebugKotlin` green, then full `./gradlew :app:assembleDebug`
+    green.
+  - **Exact next step:** keep moving down the real remaining checklist gaps,
+    with the plan file staying updated in lockstep after each verified slice.
+
+- **2026-07-10, Codex update: finished the `DetailSheetScaffold` rollout across the
+  remaining profile detail screens, including `ManageAccount`, and the full app
+  build is green.**
+  Closed the rest of the profile-detail-family scaffold slice instead of leaving
+  the migration split between old and new sheet roots:
+  - Moved `LegalScreen.kt`, `ContentPageScreen.kt`, and `ActivityLogScreen.kt`
+    onto `:core:ui`'s shared `DetailSheetScaffold`.
+  - Extended `DetailSheetScaffold` to support back-only headers cleanly
+    (`title = null`), which lets content pages keep the right iOS-style
+    back-only chrome without hand-rolling another header path.
+  - Moved `ManageAccountScreen.kt` off its last bespoke
+    `SheetSurface + DetailHeader` root and onto the same shared scaffold, while
+    preserving its own internal step flow, busy overlay, and destructive-action
+    logic unchanged.
+  - Deleted the now-unused `DetailHeader(...)` helper from `LegalScreen.kt`,
+    since the profile detail family no longer needs a second local header
+    primitive.
+  - Updated `Android-Developent-Final-Plan.md` directly, per the current
+    protocol, to add a checked optional `DetailSheetScaffold` item, recompute
+    raw progress totals, and clarify that the broader shared app scaffold item
+    is now a root-lane/keyboard-lane gap, not a profile detail-shell gap.
+  - **Verification:** `./gradlew :core:ui:compileDebugKotlin
+    :feature:profile:compileDebugKotlin :app:compileDebugKotlin` green after
+    the initial `LegalScreen` / `ContentPageScreen` import fixes, then green
+    again after the final `ManageAccountScreen` migration, and full
+    `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** leave the checklist/log in sync, then move to the next
+    highest-value remaining parity gap instead of reopening this scaffold slice.
+
+- **2026-07-10, Codex update: widened `DetailSheetScaffold` adoption across the
+  rest of the profile detail family, and the full app build stayed green.**
+  Continued immediately from the first `DetailSheetScaffold` slice instead of
+  leaving the migration half-done:
+  - Moved `AppIntegrationScreen.kt`, `PrivacySecurityScreen.kt`,
+    `FeedbackScreen.kt`, and `EditProfileScreen.kt` onto the same shared
+    `DetailSheetScaffold` shell in `:core:ui`.
+  - Kept the logic untouched: Health Connect permission/import behavior,
+    privacy-data export, feedback mail intent flow, and profile load/save all
+    still behave the same. This pass only removed the repeated
+    `SheetSurface + DetailHeader + scroll column` boilerplate around them.
+  - `EditProfileScreen.kt` was the only slightly stateful case; its loading
+    branch now lives inside the shared scaffold body instead of returning early
+    from the old `SheetSurface` lambda, but the load/save flow itself is
+    unchanged.
+  - **Verification:** `./gradlew :feature:profile:compileDebugKotlin
+    :app:compileDebugKotlin` green, then full `./gradlew :app:assembleDebug`
+    green after the wider adoption.
+  - **Exact next step:** if continuing the scaffold pass, finish the last
+    remaining profile screens still on their own roots (`Legal`,
+    `ContentPageScreen`, `ActivityLog`, `ManageAccount`) and then reassess
+    whether the broader shared app-wide scaffold item is genuinely close enough
+    to claim more progress.
+
+- **2026-07-10, Codex update: started the broader shared-screen-scaffold pass
+  with a real reusable detail-sheet shell in `:core:ui`, adopted across the
+  low-risk profile settings pages, and the full app build is green.**
+  Continued after the shared sheet host / shared back button work:
+  - Added `core/ui/src/main/kotlin/team/sakhi/android/ui/DetailSheetScaffold.kt`,
+    a reusable sheet-detail shell that owns the repeated rounded sheet surface,
+    back header, divider, padded scroll body, and optional trailing-header slot.
+    This is the Android-side equivalent of iOS's reusable profile settings
+    detail wrappers (`ProfileSettingsDetailView.swift`), not a one-off helper.
+  - Migrated the low-risk repeated profile screens onto it:
+    `AboutScreen.kt`, `HelpSupportScreen.kt`, `NotificationsScreen.kt`, and
+    `AppearanceScreen.kt` no longer hand-roll their own
+    `SheetSurface + DetailHeader + scroll Column` roots.
+  - Kept this honest as **progress** on the broader shared app-wide scaffold
+    checklist item, not a full close. More stateful profile sub-screens and the
+    rest of the app still need the same treatment before that broader box is
+    truly done.
+  - **Verification:** `./gradlew :core:ui:compileDebugKotlin
+    :feature:profile:compileDebugKotlin :app:compileDebugKotlin` green, then
+    full `./gradlew :app:assembleDebug` green after the migration.
+  - **Exact next step:** widen `DetailSheetScaffold` adoption to the remaining
+    profile detail-family screens (`AppIntegration`, `PrivacySecurity`,
+    `Feedback`, `EditProfile`, etc.) before deciding whether the broader shared
+    scaffold item can honestly move any further.
+
+- **2026-07-10, Codex update: shared `BackButton` is now real in `:core:ui`,
+  adopted in the repeated detail-header paths, and the app build is still
+  green.**
+  Continued the scaffold-consistency pass after `SakhiModalSheet`:
+  - Added `core/ui/src/main/kotlin/team/sakhi/android/ui/BackButton.kt`, a
+    small shared auto-mirrored arrow-button wrapper so sheet/detail headers no
+    longer each hand-roll their own back affordance.
+  - Switched Profile's shared `DetailHeader(...)` in `LegalScreen.kt` to use
+    `BackButton`, which immediately updates the repeated profile detail screens
+    that already flow through that header.
+  - Switched `ContentPageScreen.kt` to use the same shared back affordance for
+    Legal/About/Help nested content pages.
+  - Switched `feature/ai/.../ChatSubscreens.kt`'s shared `ChatSubscreenHeader`
+    and `feature/care/.../CareScreen.kt`'s activity-detail header to the same
+    component so the biggest repeated header families now share one back
+    primitive instead of drifting separately.
+  - Updated `Android-Developent-Final-Plan.md` to tick the optional
+    `BackButton` scaffold item and recomputed progress totals.
+  - **Verification:** `./gradlew :core:ui:compileDebugKotlin
+    :feature:profile:compileDebugKotlin :feature:ai:compileDebugKotlin
+    :feature:care:compileDebugKotlin :app:compileDebugKotlin` green after one
+    quick `LegalScreen.kt` import restore, then full
+    `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** continue the remaining code-side parity/scaffold work
+    that is still realistically buildable tonight, with the broader shared
+    app-wide scaffold as the next most coherent internal consistency target.
+
+- **2026-07-10, Codex update: extracted a real shared bottom-sheet host into
+  `:core:ui`, adopted it in both existing sheet call sites, and checked off the
+  optional scaffold item honestly.**
+  Continued straight from the Home/Profile overlay work and closed the remaining
+  "not actually shared yet" gap in Android's sheet host layer:
+  - Added `core/ui/src/main/kotlin/team/sakhi/android/ui/SakhiModalSheet.kt`,
+    a shared `ModalBottomSheet` wrapper plus `rememberSakhiModalSheetState()`
+    helper that standardizes large-detent-only behavior, transparent outer
+    container, and drag-handle policy for iOS-matched sheet presentation.
+  - Switched `app/src/main/kotlin/team/sakhi/android/app/HomeNavHost.kt` off
+    its hand-rolled `ModalBottomSheet` host and onto `SakhiModalSheet`, so the
+    Home-owned overlay lane now uses the shared scaffold instead of a local one.
+  - Switched `feature/auth/src/main/kotlin/team/sakhi/android/feature/auth/PhoneScreen.kt`
+    off its hand-rolled `ModalBottomSheet` host too, so CountryPicker now uses
+    the same shared sheet state/host path as the rest of the app.
+  - Updated `SheetSurface.kt`'s documentation to reflect the new split of
+    responsibilities: `SakhiModalSheet` owns outer modal behavior, while
+    `SheetSurface` stays the inner rounded-top sheet chrome.
+  - Updated `Android-Developent-Final-Plan.md` to tick the optional shared
+    bottom-sheet scaffold item and recomputed progress totals.
+  - **Verification:** `./gradlew :core:ui:compileDebugKotlin
+    :feature:auth:compileDebugKotlin :app:compileDebugKotlin` green after one
+    small auth `@OptIn(ExperimentalMaterial3Api::class)` restore, then full
+    `./gradlew :app:assembleDebug` green.
+  - **Exact next step:** keep pushing the remaining code-side parity/scaffold
+    gaps that are still buildable tonight, with `BackButton` and the broader
+    shared app-wide scaffold as the next obvious internal consistency targets.
+
+- **2026-07-10, Codex update: Reports now stays inside the Profile sheet-owned
+  stack, and signed-in report deep links land in that same overlay lane.**
+  Finished the in-progress Home/Profile presentation pass in
+  `app/src/main/kotlin/team/sakhi/android/app/HomeNavHost.kt` and
+  `feature/reports/src/main/kotlin/team/sakhi/android/feature/reports/ReportsScreen.kt`:
+  - Upgraded `HomeOverlaySheet.Profile` from a single root-sheet case to a
+    local sheet-owned stack with an `initialScreen`, so the Profile overlay can
+    open either at its root or directly on Reports without falling back to a
+    separate full-screen route.
+  - Removed the old dedicated `HomeGraphRoute.Reports` destination. Profile's
+    "Health Data" row now switches to a local `ProfileSheetScreen.Reports`
+    state, and signed-in `OpenReport` deep links now enter through the same
+    Profile overlay lane instead of splitting between overlay and route-push
+    paths.
+  - Extended `ReportsScreen` with an optional `onClose` hook so the config
+    sheet can show a real local "Back" action when it is being hosted inside
+    the Profile-owned sheet stack, while keeping the existing in-screen
+    preview-to-config back flow unchanged.
+  - **Verification:** `./gradlew :app:compileDebugKotlin` and full
+    `./gradlew :app:assembleDebug` both green after the final sheet-stack
+    change.
+  - **Checklist impact:** this closes another real chunk of the optional shared
+    sheet/scaffold parity work, but it still does not flip that broader item by
+    itself because the remaining app-wide scaffold/detent polish work is still
+    separate.
+  - **Exact next step:** scan the remaining open code-side parity items from
+    the plan and keep pushing the next highest-value gap instead of leaving the
+    night on a half-finished presentation split.
+
+- **2026-07-10, Codex update: the whole first-layer Home presentation family is
+  now on the shared overlay sheet lane, and the full app build is green.**
+  Built on the prior Chat/Logging/Care/Calendar passes and finished the biggest
+  remaining visible Home presentation mismatch in
+  `app/src/main/kotlin/team/sakhi/android/app/HomeNavHost.kt`:
+  - Moved the top-level Home `Profile` entry off the nested `NavHost` and into
+    the same `HomeOverlaySheet` host as the other Home-owned surfaces.
+  - At this stage, the Profile root itself now opens as a real overlay sheet
+    over Home. Its child destinations (Edit Profile, Reports, Log History,
+    App Integration, Notifications, Appearance, Help & Support, Privacy &
+    Security, Legal, About, Feedback, Manage Account) still reuse the existing
+    nested nav routes after the root sheet dismisses. That is not yet a perfect
+    in-sheet stack match to iOS, but it closes the biggest user-visible
+    full-screen-vs-sheet gap immediately without destabilizing the already-green
+    child screens.
+  - Updated the `HomeNavHost.kt` parity note again so it reflects the real new
+    state honestly: Profile, Care, Calendar, Chat, and Logging now all enter
+    through the shared overlay lane; the remaining gap is the deeper
+    Profile-owned sub-navigation behavior inside that sheet.
+  - **Verification:** after the full combined nav pass,
+    `./gradlew :app:compileDebugKotlin` and full
+    `./gradlew :app:assembleDebug` both green.
+  - **Checklist impact:** still no checkbox flip, because the broader optional
+    scaffold item also includes a shared app scaffold and keyboard-safe input
+    lane, not just the sheet lane.
+  - **Exact next step:** if staying on presentation parity, the next real slice
+    is to keep Profile's child screens inside the sheet-owned navigation stack
+    instead of dismissing the root sheet first. Otherwise, shift to the next
+    remaining release/parity gap from the plan file.
+
+- **2026-07-10, Codex update: extended the shared Home sheet lane again, Care
+  and Calendar now present as overlays too, not plain route pushes.** This
+  continues directly from the previous Chat/Logging sheet-host pass in
+  `HomeNavHost.kt`:
+  - Moved the top-bar Care entry point and signed-in care deep links
+    (`AcceptInvite`, `OpenCareMode`) onto the same `HomeOverlaySheet` host,
+    and removed the old dedicated `HomeGraphRoute.Care` path so there is one
+    presentation path instead of two.
+  - Moved the Home calendar entry point off the nested graph too and into the
+    overlay lane, wrapping `CalendarScreen()` in `SheetSurface(showDragHandle =
+    true)` so the existing Android calendar content keeps its own month/year
+    logic but now presents as a true Home overlay instead of a full-screen
+    push.
+  - Updated `HomeNavHost.kt`'s file-level parity note to reflect the new state:
+    Care, Calendar, Chat, and Logging are overlay sheets now; Profile is the
+    last major Home-owned presentation still on the nested nav graph.
+  - **Verification:** `./gradlew :app:compileDebugKotlin` stayed green after
+    the Care move, and stayed green again after the Calendar move. I have not
+    yet run the final full `:app:assembleDebug` for this second sub-pass,
+    because I am rolling straight into the remaining Profile sheet-stack work
+    next and will verify the larger combined nav pass together once that lands.
+  - **Checklist impact:** still no checkbox flip yet, this is more real
+    progress on the same broader optional modal-sheet-lane item.
+  - **Exact next step:** move Profile and its nested sheet-owned destinations
+    off the root nested graph and into a local sheet stack so the entire
+    Home-owned presentation family matches iOS instead of only the bottom-bar
+    surfaces.
+
+- **2026-07-10, Codex update: first real slice of the shared Home sheet lane is
+  now live, Chat and Logging no longer open as plain full-screen pushes.**
+  Read the real iOS `HomeView.swift` sheet routing first, especially
+  `sharedSheetView(for:)` and `makeLoggingSheetConfiguration(...)`, then
+  updated Android's `app/src/main/kotlin/team/sakhi/android/app/HomeNavHost.kt`
+  to match the same interaction model for the two safest Home-owned sheets:
+  - Added a shared `HomeOverlaySheet` state host in `HomeNavHost` backed by a
+    real `ModalBottomSheet`, instead of navigating Chat and Logging through
+    normal full-screen `NavHost` routes.
+  - Rewired Home's bottom-bar actions so "Ask Sakhi" and "Log" now open their
+    surfaces through that overlay host, leaving Home mounted underneath like
+    iOS does.
+  - Rewired signed-in deep links for `OpenAIChat` to use the same overlay
+    sheet lane instead of a route push.
+  - Removed the now-unused `HomeGraphRoute.Chat` and `.Logging` destinations
+    from the nested graph, so there is no second presentation path drifting
+    out of sync.
+  - Updated the `HomeScreen.kt` file-level note so it accurately reflects the
+    new split: Chat and Logging are sheet-presented now, while
+    Profile/Care/Calendar still need their own presentation pass.
+  - **Verification:** `./gradlew :app:compileDebugKotlin` and full
+    `./gradlew :app:assembleDebug` both green after the nav change.
+  - **Checklist impact:** still no checkbox flip yet, this is a real partial
+    close on the broader optional "shared modal sheet lane" item, not the full
+    app-wide finish.
+  - **Exact next step:** continue the same presentation-lane pass with the
+    remaining Home-owned overlays, starting with Calendar next.
+
+- **2026-07-10, Codex update: auth CountryPicker now presents as a real modal
+  sheet over the phone screen, and the full app build is green.** Closed the
+  remaining auth presentation mismatch by updating
+  `feature/auth/src/main/kotlin/team/sakhi/android/feature/auth/PhoneScreen.kt`
+  and `CountryPicker.kt`:
+  - Replaced the old full-screen CountryPicker takeover with a real
+    `ModalBottomSheet`, so the phone-entry screen stays mounted underneath,
+    matching the iOS interaction model much more closely.
+  - Reshaped `CountryPicker` for sheet presentation with an `asSheet` mode
+    instead of assuming a full-screen root, while keeping the same shared
+    KMM-backed country list and search behavior.
+  - Fixed the compile blockers from that patch immediately after landing it:
+    restored the needed `fillMaxSize` import in `CountryPicker.kt` and added
+    the required `@OptIn(ExperimentalMaterial3Api::class)` on `PhoneScreen`.
+  - **Verification:** `./gradlew :feature:auth:compileDebugKotlin` and full
+    `./gradlew :app:assembleDebug` both green after the change.
+  - **Checklist impact:** no checkbox count changed, this was a parity/
+    presentation improvement inside an already-checked auth feature.
+  - **Exact next step:** continue the remaining visible iOS presentation gap
+    work, starting with the app-wide modal-sheet lane / sheet-style screen
+    presentation cleanup rather than stopping at the auth flow.
+
+- **2026-07-10, Codex update: closed the biggest remaining Home parity gap, real
+  visual chrome + scroll-tied hero behavior, and verified it with a full app
+  build.** Read the real iOS sources first:
+  `Features/Home/Views/HomeView.swift`,
+  `Features/Home/Views/DayDetail/HomeDayDetailGlassView.swift`, and
+  `HomeDayDetailGlassView+GlassCard.swift`, then ported the missing Android
+  pieces into `feature/home/HomeScreen.kt` without touching any KMM logic:
+  - Replaced the plain Home root with the real phase-tinted gradient backdrop,
+    sourced from shared KMM `SakhiColors.resolved(...).forPhase(...)`
+    (`bgTop/bgMid/bgBot`, `surface`, `tileFill`, `tileStroke`) instead of the
+    earlier one-color accent approximation.
+  - Reworked `HomeGlassCard` to use the shared per-phase palette properly
+    (menstrual surface mode, tileFill/tileStroke in the non-menstrual modes,
+    real divider/header-badge treatment), which closes the earlier documented
+    "Android doesn't have the fuller per-phase palette ported" simplification.
+  - Added an iOS-shaped centered top bar: real date header, left/right circular
+    icon buttons, and a subtitle that crossfades from phase label to live hero
+    summary as the user scrolls, driven off the vertical scroll position.
+  - Added scroll-tied hero motion to the main Home hero block itself
+    (translate/fade/scale on scroll) so the screen no longer feels static
+    relative to the iOS build.
+  - Kept all cycle/phase/prediction logic in KMM exactly as before; this was a
+    pure parity/chrome pass.
+  - **Verification:** `./gradlew :feature:home:compileDebugKotlin` and full
+    `./gradlew :app:assembleDebug` both green after the change.
+  - **Checklist updates:** marked the two `:feature:home` parity items done
+    ("Real Home visual chrome..." and "Scroll-tied hero animations..."), then
+    recomputed progress counts.
+  - **Exact next step:** continue down the remaining must-ship checklist rather
+    than reworking Home again. The biggest open items now are no longer code on
+    this screen, they are release/runtime gates: real device walk-throughs,
+    Play/Firebase/keys from Karan, localization scope decision, and final
+    side-by-side parity QA.
+
 - **2026-07-05, Claude update: Karan asked directly whether the checklist was
   actually enough to complete the app -- re-audit found 3 real gaps and a
   structural flaw, both fixed.** Gaps: the home-screen widget (Glance), the
@@ -4452,4 +5386,3 @@ No high-level screen should become its own architecture island. Every feature mu
 into the shared managers, navigators, stores, and design-system skeleton.
 
 ---
-

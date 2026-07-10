@@ -3,23 +3,20 @@ package team.sakhi.android.feature.profile
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
-import team.sakhi.android.designsystem.SakhiSpacing
-import team.sakhi.android.ui.SheetSurface
+import team.sakhi.android.ui.DetailSheetScaffold
 
 private const val WEBSITE_URL = "https://sakhi.rachna.co"
 private const val INSTAGRAM_URL = "https://instagram.com/sakhi.app"
@@ -28,26 +25,24 @@ private const val PLAY_STORE_URL = "https://play.google.com/store/apps"
 
 /** Ports iOS `AboutView.swift`: story/team/licenses navigation, connect links, share, app info. */
 @Composable
-fun AboutScreen(onBack: () -> Unit) {
+fun AboutScreen(
+    onBack: () -> Unit,
+    contentViewModel: SanityContentViewModel = koinViewModel(),
+) {
     var openPage by remember { mutableStateOf<ContentPageId?>(null) }
     val context = LocalContext.current
     val hapticManager = koinInject<AndroidHapticManager>()
+    val uiState by contentViewModel.uiState.collectAsState()
+    val instagramUrl = uiState.siteSettings?.socialLinks?.instagram?.takeIf { !it.isNullOrBlank() } ?: INSTAGRAM_URL
+    val feedbackEmail = uiState.siteSettings?.contactEmail?.takeIf { !it.isNullOrBlank() } ?: FEEDBACK_EMAIL
 
     openPage?.let { id ->
-        ContentPageScreen(page = ContentLibrary.page(for_ = id), onBack = { openPage = null })
+        ContentPageScreen(pageId = id, onBack = { openPage = null })
         return
     }
 
-    SheetSurface(showDragHandle = true) {
-        DetailHeader(title = "About Sakhi", onBack = onBack)
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(SakhiSpacing.space5),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
-        ) {
+    DetailSheetScaffold(title = "About Sakhi", onBack = onBack) {
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5)) {
             SettingsSectionCard(
                 label = "OUR STORY",
                 rows = listOf(
@@ -61,8 +56,8 @@ fun AboutScreen(onBack: () -> Unit) {
                 label = "CONNECT",
                 rows = listOf(
                     "Website" to { openUrl(context, WEBSITE_URL) },
-                    "Instagram" to { openUrl(context, INSTAGRAM_URL) },
-                    "Send Feedback" to { openUrl(context, "mailto:$FEEDBACK_EMAIL?subject=Sakhi%20Feedback") },
+                    "Instagram" to { openUrl(context, instagramUrl) },
+                    "Send Feedback" to { openUrl(context, "mailto:$feedbackEmail?subject=Sakhi%20Feedback") },
                     "Rate on Play Store" to { openUrl(context, PLAY_STORE_URL) },
                 ),
             )

@@ -1,10 +1,12 @@
 package team.sakhi.android.feature.profile
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,6 +38,7 @@ data class AppIntegrationUiState(
 class AppIntegrationViewModel(
     private val sessionManager: SessionManager,
     private val healthConnectManager: AndroidHealthConnectManager,
+    private val appContext: Context,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(AppIntegrationUiState())
     val uiState: StateFlow<AppIntegrationUiState> = _uiState.asStateFlow()
@@ -61,7 +64,7 @@ class AppIntegrationViewModel(
             _uiState.update {
                 it.copy(
                     isSyncing = false,
-                    error = "Health Connect access was not granted yet.",
+                    error = appContext.getString(R.string.profile_app_integration_permission_denied),
                 )
             }
             refresh()
@@ -94,7 +97,7 @@ class AppIntegrationViewModel(
                         it.copy(
                             isSyncing = false,
                             isLoading = false,
-                            error = throwable.message ?: "Health Connect sync failed.",
+                            error = throwable.message ?: appContext.getString(R.string.profile_app_integration_sync_failed),
                         )
                     }
                 }
@@ -157,7 +160,10 @@ class AppIntegrationViewModel(
     private fun formatLastSynced(iso: String): String {
         return runCatching {
             val time = Instant.parse(iso).atZone(ZoneId.systemDefault())
-            "Last synced ${time.format(DateTimeFormatter.ofPattern("d MMM, h:mm a"))}"
+            appContext.getString(
+                R.string.profile_app_integration_last_synced,
+                time.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)),
+            )
         }.getOrDefault(iso)
     }
 }

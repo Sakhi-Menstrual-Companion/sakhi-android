@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.home
 
+import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
@@ -10,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -72,6 +74,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -79,12 +82,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -100,8 +110,10 @@ import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.phasePrimaryColor
+import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.ui.PhaseBadge
 import team.sakhi.android.feature.logging.LoggingViewModel
 import team.sakhi.android.feature.recommendations.RecommendationFoodUi
 import team.sakhi.android.feature.recommendations.RecommendationsViewModel
@@ -113,6 +125,7 @@ import team.sakhi.logging.Symptom
 import team.sakhi.models.CyclePhase
 import team.sakhi.models.FlowIntensity
 import team.sakhi.models.PeriodLog
+import team.sakhi.design.SakhiColors
 import team.sakhi.sync.SyncRuntimeState
 
 /**
@@ -122,8 +135,9 @@ import team.sakhi.sync.SyncRuntimeState
  * bottom action bar (calendar toggle, "Ask Sakhi" search capsule, log button — see
  * `HomeActionBar.swift`'s `SakhiBottomActionBar`). iOS has no tab bar; Android must
  * not invent one — parity means these exact entry points, not a Material bottom
- * nav. Presentation style (iOS uses sheets) and full visual layout are a later
- * pass; these are plain pushes on the nested Home nav graph for now.
+ * nav. Presentation style is now split: Chat and Logging use the shared modal-sheet
+ * lane in `HomeNavHost`, while Profile/Care/Calendar still use the nested nav graph
+ * until their own sheet-presentation pass lands.
  */
 @Composable
 fun HomeScreen(
@@ -139,8 +153,19 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val recoState by recommendationsViewModel.uiState.collectAsStateWithLifecycle()
     val quickLogUiState by quickLogViewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val accentColor = phasePrimaryColor(uiState.phase)
+    val phasePalette = rememberHomePhasePalette(uiState.phase)
     val hapticManager = koinInject<AndroidHapticManager>()
+    val scrollState = rememberScrollState()
+    val density = LocalDensity.current
+    val heroScrollProgress by remember(scrollState, density) {
+        derivedStateOf {
+            with(density) {
+                ((scrollState.value.toFloat() - 20.dp.toPx()) / 120.dp.toPx()).coerceIn(0f, 1f)
+            }
+        }
+    }
 
     // `refresh()`'s own triggers (session/syncState/partnerSnapshot) don't fire
     // on a plain nav pop back from the logging sheet, so `hasLoggedToday` would
@@ -166,60 +191,75 @@ fun HomeScreen(
         wasQuickLogSaving = quickLogUiState.isSaving
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(SakhiSpacing.space6),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+            .background(homeBackgroundBrush(phasePalette = phasePalette, hasCycleData = uiState.hasCycleData)),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = onOpenProfile) {
-                Icon(Icons.Filled.Menu, contentDescription = "Profile")
-            }
-            Text(
-                text = if (uiState.session?.isViewingOwnData == false) "Partner Home" else "Home",
-                style = MaterialTheme.typography.headlineMedium,
-            )
-            IconButton(onClick = onOpenCare) {
-                Icon(Icons.Filled.People, contentDescription = "Be Her Sakhi")
-            }
-        }
-        Text(
-            text = uiState.session?.let(::sessionSummary) ?: "Waiting for session",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
         Column(
             modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
+                .fillMaxSize()
+                .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
         ) {
+            HomeTopBar(
+                uiState = uiState,
+                heroScrollProgress = heroScrollProgress,
+                phasePalette = phasePalette,
+                onOpenProfile = {
+                    hapticManager.selection()
+                    onOpenProfile()
+                },
+                onOpenCare = {
+                    hapticManager.selection()
+                    onOpenCare()
+                },
+                onOpenCalendar = {
+                    hapticManager.selection()
+                    onOpenCalendar()
+                },
+            )
+            Text(
+                text = uiState.session?.let { sessionSummary(context, it) }
+                    ?: stringResource(R.string.home_waiting_for_session),
+                style = MaterialTheme.typography.bodyMedium,
+                color = homeSecondaryTextColor(
+                    phasePalette = phasePalette,
+                    hasCycleData = uiState.hasCycleData,
+                    isMenstrual = uiState.phase == CyclePhase.MENSTRUAL,
+                ),
+            )
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
+            ) {
             val canShowHero = uiState.session?.isViewingOwnData == true || uiState.canViewPredictions
             if (!uiState.isLoadingCycle && canShowHero) {
-                HeroSection(uiState = uiState, accentColor = accentColor)
+                HeroSection(
+                    uiState = uiState,
+                    accentColor = accentColor,
+                    phasePalette = phasePalette,
+                    scrollProgress = heroScrollProgress,
+                )
             }
 
             StateChip(
-                label = syncLabel(uiState.syncState),
+                label = syncLabel(context, uiState.syncState),
                 tint = syncTint(uiState.syncState, accentColor),
             )
 
             uiState.partnerSnapshotRevision?.let { revision ->
+                val revisionText = stringResource(
+                    R.string.home_partner_snapshot_revision,
+                    revision,
+                )
                 Text(
-                    text = buildString {
-                        append("Partner snapshot revision ")
-                        append(revision)
-                        uiState.partnerSnapshotRefreshedAt?.let {
-                            append(" • refreshed ")
-                            append(it)
-                        }
-                    },
+                    text = uiState.partnerSnapshotRefreshedAt?.let {
+                        "$revisionText • ${context.getString(R.string.home_partner_snapshot_refreshed, it)}"
+                    } ?: revisionText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -255,22 +295,25 @@ fun HomeScreen(
                         state = checklistState,
                         onToggle = checklistViewModel::toggle,
                         onRetry = { checklistViewModel.retry(uiState.phase, uiState.dayInCycle ?: 1) },
+                        phase = uiState.phase,
                         accentColor = accentColor,
                     )
                     LoggedDetailsCard(
                         log = uiState.todayLog,
                         isPartnerMode = true,
+                        phase = uiState.phase,
                         accentColor = accentColor,
                         onClick = { /* Activity/history sheet -- ActivityLogScreen, reachable from Profile today */ },
                     )
                     if (recoState.canViewPhaseRecommendations) {
                         NutritionCard(
+                            phase = uiState.phase,
                             foods = recoState.eatMoreFoods,
                             isLoading = recoState.isLoading,
                             accentColor = accentColor,
                         )
                     }
-                    partnerHeadsUpText(uiState.phase, uiState.dayInCycle, uiState.daysUntilNextPeriod)?.let { headsUp ->
+                    partnerHeadsUpText(context, uiState.phase, uiState.dayInCycle, uiState.daysUntilNextPeriod)?.let { headsUp ->
                         PartnerHeadsUpCard(text = headsUp, accentColor = accentColor)
                     }
                     PhaseInfoCard(phase = uiState.phase, isPartnerMode = true, accentColor = accentColor)
@@ -282,11 +325,13 @@ fun HomeScreen(
                     LoggedDetailsCard(
                         log = uiState.todayLog,
                         isPartnerMode = false,
+                        phase = uiState.phase,
                         accentColor = accentColor,
                         onClick = { /* Activity/history sheet -- ActivityLogScreen, reachable from Profile today */ },
                     )
                     if (recoState.canViewPhaseRecommendations) {
                         NutritionCard(
+                            phase = uiState.phase,
                             foods = recoState.eatMoreFoods,
                             isLoading = recoState.isLoading,
                             accentColor = accentColor,
@@ -297,11 +342,13 @@ fun HomeScreen(
                             cycle = cycle,
                             dayInCycle = uiState.dayInCycle ?: 1,
                             cycleLength = uiState.cycleLength ?: 28,
+                            phase = uiState.phase,
                             accentColor = accentColor,
                         )
                     }
                     PhaseInfoCard(phase = uiState.phase, isPartnerMode = false, accentColor = accentColor)
                     SakhiInsightCard(
+                        phase = uiState.phase,
                         insight = recoState.aiInsight,
                         isLoading = recoState.isLoading,
                         isPartnerMode = false,
@@ -309,34 +356,35 @@ fun HomeScreen(
                     )
                 }
             }
-        }
+            }
 
-        HomeBottomActionBar(
-            phase = uiState.phase,
-            accentColor = accentColor,
-            isPartnerMode = uiState.session?.isViewingOwnData == false,
-            canLog = uiState.canLogPeriod,
-            hasLoggedToday = uiState.hasLoggedToday,
-            isLogSaving = quickLogUiState.isSaving,
-            selectedFlow = quickLogUiState.selectedFlow,
-            onCalendarClick = {
-                hapticManager.selection()
-                onOpenCalendar()
-            },
-            onAskSakhiClick = {
-                hapticManager.selection()
-                onOpenChat()
-            },
-            onLogClick = {
-                hapticManager.impact(HapticImpact.MEDIUM)
-                onQuickLogClick()
-            },
-            onQuickLogFlow = { level ->
-                hapticManager.selection()
-                quickLogViewModel.onFlowSelected(level)
-                quickLogViewModel.save()
-            },
-        )
+            HomeBottomActionBar(
+                phase = uiState.phase,
+                accentColor = accentColor,
+                isPartnerMode = uiState.session?.isViewingOwnData == false,
+                canLog = uiState.canLogPeriod,
+                hasLoggedToday = uiState.hasLoggedToday,
+                isLogSaving = quickLogUiState.isSaving,
+                selectedFlow = quickLogUiState.selectedFlow,
+                onCalendarClick = {
+                    hapticManager.selection()
+                    onOpenCalendar()
+                },
+                onAskSakhiClick = {
+                    hapticManager.selection()
+                    onOpenChat()
+                },
+                onLogClick = {
+                    hapticManager.impact(HapticImpact.MEDIUM)
+                    onQuickLogClick()
+                },
+                onQuickLogFlow = { level ->
+                    hapticManager.selection()
+                    quickLogViewModel.onFlowSelected(level)
+                    quickLogViewModel.save()
+                },
+            )
+        }
     }
 }
 
@@ -367,6 +415,7 @@ private fun HomeBottomActionBar(
     onLogClick: () -> Unit,
     onQuickLogFlow: (FlowIntensity?) -> Unit,
 ) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
@@ -378,7 +427,11 @@ private fun HomeBottomActionBar(
                 .size(50.dp)
                 .background(accentColor.copy(alpha = 0.12f), CircleShape),
         ) {
-            Icon(Icons.Filled.CalendarMonth, contentDescription = "Calendar", tint = accentColor)
+            Icon(
+                Icons.Filled.CalendarMonth,
+                contentDescription = stringResource(R.string.home_calendar_content_description),
+                tint = accentColor,
+            )
         }
 
         HomeAskSakhiBar(
@@ -412,7 +465,7 @@ private fun HomeBottomActionBar(
                 } else {
                     Icon(
                         imageVector = if (hasLoggedToday) Icons.Filled.Edit else Icons.Filled.Add,
-                        contentDescription = "Log",
+                        contentDescription = stringResource(R.string.home_log_content_description),
                         tint = Color.White,
                     )
                 }
@@ -423,7 +476,7 @@ private fun HomeBottomActionBar(
                 onDismissRequest = { showQuickLogMenu = false },
             ) {
                 DropdownMenuItem(
-                    text = { Text("Other symptoms  ›") },
+                    text = { Text(stringResource(R.string.home_other_symptoms)) },
                     leadingIcon = { Icon(Icons.Filled.MoreHoriz, contentDescription = null) },
                     onClick = {
                         showQuickLogMenu = false
@@ -439,7 +492,15 @@ private fun HomeBottomActionBar(
                 ).forEach { level ->
                     val isSelected = selectedFlow == level
                     DropdownMenuItem(
-                        text = { Text(if (isSelected) "${level.displayName}  ✓" else level.displayName) },
+                        text = {
+                            Text(
+                                if (isSelected) {
+                                    context.getString(R.string.home_flow_selected, level.displayName)
+                                } else {
+                                    level.displayName
+                                },
+                            )
+                        },
                         onClick = {
                             showQuickLogMenu = false
                             onQuickLogFlow(if (isSelected) null else level)
@@ -460,7 +521,10 @@ private fun HomeAskSakhiBar(
     onTap: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val placeholders = remember(phase, isPartnerMode) { askSakhiPlaceholders(phase, isPartnerMode) }
+    val context = LocalContext.current
+    val placeholders = remember(phase, isPartnerMode, context) {
+        askSakhiPlaceholders(context, phase, isPartnerMode)
+    }
     var placeholderIndex by remember(placeholders) { mutableIntStateOf(0) }
 
     LaunchedEffect(placeholders) {
@@ -516,84 +580,90 @@ private fun HomeAskSakhiBar(
  * Same exact copy as iOS's `HomeAskSakhiBar.placeholders(for:isPartnerMode:)` —
  * ported verbatim from `HomeActionBar.swift`, not paraphrased.
  */
-private fun askSakhiPlaceholders(phase: CyclePhase, isPartnerMode: Boolean): List<String> {
-    if (isPartnerMode) {
-        return when (phase) {
-            CyclePhase.MENSTRUAL -> listOf(
-                "How's she feeling today?",
-                "What can I do for her right now?",
-                "What does she need during her period?",
-                "How can we help her through this?",
+private fun askSakhiPlaceholders(
+    context: Context,
+    phase: CyclePhase,
+    isPartnerMode: Boolean,
+): List<String> {
+    fun listOfStrings(vararg ids: Int): List<String> = ids.map(context::getString)
+    return if (isPartnerMode) {
+        when (phase) {
+            CyclePhase.MENSTRUAL -> listOfStrings(
+                R.string.home_ask_sakhi_partner_menstrual_1,
+                R.string.home_ask_sakhi_partner_menstrual_2,
+                R.string.home_ask_sakhi_partner_menstrual_3,
+                R.string.home_ask_sakhi_partner_menstrual_4,
             )
-            CyclePhase.FOLLICULAR -> listOf(
-                "How's her energy this week?",
-                "What does she need from me now?",
-                "What's good for her this phase?",
-                "How's she doing this week?",
+            CyclePhase.FOLLICULAR -> listOfStrings(
+                R.string.home_ask_sakhi_partner_follicular_1,
+                R.string.home_ask_sakhi_partner_follicular_2,
+                R.string.home_ask_sakhi_partner_follicular_3,
+                R.string.home_ask_sakhi_partner_follicular_4,
             )
-            CyclePhase.OVULATION -> listOf(
-                "How's she feeling right now?",
-                "What does she need today?",
-                "What's she going through this week?",
-                "How can I be there for her today?",
+            CyclePhase.OVULATION -> listOfStrings(
+                R.string.home_ask_sakhi_partner_ovulation_1,
+                R.string.home_ask_sakhi_partner_ovulation_2,
+                R.string.home_ask_sakhi_partner_ovulation_3,
+                R.string.home_ask_sakhi_partner_ovulation_4,
             )
-            CyclePhase.LUTEAL -> listOf(
-                "Why might she seem off today?",
-                "What does she need right now?",
-                "How can I help her this week?",
-                "What's she going through?",
+            CyclePhase.LUTEAL -> listOfStrings(
+                R.string.home_ask_sakhi_partner_luteal_1,
+                R.string.home_ask_sakhi_partner_luteal_2,
+                R.string.home_ask_sakhi_partner_luteal_3,
+                R.string.home_ask_sakhi_partner_luteal_4,
             )
-            CyclePhase.DELAYED -> listOf(
-                "How's she doing with the delay?",
-                "What does she need from me?",
-                "Is she okay?",
-                "How can I support her right now?",
+            CyclePhase.DELAYED -> listOfStrings(
+                R.string.home_ask_sakhi_partner_delayed_1,
+                R.string.home_ask_sakhi_partner_delayed_2,
+                R.string.home_ask_sakhi_partner_delayed_3,
+                R.string.home_ask_sakhi_partner_delayed_4,
             )
-            CyclePhase.UNKNOWN -> listOf(
-                "How's she doing today?",
-                "What does she need?",
-                "What can we figure out for her?",
-                "Ask about her cycle...",
+            CyclePhase.UNKNOWN -> listOfStrings(
+                R.string.home_ask_sakhi_partner_unknown_1,
+                R.string.home_ask_sakhi_partner_unknown_2,
+                R.string.home_ask_sakhi_partner_unknown_3,
+                R.string.home_ask_sakhi_partner_unknown_4,
             )
         }
-    }
-    return when (phase) {
-        CyclePhase.MENSTRUAL -> listOf(
-            "How are you managing today?",
-            "Ask about cramp relief...",
-            "What helps with fatigue?",
-            "Talk to Sakhi about your flow...",
-        )
-        CyclePhase.FOLLICULAR -> listOf(
-            "What should I eat this week?",
-            "How's your energy level?",
-            "Ask about cycle nutrition...",
-            "Plan something for your glow-up phase...",
-        )
-        CyclePhase.OVULATION -> listOf(
-            "Am I in my fertile window?",
-            "Ask about ovulation signs...",
-            "What's my body doing right now?",
-            "Tips for your peak energy day...",
-        )
-        CyclePhase.LUTEAL -> listOf(
-            "Why do I feel this way?",
-            "Ask about PMS remedies...",
-            "What helps with bloating?",
-            "Talk to Sakhi about your mood...",
-        )
-        CyclePhase.DELAYED -> listOf(
-            "Why is my period late?",
-            "Should I be worried?",
-            "Ask Sakhi about irregular cycles...",
-            "What could cause a delay?",
-        )
-        CyclePhase.UNKNOWN -> listOf(
-            "Ask Sakhi anything...",
-            "How do I start tracking?",
-            "Tell me about my cycle phases...",
-            "What should I log today?",
-        )
+    } else {
+        when (phase) {
+            CyclePhase.MENSTRUAL -> listOfStrings(
+                R.string.home_ask_sakhi_self_menstrual_1,
+                R.string.home_ask_sakhi_self_menstrual_2,
+                R.string.home_ask_sakhi_self_menstrual_3,
+                R.string.home_ask_sakhi_self_menstrual_4,
+            )
+            CyclePhase.FOLLICULAR -> listOfStrings(
+                R.string.home_ask_sakhi_self_follicular_1,
+                R.string.home_ask_sakhi_self_follicular_2,
+                R.string.home_ask_sakhi_self_follicular_3,
+                R.string.home_ask_sakhi_self_follicular_4,
+            )
+            CyclePhase.OVULATION -> listOfStrings(
+                R.string.home_ask_sakhi_self_ovulation_1,
+                R.string.home_ask_sakhi_self_ovulation_2,
+                R.string.home_ask_sakhi_self_ovulation_3,
+                R.string.home_ask_sakhi_self_ovulation_4,
+            )
+            CyclePhase.LUTEAL -> listOfStrings(
+                R.string.home_ask_sakhi_self_luteal_1,
+                R.string.home_ask_sakhi_self_luteal_2,
+                R.string.home_ask_sakhi_self_luteal_3,
+                R.string.home_ask_sakhi_self_luteal_4,
+            )
+            CyclePhase.DELAYED -> listOfStrings(
+                R.string.home_ask_sakhi_self_delayed_1,
+                R.string.home_ask_sakhi_self_delayed_2,
+                R.string.home_ask_sakhi_self_delayed_3,
+                R.string.home_ask_sakhi_self_delayed_4,
+            )
+            CyclePhase.UNKNOWN -> listOfStrings(
+                R.string.home_ask_sakhi_self_unknown_1,
+                R.string.home_ask_sakhi_self_unknown_2,
+                R.string.home_ask_sakhi_self_unknown_3,
+                R.string.home_ask_sakhi_self_unknown_4,
+            )
+        }
     }
 }
 
@@ -615,17 +685,21 @@ private fun StateChip(
     )
 }
 
-private fun sessionSummary(session: team.sakhi.session.SessionContext): String = when {
-    session.isViewingOwnData -> "Showing ${session.userName}'s cycle"
-    else -> "Viewing ${session.activeRole.displayName.lowercase()} access for user ${session.targetUserId}"
+private fun sessionSummary(context: Context, session: team.sakhi.session.SessionContext): String = when {
+    session.isViewingOwnData -> context.getString(R.string.home_session_summary_own, session.userName)
+    else -> context.getString(
+        R.string.home_session_summary_partner,
+        session.activeRole.displayName.lowercase(),
+        session.targetUserId,
+    )
 }
 
-private fun syncLabel(syncState: SyncRuntimeState): String = when (syncState) {
-    SyncRuntimeState.Idle -> "Sync idle"
-    SyncRuntimeState.Syncing -> "Syncing"
-    is SyncRuntimeState.Success -> "Synced"
-    SyncRuntimeState.Stale -> "Data marked stale"
-    is SyncRuntimeState.Failed -> "Sync failed"
+private fun syncLabel(context: Context, syncState: SyncRuntimeState): String = when (syncState) {
+    SyncRuntimeState.Idle -> context.getString(R.string.home_sync_idle)
+    SyncRuntimeState.Syncing -> context.getString(R.string.home_sync_syncing)
+    is SyncRuntimeState.Success -> context.getString(R.string.home_sync_synced)
+    SyncRuntimeState.Stale -> context.getString(R.string.home_sync_stale)
+    is SyncRuntimeState.Failed -> context.getString(R.string.home_sync_failed)
 }
 
 @Composable
@@ -657,34 +731,73 @@ private fun syncTint(
 
 private data class HeroText(val big: String, val sub: String)
 
-private fun heroText(uiState: HomeUiState): HeroText {
+private fun heroText(context: Context, uiState: HomeUiState): HeroText {
     val isPartnerMode = uiState.session?.isViewingOwnData == false
 
     if (!uiState.hasCycleData) {
-        return HeroText("", if (isPartnerMode) "she hasn't started tracking" else "start tracking today")
+        return HeroText(
+            "",
+            context.getString(
+                if (isPartnerMode) {
+                    R.string.home_hero_not_started_partner
+                } else {
+                    R.string.home_hero_not_started_self
+                },
+            ),
+        )
     }
 
     return when (uiState.phase) {
         CyclePhase.MENSTRUAL -> {
             val day = uiState.dayInCycle ?: 1
-            HeroText("Day $day", if (isPartnerMode) "of her period" else "of your period")
+            HeroText(
+                context.resources.getQuantityString(R.plurals.home_day_count, day, day),
+                context.getString(
+                    if (isPartnerMode) {
+                        R.string.home_hero_period_of_her
+                    } else {
+                        R.string.home_hero_period_of_your
+                    },
+                ),
+            )
         }
         CyclePhase.DELAYED -> {
             val daysDelayed = ((uiState.dayInCycle ?: 0) - (uiState.cycleLength ?: 0)).coerceAtLeast(1)
             HeroText(
-                if (daysDelayed == 1) "1 Day" else "$daysDelayed Days",
-                if (isPartnerMode) "her period is delayed" else "period is delayed",
+                context.resources.getQuantityString(R.plurals.home_day_count, daysDelayed, daysDelayed),
+                context.getString(
+                    if (isPartnerMode) {
+                        R.string.home_hero_period_delayed_her
+                    } else {
+                        R.string.home_hero_period_delayed_self
+                    },
+                ),
             )
         }
         else -> {
             val daysUntil = uiState.daysUntilNextPeriod
             if (daysUntil == null) {
-                HeroText("", if (isPartnerMode) "she hasn't started tracking" else "start tracking today")
+                HeroText(
+                    "",
+                    context.getString(
+                        if (isPartnerMode) {
+                            R.string.home_hero_not_started_partner
+                        } else {
+                            R.string.home_hero_not_started_self
+                        },
+                    ),
+                )
             } else {
                 val n = daysUntil.coerceAtLeast(0)
                 HeroText(
-                    if (n == 1) "1 Day" else "$n Days",
-                    if (isPartnerMode) "until her next period" else "until next period",
+                    context.resources.getQuantityString(R.plurals.home_day_count, n, n),
+                    context.getString(
+                        if (isPartnerMode) {
+                            R.string.home_hero_until_next_her
+                        } else {
+                            R.string.home_hero_until_next_self
+                        },
+                    ),
                 )
             }
         }
@@ -692,11 +805,29 @@ private fun heroText(uiState: HomeUiState): HeroText {
 }
 
 @Composable
-private fun HeroSection(uiState: HomeUiState, accentColor: Color) {
-    val text = heroText(uiState)
+private fun HeroSection(
+    uiState: HomeUiState,
+    accentColor: Color,
+    phasePalette: HomePhasePalette,
+    scrollProgress: Float,
+) {
+    val context = LocalContext.current
+    val text = heroText(context, uiState)
+    val subtitleColor = homeSecondaryTextColor(
+        phasePalette = phasePalette,
+        hasCycleData = uiState.hasCycleData,
+        isMenstrual = uiState.phase == CyclePhase.MENSTRUAL,
+    )
 
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = 1f - (0.38f * scrollProgress)
+                translationY = -36.dp.toPx() * scrollProgress
+                scaleX = 1f - (0.08f * scrollProgress)
+                scaleY = 1f - (0.08f * scrollProgress)
+            },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (text.big.isNotEmpty()) {
@@ -710,7 +841,7 @@ private fun HeroSection(uiState: HomeUiState, accentColor: Color) {
         Text(
             text = text.sub,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = subtitleColor,
         )
     }
 }
@@ -721,52 +852,52 @@ private fun HeroSection(uiState: HomeUiState, accentColor: Color) {
 // (local Swift dictionary, not CMS-driven, so this is the real, final copy,
 // not a placeholder).
 
-private data class PhaseSnippet(val overview: String, val bodyChanges: List<String>)
+private data class PhaseSnippet(val overviewRes: Int, val bodyChangeResIds: List<Int>)
 
 private fun phaseSnippet(phase: CyclePhase): PhaseSnippet = when (phase) {
     CyclePhase.MENSTRUAL -> PhaseSnippet(
-        overview = "Your period is here. Your body is shedding the lining it built last month, and starting fresh. It's completely normal to feel tired, crampy, or a little low, your hormones are at their lowest point right now.",
-        bodyChanges = listOf(
-            "Your uterus gently cramps to help shed the lining, that's what causes period pain",
-            "Estrogen and progesterone are at their lowest, which can affect your mood and energy",
-            "Your body is already quietly preparing for next month's cycle",
+        overviewRes = R.string.home_phase_snippet_menstrual_overview,
+        bodyChangeResIds = listOf(
+            R.string.home_phase_snippet_menstrual_body_1,
+            R.string.home_phase_snippet_menstrual_body_2,
+            R.string.home_phase_snippet_menstrual_body_3,
         ),
     )
     CyclePhase.FOLLICULAR -> PhaseSnippet(
-        overview = "This is often the best week of your cycle. Estrogen is rising and you'll likely notice more energy, a clearer head, and a better mood. Your body is getting ready to ovulate.",
-        bodyChanges = listOf(
-            "Estrogen is rising, which is why you might feel brighter and more motivated",
-            "Your uterine lining is rebuilding itself after your period",
-            "One follicle in your ovary is growing and getting ready to release an egg",
+        overviewRes = R.string.home_phase_snippet_follicular_overview,
+        bodyChangeResIds = listOf(
+            R.string.home_phase_snippet_follicular_body_1,
+            R.string.home_phase_snippet_follicular_body_2,
+            R.string.home_phase_snippet_follicular_body_3,
         ),
     )
     CyclePhase.OVULATION -> PhaseSnippet(
-        overview = "Your body is releasing an egg right now, this is ovulation. Many girls feel their best this week: confident, social, and full of energy. It's a natural peak.",
-        bodyChanges = listOf(
-            "Your ovary releases a mature egg, which can be fertilised for about 12–24 hours",
-            "You might notice your discharge becomes clearer and more slippery, this is normal and healthy",
-            "Your body temperature rises very slightly after the egg is released",
+        overviewRes = R.string.home_phase_snippet_ovulation_overview,
+        bodyChangeResIds = listOf(
+            R.string.home_phase_snippet_ovulation_body_1,
+            R.string.home_phase_snippet_ovulation_body_2,
+            R.string.home_phase_snippet_ovulation_body_3,
         ),
     )
     CyclePhase.LUTEAL -> PhaseSnippet(
-        overview = "Your body is now in wind-down mode. Progesterone rises to prepare for a potential pregnancy. If that doesn't happen, your hormones start dropping and PMS can creep in, mood swings, bloating, cravings. All very normal.",
-        bodyChanges = listOf(
-            "Progesterone rises, which can make you feel heavier, bloated, or more emotional",
-            "Your body temperature stays a little higher than usual",
-            "Towards the end of this phase you may notice PMS symptoms, your period is coming soon",
+        overviewRes = R.string.home_phase_snippet_luteal_overview,
+        bodyChangeResIds = listOf(
+            R.string.home_phase_snippet_luteal_body_1,
+            R.string.home_phase_snippet_luteal_body_2,
+            R.string.home_phase_snippet_luteal_body_3,
         ),
     )
     CyclePhase.DELAYED -> PhaseSnippet(
-        overview = "Your period is running a little late. This happens to almost everyone at some point and is usually nothing to worry about. Stress, a change in routine, or hormonal shifts are the most common reasons.",
-        bodyChanges = listOf(
-            "Stress can raise cortisol, which sometimes delays ovulation and pushes your period back",
-            "Changes in sleep, travel, or diet can affect your hormone rhythm",
-            "If this happens often, it's worth mentioning to a doctor, just to rule anything out",
+        overviewRes = R.string.home_phase_snippet_delayed_overview,
+        bodyChangeResIds = listOf(
+            R.string.home_phase_snippet_delayed_body_1,
+            R.string.home_phase_snippet_delayed_body_2,
+            R.string.home_phase_snippet_delayed_body_3,
         ),
     )
     CyclePhase.UNKNOWN -> PhaseSnippet(
-        overview = "Sakhi needs a little more data to figure out your phase. Log your period start date and you'll start seeing personalised insights right here.",
-        bodyChanges = emptyList(),
+        overviewRes = R.string.home_phase_snippet_unknown_overview,
+        bodyChangeResIds = emptyList(),
     )
 }
 
@@ -786,6 +917,7 @@ private fun phaseSnippet(phase: CyclePhase): PhaseSnippet = when (phase) {
 @Composable
 private fun HomeGlassCard(
     title: String,
+    phase: CyclePhase = CyclePhase.UNKNOWN,
     accentColor: Color,
     hasCycleData: Boolean,
     icon: ImageVector? = null,
@@ -795,9 +927,36 @@ private fun HomeGlassCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val cardFill = if (hasCycleData) accentColor.copy(alpha = 0.06f) else MaterialTheme.colorScheme.surface
-    val cardStroke = if (hasCycleData) accentColor.copy(alpha = 0.18f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
-    val badgeFill = accentColor.copy(alpha = 0.10f)
+    val refreshLabel = stringResource(R.string.home_refresh_content_description)
+    val palette = rememberHomePhasePalette(phase)
+    val isDark = isSystemInDarkTheme()
+    val isMenstrual = phase == CyclePhase.MENSTRUAL
+    val cardFill = when {
+        !hasCycleData -> MaterialTheme.colorScheme.surface
+        isMenstrual -> palette.surface
+        isDark -> palette.tileFill
+        else -> palette.tileFill.copy(alpha = 0.14f)
+    }
+    val cardStroke = when {
+        !hasCycleData -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
+        isMenstrual -> palette.secondary.copy(alpha = 0.30f)
+        else -> palette.tileStroke.copy(alpha = 0.50f)
+    }
+    val dividerColor = when {
+        !hasCycleData -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)
+        isMenstrual -> palette.primary.copy(alpha = 0.16f)
+        else -> palette.tileStroke.copy(alpha = 0.28f)
+    }
+    val badgeFill = when {
+        !hasCycleData -> accentColor.copy(alpha = 0.10f)
+        isMenstrual -> palette.secondary.copy(alpha = 0.20f)
+        else -> palette.secondary.copy(alpha = 0.09f)
+    }
+    val badgeStroke = when {
+        !hasCycleData -> accentColor.copy(alpha = 0.20f)
+        isMenstrual -> palette.secondary.copy(alpha = 0.30f)
+        else -> accentColor.copy(alpha = 0.25f)
+    }
 
     Column(
         modifier = modifier
@@ -817,7 +976,7 @@ private fun HomeGlassCard(
                     modifier = Modifier
                         .size(30.dp)
                         .background(badgeFill, RoundedCornerShape(8.dp))
-                        .border(0.5.dp, accentColor.copy(alpha = 0.25f), RoundedCornerShape(8.dp)),
+                        .border(0.5.dp, badgeStroke, RoundedCornerShape(8.dp)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(it, contentDescription = null, tint = accentColor, modifier = Modifier.size(14.dp))
@@ -837,6 +996,7 @@ private fun HomeGlassCard(
                     color = accentColor.copy(alpha = 0.7f),
                     modifier = Modifier
                         .background(badgeFill, RoundedCornerShape(SakhiRadius.full))
+                        .border(0.5.dp, accentColor.copy(alpha = 0.10f), RoundedCornerShape(SakhiRadius.full))
                         .padding(horizontal = SakhiSpacing.space3, vertical = SakhiSpacing.space1),
                 )
             }
@@ -848,12 +1008,17 @@ private fun HomeGlassCard(
                     if (isRefreshing) {
                         CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 1.5.dp, color = accentColor.copy(alpha = 0.7f))
                     } else {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh", tint = accentColor.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                        Icon(
+                            Icons.Filled.Refresh,
+                            contentDescription = refreshLabel,
+                            tint = accentColor.copy(alpha = 0.7f),
+                            modifier = Modifier.size(14.dp),
+                        )
                     }
                 }
             }
         }
-        HorizontalDivider(color = cardStroke)
+        HorizontalDivider(color = dividerColor)
         content()
     }
 }
@@ -871,9 +1036,15 @@ private fun HomeGlassCard(
 private fun LoggedDetailsCard(
     log: PeriodLog?,
     isPartnerMode: Boolean,
+    phase: CyclePhase,
     accentColor: Color,
     onClick: () -> Unit,
 ) {
+    val flowLabel = stringResource(R.string.home_log_category_flow)
+    val weightLabel = stringResource(R.string.home_log_category_weight)
+    val bbtLabel = stringResource(R.string.home_log_category_bbt)
+    val symptomLabel = stringResource(R.string.home_log_category_symptoms)
+    val moodLabel = stringResource(R.string.home_log_category_mood)
     val notes = log?.symptoms?.joinToString(" ").orEmpty()
     val weightKg = LogTokenEncoder.decodeWeight(notes)
     val bbtCelsius = LogTokenEncoder.decodeBbt(notes)
@@ -883,7 +1054,14 @@ private fun LoggedDetailsCard(
     val hasAnyData = log != null && (flow != null || weightKg != null || bbtCelsius != null || symptoms.isNotEmpty() || moods.isNotEmpty())
 
     HomeGlassCard(
-        title = if (isPartnerMode) "Her day" else "Logged today",
+        title = stringResource(
+            if (isPartnerMode) {
+                R.string.home_logged_partner_title
+            } else {
+                R.string.home_logged_self_title
+            },
+        ),
+        phase = phase,
         accentColor = accentColor,
         hasCycleData = true,
         icon = Icons.AutoMirrored.Filled.ListAlt,
@@ -891,7 +1069,13 @@ private fun LoggedDetailsCard(
     ) {
         if (!hasAnyData) {
             Text(
-                text = if (isPartnerMode) "She hasn't logged today yet" else "Log your day",
+                text = stringResource(
+                    if (isPartnerMode) {
+                        R.string.home_logged_partner_empty
+                    } else {
+                        R.string.home_logged_self_empty
+                    },
+                ),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
@@ -904,19 +1088,19 @@ private fun LoggedDetailsCard(
                 horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
             ) {
                 if (flow != null) {
-                    LogChip(icon = Icons.Filled.WaterDrop, value = flow.displayName, category = "Flow", accentColor = accentColor)
+                    LogChip(icon = Icons.Filled.WaterDrop, value = flow.displayName, category = flowLabel, accentColor = accentColor)
                 }
                 weightKg?.let {
-                    LogChip(icon = Icons.Filled.MonitorWeight, value = "%.1f kg".format(it), category = "Weight", accentColor = accentColor)
+                    LogChip(icon = Icons.Filled.MonitorWeight, value = "%.1f kg".format(it), category = weightLabel, accentColor = accentColor)
                 }
                 bbtCelsius?.let {
-                    LogChip(icon = Icons.Filled.Thermostat, value = "%.1f °C".format(it), category = "BBT", accentColor = accentColor)
+                    LogChip(icon = Icons.Filled.Thermostat, value = "%.1f °C".format(it), category = bbtLabel, accentColor = accentColor)
                 }
                 symptoms.take(4).forEach { symptom ->
-                    LogChip(icon = Icons.Filled.Healing, value = symptom.displayName, category = "Symptoms", accentColor = accentColor)
+                    LogChip(icon = Icons.Filled.Healing, value = symptom.displayName, category = symptomLabel, accentColor = accentColor)
                 }
                 moods.take(2).forEach { mood ->
-                    LogChip(icon = Icons.Filled.SentimentSatisfied, value = mood.displayName, category = "Mood", accentColor = accentColor)
+                    LogChip(icon = Icons.Filled.SentimentSatisfied, value = mood.displayName, category = moodLabel, accentColor = accentColor)
                 }
             }
         }
@@ -978,8 +1162,10 @@ private fun CycleDetailsCard(
     cycle: team.sakhi.models.CycleData,
     dayInCycle: Int,
     cycleLength: Int,
+    phase: CyclePhase,
     accentColor: Color,
 ) {
+    val context = LocalContext.current
     val today = DateConverter.today()
     val marks = remember(cycle) {
         val end = DateConverter.addDays(cycle.cycleStartDate, cycleLength - 1)
@@ -990,7 +1176,8 @@ private fun CycleDetailsCard(
     }
 
     HomeGlassCard(
-        title = "Current Cycle",
+        title = stringResource(R.string.home_current_cycle_title),
+        phase = phase,
         accentColor = accentColor,
         hasCycleData = true,
         icon = Icons.Filled.Autorenew,
@@ -1012,9 +1199,9 @@ private fun CycleDetailsCard(
             }
             Text(
                 text = if (today == DateConverter.addDays(cycle.cycleStartDate, dayInCycle - 1)) {
-                    "today's cycle day"
+                    stringResource(R.string.home_cycle_day_today)
                 } else {
-                    "cycle day"
+                    stringResource(R.string.home_cycle_day_label)
                 },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -1055,13 +1242,20 @@ private fun CycleDetailsCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "Started ${DateConverter.formatShort(cycle.cycleStartDate)}",
+                    text = stringResource(
+                        R.string.home_cycle_started,
+                        DateConverter.formatShort(cycle.cycleStartDate),
+                    ),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
-                    CycleLegendDot(color = accentColor, label = "Period")
-                    CycleLegendDot(color = accentColor.copy(alpha = 0.22f), label = "Ovulation", striped = true)
+                    CycleLegendDot(color = accentColor, label = stringResource(R.string.home_cycle_legend_period))
+                    CycleLegendDot(
+                        color = accentColor.copy(alpha = 0.22f),
+                        label = stringResource(R.string.home_cycle_legend_ovulation),
+                        striped = true,
+                    )
                 }
             }
 
@@ -1074,14 +1268,22 @@ private fun CycleDetailsCard(
                 horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
             ) {
                 CycleStatTile(
-                    title = "Cycle Length",
-                    value = "$cycleLength days",
+                    title = stringResource(R.string.home_cycle_length_title),
+                    value = context.resources.getQuantityString(
+                        R.plurals.home_cycle_length_days,
+                        cycleLength,
+                        cycleLength,
+                    ),
                     icon = Icons.Filled.Autorenew,
                     modifier = Modifier.weight(1f),
                 )
                 CycleStatTile(
-                    title = "Period Length",
-                    value = "${cycle.periodLength ?: 5} days",
+                    title = stringResource(R.string.home_period_length_title),
+                    value = context.resources.getQuantityString(
+                        R.plurals.home_cycle_length_days,
+                        cycle.periodLength ?: 5,
+                        cycle.periodLength ?: 5,
+                    ),
                     icon = Icons.Filled.WaterDrop,
                     modifier = Modifier.weight(1f),
                 )
@@ -1116,6 +1318,7 @@ private fun CycleLegendDot(color: Color, label: String, striped: Boolean = false
  */
 @Composable
 private fun CyclePill(date: kotlinx.datetime.LocalDate, mark: team.sakhi.cycle.CalendarMarker.DayMark?, isToday: Boolean, isFuture: Boolean, pillWidth: Dp, accentColor: Color) {
+    val context = LocalContext.current
     val isPeriod = mark?.isPeriod == true
     val isOvulation = mark?.isOvulation == true
     val fill = when {
@@ -1131,10 +1334,10 @@ private fun CyclePill(date: kotlinx.datetime.LocalDate, mark: team.sakhi.cycle.C
     }
     val description = buildString {
         append(DateConverter.formatShort(date))
-        if (isToday) append(", today")
+        if (isToday) append(", ${context.getString(R.string.home_cycle_pill_today)}")
         when {
-            isPeriod -> append(", period day")
-            isOvulation -> append(", predicted ovulation day")
+            isPeriod -> append(", ${context.getString(R.string.home_cycle_pill_period_day)}")
+            isOvulation -> append(", ${context.getString(R.string.home_cycle_pill_predicted_ovulation)}")
         }
     }
     Box(
@@ -1211,25 +1414,37 @@ private fun PhaseInfoCard(phase: CyclePhase, isPartnerMode: Boolean, accentColor
     }
 
     HomeGlassCard(
-        title = if (isPartnerMode) "What's happening to her body?" else "What's happening in your body",
+        title = stringResource(
+            if (isPartnerMode) {
+                R.string.home_phase_info_partner_title
+            } else {
+                R.string.home_phase_info_self_title
+            },
+        ),
+        phase = phase,
         accentColor = accentColor,
         hasCycleData = true,
         icon = icon,
     ) {
+        PhaseBadge(
+            phase = phase,
+            accentColor = accentColor,
+            modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
+        )
         Text(
-            text = snippet.overview,
+            text = stringResource(snippet.overviewRes),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
         )
-        if (snippet.bodyChanges.isNotEmpty()) {
+        if (snippet.bodyChangeResIds.isNotEmpty()) {
             Text(
-                text = "BODY CHANGES",
+                text = stringResource(R.string.home_phase_info_body_changes),
                 style = MaterialTheme.typography.labelSmall,
                 color = accentColor,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
             )
-            snippet.bodyChanges.forEach { change ->
+            snippet.bodyChangeResIds.forEach { changeResId ->
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1243,7 +1458,7 @@ private fun PhaseInfoCard(phase: CyclePhase, isPartnerMode: Boolean, accentColor
                             .background(accentColor.copy(alpha = 0.4f), CircleShape),
                     )
                     Text(
-                        text = change,
+                        text = stringResource(changeResId),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
@@ -1274,10 +1489,12 @@ private fun PartnerChecklistCard(
     state: PartnerChecklistUiState,
     onToggle: (String) -> Unit,
     onRetry: () -> Unit,
+    phase: CyclePhase,
     accentColor: Color,
 ) {
     HomeGlassCard(
-        title = "What You Can Do",
+        title = stringResource(R.string.home_partner_checklist_title),
+        phase = phase,
         accentColor = accentColor,
         hasCycleData = true,
         icon = Icons.AutoMirrored.Filled.ListAlt,
@@ -1291,7 +1508,11 @@ private fun PartnerChecklistCard(
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
             ) {
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = accentColor)
-                Text(text = "Finding today's ideas...", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    text = stringResource(R.string.home_partner_checklist_loading),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
             state.failedToGenerate -> Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1300,9 +1521,13 @@ private fun PartnerChecklistCard(
                     .fillMaxWidth()
                     .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
             ) {
-                Text(text = "Couldn't load today's list", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
-                    text = "Retry",
+                    text = stringResource(R.string.home_partner_checklist_failed),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = stringResource(R.string.home_retry),
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                     color = accentColor,
                     modifier = Modifier.clickable(onClick = onRetry),
@@ -1357,13 +1582,13 @@ private fun PartnerNoDataCard() {
         ) {
             Icon(Icons.Filled.NightsStay, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
             Text(
-                text = "She hasn't started tracking yet",
+                text = stringResource(R.string.home_partner_no_data_title),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = SakhiSpacing.space3),
             )
             Text(
-                text = "Once she logs her first period, her cycle data will appear here.",
+                text = stringResource(R.string.home_partner_no_data_body),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -1406,7 +1631,11 @@ private fun PartnerHeadsUpCard(text: PartnerHeadsUpText, accentColor: Color) {
                     modifier = Modifier.clearAndSetSemantics {},
                 ) {
                     Text(text = "$days", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold), color = accentColor)
-                    Text(text = "days", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        text = stringResource(R.string.home_partner_heads_up_days),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -1431,7 +1660,50 @@ internal data class PartnerHeadsUpText(val label: String, val days: Int?)
  * `src/test/.../PartnerHeadsUpTextTest.kt`) rather than only manual
  * reasoning about 5 branches of date math.
  */
-internal fun partnerHeadsUpText(phase: CyclePhase, dayInCycle: Int?, daysUntilNextPeriod: Int?): PartnerHeadsUpText? {
+internal fun partnerHeadsUpText(
+    context: Context,
+    phase: CyclePhase,
+    dayInCycle: Int?,
+    daysUntilNextPeriod: Int?,
+): PartnerHeadsUpText? {
+    val raw = partnerHeadsUpText(phase, dayInCycle, daysUntilNextPeriod) ?: return null
+    return when (phase) {
+        CyclePhase.FOLLICULAR, CyclePhase.OVULATION, CyclePhase.LUTEAL -> {
+            val days = raw.days ?: return null
+            val label = if (days == 1) {
+                context.getString(R.string.home_partner_heads_up_tomorrow)
+            } else {
+                context.resources.getQuantityString(
+                    R.plurals.home_partner_heads_up_period_in,
+                    days,
+                    days,
+                )
+            }
+            raw.copy(label = label)
+        }
+        CyclePhase.MENSTRUAL -> {
+            val periodDay = dayInCycle ?: return null
+            raw.copy(label = context.getString(R.string.home_partner_heads_up_long_period, periodDay))
+        }
+        CyclePhase.DELAYED -> {
+            val daysDelayed = daysUntilNextPeriod?.let { -it } ?: return null
+            raw.copy(
+                label = context.resources.getQuantityString(
+                    R.plurals.home_partner_heads_up_past_expected,
+                    daysDelayed,
+                    daysDelayed,
+                ),
+            )
+        }
+        CyclePhase.UNKNOWN -> raw
+    }
+}
+
+internal fun partnerHeadsUpText(
+    phase: CyclePhase,
+    dayInCycle: Int?,
+    daysUntilNextPeriod: Int?,
+): PartnerHeadsUpText? {
     return when (phase) {
         CyclePhase.FOLLICULAR, CyclePhase.OVULATION, CyclePhase.LUTEAL -> {
             val days = daysUntilNextPeriod ?: return null
@@ -1468,7 +1740,7 @@ private fun EmptyStateCard(accentColor: Color) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
-            text = "Your body runs on a 4-phase cycle. Each phase shapes your energy, mood, and how you feel. Log your first period and Sakhi starts tracking from there.",
+            text = stringResource(R.string.home_empty_state_body),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(SakhiSpacing.space5),
@@ -1487,25 +1759,57 @@ private fun EmptyStateCard(accentColor: Color) {
 @Composable
 private fun LearningPhaseCards() {
     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4)) {
-        LearningCard(title = "How you feel through your cycle", icon = Icons.Filled.Favorite) {
-            LearningIntro("Your energy, mood, sleep, skin, and appetite are not random, they follow your hormones, and your hormones follow your cycle. Once Sakhi knows your pattern, it can tell you exactly why you feel the way you do on any given day.")
+        LearningCard(title = stringResource(R.string.home_learning_feel_title), icon = Icons.Filled.Favorite) {
+            LearningIntro(stringResource(R.string.home_learning_feel_intro))
             LearningRows(
                 listOf(
-                    Triple(Icons.Filled.Bolt, "High energy", "Around ovulation, estrogen peaks and most people feel their sharpest and most social"),
-                    Triple(Icons.Filled.Bedtime, "Slow days", "Late in the luteal phase, progesterone drops and tiredness, cravings, and low mood are normal"),
-                    Triple(Icons.Filled.WaterDrop, "Period cramps", "Prostaglandins cause the uterus to contract, some days are harder than others, and that is valid"),
-                    Triple(Icons.Filled.Psychology, "Mood shifts", "Estrogen and progesterone directly affect serotonin and dopamine, so mood changes are biological, not personal"),
+                    Triple(
+                        Icons.Filled.Bolt,
+                        stringResource(R.string.home_learning_high_energy_title),
+                        stringResource(R.string.home_learning_high_energy_body),
+                    ),
+                    Triple(
+                        Icons.Filled.Bedtime,
+                        stringResource(R.string.home_learning_slow_days_title),
+                        stringResource(R.string.home_learning_slow_days_body),
+                    ),
+                    Triple(
+                        Icons.Filled.WaterDrop,
+                        stringResource(R.string.home_learning_period_cramps_title),
+                        stringResource(R.string.home_learning_period_cramps_body),
+                    ),
+                    Triple(
+                        Icons.Filled.Psychology,
+                        stringResource(R.string.home_learning_mood_shifts_title),
+                        stringResource(R.string.home_learning_mood_shifts_body),
+                    ),
                 ),
             )
         }
 
-        LearningCard(title = "How your cycle works", icon = Icons.Filled.RadioButtonUnchecked) {
-            LearningIntro("A menstrual cycle is 21–35 days long, 28 days on average. It runs on four hormones: FSH, LH, estrogen, and progesterone. Each phase is shaped by how those hormones rise and fall, and they affect your energy, mood, skin, digestion, and sleep every single day.")
+        LearningCard(title = stringResource(R.string.home_learning_cycle_works_title), icon = Icons.Filled.RadioButtonUnchecked) {
+            LearningIntro(stringResource(R.string.home_learning_cycle_works_intro))
             listOf(
-                Triple(Icons.Filled.WaterDrop, phasePrimaryColor(CyclePhase.MENSTRUAL), "Menstrual" to "Days 1–5"),
-                Triple(Icons.Filled.WbSunny, phasePrimaryColor(CyclePhase.FOLLICULAR), "Follicular" to "Days 6–13"),
-                Triple(Icons.Filled.AutoAwesome, phasePrimaryColor(CyclePhase.OVULATION), "Ovulation" to "~Day 14"),
-                Triple(Icons.Filled.Bedtime, phasePrimaryColor(CyclePhase.LUTEAL), "Luteal" to "Days 15–28"),
+                Triple(
+                    Icons.Filled.WaterDrop,
+                    phasePrimaryColor(CyclePhase.MENSTRUAL),
+                    stringResource(R.string.home_learning_phase_menstrual_name) to stringResource(R.string.home_learning_phase_menstrual_days),
+                ),
+                Triple(
+                    Icons.Filled.WbSunny,
+                    phasePrimaryColor(CyclePhase.FOLLICULAR),
+                    stringResource(R.string.home_learning_phase_follicular_name) to stringResource(R.string.home_learning_phase_follicular_days),
+                ),
+                Triple(
+                    Icons.Filled.AutoAwesome,
+                    phasePrimaryColor(CyclePhase.OVULATION),
+                    stringResource(R.string.home_learning_phase_ovulation_name) to stringResource(R.string.home_learning_phase_ovulation_days),
+                ),
+                Triple(
+                    Icons.Filled.Bedtime,
+                    phasePrimaryColor(CyclePhase.LUTEAL),
+                    stringResource(R.string.home_learning_phase_luteal_name) to stringResource(R.string.home_learning_phase_luteal_days),
+                ),
             ).forEachIndexed { i, (icon, color, nameDays) ->
                 if (i > 0) LearningDivider()
                 LearningOverviewRow(icon = icon, color = color, name = nameDays.first, days = nameDays.second)
@@ -1513,88 +1817,88 @@ private fun LearningPhaseCards() {
         }
 
         LearningPhaseDetailCard(
-            title = "Menstrual phase", icon = Icons.Filled.WaterDrop, dayRange = "Days 1–5",
+            title = stringResource(R.string.home_phase_menstrual), icon = Icons.Filled.WaterDrop, dayRange = stringResource(R.string.home_learning_phase_menstrual_days),
             phaseColor = phasePrimaryColor(CyclePhase.MENSTRUAL),
-            overview = "Your period. Estrogen and progesterone drop to their lowest, and your uterus sheds its lining. Energy dips, rest is the best thing you can do right now.",
+            overview = stringResource(R.string.home_learning_detail_menstrual_overview),
             points = listOf(
-                "Cramping, bloating, and lower back pain are common",
-                "Iron levels drop as you bleed, iron-rich foods help",
-                "Gentle walks and warm packs ease cramps better than staying still",
+                stringResource(R.string.home_learning_detail_menstrual_point_1),
+                stringResource(R.string.home_learning_detail_menstrual_point_2),
+                stringResource(R.string.home_learning_detail_menstrual_point_3),
             ),
         )
         LearningPhaseDetailCard(
-            title = "Follicular phase", icon = Icons.Filled.WbSunny, dayRange = "Days 6–13",
+            title = stringResource(R.string.home_phase_follicular), icon = Icons.Filled.WbSunny, dayRange = stringResource(R.string.home_learning_phase_follicular_days),
             phaseColor = phasePrimaryColor(CyclePhase.FOLLICULAR),
-            overview = "FSH rises and a follicle starts growing in your ovary. Estrogen climbs with it, bringing a natural boost in energy, focus, and confidence. Often the best week of the month.",
+            overview = stringResource(R.string.home_learning_detail_follicular_overview),
             points = listOf(
-                "Energy and social drive naturally peak",
-                "Skin tends to be at its clearest",
-                "A great time for new projects, workouts, and big plans",
+                stringResource(R.string.home_learning_detail_follicular_point_1),
+                stringResource(R.string.home_learning_detail_follicular_point_2),
+                stringResource(R.string.home_learning_detail_follicular_point_3),
             ),
         )
         LearningPhaseDetailCard(
-            title = "Ovulation", icon = Icons.Filled.AutoAwesome, dayRange = "Around day 14",
+            title = stringResource(R.string.home_learning_phase_ovulation_name), icon = Icons.Filled.AutoAwesome, dayRange = stringResource(R.string.home_learning_phase_ovulation_days),
             phaseColor = phasePrimaryColor(CyclePhase.OVULATION),
-            overview = "An LH surge triggers egg release. Your most fertile window, the egg survives 12–24 hours. Communication, confidence, and charisma tend to peak here.",
+            overview = stringResource(R.string.home_learning_detail_ovulation_overview),
             points = listOf(
-                "Discharge becomes clear and stretchy, like egg whites",
-                "A mild one-sided pelvic ache is normal",
-                "Basal body temperature rises slightly after ovulation",
+                stringResource(R.string.home_learning_detail_ovulation_point_1),
+                stringResource(R.string.home_learning_detail_ovulation_point_2),
+                stringResource(R.string.home_learning_detail_ovulation_point_3),
             ),
         )
         LearningPhaseDetailCard(
-            title = "Luteal phase", icon = Icons.Filled.Bedtime, dayRange = "Days 15–28",
+            title = stringResource(R.string.home_phase_luteal), icon = Icons.Filled.Bedtime, dayRange = stringResource(R.string.home_learning_phase_luteal_days),
             phaseColor = phasePrimaryColor(CyclePhase.LUTEAL),
-            overview = "Progesterone rises to prepare the uterine lining. If no pregnancy happens, hormone levels drop, and your next period begins. PMS symptoms may appear in the second half.",
+            overview = stringResource(R.string.home_learning_detail_luteal_overview),
             points = listOf(
-                "Energy slows as your body works harder internally",
-                "Bloating, mood swings, and cravings are hormonal, not weakness",
-                "Magnesium and B6 are clinically shown to ease PMS symptoms",
+                stringResource(R.string.home_learning_detail_luteal_point_1),
+                stringResource(R.string.home_learning_detail_luteal_point_2),
+                stringResource(R.string.home_learning_detail_luteal_point_3),
             ),
         )
 
-        LearningCard(title = "What to log with Sakhi", icon = Icons.AutoMirrored.Filled.ListAlt) {
-            LearningTipRow(Icons.Filled.Opacity, "Period dates, when it starts and ends each month")
+        LearningCard(title = stringResource(R.string.home_learning_log_title), icon = Icons.AutoMirrored.Filled.ListAlt) {
+            LearningTipRow(Icons.Filled.Opacity, stringResource(R.string.home_learning_log_tip_1))
             LearningDivider()
-            LearningTipRow(Icons.Filled.BarChart, "Flow level, light, medium, or heavy each day")
+            LearningTipRow(Icons.Filled.BarChart, stringResource(R.string.home_learning_log_tip_2))
             LearningDivider()
-            LearningTipRow(Icons.Filled.Favorite, "Symptoms, cramps, mood, energy, sleep, headaches, cravings")
+            LearningTipRow(Icons.Filled.Favorite, stringResource(R.string.home_learning_log_tip_3))
             LearningDivider()
-            LearningTipRow(Icons.Filled.Visibility, "Discharge, colour and texture help pinpoint ovulation")
+            LearningTipRow(Icons.Filled.Visibility, stringResource(R.string.home_learning_log_tip_4))
         }
 
-        LearningCard(title = "The hormones behind it all", icon = Icons.Filled.MonitorHeart) {
+        LearningCard(title = stringResource(R.string.home_learning_hormones_title), icon = Icons.Filled.MonitorHeart) {
             listOf(
-                Triple("FSH", "Follicle-stimulating hormone", "Rises to kick off follicle development at the start of your cycle"),
-                Triple("LH", "Luteinizing hormone", "Surges mid-cycle to trigger ovulation, the key signal Sakhi watches"),
-                Triple("E2", "Estrogen", "Builds through follicular phase, lifts mood, energy, and skin glow"),
-                Triple("P4", "Progesterone", "Rises after ovulation, prepares the uterus, causes PMS if it drops"),
+                Triple("FSH", stringResource(R.string.home_learning_hormone_fsh_name), stringResource(R.string.home_learning_hormone_fsh_desc)),
+                Triple("LH", stringResource(R.string.home_learning_hormone_lh_name), stringResource(R.string.home_learning_hormone_lh_desc)),
+                Triple("E2", stringResource(R.string.home_learning_hormone_e2_name), stringResource(R.string.home_learning_hormone_e2_desc)),
+                Triple("P4", stringResource(R.string.home_learning_hormone_p4_name), stringResource(R.string.home_learning_hormone_p4_desc)),
             ).forEachIndexed { i, (abbr, name, desc) ->
                 if (i > 0) LearningDivider()
                 LearningAbbrRow(abbr = abbr, name = name, description = desc)
             }
         }
 
-        LearningCard(title = "Eat with your cycle", icon = Icons.Filled.Eco) {
+        LearningCard(title = stringResource(R.string.home_learning_eat_title), icon = Icons.Filled.Eco) {
             listOf(
-                LearningNutritionRowData(Icons.Filled.WaterDrop, phasePrimaryColor(CyclePhase.MENSTRUAL), "Period", "Spinach, lentils, dark chocolate, ginger tea, replenish iron and ease cramps"),
-                LearningNutritionRowData(Icons.Filled.WbSunny, phasePrimaryColor(CyclePhase.FOLLICULAR), "Follicular", "Lean protein, fermented foods, broccoli, support rising estrogen"),
-                LearningNutritionRowData(Icons.Filled.AutoAwesome, phasePrimaryColor(CyclePhase.OVULATION), "Ovulation", "Berries, leafy greens, zinc-rich seeds, antioxidants protect the egg"),
-                LearningNutritionRowData(Icons.Filled.Bedtime, phasePrimaryColor(CyclePhase.LUTEAL), "Luteal", "Magnesium (nuts, seeds), B6 foods, complex carbs, reduce PMS and cravings"),
+                LearningNutritionRowData(Icons.Filled.WaterDrop, phasePrimaryColor(CyclePhase.MENSTRUAL), stringResource(R.string.home_learning_phase_menstrual_name), stringResource(R.string.home_learning_eat_period_desc)),
+                LearningNutritionRowData(Icons.Filled.WbSunny, phasePrimaryColor(CyclePhase.FOLLICULAR), stringResource(R.string.home_learning_phase_follicular_name), stringResource(R.string.home_learning_eat_follicular_desc)),
+                LearningNutritionRowData(Icons.Filled.AutoAwesome, phasePrimaryColor(CyclePhase.OVULATION), stringResource(R.string.home_learning_phase_ovulation_name), stringResource(R.string.home_learning_eat_ovulation_desc)),
+                LearningNutritionRowData(Icons.Filled.Bedtime, phasePrimaryColor(CyclePhase.LUTEAL), stringResource(R.string.home_learning_phase_luteal_name), stringResource(R.string.home_learning_eat_luteal_desc)),
             ).forEachIndexed { i, row ->
                 if (i > 0) LearningDivider()
                 LearningOverviewRow(icon = row.icon, color = row.color, name = row.title, days = null, subtitle = row.description)
             }
         }
 
-        LearningCard(title = "Tips for better tracking", icon = Icons.Filled.Lightbulb) {
-            LearningTipRow(Icons.Filled.CalendarMonth, "Log your period on the first day of bleeding, not spotting")
+        LearningCard(title = stringResource(R.string.home_learning_tracking_title), icon = Icons.Filled.Lightbulb) {
+            LearningTipRow(Icons.Filled.CalendarMonth, stringResource(R.string.home_learning_tracking_tip_1))
             LearningDivider()
-            LearningTipRow(Icons.Filled.Schedule, "Track at the same time each day for the most consistent data")
+            LearningTipRow(Icons.Filled.Schedule, stringResource(R.string.home_learning_tracking_tip_2))
             LearningDivider()
-            LearningTipRow(Icons.Filled.Bedtime, "Sleep quality and stress both affect your cycle length, log them too")
+            LearningTipRow(Icons.Filled.Bedtime, stringResource(R.string.home_learning_tracking_tip_3))
             LearningDivider()
-            LearningTipRow(Icons.Filled.Autorenew, "Cycles vary month to month. Three cycles gives Sakhi a reliable baseline")
+            LearningTipRow(Icons.Filled.Autorenew, stringResource(R.string.home_learning_tracking_tip_4))
         }
     }
 }
@@ -1605,6 +1909,7 @@ private data class LearningNutritionRowData(val icon: ImageVector, val color: Co
 private fun LearningCard(title: String, icon: ImageVector, content: @Composable ColumnScope.() -> Unit) {
     HomeGlassCard(
         title = title,
+        phase = CyclePhase.UNKNOWN,
         accentColor = MaterialTheme.colorScheme.primary,
         hasCycleData = false,
         icon = icon,
@@ -1720,6 +2025,7 @@ private fun LearningPhaseDetailCard(
 ) {
     HomeGlassCard(
         title = title,
+        phase = CyclePhase.UNKNOWN,
         accentColor = phaseColor,
         hasCycleData = false,
         icon = icon,
@@ -1775,6 +2081,7 @@ private fun LearningDivider() {
 
 @Composable
 private fun NutritionCard(
+    phase: CyclePhase,
     foods: List<RecommendationFoodUi>,
     isLoading: Boolean,
     accentColor: Color,
@@ -1782,14 +2089,15 @@ private fun NutritionCard(
     if (isLoading && foods.isEmpty()) return
 
     HomeGlassCard(
-        title = "What to Eat",
+        title = stringResource(R.string.home_nutrition_title),
+        phase = phase,
         accentColor = accentColor,
         hasCycleData = true,
         icon = Icons.Filled.Eco,
     ) {
         if (foods.isEmpty()) {
             Text(
-                text = "No food recommendations are available right now.",
+                text = stringResource(R.string.home_nutrition_empty),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
@@ -1830,6 +2138,7 @@ private fun NutritionCard(
 
 @Composable
 private fun SakhiInsightCard(
+    phase: CyclePhase,
     insight: String?,
     isLoading: Boolean,
     isPartnerMode: Boolean,
@@ -1838,7 +2147,14 @@ private fun SakhiInsightCard(
     if (insight == null && !isLoading) return
 
     HomeGlassCard(
-        title = if (isPartnerMode) "How to be there for her today" else "Sakhi's tip for today",
+        title = stringResource(
+            if (isPartnerMode) {
+                R.string.home_insight_partner_title
+            } else {
+                R.string.home_insight_self_title
+            },
+        ),
+        phase = phase,
         accentColor = accentColor,
         hasCycleData = true,
         icon = Icons.Filled.AutoAwesome,
@@ -1855,11 +2171,238 @@ private fun SakhiInsightCard(
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
             )
             Text(
-                text = "Powered by Sakhi AI",
+                text = stringResource(R.string.home_insight_powered),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
             )
         }
     }
+}
+
+private data class HomePhasePalette(
+    val primary: Color,
+    val secondary: Color,
+    val surface: Color,
+    val bgTop: Color,
+    val bgMid: Color,
+    val bgBot: Color,
+    val tileFill: Color,
+    val tileStroke: Color,
+)
+
+@Composable
+private fun rememberHomePhasePalette(phase: CyclePhase): HomePhasePalette {
+    val isDark = isSystemInDarkTheme()
+    return remember(phase, isDark) {
+        val resolved = SakhiColors.resolved(isDark).forPhase(
+            if (phase == CyclePhase.UNKNOWN) CyclePhase.FOLLICULAR else phase,
+        )
+        HomePhasePalette(
+            primary = resolved.primary.toComposeColor(),
+            secondary = resolved.secondary.toComposeColor(),
+            surface = resolved.surface.toComposeColor(),
+            bgTop = resolved.bgTop.toComposeColor(),
+            bgMid = resolved.bgMid.toComposeColor(),
+            bgBot = resolved.bgBot.toComposeColor(),
+            tileFill = resolved.tileFill.toComposeColor(),
+            tileStroke = resolved.tileStroke.toComposeColor(),
+        )
+    }
+}
+
+@Composable
+private fun homeBackgroundBrush(phasePalette: HomePhasePalette, hasCycleData: Boolean): Brush {
+    return if (!hasCycleData) {
+        Brush.verticalGradient(
+            colors = listOf(
+                MaterialTheme.colorScheme.background,
+                MaterialTheme.colorScheme.surface,
+            ),
+        )
+    } else {
+        Brush.verticalGradient(
+            colors = listOf(
+                phasePalette.bgTop,
+                phasePalette.bgMid,
+                phasePalette.bgBot,
+            ),
+        )
+    }
+}
+
+@Composable
+private fun homeSecondaryTextColor(
+    phasePalette: HomePhasePalette,
+    hasCycleData: Boolean,
+    isMenstrual: Boolean,
+): Color = when {
+    !hasCycleData -> MaterialTheme.colorScheme.onSurfaceVariant
+    isMenstrual -> Color.White.copy(alpha = 0.90f)
+    else -> phasePalette.primary.copy(alpha = 0.72f)
+}
+
+@Composable
+private fun HomeTopBar(
+    uiState: HomeUiState,
+    heroScrollProgress: Float,
+    phasePalette: HomePhasePalette,
+    onOpenProfile: () -> Unit,
+    onOpenCare: () -> Unit,
+    onOpenCalendar: () -> Unit,
+) {
+    val context = LocalContext.current
+    val hasCycleData = uiState.hasCycleData
+    val isMenstrual = uiState.phase == CyclePhase.MENSTRUAL
+    val foreground = when {
+        !hasCycleData -> MaterialTheme.colorScheme.primary
+        isMenstrual -> Color.White
+        else -> phasePalette.primary
+    }
+    val iconBackground = if (!hasCycleData) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    } else {
+        phasePalette.secondary.copy(alpha = 0.12f)
+    }
+    val iconStroke = foreground.copy(alpha = 0.14f)
+    val phaseLabel = if (hasCycleData) {
+        uiState.phase.displayName(context)
+    } else if (uiState.session?.isViewingOwnData == false) {
+        stringResource(R.string.home_phase_first_period_partner)
+    } else {
+        stringResource(R.string.home_phase_first_period_self)
+    }
+    val heroSummary = heroText(context, uiState)
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier.align(Alignment.Center),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = DateConverter.formatForDisplay(DateConverter.today()),
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = foreground,
+                modifier = Modifier.clickable(onClick = onOpenCalendar),
+            )
+            HeroTopBarSubtitle(
+                phaseName = phaseLabel,
+                heroContentBig = heroSummary.big,
+                heroContentSub = heroSummary.sub,
+                foreground = foreground,
+                progress = heroScrollProgress,
+            )
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TopBarIconButton(
+                icon = Icons.Filled.Menu,
+                contentDescription = stringResource(R.string.home_open_profile_content_description),
+                foreground = foreground,
+                background = iconBackground,
+                stroke = iconStroke,
+                onClick = onOpenProfile,
+            )
+            TopBarIconButton(
+                icon = Icons.Filled.People,
+                contentDescription = stringResource(R.string.home_open_care_content_description),
+                foreground = foreground,
+                background = iconBackground,
+                stroke = iconStroke,
+                onClick = onOpenCare,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TopBarIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    foreground: Color,
+    background: Color,
+    stroke: Color,
+    onClick: () -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .background(background, CircleShape)
+            .border(0.5.dp, stroke, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = foreground)
+    }
+}
+
+@Composable
+private fun HeroTopBarSubtitle(
+    phaseName: String,
+    heroContentBig: String,
+    heroContentSub: String,
+    foreground: Color,
+    progress: Float,
+) {
+    Box(
+        modifier = Modifier.height(16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
+            modifier = Modifier.alpha(1f - progress),
+        ) {
+            Text(
+                text = phaseName,
+                style = MaterialTheme.typography.labelMedium,
+                color = foreground.copy(alpha = 0.72f),
+            )
+            Icon(
+                imageVector = Icons.Filled.MoreHoriz,
+                contentDescription = null,
+                tint = foreground.copy(alpha = 0.50f),
+                modifier = Modifier.size(12.dp),
+            )
+        }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.alpha(progress),
+        ) {
+            if (heroContentBig.isNotEmpty()) {
+                Text(
+                    text = heroContentBig,
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = foreground,
+                )
+                Text(
+                    text = "·",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = foreground.copy(alpha = 0.45f),
+                )
+            }
+            Text(
+                text = heroContentSub,
+                style = MaterialTheme.typography.labelMedium,
+                color = foreground.copy(alpha = 0.72f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private fun CyclePhase.displayName(context: Context): String = when (this) {
+    CyclePhase.MENSTRUAL -> context.getString(R.string.home_phase_menstrual)
+    CyclePhase.FOLLICULAR -> context.getString(R.string.home_phase_follicular)
+    CyclePhase.OVULATION -> context.getString(R.string.home_phase_ovulation)
+    CyclePhase.LUTEAL -> context.getString(R.string.home_phase_luteal)
+    CyclePhase.DELAYED -> context.getString(R.string.home_phase_delayed)
+    CyclePhase.UNKNOWN -> context.getString(R.string.home_phase_first_period_self)
 }

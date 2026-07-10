@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.recommendations
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.async
@@ -50,6 +51,7 @@ class RecommendationsViewModel(
     private val cycleDataRepository: CycleDataRepository,
     private val userProfileRepository: UserProfileRepository,
     private val recommendationRepository: RecommendationRepository,
+    private val appContext: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RecommendationsUiState())
@@ -164,7 +166,7 @@ class RecommendationsViewModel(
                     RecommendationFoodUi(
                         name = food.name,
                         category = food.category,
-                        nutritionLabel = nutrition?.let(::nutritionLabel),
+                        nutritionLabel = nutrition?.let { nutritionLabel(appContext, it) },
                     )
                 }
             }.awaitAll()
@@ -172,11 +174,23 @@ class RecommendationsViewModel(
     }
 }
 
-private fun nutritionLabel(nutrition: team.sakhi.repositories.FoodNutrition): String? {
+private fun nutritionLabel(
+    context: Context,
+    nutrition: team.sakhi.repositories.FoodNutrition,
+): String? {
     return when {
-        nutrition.proteinG != null -> "Protein ${nutrition.proteinG} g"
-        nutrition.carbsG != null -> "Carbs ${nutrition.carbsG} g"
-        nutrition.calories != null -> "${nutrition.calories} kcal"
+        nutrition.proteinG != null -> context.getString(
+            R.string.recommendations_nutrition_protein,
+            nutrition.proteinG.toString(),
+        )
+        nutrition.carbsG != null -> context.getString(
+            R.string.recommendations_nutrition_carbs,
+            nutrition.carbsG.toString(),
+        )
+        nutrition.calories != null -> context.getString(
+            R.string.recommendations_nutrition_calories,
+            nutrition.calories.toString(),
+        )
         else -> null
     }
 }

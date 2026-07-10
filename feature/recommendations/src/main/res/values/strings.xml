@@ -1,0 +1,27 @@
+<resources>
+    <string name="recommendations_title">Recommendations</string>
+    <string name="recommendations_shared_title">Shared recommendations</string>
+    <string name="recommendations_loading_summary">Loading shared recommendations</string>
+    <string name="recommendations_phase_unresolved_summary">Recommendations are available, but the current phase could not be resolved right now.</string>
+    <string name="recommendations_no_phase_summary">Recommendations are ready, but there is no active phase signal yet.</string>
+    <string name="recommendations_shared_phase_summary">Showing %1$s recommendations with care-role visibility applied.</string>
+    <string name="recommendations_current_phase_summary">Showing %1$s recommendations for the current phase.</string>
+
+    <string name="recommendations_section_eat_more">Eat more</string>
+    <string name="recommendations_section_avoid">Avoid</string>
+    <string name="recommendations_section_phase_tips">Phase tips</string>
+    <string name="recommendations_section_condition_tips">Condition tips</string>
+    <string name="recommendations_ai_insight">AI insight</string>
+
+    <string name="recommendations_hidden_phase_foods">Phase-based food recommendations are hidden for this care role.</string>
+    <string name="recommendations_hidden_avoid_foods">Avoid-food guidance is hidden for this care role.</string>
+    <string name="recommendations_no_phase_tips">No phase tips are available right now.</string>
+    <string name="recommendations_hidden_phase_tips">Phase tips are hidden for this care role.</string>
+    <string name="recommendations_no_condition_tips">No condition-specific tips are available right now.</string>
+    <string name="recommendations_hidden_condition_tips">Condition-specific recommendations are hidden for this care role.</string>
+
+    <string name="recommendations_food_line">%1$s, %2$s</string>
+    <string name="recommendations_nutrition_protein">Protein %1$s g</string>
+    <string name="recommendations_nutrition_carbs">Carbs %1$s g</string>
+    <string name="recommendations_nutrition_calories">%1$s kcal</string>
+</resources>

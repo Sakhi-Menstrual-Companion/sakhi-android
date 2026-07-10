@@ -1,0 +1,11 @@
+<resources>
+    <string name="calendar_no_access">This viewer does not have calendar access.</string>
+    <string name="calendar_previous_month">Previous month</string>
+    <string name="calendar_next_month">Next month</string>
+    <string name="calendar_expand_year_view">Expand year view</string>
+    <string name="calendar_today">Today</string>
+    <string name="calendar_previous_year">Previous year</string>
+    <string name="calendar_collapse_year_view">Collapse year view</string>
+    <string name="calendar_current_year">Current year</string>
+    <string name="calendar_next_year">Next year</string>
+</resources>

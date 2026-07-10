@@ -1,0 +1,28 @@
+<resources>
+    <string name="auth_phone_title">Let\'s Begin</string>
+    <string name="auth_phone_subtitle">Your number stays private. It\'s just how we keep your account safe.</string>
+    <string name="auth_phone_continue">Continue</string>
+    <string name="auth_phone_sending">Sending...</string>
+    <string name="auth_phone_placeholder_number">7898565431</string>
+    <string name="auth_select_country">Select your country</string>
+
+    <string name="auth_otp_title">Our Secret Code</string>
+    <string name="auth_otp_subtitle">Enter the code we sent to confirm it\'s you.</string>
+    <string name="auth_otp_resending">Resending...</string>
+    <string name="auth_otp_resend_cta">Didn\'t get the code? Resend</string>
+    <string name="auth_otp_verifying">Verifying...</string>
+
+    <string name="auth_country_picker_title">Select your country</string>
+    <string name="auth_country_picker_dismiss">Dismiss</string>
+    <string name="auth_country_picker_search_placeholder">Search for a country...</string>
+    <string name="auth_country_picker_clear_search">Clear search</string>
+    <string name="auth_country_picker_no_results">No results for \"%1$s\"</string>
+    <string name="auth_country_picker_try_again">Try a different spelling or a dial code like +91</string>
+
+    <string name="auth_error_code_empty">Code cannot be empty, please enter the 6-digit code we sent you</string>
+    <string name="auth_error_phone_empty">Please enter your phone number</string>
+    <string name="auth_error_phone_wrong_length">Enter a valid %1$d-digit number</string>
+    <string name="auth_error_phone_invalid_start_india">Indian numbers start with 6, 7, 8, or 9</string>
+    <string name="auth_error_too_many_attempts">Too many attempts, we sent a new code to your number.</string>
+    <string name="auth_error_generic">Something went wrong. Please try again.</string>
+</resources>

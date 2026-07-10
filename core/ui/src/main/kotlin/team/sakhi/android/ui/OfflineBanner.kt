@@ -11,6 +11,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 
@@ -18,9 +19,10 @@ import team.sakhi.android.designsystem.SakhiSpacing
 @Composable
 fun OfflineBanner(
     modifier: Modifier = Modifier,
-    message: String = "You are offline. Sakhi will sync again when the connection returns.",
+    message: String? = null,
     leadingContent: (@Composable () -> Unit)? = null,
 ) {
+    val resolvedMessage = message ?: stringResource(R.string.offline_banner_default)
     Surface(
         shape = RoundedCornerShape(SakhiRadius.lg),
         color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
@@ -37,7 +39,7 @@ fun OfflineBanner(
             leadingContent?.invoke()
 
             Text(
-                text = message,
+                text = resolvedMessage,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface,
             )

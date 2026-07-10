@@ -17,6 +17,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -28,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -35,13 +37,17 @@ import team.sakhi.android.designsystem.SakhiRadius
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.KeyboardSafeScaffold
 import team.sakhi.android.ui.PrimaryButton
+import team.sakhi.android.ui.SakhiModalSheet
+import team.sakhi.android.ui.rememberSakhiModalSheetState
 
 /**
  * Phone-entry shell for the signed-out route. It renders only shared auth state
  * from [AuthViewModel]; phone validation, OTP dispatch, and the country/dial-code
  * list ([team.sakhi.validation.PhoneCountry]) all stay in KMM.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PhoneScreen(
     onOtpSent: (phone: String) -> Unit,
@@ -49,6 +55,7 @@ fun PhoneScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCountryPicker by remember { mutableStateOf(false) }
+    val countryPickerSheetState = rememberSakhiModalSheetState()
 
     uiState.otpSentTo?.takeIf { uiState.verifiedAuthResult == null }?.let { phone ->
         onOtpSent(phone)
@@ -56,51 +63,67 @@ fun PhoneScreen(
     }
 
     if (showCountryPicker) {
-        CountryPicker(
-            selectedCountry = uiState.selectedCountry,
-            onCountrySelected = { country ->
-                viewModel.selectCountry(country)
-                showCountryPicker = false
-            },
-            onDismiss = { showCountryPicker = false },
-        )
-        return
+        SakhiModalSheet(
+            onDismissRequest = { showCountryPicker = false },
+            sheetState = countryPickerSheetState,
+        ) {
+            CountryPicker(
+                selectedCountry = uiState.selectedCountry,
+                onCountrySelected = { country ->
+                    viewModel.selectCountry(country)
+                    showCountryPicker = false
+                },
+                onDismiss = { showCountryPicker = false },
+                asSheet = true,
+            )
+        }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SakhiSpacing.space6),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-    ) {
-        Text(
-            text = "Let's Begin",
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Text(
-            text = "Your number stays private. It's just how we keep your account safe.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    KeyboardSafeScaffold(
+        body = {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(SakhiSpacing.space6),
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+            ) {
+                Text(
+                    text = stringResource(R.string.auth_phone_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Text(
+                    text = stringResource(R.string.auth_phone_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
-        PhoneEntryField(
-            countryFlag = uiState.selectedCountry.flag,
-            dialCode = uiState.selectedCountry.dialCode,
-            phoneDigits = uiState.localDigits,
-            onCountryTap = { showCountryPicker = true },
-            onDigitsChanged = viewModel::onPhoneDigitsChanged,
-            hasError = uiState.error != null,
-            errorText = uiState.error,
-            modifier = Modifier.padding(top = SakhiSpacing.space6),
-        )
-
-        PrimaryButton(
-            text = if (uiState.isSendingOtp) "Sending..." else "Continue",
-            onClick = viewModel::sendOtp,
-            enabled = !uiState.isSendingOtp,
-            modifier = Modifier.padding(top = SakhiSpacing.space3),
-        )
-    }
+                PhoneEntryField(
+                    countryFlag = uiState.selectedCountry.flag,
+                    dialCode = uiState.selectedCountry.dialCode,
+                    phoneDigits = uiState.localDigits,
+                    onCountryTap = { showCountryPicker = true },
+                    onDigitsChanged = viewModel::onPhoneDigitsChanged,
+                    hasError = uiState.error != null,
+                    errorText = uiState.error,
+                    modifier = Modifier.padding(top = SakhiSpacing.space6),
+                )
+            }
+        },
+        footer = {
+            PrimaryButton(
+                text = if (uiState.isSendingOtp) {
+                    stringResource(R.string.auth_phone_sending)
+                } else {
+                    stringResource(R.string.auth_phone_continue)
+                },
+                onClick = viewModel::sendOtp,
+                enabled = !uiState.isSendingOtp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
+            )
+        },
+    )
 }
 
 @Composable
@@ -156,7 +179,7 @@ private fun PhoneEntryField(
                 )
                 Icon(
                     imageVector = Icons.Rounded.KeyboardArrowDown,
-                    contentDescription = "Select your country",
+                    contentDescription = stringResource(R.string.auth_select_country),
                     tint = MaterialTheme.colorScheme.primary,
                 )
             }
@@ -189,7 +212,7 @@ private fun PhoneEntryField(
                     ) {
                         if (phoneDigits.isEmpty()) {
                             Text(
-                                text = "7898565431",
+                                text = stringResource(R.string.auth_phone_placeholder_number),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                             )

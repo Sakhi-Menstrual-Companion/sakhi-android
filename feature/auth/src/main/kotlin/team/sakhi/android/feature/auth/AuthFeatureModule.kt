@@ -11,6 +11,7 @@ val authFeatureModule = module {
             accountClassifier = get(),
             appStateInputBridge = get(),
             hapticManager = get(),
+            appContext = get(),
         )
     }
 }

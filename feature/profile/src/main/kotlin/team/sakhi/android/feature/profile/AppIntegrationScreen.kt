@@ -22,12 +22,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.health.connect.client.PermissionController
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -41,7 +44,7 @@ import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
 import team.sakhi.android.ui.SecondaryButton
-import team.sakhi.android.ui.SheetSurface
+import team.sakhi.android.ui.DetailSheetScaffold
 
 /**
  * Real Android Health Connect bridge for Profile's App Integration card.
@@ -65,25 +68,17 @@ fun AppIntegrationScreen(
         onResult = viewModel::onPermissionsResult,
     )
 
-    SheetSurface(showDragHandle = true) {
-        DetailHeader(title = "App Integration", onBack = onBack)
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(SakhiSpacing.space5),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
-        ) {
+    DetailSheetScaffold(title = stringResource(R.string.profile_app_integration_title), onBack = onBack) {
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5)) {
             Text(
-                text = "Import period, sleep, steps, and temperature from Health Connect. Sleep, steps, and temperature stay on device.",
+                text = stringResource(R.string.profile_app_integration_intro),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             if (!uiState.error.isNullOrBlank()) {
                 SakhiAlert(
-                    title = "Health Connect",
+                    title = stringResource(R.string.profile_app_integration_health_connect),
                     message = uiState.error.orEmpty(),
                     tone = SakhiAlertTone.Error,
                     onDismiss = viewModel::clearError,
@@ -111,17 +106,17 @@ fun AppIntegrationScreen(
 
             if (uiState.isEnabled && uiState.sleepEntries.isNotEmpty()) {
                 InsightCard(
-                    label = "SLEEP",
-                    title = "Avg Sleep",
-                    value = average(uiState.sleepEntries).let { String.format("%.1f hrs", it) },
+                    label = stringResource(R.string.profile_app_integration_label_sleep),
+                    title = stringResource(R.string.profile_app_integration_title_avg_sleep),
+                    value = stringResource(R.string.profile_app_integration_value_hours, average(uiState.sleepEntries)),
                     rows = uiState.sleepEntries,
-                    formatter = { String.format("%.1f hrs", it) },
+                    formatter = { value -> context.getString(R.string.profile_app_integration_value_hours, value) },
                 )
             }
             if (uiState.isEnabled && uiState.stepEntries.isNotEmpty()) {
                 InsightCard(
-                    label = "ACTIVITY",
-                    title = "Avg Steps",
+                    label = stringResource(R.string.profile_app_integration_label_activity),
+                    title = stringResource(R.string.profile_app_integration_title_avg_steps),
                     value = average(uiState.stepEntries).toInt().toString(),
                     rows = uiState.stepEntries,
                     formatter = { it.toInt().toString() },
@@ -129,11 +124,15 @@ fun AppIntegrationScreen(
             }
             if (uiState.isEnabled && uiState.temperatureEntries.isNotEmpty()) {
                 InsightCard(
-                    label = "TEMPERATURE",
-                    title = "Recent Readings",
-                    value = "${uiState.temperatureEntries.size} days",
+                    label = stringResource(R.string.profile_app_integration_label_temperature),
+                    title = stringResource(R.string.profile_app_integration_title_recent_readings),
+                    value = pluralStringResource(
+                        R.plurals.profile_app_integration_days_count,
+                        uiState.temperatureEntries.size,
+                        uiState.temperatureEntries.size,
+                    ),
                     rows = uiState.temperatureEntries,
-                    formatter = { String.format("%.1f°C", it) },
+                    formatter = { value -> context.getString(R.string.profile_app_integration_value_temperature, value) },
                 )
             }
         }
@@ -164,7 +163,7 @@ private fun HealthConnectCard(
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Health Connect",
+                    text = stringResource(R.string.profile_app_integration_health_connect),
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                 )
                 Text(
@@ -195,7 +194,13 @@ private fun HealthConnectCard(
 
         uiState.latestSync?.let { latest ->
             Text(
-                text = "Imported ${latest.importedPeriodLogs} period days, ${latest.importedSleepSamples} sleep entries, ${latest.importedStepSamples} step entries, and ${latest.importedTemperatureSamples} temperature readings.",
+                text = stringResource(
+                    R.string.profile_app_integration_imported_summary,
+                    latest.importedPeriodLogs,
+                    latest.importedSleepSamples,
+                    latest.importedStepSamples,
+                    latest.importedTemperatureSamples,
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = SakhiSpacing.space2),
@@ -211,34 +216,34 @@ private fun HealthConnectCard(
             when {
                 uiState.session?.isViewingOwnData == false -> {
                     Text(
-                        text = "Health Connect is only available when viewing your own data.",
+                        text = stringResource(R.string.profile_app_integration_own_data_only),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 uiState.availability == HealthConnectAvailability.NotInstalled -> {
                     PrimaryButton(
-                        text = "Install Health Connect",
+                        text = stringResource(R.string.profile_app_integration_install),
                         onClick = onInstall,
                         modifier = Modifier.weight(1f),
                     )
                 }
                 uiState.availability == HealthConnectAvailability.NotSupported -> {
                     Text(
-                        text = "Health Connect is not available on this device.",
+                        text = stringResource(R.string.profile_app_integration_not_available),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 uiState.isEnabled -> {
                     SecondaryButton(
-                        text = "Disconnect",
+                        text = stringResource(R.string.profile_app_integration_disconnect),
                         onClick = onDisconnect,
                         modifier = Modifier.weight(1f),
                         enabled = !uiState.isSyncing,
                     )
                     PrimaryButton(
-                        text = "Sync now",
+                        text = stringResource(R.string.profile_app_integration_sync_now),
                         onClick = {
                             hapticManager.impact(HapticImpact.LIGHT)
                             onSync()
@@ -249,7 +254,7 @@ private fun HealthConnectCard(
                 }
                 else -> {
                     PrimaryButton(
-                        text = "Connect Health Connect",
+                        text = stringResource(R.string.profile_app_integration_connect),
                         onClick = {
                             hapticManager.impact(HapticImpact.LIGHT)
                             onConnect()
@@ -320,18 +325,6 @@ private fun InsightCard(
     }
 }
 
-private fun healthConnectSubtitle(uiState: AppIntegrationUiState): String {
-    return when {
-        uiState.session?.isViewingOwnData == false -> "Available only for your own Health Connect data."
-        uiState.availability == HealthConnectAvailability.NotInstalled -> "Install the Health Connect app to start importing."
-        uiState.availability == HealthConnectAvailability.NotSupported -> "This device does not support Health Connect."
-        uiState.isSyncing -> "Syncing period, sleep, steps, and temperature."
-        uiState.isEnabled -> "Imports cycle data into Sakhi and keeps health insights on this device."
-        uiState.hasPermissions -> "Permissions granted. Connect when you're ready."
-        else -> "Import period, sleep, steps, and temperature."
-    }
-}
-
 private fun average(values: List<DailyHealthValue>): Double {
     if (values.isEmpty()) return 0.0
     return values.sumOf(DailyHealthValue::value) / values.size
@@ -339,5 +332,19 @@ private fun average(values: List<DailyHealthValue>): Double {
 
 private fun kotlinx.datetime.LocalDate.toDisplayLabel(): String {
     val date = LocalDate.of(year, monthNumber, dayOfMonth)
-    return date.format(DateTimeFormatter.ofPattern("d MMM"))
+    return date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+}
+
+@Composable
+private fun healthConnectSubtitle(uiState: AppIntegrationUiState): String {
+    val context = LocalContext.current
+    return when {
+        uiState.session?.isViewingOwnData == false -> context.getString(R.string.profile_app_integration_subtitle_own_data_only)
+        uiState.availability == HealthConnectAvailability.NotInstalled -> context.getString(R.string.profile_app_integration_subtitle_not_installed)
+        uiState.availability == HealthConnectAvailability.NotSupported -> context.getString(R.string.profile_app_integration_subtitle_not_supported)
+        uiState.isSyncing -> context.getString(R.string.profile_app_integration_subtitle_syncing)
+        uiState.isEnabled -> context.getString(R.string.profile_app_integration_subtitle_enabled)
+        uiState.hasPermissions -> context.getString(R.string.profile_app_integration_subtitle_permissions_ready)
+        else -> context.getString(R.string.profile_app_integration_subtitle_default)
+    }
 }

@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.auth
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,7 @@ class AuthViewModel(
     private val accountClassifier: AccountClassifier,
     private val appStateInputBridge: AppStateInputBridge,
     private val hapticManager: AndroidHapticManager,
+    private val appContext: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PhoneUiState())
@@ -147,14 +149,14 @@ class AuthViewModel(
         val phone = state.otpSentTo ?: normalizedPhoneOrNull(state)
         if (phone == null) {
             hapticManager.error()
-            _uiState.value = state.copy(otpError = "Code cannot be empty, please enter the 6-digit code we sent you")
+            _uiState.value = state.copy(otpError = appContext.getString(R.string.auth_error_code_empty))
             return
         }
         if (!ValidationRules.isValidOtp(filteredOtp)) {
             hapticManager.error()
             _uiState.value = state.copy(
                 otpDigits = filteredOtp,
-                otpError = "Code cannot be empty, please enter the 6-digit code we sent you",
+                otpError = appContext.getString(R.string.auth_error_code_empty),
                 verifiedAuthResult = null,
             )
             return
@@ -259,17 +261,20 @@ class AuthViewModel(
     }
 
     private fun phoneValidationMessage(validation: PhoneValidationResult): String? = when (validation) {
-        PhoneValidationResult.Empty -> "Please enter your phone number"
-        is PhoneValidationResult.WrongLength -> "Enter a valid ${validation.expected}-digit number"
-        PhoneValidationResult.InvalidStart -> "Indian numbers start with 6, 7, 8, or 9"
+        PhoneValidationResult.Empty -> appContext.getString(R.string.auth_error_phone_empty)
+        is PhoneValidationResult.WrongLength -> appContext.getString(
+            R.string.auth_error_phone_wrong_length,
+            validation.expected,
+        )
+        PhoneValidationResult.InvalidStart -> appContext.getString(R.string.auth_error_phone_invalid_start_india)
         PhoneValidationResult.Valid -> null
     }
 
     private fun authMessageFor(throwable: Throwable): String {
         return when (throwable as? AuthError) {
-            AuthError.TooManyAttempts -> "Too many attempts, we sent a new code to your number."
+            AuthError.TooManyAttempts -> appContext.getString(R.string.auth_error_too_many_attempts)
             is AuthError -> throwable.userMessage
-            else -> throwable.message ?: "Something went wrong. Please try again."
+            else -> throwable.message ?: appContext.getString(R.string.auth_error_generic)
         }
     }
 }

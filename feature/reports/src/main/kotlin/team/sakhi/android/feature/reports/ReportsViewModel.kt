@@ -1,5 +1,7 @@
 package team.sakhi.android.feature.reports
 
+import android.content.Context
+import androidx.annotation.StringRes
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -30,28 +32,28 @@ enum class ReportsPhase {
 }
 
 enum class ReportDateRangePreset(
-    val shortLabel: String,
-    val rowLabel: String,
+    @StringRes val shortLabelRes: Int,
+    @StringRes val rowLabelRes: Int,
 ) {
     LastMonth(
-        shortLabel = "Last Month",
-        rowLabel = "Last 1 month",
+        shortLabelRes = R.string.reports_preset_last_month_short,
+        rowLabelRes = R.string.reports_preset_last_month_row,
     ),
     ThreeMonths(
-        shortLabel = "3 Months",
-        rowLabel = "Last 3 months",
+        shortLabelRes = R.string.reports_preset_three_months_short,
+        rowLabelRes = R.string.reports_preset_three_months_row,
     ),
     SixMonths(
-        shortLabel = "6 Months",
-        rowLabel = "Last 6 months",
+        shortLabelRes = R.string.reports_preset_six_months_short,
+        rowLabelRes = R.string.reports_preset_six_months_row,
     ),
     OneYear(
-        shortLabel = "1 Year",
-        rowLabel = "Last 1 year",
+        shortLabelRes = R.string.reports_preset_one_year_short,
+        rowLabelRes = R.string.reports_preset_one_year_row,
     ),
     Lifetime(
-        shortLabel = "All Time",
-        rowLabel = "All time",
+        shortLabelRes = R.string.reports_preset_lifetime_short,
+        rowLabelRes = R.string.reports_preset_lifetime_row,
     ),
     ;
 
@@ -66,32 +68,32 @@ enum class ReportDateRangePreset(
 }
 
 enum class ReportSection(
-    val title: String,
-    val subtitle: String,
+    @StringRes val titleRes: Int,
+    @StringRes val subtitleRes: Int,
 ) {
     CycleOverview(
-        title = "Cycle Overview",
-        subtitle = "Avg length, regularity score, predictions",
+        titleRes = R.string.reports_section_cycle_overview_title,
+        subtitleRes = R.string.reports_section_cycle_overview_subtitle,
     ),
     PeriodCalendar(
-        title = "Period Calendar",
-        subtitle = "Monthly calendar with phase markers",
+        titleRes = R.string.reports_section_period_calendar_title,
+        subtitleRes = R.string.reports_section_period_calendar_subtitle,
     ),
     Symptoms(
-        title = "Symptoms & Flow",
-        subtitle = "Frequency, trends, phase correlation",
+        titleRes = R.string.reports_section_symptoms_title,
+        subtitleRes = R.string.reports_section_symptoms_subtitle,
     ),
     MoodPatterns(
-        title = "Mood Patterns",
-        subtitle = "Emotional patterns across your cycle",
+        titleRes = R.string.reports_section_mood_title,
+        subtitleRes = R.string.reports_section_mood_subtitle,
     ),
     Medications(
-        title = "Medications & Visits",
-        subtitle = "Painkillers, supplements, doctor visits",
+        titleRes = R.string.reports_section_medications_title,
+        subtitleRes = R.string.reports_section_medications_subtitle,
     ),
     Insights(
-        title = "Health Insights",
-        subtitle = "Personalised observations from your data",
+        titleRes = R.string.reports_section_insights_title,
+        subtitleRes = R.string.reports_section_insights_subtitle,
     ),
     ;
 }
@@ -123,6 +125,7 @@ class ReportsViewModel(
     private val periodLogRepository: PeriodLogRepository,
     private val reportPdfExporter: ReportPdfExporter,
     private val hapticManager: AndroidHapticManager,
+    private val appContext: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(defaultUiState())
@@ -181,7 +184,7 @@ class ReportsViewModel(
         if (userId.isNullOrBlank()) {
             _uiState.value = _uiState.value.copy(
                 phase = ReportsPhase.Error,
-                errorMessage = "Couldn't identify the current account.",
+                errorMessage = appContext.getString(R.string.reports_current_account_error),
             )
             return
         }
@@ -213,7 +216,7 @@ class ReportsViewModel(
             if (cycles == null || logs == null) {
                 val errorMessage = cyclesResult.exceptionOrNull()?.message
                     ?: logsResult.exceptionOrNull()?.message
-                    ?: "Failed to load report data"
+                    ?: appContext.getString(R.string.reports_load_failed)
                 _uiState.value = _uiState.value.copy(
                     phase = ReportsPhase.Error,
                     errorMessage = errorMessage,
@@ -255,7 +258,7 @@ class ReportsViewModel(
     fun exportPdf() {
         val report = _uiState.value.report ?: run {
             _uiState.value = _uiState.value.copy(
-                exportErrorMessage = "Generate the report preview before exporting the PDF.",
+                exportErrorMessage = appContext.getString(R.string.reports_export_before_preview),
             )
             return
         }
@@ -285,7 +288,7 @@ class ReportsViewModel(
             }.onFailure { throwable ->
                 _uiState.value = _uiState.value.copy(
                     isExportingPdf = false,
-                    exportErrorMessage = throwable.message ?: "Failed to prepare the PDF.",
+                    exportErrorMessage = throwable.message ?: appContext.getString(R.string.reports_export_failed),
                 )
             }
         }

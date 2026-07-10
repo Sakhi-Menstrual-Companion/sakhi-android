@@ -10,6 +10,7 @@ val onboardingFeatureModule = module {
         val flowId: String = params.get()
         OnboardingViewModel(
             flowId = flowId,
+            appContext = get(),
             flowStore = get { parametersOf(flowId) },
             authRepository = get(),
             careStore = get(),

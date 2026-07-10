@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.compose)
 }
 
 android {
@@ -18,16 +19,24 @@ android {
     kotlin {
         jvmToolchain(17)
     }
+    buildFeatures {
+        compose = true
+    }
 }
 
 dependencies {
     implementation("team.sakhi:SakhiCore:1.0.0")
     implementation(project(":core:common"))
+    implementation(project(":core:designsystem"))
 
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
     implementation(libs.koin.core)
     implementation(libs.koin.android)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.health.connect.client)
+    implementation(libs.androidx.glance.appwidget)
+    implementation(libs.androidx.glance.material3)
     implementation(libs.androidx.work.runtime.ktx)
     // 1.4.x never left alpha (verified against Maven metadata) — 1.1.0 is the newest stable.
     implementation("androidx.biometric:biometric:1.1.0")

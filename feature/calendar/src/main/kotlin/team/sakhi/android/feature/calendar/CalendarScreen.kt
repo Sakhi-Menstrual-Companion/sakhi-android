@@ -13,8 +13,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -33,9 +31,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -60,9 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -78,10 +72,16 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
-import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.platform.AndroidHapticManager
+import team.sakhi.android.ui.SakhiCalendarDay
+import team.sakhi.android.ui.SakhiCalendarMarkerType
+import team.sakhi.android.ui.SakhiCalendarMonthGrid
+import team.sakhi.android.ui.SakhiMiniMonthGrid
+import team.sakhi.android.ui.SakhiWeekdayHeaderRow
 import team.sakhi.date.DateConverter
-import team.sakhi.design.DesignTokens
+import java.time.Month
+import java.time.format.TextStyle
+import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -101,6 +101,9 @@ fun CalendarScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     val hapticManager = koinInject<AndroidHapticManager>()
+    val locale = Locale.getDefault()
+    val compactHeaders = remember(locale) { localizedWeekdayHeaders(sundayFirst = true, locale = locale) }
+    val expandedHeaders = remember(locale) { localizedWeekdayHeaders(sundayFirst = false, locale = locale) }
     var isYearExpanded by rememberSaveable { mutableStateOf(false) }
     var viewingYear by rememberSaveable { mutableIntStateOf(uiState.visibleMonth.year) }
     var yearSlideDirection by rememberSaveable { mutableIntStateOf(1) }
@@ -174,7 +177,7 @@ fun CalendarScreen(
                     viewingYear = compactToday.year
                 },
             )
-            WeekdayHeaderRow(labels = expandedWeekdayHeaders)
+            SakhiWeekdayHeaderRow(labels = expandedHeaders)
         } else {
             CalendarHeader(
                 visibleMonth = uiState.visibleMonth,
@@ -187,7 +190,7 @@ fun CalendarScreen(
                     isYearExpanded = true
                 },
             )
-            WeekdayHeaderRow(labels = compactWeekdayHeaders)
+            SakhiWeekdayHeaderRow(labels = compactHeaders)
         }
 
         AnimatedContent(
@@ -247,7 +250,7 @@ fun CalendarScreen(
             }
             !uiState.hasAnyCalendarAccess -> {
                 Text(
-                    text = "This viewer does not have calendar access.",
+                    text = stringResource(R.string.calendar_no_access),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = SakhiSpacing.space4),
@@ -278,7 +281,7 @@ private fun CalendarHeader(
         HeaderNavButton(
             onClick = onPreviousMonth,
             icon = Icons.Rounded.ChevronLeft,
-            contentDescription = "Previous month",
+            contentDescription = stringResource(R.string.calendar_previous_month),
         )
         Box(
             modifier = Modifier.weight(1f),
@@ -298,7 +301,7 @@ private fun CalendarHeader(
                     isOnToday -> {
                         Icon(
                             imageVector = Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = "Expand year view",
+                            contentDescription = stringResource(R.string.calendar_expand_year_view),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(SakhiSpacing.space4),
                         )
@@ -310,7 +313,7 @@ private fun CalendarHeader(
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Refresh,
-                                contentDescription = "Today",
+                                contentDescription = stringResource(R.string.calendar_today),
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.size(SakhiSpacing.space3),
                             )
@@ -322,7 +325,7 @@ private fun CalendarHeader(
         HeaderNavButton(
             onClick = onNextMonth,
             icon = Icons.Rounded.ChevronRight,
-            contentDescription = "Next month",
+            contentDescription = stringResource(R.string.calendar_next_month),
         )
     }
 }
@@ -345,7 +348,7 @@ private fun CalendarYearHeader(
         HeaderNavButton(
             onClick = onPreviousYear,
             icon = Icons.Rounded.ChevronLeft,
-            contentDescription = "Previous year",
+            contentDescription = stringResource(R.string.calendar_previous_year),
         )
         Box(
             modifier = Modifier.weight(1f),
@@ -367,7 +370,7 @@ private fun CalendarYearHeader(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = "Collapse year view",
+                            contentDescription = stringResource(R.string.calendar_collapse_year_view),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(SakhiSpacing.space3),
                         )
@@ -379,7 +382,7 @@ private fun CalendarYearHeader(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Refresh,
-                            contentDescription = "Current year",
+                            contentDescription = stringResource(R.string.calendar_current_year),
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(SakhiSpacing.space3),
                         )
@@ -390,7 +393,7 @@ private fun CalendarYearHeader(
         HeaderNavButton(
             onClick = onNextYear,
             icon = Icons.Rounded.ChevronRight,
-            contentDescription = "Next year",
+            contentDescription = stringResource(R.string.calendar_next_year),
         )
     }
 }
@@ -411,25 +414,6 @@ private fun HeaderNavButton(
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(SakhiSpacing.space8 + SakhiSpacing.space1),
         )
-    }
-}
-
-@Composable
-private fun WeekdayHeaderRow(labels: List<String>) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = SakhiSpacing.space2),
-    ) {
-        labels.forEach { day ->
-            Text(
-                text = day,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.weight(1f),
-            )
-        }
     }
 }
 
@@ -530,41 +514,13 @@ private fun MonthPanel(
     onDateSelected: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    CalendarMonthGrid(
-        days = if (days.isNotEmpty()) days else fallbackMonthCells(month),
-        selectedDate = selectedDate,
-        onDateSelected = onDateSelected,
+    SakhiCalendarMonthGrid(
+        days = (if (days.isNotEmpty()) days else fallbackMonthCells(month)).toSakhiCalendarDays(
+            selectedDate = selectedDate,
+        ),
+        onDayClick = onDateSelected,
         modifier = modifier,
     )
-}
-
-@Composable
-private fun CalendarMonthGrid(
-    days: List<CalendarDayUiState>,
-    selectedDate: LocalDate,
-    onDateSelected: (LocalDate) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val weekRows = remember(days) { CalendarWeekRows(days.chunked(7)) }
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1 + SakhiSpacing.space1 / 2),
-    ) {
-        weekRows.rows.forEach { week ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                week.forEach { day ->
-                    CalendarDayCell(
-                        day = day,
-                        isSelected = day.isInVisibleMonth && day.date == selectedDate,
-                        onDateSelected = onDateSelected,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -656,187 +612,13 @@ private fun CalendarYearMonthCard(
                     MaterialTheme.colorScheme.onSurface
                 },
             )
-            MiniMonthGrid(days = days)
-        }
-    }
-}
-
-@Composable
-private fun MiniMonthGrid(
-    days: List<CalendarDayUiState>,
-) {
-    val weekRows = remember(days) { CalendarWeekRows(days.chunked(7)) }
-    Column(
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
-    ) {
-        weekRows.rows.forEach { week ->
-            Row(modifier = Modifier.fillMaxWidth()) {
-                week.forEach { day ->
-                    MiniMonthDayCell(
-                        day = day,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MiniMonthDayCell(
-    day: CalendarDayUiState,
-    modifier: Modifier = Modifier,
-) {
-    if (!day.isInVisibleMonth) {
-        Box(modifier = modifier.height(yearGridCellHeight))
-        return
-    }
-
-    val mark = day.mark
-    val periodColor = DesignTokens.PERIOD_RED.toComposeColor()
-    val accentColor = MaterialTheme.colorScheme.primary
-    val isDarkTheme = isSystemInDarkTheme()
-    val isToday = day.date == compactToday
-    val showAsPeriod = mark?.isPeriod == true
-    val isPredicted = mark?.isPredictedPeriod == true
-    val isFertile = mark?.isFertile == true
-    val isOvulation = mark?.isOvulation == true
-
-    val fillColor = when {
-        showAsPeriod -> periodColor
-        isPredicted -> periodColor.copy(alpha = 0.16f)
-        else -> Color.Transparent
-    }
-    val labelColor = when {
-        showAsPeriod -> Color.White
-        isDarkTheme && isPredicted -> Color.White
-        isOvulation -> accentColor
-        isFertile -> accentColor
-        isPredicted -> periodColor
-        isToday -> accentColor
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-
-    Box(
-        modifier = modifier.height(yearGridCellHeight),
-        contentAlignment = Alignment.Center,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(yearGridDotSize)
-                .background(fillColor, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = day.date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontWeight = if (isToday || showAsPeriod) FontWeight.Bold else FontWeight.Normal,
-                ),
-                color = labelColor,
-            )
-        }
-    }
-}
-
-@Composable
-private fun CalendarDayCell(
-    day: CalendarDayUiState,
-    isSelected: Boolean,
-    onDateSelected: (LocalDate) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    if (!day.isInVisibleMonth) {
-        Box(
-            modifier = modifier.height(calendarCellHeight),
-        )
-        return
-    }
-
-    val isToday = day.date == compactToday
-    val isFuture = day.date > compactToday
-    val mark = day.mark
-    val periodColor = DesignTokens.PERIOD_RED.toComposeColor()
-    val accentColor = MaterialTheme.colorScheme.primary
-    val showAsPeriod = mark?.isPeriod == true
-    val isPredicted = mark?.isPredictedPeriod == true
-    val isFertile = mark?.isFertile == true
-    val isOvulation = mark?.isOvulation == true
-    val isDarkTheme = isSystemInDarkTheme()
-
-    val fillColor = when {
-        showAsPeriod -> if (isFuture) periodColor.copy(alpha = 0.12f) else periodColor
-        isPredicted -> periodColor.copy(alpha = if (isFuture) 0.12f else 0.16f)
-        else -> Color.Transparent
-    }
-
-    val labelColor = when {
-        showAsPeriod -> if (isFuture) periodColor.copy(alpha = disabledSemanticOpacity) else Color.White
-        isDarkTheme && isPredicted -> if (isFuture) Color.White.copy(alpha = disabledSemanticOpacity) else Color.White
-        isSelected -> accentColor
-        isFuture && isOvulation -> accentColor.copy(alpha = disabledSemanticOpacity)
-        isFuture && isFertile -> accentColor.copy(alpha = disabledSemanticOpacity)
-        isFuture && isPredicted -> periodColor.copy(alpha = disabledSemanticOpacity)
-        isOvulation -> accentColor
-        isFertile -> accentColor
-        isPredicted -> periodColor
-        isToday -> accentColor
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-
-    // Period/fertile/ovulation/predicted status is otherwise conveyed by color
-    // alone (fillColor/labelColor above) -- a real WCAG "use of color" gap for
-    // a health-tracking calendar specifically, not just a generic merge-the-
-    // chip case. TalkBack gets the same status sighted users read visually.
-    val description = buildString {
-        append(day.date.dayOfMonth)
-        if (isToday) append(", today")
-        if (isSelected) append(", selected")
-        when {
-            showAsPeriod -> append(if (isFuture) ", predicted period" else ", period day")
-            isPredicted -> append(", predicted period")
-            isOvulation -> append(", predicted ovulation day")
-            isFertile -> append(", fertile window")
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .height(calendarCellHeight)
-            .clickable(enabled = !isFuture) { onDateSelected(day.date) }
-            .semantics { contentDescription = description },
-        contentAlignment = Alignment.Center,
-    ) {
-        if (isSelected) {
-            Box(
-                modifier = Modifier
-                    .size(calendarRingSize)
-                    .background(Color.Transparent, CircleShape)
-                    .border(
-                        width = calendarRingStroke,
-                        color = accentColor,
-                        shape = CircleShape,
-                    ),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(calendarDotSize)
-                .background(fillColor, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = day.date.dayOfMonth.toString(),
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontWeight = if (isSelected || isToday || showAsPeriod) FontWeight.Bold else FontWeight.Normal,
-                ),
-                color = labelColor,
-            )
+            SakhiMiniMonthGrid(days = days.toSakhiCalendarDays())
         }
     }
 }
 
 private fun monthLabel(month: LocalDate): String {
-    val monthName = month.month.name.lowercase().replaceFirstChar { it.uppercase() }
+    val monthName = Month.of(month.monthNumber).getDisplayName(TextStyle.FULL, Locale.getDefault())
     return "$monthName ${month.year}"
 }
 
@@ -858,23 +640,57 @@ private fun yearGridMonthStart(month: LocalDate): LocalDate {
 
 private fun monthStart(date: LocalDate): LocalDate = LocalDate(date.year, date.month, 1)
 
-@Immutable
-private data class CalendarWeekRows(
-    val rows: List<List<CalendarDayUiState>>,
-)
-
-private val compactWeekdayHeaders = listOf("S", "M", "T", "W", "T", "F", "S")
-private val expandedWeekdayHeaders = listOf("M", "T", "W", "T", "F", "S", "S")
-// 48dp, not 44dp: below 48dp misses Android's minimum touch-target guidance
-// for a tappable element (this cell is the day-selection tap target itself).
-private val calendarCellHeight = SakhiSpacing.space10 + SakhiSpacing.space1 * 2
-private val calendarDotSize = SakhiSpacing.space8 + SakhiSpacing.space1 / 2
-private val calendarRingSize = SakhiSpacing.space10 + SakhiSpacing.space1 / 2
-private val calendarRingStroke = SakhiSpacing.space1 / 2 + SakhiSpacing.space1 / 8
-private val yearGridCellHeight = SakhiSpacing.space6
-private val yearGridDotSize = SakhiSpacing.space5
-private const val disabledSemanticOpacity = 0.68f
 private const val GRID_CELL_COUNT = 42
 
 private val compactToday: LocalDate
     get() = DateConverter.today()
+
+private fun localizedWeekdayHeaders(
+    sundayFirst: Boolean,
+    locale: Locale,
+): List<String> {
+    val days = if (sundayFirst) {
+        listOf(
+            java.time.DayOfWeek.SUNDAY,
+            java.time.DayOfWeek.MONDAY,
+            java.time.DayOfWeek.TUESDAY,
+            java.time.DayOfWeek.WEDNESDAY,
+            java.time.DayOfWeek.THURSDAY,
+            java.time.DayOfWeek.FRIDAY,
+            java.time.DayOfWeek.SATURDAY,
+        )
+    } else {
+        listOf(
+            java.time.DayOfWeek.MONDAY,
+            java.time.DayOfWeek.TUESDAY,
+            java.time.DayOfWeek.WEDNESDAY,
+            java.time.DayOfWeek.THURSDAY,
+            java.time.DayOfWeek.FRIDAY,
+            java.time.DayOfWeek.SATURDAY,
+            java.time.DayOfWeek.SUNDAY,
+        )
+    }
+    return days.map { it.getDisplayName(TextStyle.NARROW, locale) }
+}
+
+private fun List<CalendarDayUiState>.toSakhiCalendarDays(
+    selectedDate: LocalDate? = null,
+): List<SakhiCalendarDay> {
+    val today = compactToday
+    return map { day ->
+        SakhiCalendarDay(
+            date = day.date,
+            isInVisibleMonth = day.isInVisibleMonth,
+            isSelected = selectedDate != null && day.isInVisibleMonth && day.date == selectedDate,
+            isToday = day.date == today,
+            isFuture = day.date > today,
+            markerType = when {
+                day.mark?.isPeriod == true -> SakhiCalendarMarkerType.PERIOD
+                day.mark?.isPredictedPeriod == true -> SakhiCalendarMarkerType.PREDICTED_PERIOD
+                day.mark?.isOvulation == true -> SakhiCalendarMarkerType.OVULATION
+                day.mark?.isFertile == true -> SakhiCalendarMarkerType.FERTILE
+                else -> null
+            },
+        )
+    }
+}

@@ -34,7 +34,7 @@ import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
-import team.sakhi.android.ui.SheetSurface
+import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.date.DateConverter
 import team.sakhi.logging.Mood
 import team.sakhi.logging.Symptom
@@ -93,36 +93,27 @@ fun ActivityLogScreen(onBack: () -> Unit) {
     }
     val groupedEntries = remember(dayEntries) { groupByMonth(dayEntries) }
 
-    SheetSurface(showDragHandle = true) {
-        DetailHeader(title = "Log History", onBack = onBack)
-
+    DetailSheetScaffold(title = "Log History", onBack = onBack) {
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
-            return@SheetSurface
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(SakhiSpacing.space5),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-        ) {
-            error?.let {
-                Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
-            }
-            if (groupedEntries.isEmpty() && error == null) {
-                Text(
-                    text = "Nothing logged yet. Your tracking history will appear here.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            groupedEntries.forEach { group ->
-                MonthHeader(group.monthDate)
-                group.days.forEach { entry -> DayBlock(entry) }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
+                error?.let {
+                    Text(text = it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                }
+                if (groupedEntries.isEmpty() && error == null) {
+                    Text(
+                        text = "Nothing logged yet. Your tracking history will appear here.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                groupedEntries.forEach { group ->
+                    MonthHeader(group.monthDate)
+                    group.days.forEach { entry -> DayBlock(entry) }
+                }
             }
         }
     }

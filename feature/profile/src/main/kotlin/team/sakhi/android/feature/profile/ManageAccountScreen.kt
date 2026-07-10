@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -48,6 +49,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -55,6 +59,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.annotation.StringRes
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
@@ -63,10 +68,10 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
-import team.sakhi.android.ui.SheetSurface
 import team.sakhi.appstate.AppStateInputBridge
 import team.sakhi.auth.AuthRepository
 import team.sakhi.repositories.AccountRepository
@@ -81,37 +86,37 @@ private enum class ManageAccountRoute {
 }
 
 private enum class LeaveReason(
-    val label: String,
+    @StringRes val labelRes: Int,
     val icon: ImageVector,
     val tint: Color,
 ) {
     Overwhelmed(
-        label = "I'm going through something hard right now",
+        labelRes = R.string.profile_manage_account_leave_reason_overwhelmed,
         icon = Icons.Filled.Cloud,
         tint = Color(0xFF4B7BE5),
     ),
     Privacy(
-        label = "I'm worried about my privacy",
+        labelRes = R.string.profile_manage_account_leave_reason_privacy,
         icon = Icons.Filled.Lock,
         tint = Color(0xFFE16A8F),
     ),
     NotForMe(
-        label = "The app doesn't feel right for me",
+        labelRes = R.string.profile_manage_account_leave_reason_not_for_me,
         icon = Icons.Filled.Favorite,
         tint = Color(0xFFE85D75),
     ),
     Switching(
-        label = "I found something that works better",
+        labelRes = R.string.profile_manage_account_leave_reason_switching,
         icon = Icons.Filled.SyncAlt,
         tint = Color(0xFF3AA17E),
     ),
     Technical(
-        label = "I kept running into issues",
+        labelRes = R.string.profile_manage_account_leave_reason_technical,
         icon = Icons.Filled.WarningAmber,
         tint = Color(0xFFF39C48),
     ),
     Personal(
-        label = "It's personal",
+        labelRes = R.string.profile_manage_account_leave_reason_personal,
         icon = Icons.Filled.Person,
         tint = Color(0xFFB86C8B),
     ),
@@ -145,6 +150,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
     val hapticManager = koinInject<AndroidHapticManager>()
     val scope = rememberCoroutineScope()
     val session by sessionManager.session.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     var route by remember { mutableStateOf(ManageAccountRoute.Menu) }
     var deleteStep by remember { mutableIntStateOf(0) }
@@ -195,92 +201,95 @@ fun ManageAccountScreen(onBack: () -> Unit) {
         }
     }
 
-    SheetSurface(showDragHandle = true) {
-        DetailHeader(
-            title = when (route) {
-                ManageAccountRoute.Menu -> "Manage Account"
-                ManageAccountRoute.Reset -> "Start fresh"
-                ManageAccountRoute.Delete -> "Delete account"
-            },
-            onBack = ::handleBack,
-        )
+    DetailSheetScaffold(
+        title = when (route) {
+            ManageAccountRoute.Menu -> stringResource(R.string.profile_manage_account_title)
+            ManageAccountRoute.Reset -> stringResource(R.string.profile_manage_account_start_fresh)
+            ManageAccountRoute.Delete -> stringResource(R.string.profile_manage_account_delete_account)
+        },
+        onBack = ::handleBack,
+        scrollable = false,
+        contentPadding = PaddingValues(0.dp),
+        verticalArrangement = Arrangement.Top,
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            when (route) {
+                ManageAccountRoute.Menu -> {
+                    MenuContent(
+                        onStartFresh = { route = ManageAccountRoute.Reset },
+                        onDeleteAccount = {
+                            deleteStep = 0
+                            route = ManageAccountRoute.Delete
+                        },
+                        error = error,
+                    )
+                }
 
-        when (route) {
-            ManageAccountRoute.Menu -> {
-                MenuContent(
-                    onStartFresh = { route = ManageAccountRoute.Reset },
-                    onDeleteAccount = {
-                        deleteStep = 0
-                        route = ManageAccountRoute.Delete
-                    },
-                    error = error,
-                )
-            }
+                ManageAccountRoute.Reset -> {
+                    ResetContent(
+                        onResetClick = {
+                            hapticManager.impact(HapticImpact.MEDIUM)
+                            showResetConfirm = true
+                        },
+                        error = error,
+                    )
+                }
 
-            ManageAccountRoute.Reset -> {
-                ResetContent(
-                    onResetClick = {
-                        hapticManager.impact(HapticImpact.MEDIUM)
-                        showResetConfirm = true
-                    },
-                    error = error,
-                )
-            }
-
-            ManageAccountRoute.Delete -> {
-                DeleteContent(
-                    step = deleteStep,
-                    selectedReasons = selectedReasons,
-                    stats = stats,
-                    isBusy = isBusy,
-                    error = error,
-                    onReasonToggle = { reason ->
-                        hapticManager.selection()
-                        selectedReasons = if (reason in selectedReasons) {
-                            selectedReasons - reason
-                        } else {
-                            selectedReasons + reason
-                        }
-                    },
-                    onContinue = {
-                        if (deleteStep < 2) {
-                            deleteStep += 1
-                        } else {
-                            hapticManager.impact(HapticImpact.HEAVY)
-                            showDeleteConfirm = true
-                        }
-                    },
-                    onSkip = { deleteStep = 2 },
-                )
-            }
-        }
-
-        if (isBusy) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(SakhiRadius.xl),
-                    tonalElevation = SakhiSpacing.space1,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(
-                            horizontal = SakhiSpacing.space5,
-                            vertical = SakhiSpacing.space4,
-                        ),
-                        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(22.dp))
-                        Text(
-                            text = if (route == ManageAccountRoute.Reset) {
-                                "Clearing your data..."
+                ManageAccountRoute.Delete -> {
+                    DeleteContent(
+                        step = deleteStep,
+                        selectedReasons = selectedReasons,
+                        stats = stats,
+                        isBusy = isBusy,
+                        error = error,
+                        onReasonToggle = { reason ->
+                            hapticManager.selection()
+                            selectedReasons = if (reason in selectedReasons) {
+                                selectedReasons - reason
                             } else {
-                                "Deleting your account..."
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                                selectedReasons + reason
+                            }
+                        },
+                        onContinue = {
+                            if (deleteStep < 2) {
+                                deleteStep += 1
+                            } else {
+                                hapticManager.impact(HapticImpact.HEAVY)
+                                showDeleteConfirm = true
+                            }
+                        },
+                        onSkip = { deleteStep = 2 },
+                    )
+                }
+            }
+
+            if (isBusy) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(SakhiRadius.xl),
+                        tonalElevation = SakhiSpacing.space1,
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(
+                                horizontal = SakhiSpacing.space5,
+                                vertical = SakhiSpacing.space4,
+                            ),
+                            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(22.dp))
+                            Text(
+                                text = if (route == ManageAccountRoute.Reset) {
+                                    stringResource(R.string.profile_manage_account_clearing)
+                                } else {
+                                    stringResource(R.string.profile_manage_account_deleting)
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        }
                     }
                 }
             }
@@ -290,9 +299,9 @@ fun ManageAccountScreen(onBack: () -> Unit) {
     if (showResetConfirm) {
         AlertDialog(
             onDismissRequest = { showResetConfirm = false },
-            title = { Text("Start fresh?") },
+            title = { Text(stringResource(R.string.profile_manage_account_reset_confirm_title)) },
             text = {
-                Text("Android starts fresh by signing you out of this device. Your account stays active and you can log back in any time.")
+                Text(stringResource(R.string.profile_manage_account_reset_confirm_body))
             },
             confirmButton = {
                 TextButton(
@@ -306,18 +315,18 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                                     appStateInputBridge.setUnauthenticated()
                                 }
                                 .onFailure {
-                                    error = it.message ?: "Couldn't reset. Please try again."
+                                    error = it.message ?: context.getString(R.string.profile_manage_account_reset_failed)
                                 }
                             isBusy = false
                         }
                     },
                 ) {
-                    Text("Yes, reset", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.profile_manage_account_reset_confirm_button), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showResetConfirm = false }) {
-                    Text("Keep my data")
+                    Text(stringResource(R.string.profile_manage_account_keep_data))
                 }
             },
         )
@@ -326,9 +335,9 @@ fun ManageAccountScreen(onBack: () -> Unit) {
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Delete your account?") },
+            title = { Text(stringResource(R.string.profile_manage_account_delete_confirm_title)) },
             text = {
-                Text("This is permanent. All data will be removed within 30 days and you won't be able to recover it.")
+                Text(stringResource(R.string.profile_manage_account_delete_confirm_body))
             },
             confirmButton = {
                 TextButton(
@@ -344,18 +353,18 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                                 }
                                 .onFailure {
                                     error = it.message
-                                        ?: "Couldn't delete account. Please try again or contact support."
+                                        ?: context.getString(R.string.profile_manage_account_delete_failed)
                                     isBusy = false
                                 }
                         }
                     },
                 ) {
-                    Text("Delete my account", color = MaterialTheme.colorScheme.error)
+                    Text(stringResource(R.string.profile_manage_account_delete_confirm_button), color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text("Stay")
+                    Text(stringResource(R.string.profile_manage_account_stay))
                 }
             },
         )
@@ -377,7 +386,7 @@ private fun MenuContent(
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
             Text(
-                text = "DANGER ZONE",
+                text = stringResource(R.string.profile_manage_account_danger_zone),
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -390,16 +399,16 @@ private fun MenuContent(
                     DangerRow(
                         icon = Icons.Filled.WarningAmber,
                         iconTint = MaterialTheme.colorScheme.primary,
-                        title = "Start fresh",
-                        subtitle = "See what gets removed from this device before you reset",
+                        title = stringResource(R.string.profile_manage_account_start_fresh),
+                        subtitle = stringResource(R.string.profile_manage_account_start_fresh_subtitle),
                         onClick = onStartFresh,
                     )
                     HorizontalDivider()
                     DangerRow(
                         icon = Icons.Filled.DeleteForever,
                         iconTint = MaterialTheme.colorScheme.error,
-                        title = "Delete account",
-                        subtitle = "Review what you'll lose before deleting your account",
+                        title = stringResource(R.string.profile_manage_account_delete_account),
+                        subtitle = stringResource(R.string.profile_manage_account_delete_account_subtitle),
                         titleColor = MaterialTheme.colorScheme.error,
                         onClick = onDeleteAccount,
                     )
@@ -409,7 +418,7 @@ private fun MenuContent(
 
         error?.let {
             SakhiAlert(
-                title = "Manage Account",
+                title = stringResource(R.string.profile_manage_account_title),
                 message = it,
                 tone = SakhiAlertTone.Error,
             )
@@ -438,13 +447,13 @@ private fun ResetContent(
             StepHeader(
                 icon = Icons.Filled.WarningAmber,
                 iconTint = MaterialTheme.colorScheme.primary,
-                title = "Start fresh",
-                subtitle = "This removes everything stored on this device. Your account stays active, log back in any time.",
+                title = stringResource(R.string.profile_manage_account_start_fresh),
+                subtitle = stringResource(R.string.profile_manage_account_reset_header_subtitle),
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 Text(
-                    text = "WHAT GETS REMOVED",
+                    text = stringResource(R.string.profile_manage_account_what_gets_removed),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -454,15 +463,15 @@ private fun ResetContent(
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column {
-                        LossRow(Icons.Filled.WaterDrop, Color(0xFFDD5B6A), "Every period log you've added")
+                        LossRow(Icons.Filled.WaterDrop, Color(0xFFDD5B6A), stringResource(R.string.profile_manage_account_loss_period_logs))
                         IndentedDivider()
-                        LossRow(Icons.Filled.CalendarMonth, MaterialTheme.colorScheme.primary, "Your cycle history and predictions")
+                        LossRow(Icons.Filled.CalendarMonth, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_loss_cycle_history))
                         IndentedDivider()
-                        LossRow(Icons.Filled.Favorite, Color(0xFF6B7CE3), "Health conditions and symptoms")
+                        LossRow(Icons.Filled.Favorite, Color(0xFF6B7CE3), stringResource(R.string.profile_manage_account_loss_conditions))
                         IndentedDivider()
-                        LossRow(Icons.Filled.People, Color(0xFF2E9E7E), "Care mode and Sakhi settings")
+                        LossRow(Icons.Filled.People, Color(0xFF2E9E7E), stringResource(R.string.profile_manage_account_loss_care_settings))
                         IndentedDivider()
-                        LossRow(Icons.Filled.AutoAwesome, Color(0xFFF0A144), "Sakhi AI conversations")
+                        LossRow(Icons.Filled.AutoAwesome, Color(0xFFF0A144), stringResource(R.string.profile_manage_account_loss_ai_conversations))
                     }
                 }
             }
@@ -484,7 +493,7 @@ private fun ResetContent(
                         modifier = Modifier.padding(top = 2.dp),
                     )
                     Text(
-                        text = "Your account and cloud data stay safe. On Android, starting fresh signs you out of this device so you can log back in cleanly any time.",
+                        text = stringResource(R.string.profile_manage_account_reset_note),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -493,7 +502,7 @@ private fun ResetContent(
 
             error?.let {
                 SakhiAlert(
-                    title = "Start fresh",
+                    title = stringResource(R.string.profile_manage_account_start_fresh),
                     message = it,
                     tone = SakhiAlertTone.Error,
                 )
@@ -501,9 +510,9 @@ private fun ResetContent(
         }
 
         FooterAction(
-            primaryLabel = "Reset all data",
+            primaryLabel = stringResource(R.string.profile_manage_account_reset_all_data),
             primaryAction = onResetClick,
-            note = "This cannot be undone.",
+            note = stringResource(R.string.profile_manage_account_cannot_undo),
         )
     }
 }
@@ -537,39 +546,51 @@ private fun DeleteContent(
                     StepHeader(
                         icon = Icons.Filled.DeleteForever,
                         iconTint = MaterialTheme.colorScheme.primary,
-                        title = "Before you go",
-                        subtitle = "Deleting your account is permanent. Here's what you'll lose.",
+                        title = stringResource(R.string.profile_manage_account_before_you_go),
+                        subtitle = stringResource(R.string.profile_manage_account_before_you_go_subtitle),
                     )
                     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
                         BigLossCard(
                             icon = Icons.Filled.WaterDrop,
                             iconTint = Color(0xFFDD5B6A),
                             title = if (stats.logCount > 0) {
-                                "${stats.logCount} ${if (stats.logCount == 1) "day" else "days"} of period data"
+                                pluralStringResource(
+                                    R.plurals.profile_manage_account_period_data_count,
+                                    stats.logCount,
+                                    stats.logCount,
+                                )
                             } else {
-                                "All your period logs"
+                                stringResource(R.string.profile_manage_account_all_period_logs)
                             },
-                            subtitle = "Every log, flow entry, and symptom you tracked.",
+                            subtitle = stringResource(R.string.profile_manage_account_period_data_subtitle),
                         )
                         BigLossCard(
                             icon = Icons.Filled.CalendarMonth,
                             iconTint = MaterialTheme.colorScheme.primary,
                             title = if (stats.cycleCount > 0) {
-                                "${stats.cycleCount} ${if (stats.cycleCount == 1) "cycle" else "cycles"} of patterns"
+                                pluralStringResource(
+                                    R.plurals.profile_manage_account_cycle_patterns_count,
+                                    stats.cycleCount,
+                                    stats.cycleCount,
+                                )
                             } else {
-                                "Your cycle history"
+                                stringResource(R.string.profile_manage_account_cycle_history)
                             },
-                            subtitle = "Predictions and insights built specifically for you.",
+                            subtitle = stringResource(R.string.profile_manage_account_cycle_history_subtitle),
                         )
                         BigLossCard(
                             icon = Icons.Filled.People,
                             iconTint = Color(0xFF2E9E7E),
                             title = if (stats.careConnectionCount > 0) {
-                                "${stats.careConnectionCount} ${if (stats.careConnectionCount == 1) "care connection" else "care connections"}"
+                                pluralStringResource(
+                                    R.plurals.profile_manage_account_care_connections_count,
+                                    stats.careConnectionCount,
+                                    stats.careConnectionCount,
+                                )
                             } else {
-                                "Your care connections"
+                                stringResource(R.string.profile_manage_account_care_connections)
                             },
-                            subtitle = "Sakhi and care settings linked to your account.",
+                            subtitle = stringResource(R.string.profile_manage_account_care_connections_subtitle),
                         )
                     }
                 }
@@ -578,8 +599,8 @@ private fun DeleteContent(
                     StepHeader(
                         icon = Icons.Filled.Info,
                         iconTint = MaterialTheme.colorScheme.primary,
-                        title = "What's making you leave?",
-                        subtitle = "You don't have to answer. But if you do, it helps us do better.",
+                        title = stringResource(R.string.profile_manage_account_leave_reason_title),
+                        subtitle = stringResource(R.string.profile_manage_account_leave_reason_subtitle),
                     )
                     Surface(
                         shape = RoundedCornerShape(SakhiRadius.xl),
@@ -603,8 +624,8 @@ private fun DeleteContent(
                     StepHeader(
                         icon = Icons.Filled.Favorite,
                         iconTint = MaterialTheme.colorScheme.primary,
-                        title = "Thank you for trusting us",
-                        subtitle = "Every day you showed up for yourself. We are glad we got to be part of that.",
+                        title = stringResource(R.string.profile_manage_account_thank_you_for_trusting),
+                        subtitle = stringResource(R.string.profile_manage_account_thank_you_subtitle),
                     )
 
                     if (stats.logCount > 0 || stats.cycleCount > 0) {
@@ -617,7 +638,11 @@ private fun DeleteContent(
                                     icon = Icons.Filled.WaterDrop,
                                     iconTint = Color(0xFFDD5B6A),
                                     value = stats.logCount.toString(),
-                                    label = if (stats.logCount == 1) "day logged" else "days logged",
+                                    label = pluralStringResource(
+                                        R.plurals.profile_manage_account_days_logged,
+                                        stats.logCount,
+                                        stats.logCount,
+                                    ),
                                     modifier = Modifier.weight(1f),
                                 )
                             }
@@ -626,7 +651,11 @@ private fun DeleteContent(
                                     icon = Icons.Filled.CalendarMonth,
                                     iconTint = MaterialTheme.colorScheme.primary,
                                     value = stats.cycleCount.toString(),
-                                    label = if (stats.cycleCount == 1) "cycle" else "cycles",
+                                    label = pluralStringResource(
+                                        R.plurals.profile_manage_account_cycles_logged,
+                                        stats.cycleCount,
+                                        stats.cycleCount,
+                                    ),
                                     modifier = Modifier.weight(1f),
                                 )
                             }
@@ -635,7 +664,7 @@ private fun DeleteContent(
 
                     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                         Text(
-                            text = "WHAT WILL BE REMOVED",
+                            text = stringResource(R.string.profile_manage_account_what_will_be_removed),
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -645,11 +674,11 @@ private fun DeleteContent(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column {
-                                LossRow(Icons.Filled.Person, Color(0xFFB86C8B), "Your account and profile")
+                                LossRow(Icons.Filled.Person, Color(0xFFB86C8B), stringResource(R.string.profile_manage_account_loss_account_profile))
                                 IndentedDivider()
-                                LossRow(Icons.Filled.WaterDrop, Color(0xFFDD5B6A), "All period logs and cycle data")
+                                LossRow(Icons.Filled.WaterDrop, Color(0xFFDD5B6A), stringResource(R.string.profile_manage_account_loss_cycle_data))
                                 IndentedDivider()
-                                LossRow(Icons.Filled.AutoAwesome, MaterialTheme.colorScheme.primary, "Everything Sakhi learned about you")
+                                LossRow(Icons.Filled.AutoAwesome, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_loss_learned_about_you))
                             }
                         }
                     }
@@ -671,7 +700,7 @@ private fun DeleteContent(
                                 modifier = Modifier.padding(top = 2.dp),
                             )
                             Text(
-                                text = "Your account is scheduled for deletion. All data is permanently removed within 30 days.",
+                                text = stringResource(R.string.profile_manage_account_delete_note),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.primary,
                             )
@@ -682,7 +711,7 @@ private fun DeleteContent(
 
             error?.let {
                 SakhiAlert(
-                    title = "Delete account",
+                    title = stringResource(R.string.profile_manage_account_delete_account),
                     message = it,
                     tone = SakhiAlertTone.Error,
                 )
@@ -745,7 +774,11 @@ private fun DeleteFooter(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         PrimaryButton(
-            text = if (step < 2) "Continue" else "Delete my account",
+            text = if (step < 2) {
+                stringResource(R.string.profile_manage_account_continue)
+            } else {
+                stringResource(R.string.profile_manage_account_delete_confirm_button)
+            },
             onClick = onContinue,
             enabled = !isBusy,
             modifier = Modifier.fillMaxWidth(),
@@ -753,13 +786,13 @@ private fun DeleteFooter(
         when (step) {
             1 -> {
                 TextButton(onClick = onSkip, enabled = !isBusy) {
-                    Text("Skip")
+                    Text(stringResource(R.string.profile_manage_account_skip))
                 }
             }
 
             2 -> {
                 Text(
-                    text = "Permanent. Cannot be undone.",
+                    text = stringResource(R.string.profile_manage_account_permanent_note),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -861,13 +894,18 @@ private fun ReasonRow(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
+    val stateDescriptionText = if (selected) {
+        stringResource(R.string.profile_manage_account_selected)
+    } else {
+        stringResource(R.string.profile_manage_account_not_selected)
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
                 this.selected = selected
                 role = Role.RadioButton
-                stateDescription = if (selected) "Selected" else "Not selected"
+                stateDescription = stateDescriptionText
             }
             .clickable(onClick = onClick)
             .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space4),
@@ -880,7 +918,7 @@ private fun ReasonRow(
             tint = reason.tint,
         )
         Text(
-            text = reason.label,
+            text = stringResource(reason.labelRes),
             style = MaterialTheme.typography.bodyLarge,
             modifier = Modifier.weight(1f),
         )

@@ -6,14 +6,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import team.sakhi.access.FeatureAccessState
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.appstate.AppStateInputBridge
 import team.sakhi.auth.AuthRepository
+import team.sakhi.cycle.CycleMath
+import team.sakhi.models.CycleHealthStatus
 import team.sakhi.models.UserProfile
+import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
@@ -26,6 +28,7 @@ data class ProfileUiState(
     val showSignOutConfirm: Boolean = false,
     val isSigningOut: Boolean = false,
     val signOutError: String? = null,
+    val cycleHealthStatus: CycleHealthStatus? = null,
     // Real signal from the shared `FeatureAccessState` (wired 2026-07-05):
     // true for a local-only/offline account that never signed in to the
     // cloud. Previously this screen always assumed the "signed-in owner"
@@ -41,6 +44,7 @@ data class ProfileUiState(
 class ProfileViewModel(
     private val sessionManager: SessionManager,
     private val userProfileRepository: UserProfileRepository,
+    private val cycleDataRepository: CycleDataRepository,
     private val authRepository: AuthRepository,
     private val appStateInputBridge: AppStateInputBridge,
     private val featureAccessState: FeatureAccessState,
@@ -119,6 +123,7 @@ class ProfileViewModel(
                 profile = null,
                 isLoading = true,
                 error = null,
+                cycleHealthStatus = null,
             )
         }
 
@@ -126,12 +131,14 @@ class ProfileViewModel(
         userProfileRepository.get(requestedUserId)
             .onSuccess { profile ->
                 if (sessionManager.current?.userId != requestedUserId) return
+                val cycles = cycleDataRepository.getAll(requestedUserId).getOrDefault(emptyList())
                 _uiState.update {
                     it.copy(
                         session = session,
                         profile = profile,
                         isLoading = false,
                         error = null,
+                        cycleHealthStatus = CycleMath.profileHealthStatus(cycles),
                     )
                 }
             }

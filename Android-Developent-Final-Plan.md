@@ -14,10 +14,14 @@ either file anywhere else.
 2. After finishing any task: tick the checklist item(s) in this file AND append a new
    entry to `Android-Live-Status-Log.md` (date, agent, what was done, build/test
    verification, exact next step).
-3. Never leave a task half-done without recording exactly where you stopped.
-4. Neither agent does anything wrong, unsafe, or off-objective. The only objective is to
+3. **Execution order:** finish the Development Checklist first. Do not start new
+   Testing Checklist work while any real development item that is not
+   `(BLOCKED ON KARAN)` is still open. Testing only becomes the active focus
+   after development is exhausted or externally blocked.
+4. Never leave a task half-done without recording exactly where you stopped.
+5. Neither agent does anything wrong, unsafe, or off-objective. The only objective is to
    complete the Sakhi Android app to full iOS parity. No shortcuts, no side quests.
-5. **Session-limit handoff:** whichever agent senses its session/context limit
+6. **Session-limit handoff:** whichever agent senses its session/context limit
    approaching must hand off BEFORE dropping below 5% remaining — finish or safely park
    the current step, write full handoff context into `Android-Live-Status-Log.md`, then
    pass the baton (Claude → message into the Codex session; Codex → write the handoff
@@ -63,9 +67,9 @@ task; append a new entry there after finishing one, per the workflow rules above
 don't block release) but included in "Raw %" (total real coverage, including nice-to-haves).
 Recompute both by hand after ticking or re-tagging any box — do not let this drift.
 
-- **Development — raw: 79 / 112 (71%) · must-ship: 79 / 100 (79%)**
+- **Development — raw: 93 / 114 (82%) · must-ship: 82 / 101 (81%)**
 - **Testing — raw: 4 / 18 (22%) · must-ship: 4 / 14 (29%)**
-- **Overall — raw: 83 / 130 (64%) · must-ship: 83 / 114 (73%)**
+- **Overall — raw: 97 / 132 (73%) · must-ship: 86 / 115 (75%)**
 
 The Android app is ready to release when every **untagged** and **`(BLOCKED ON KARAN)`**
 box in both checklists below is checked — that's the "must-ship" number. `(OPTIONAL)`
@@ -94,8 +98,9 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
 - [ ] `BuildConfigProvider` wired to real secrets (Supabase URL/key, Claude, Places, Exotel,
       Sanity, Razorpay, USDA) via Gradle properties / CI secrets — nothing injected yet
       `(BLOCKED ON KARAN — needs the real secret values)`
-- [ ] Thin-shell audit enforced as a real CI gate (`--strict`) `(OPTIONAL)` — script exists
-      and already passes manually; enforcing it in CI is a safety net, not a blocker
+- [x] Thin-shell audit enforced as a real CI gate (`--strict`) `(OPTIONAL)` — workflow now
+      runs the audit in strict mode, and the remaining false positives were cleared so the
+      gate can fail only on real thin-shell ownership bypasses
 
 ### `:app`
 - [x] Multi-module Gradle project (Kotlin 2.1.20, AGP, Compose BOM, version catalog, JDK 17)
@@ -105,10 +110,12 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
 - [x] Force-update gate reading the shared `app_update_policies` table
 - [x] Global `ToastManager`/`ToastHost`
 - [x] Android haptic-feedback system wired across all features
-- [ ] Shared app-wide scaffold (top/bottom bars, modal sheet lane, keyboard-safe input lane)
-      `(OPTIONAL)` — each screen currently lays out its own root `Column`, which works and
-      looks correct today; this is an internal consistency/maintainability item, not a
-      user-visible gap
+- [x] Shared app-wide scaffold (top/bottom bars, modal sheet lane, keyboard-safe input lane)
+      `(OPTIONAL)` — `SakhiModalSheet`, `BackButton`, `DetailSheetScaffold`, and the new
+      shared `KeyboardSafeScaffold` now cover the real repeated app shells: the Home overlay
+      lane, auth CountryPicker, the full profile detail-screen family, and the main
+      input-heavy surfaces (`PhoneScreen`, `OtpScreen`, `ChatScreen`, `LoggingSheet`) so the
+      keyboard-safe footer/action lane is no longer hand-rolled per screen
 - [ ] CI pipeline actually triggers in GitHub Actions `(OPTIONAL)` — workflow file exists as
       a skeleton; valuable but not a release blocker for a first ship
 - [ ] App launched and manually walked through on a real emulator/device — **critical**,
@@ -125,14 +132,26 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
 - [x] Core reusable components built: `PrimaryButton`, `SecondaryButton`, `SakhiTextField`,
       `OtpField`, `GlassCard`, `LoadingShimmer`, `EmptyState`, `SakhiAlert`, `OfflineBanner`,
       `ToastHost`, `SheetSurface`
-- [ ] Reusable `BackButton` component `(OPTIONAL)` — back navigation already works via
-      existing per-screen buttons; this is a consistency refactor
-- [ ] Shared bottom-sheet scaffold with iOS-matched detents/drag-to-dismiss `(OPTIONAL)` —
-      every feature's sheets already work via `SheetSurface`, just not through one unified
-      component
-- [ ] `SakhiCalendar` extracted as a reusable `:core:ui` component `(OPTIONAL)` — Calendar
-      feature's own grid already works
-- [ ] `PhaseBadge` shared component `(OPTIONAL)` — no screen is currently blocked on this
+- [x] Reusable `BackButton` component `(OPTIONAL)` — shared `:core:ui` back affordance now
+      exists and is adopted by the repeated profile / care / AI detail-header paths instead
+      of each screen hand-rolling its own arrow button
+- [x] Shared `DetailSheetScaffold` component `(OPTIONAL)` — the reusable detail-sheet shell
+      (back header, divider, padded scroll body) now covers the full profile detail-screen
+      family: `About`, `HelpSupport`, `Notifications`, `Appearance`, `AppIntegration`,
+      `PrivacySecurity`, `Feedback`, `EditProfile`, `Legal`, `ContentPage`, `ActivityLog`,
+      and `ManageAccount`
+- [x] Shared bottom-sheet scaffold with iOS-matched detents/drag-to-dismiss `(OPTIONAL)` —
+      `SakhiModalSheet` now owns the real shared `ModalBottomSheet` host (large-detent-only,
+      transparent outer container, consistent drag-handle policy), reused by the Home
+      overlay lane and auth's CountryPicker sheet
+- [x] `SakhiCalendar` extracted as a reusable `:core:ui` component `(OPTIONAL)` — the
+      reusable `SakhiCalendarDay` model plus `SakhiCalendarMonthGrid`,
+      `SakhiMiniMonthGrid`, and `SakhiWeekdayHeaderRow` now live in `:core:ui`, and
+      `:feature:calendar` consumes those shared primitives instead of owning the month-grid
+      internals locally
+- [x] `PhaseBadge` shared component `(OPTIONAL)` — reusable phase chip now lives in
+      `:core:ui` and is adopted in Home and Recommendations instead of each screen
+      hand-rolling its own phase-status pill
       not existing
 
 ### `:core:common`
@@ -156,10 +175,14 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
 - [x] Play Billing / Razorpay payment adapter `(CONFIRMED NOT A GAP for v1)` — Sakhi's own
       shipped FAQ copy states the app is completely free with no paid tier; nothing in
       today's product requires a payment adapter to launch
-- [ ] Camera / Photo Picker adapter for avatar upload `(OPTIONAL)` — profile works fully
-      without a photo
-- [ ] Exotel call adapter (`PhoneCallRepository` Android actual) `(OPTIONAL)` — not
-      referenced as a launch-blocking feature anywhere in this session's investigation
+- [x] Camera / Photo Picker adapter for avatar upload `(CONFIRMED NOT A GAP)` — re-grepped
+      the real iOS profile source; it only renders initials/color avatars too and exposes no
+      real profile-photo picker flow, so building Android-only avatar upload would break
+      parity rather than close a real feature gap
+- [x] Exotel call adapter (`PhoneCallRepository` Android actual) `(CONFIRMED NOT A GAP)` —
+      re-grepped iOS and KMM: the shared `PhoneCallRepository` and iOS `ExotelManager`
+      plumbing still exist, but there is no real UI call path invoking them on either
+      platform, so this is dormant infrastructure, not a missing Android feature for v1
 - [ ] Certificate pinning (SPKI) against the Supabase endpoint — real security gap for a
       health app; blocked on a real production SPKI hash from Karan, and on Karan
       confirming whether iOS's own pinning is even live on its current Ktor path or is
@@ -185,9 +208,9 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
 - [x] Full partner-mode branch (checklist card, no-data card, heads-up card)
 - [x] `HomeGlassCard` reusable wrapper, cycle-day pill strip with real diagonal
       ovulation-hatch drawing
-- [ ] Glass-morph visual chrome (blur/translucency) — not built; the single biggest
-      remaining visual-parity gap in the whole app, on the screen the app opens into
-- [ ] Scroll-tied hero animations — not built
+- [x] Real Home visual chrome: phase-gradient background, iOS-style tinted card palette,
+      and date-centered top bar with hero-summary crossfade
+- [x] Scroll-tied hero animations on the main hero block
 
 ### `:feature:calendar`
 - [x] Month/year grid, markers via shared `CalendarMarker`, summary card
@@ -226,6 +249,9 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
 - [x] All sub-screens present: EditProfile, PrivacySecurity (+export), Notifications,
       Appearance, Care settings, About, Legal, HelpSupport, ManageAccount, ActivityLog,
       AppIntegration
+- [x] Profile root parity: real avatar initials circle, secure/offline status subtitle,
+      `Cycle Health` badge, and the iOS footer CTA, with the badge decision moved into
+      shared KMM (`CycleMath.profileHealthStatus`) instead of Android-local heuristics
 - [x] Account deletion — real 3-step wizard via `AccountRepository.deleteServerAccount`
 - [x] Disconnect-partner — real, via `CareViewModel.removePartnership`
 - [x] Data export — real, and fixed to surface genuine fetch failures instead of a false
@@ -235,8 +261,10 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
       this before a Room local-first rearchitecture would show "offline" while still
       silently syncing to the cloud, a real privacy/correctness risk for a health app;
       deliberately deferred, not forgotten
-- [ ] Live Sanity-CMS content sync for Legal/About/FAQ `(OPTIONAL)` — Android shows the
-      same static content most iOS users see anyway (CMS override is the exception there)
+- [x] Live Sanity-CMS content sync for Legal/About/FAQ `(OPTIONAL)` — shared
+      `SanityRepository` now has typed legal-page / FAQ / site-settings fetchers with
+      cross-platform KV-backed response caching, and Android's Legal/About/Help flows use
+      them with the same instant static fallback body as iOS when CMS data is absent
 
 ### `:feature:reports`
 - [x] Report config (date range) + preview
@@ -261,9 +289,13 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
       the live emergency-session viewer doesn't exist as a working screen on iOS either.
       Not Android lagging behind a real iOS feature; flag to Karan as a genuinely
       unbuilt cross-platform feature if/when SOS session viewing becomes a real priority
-- [ ] Home-screen widget (cycle day/phase) via Glance `(OPTIONAL)` — explicitly marked
-      "optional" in the original scope; zero `androidx.glance` usage exists. Confirm with
-      Karan whether this is in scope for the first release or deferred to a later one
+- [x] Home-screen widget (cycle day/phase) via Glance `(OPTIONAL)` — Android now has a
+      real Glance widget lane: `AndroidWidgetSnapshotManager` persists a widget snapshot from
+      the real repositories + session context, drains `sakhi://widget/log-today` taps through
+      the real period-log repository, and `SakhiPeriodWidget` / `SakhiPeriodWidgetReceiver`
+      render the same countdown + log-today affordance as iOS. Glance still uses a resolved
+      phase mid-tone instead of iOS's fully dynamic three-stop gradient, because the Android
+      widget surface does not expose the same dynamic gradient rendering path
 
 ### Security & Privacy (cross-cutting)
 - [x] Zero raw health data in logs — grepped the whole tree, no `Log.*` calls exist at all
@@ -287,8 +319,38 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
 - [ ] Real TalkBack device/emulator run — not done, no device available this session
 - [ ] Real 200%-font-scale screenshot/device run — not done
 - [ ] Localization: shared CMS/Sanity content wiring, 14+ languages, RTL check — real,
-      large, and genuinely unstarted; every Android string today is a hardcoded English
-      literal `(confirm with Karan whether v1 ships English-only or needs this first)`
+      large, and now only foundation-started: per-module `strings.xml` resources exist in
+      `:app`, `:core:ui`, `:core:platform`, `:feature:auth`, `:feature:calendar`,
+      `:feature:ai`, `:feature:recommendations`, `:feature:home`, `:feature:profile`,
+      `:feature:reports`, `:feature:logging`, `:feature:care`, and now
+      `:feature:onboarding`; the update gate,
+      shared shell copy (`BackButton`/`OfflineBanner`/`SakhiAlert`), auth screen copy +
+      Android auth validation errors, widget copy, calendar nav/access strings, the main
+      AI chat lane's Android-owned copy, recommendations summary/section/nutrition-label
+      copy, and Home's visible UI copy end to end (session/sync labels, hero text, Ask
+      Sakhi placeholders, action-bar labels, cycle-card labels, partner heads-up text,
+      empty-state text, recommendation titles, the phase explainer, and the learning-card
+      educational copy), plus the profile shell, edit-profile form copy, notifications /
+      appearance settings, Privacy & Security / Feedback / Manage Account screen copy,
+      the App Integration screen + Health Connect status/error copy, the Reports
+      module's config/preview/view-model error copy, and the full Logging sheet's
+      Android-owned section labels, save-state copy, validation/load/save errors, notes
+      placeholder, partner-lock message, and header-date formatting, plus the full Care
+      hub's Android-owned copy end to end (connected-partner detail copy, pending-invite
+      share/cancel flow, create/accept invite forms, permission-editor labels, activity
+      history labels, and the care view-model's fallback/info/error messages), plus the
+      onboarding health-step lane's Android-owned copy (step titles/subtitles, unit
+      toggles, date-nav content descriptions, day-length help-sheet labels/copy, shared
+      Continue/Back CTAs, and the onboarding view-model's health/import/invite error
+      messages), are no longer hardcoded English literals. Calendar month / weekday
+      labels, AI chat timestamps, App Integration's last-synced date label, the Reports
+      preview's month/week labels, the Logging sheet header date, Care's connected/history
+      date labels, and onboarding's health-step weekday/unit labels now come from the
+      device locale or Android resources instead of enum-name / hand-built English
+      formatting. The rest of onboarding content plus other remaining modules are still
+      partially hardcoded, and the real multi-language / RTL / CMS-driven parity pass is
+      still open `(confirm with Karan whether v1 ships
+      English-only or needs this first)`
 
 ### Performance (cross-cutting)
 - [x] Calendar's unstable hot-path collection wrapped in a stable holder (`CalendarMonthCache`)

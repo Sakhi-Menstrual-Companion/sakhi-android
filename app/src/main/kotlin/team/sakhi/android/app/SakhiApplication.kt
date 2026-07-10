@@ -16,6 +16,7 @@ import team.sakhi.android.feature.profile.profileFeatureModule
 import team.sakhi.android.feature.recommendations.recommendationsFeatureModule
 import team.sakhi.android.feature.reports.reportsFeatureModule
 import team.sakhi.android.platform.AndroidNotificationReminderManager
+import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.platform.CurrentActivityHolder
 import team.sakhi.android.platform.androidPlatformModule
 import team.sakhi.di.appModule
@@ -79,5 +80,6 @@ class SakhiApplication : Application() {
         // Koin only constructs it lazily on first `get()`, it doesn't register callbacks.
         registerActivityLifecycleCallbacks(KoinPlatform.getKoin().get<CurrentActivityHolder>())
         KoinPlatform.getKoin().get<AndroidNotificationReminderManager>().start()
+        KoinPlatform.getKoin().get<AndroidWidgetSnapshotManager>().start()
     }
 }

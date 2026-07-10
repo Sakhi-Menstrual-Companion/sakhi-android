@@ -8,7 +8,9 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.getValue
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.mp.KoinPlatform
 import org.koin.compose.koinInject
+import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.designsystem.SakhiTheme
 import team.sakhi.preferences.ThemeMode
 import team.sakhi.preferences.ThemePreferenceStore
@@ -55,6 +57,11 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleDeepLinkIntent(intent: Intent?) {
+        val rawUrl = intent?.dataString.orEmpty()
+        if (rawUrl == AndroidWidgetSnapshotManager.WIDGET_LOG_TODAY_URL) {
+            KoinPlatform.getKoin().get<AndroidWidgetSnapshotManager>().handleWidgetLogTodayDeepLink()
+            return
+        }
         AndroidDeepLinkManager.handleIntent(intent)
     }
 }

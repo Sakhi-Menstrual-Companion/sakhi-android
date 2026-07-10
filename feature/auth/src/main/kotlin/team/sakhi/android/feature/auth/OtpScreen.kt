@@ -12,9 +12,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.KeyboardSafeScaffold
 import team.sakhi.android.ui.OtpField
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.auth.AuthResultWithAccount
@@ -38,57 +40,71 @@ fun OtpScreen(
         }
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SakhiSpacing.space6),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-    ) {
-        Text(
-            text = "Our Secret Code",
-            style = MaterialTheme.typography.headlineMedium,
-        )
-        Text(
-            text = "Enter the code we sent to confirm it's you.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    KeyboardSafeScaffold(
+        body = {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(SakhiSpacing.space6),
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+            ) {
+                Text(
+                    text = stringResource(R.string.auth_otp_title),
+                    style = MaterialTheme.typography.headlineMedium,
+                )
+                Text(
+                    text = stringResource(R.string.auth_otp_subtitle),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
 
-        OtpField(
-            value = uiState.otpDigits,
-            onValueChange = viewModel::onOtpChanged,
-            isError = uiState.otpError != null,
-            errorText = uiState.otpError,
-            autoFocus = true,
-            cellSpacing = SakhiSpacing.space2,
-            cellWidth = SakhiSpacing.space12,
-            cellHeight = SakhiSpacing.space12 + SakhiSpacing.space3,
-            activeBorderWidth = SakhiSpacing.space1 / 2,
-            modifier = Modifier.padding(top = SakhiSpacing.space6),
-            onComplete = viewModel::verifyOtp,
-        )
+                OtpField(
+                    value = uiState.otpDigits,
+                    onValueChange = viewModel::onOtpChanged,
+                    isError = uiState.otpError != null,
+                    errorText = uiState.otpError,
+                    autoFocus = true,
+                    cellSpacing = SakhiSpacing.space2,
+                    cellWidth = SakhiSpacing.space12,
+                    cellHeight = SakhiSpacing.space12 + SakhiSpacing.space3,
+                    activeBorderWidth = SakhiSpacing.space1 / 2,
+                    modifier = Modifier.padding(top = SakhiSpacing.space6),
+                    onComplete = viewModel::verifyOtp,
+                )
+            }
+        },
+        footer = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+            ) {
+                TextButton(
+                    onClick = viewModel::resendOtp,
+                    enabled = !uiState.isSendingOtp && !uiState.isVerifyingOtp,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(
+                        text = if (uiState.isSendingOtp) {
+                            stringResource(R.string.auth_otp_resending)
+                        } else {
+                            stringResource(R.string.auth_otp_resend_cta)
+                        },
+                    )
+                }
 
-        TextButton(
-            onClick = viewModel::resendOtp,
-            enabled = !uiState.isSendingOtp && !uiState.isVerifyingOtp,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = SakhiSpacing.space1),
-        ) {
-            Text(
-                text = if (uiState.isSendingOtp) {
-                    "Resending..."
-                } else {
-                    "Didn't get the code? Resend"
-                },
-            )
-        }
-
-        PrimaryButton(
-            text = if (uiState.isVerifyingOtp) "Verifying..." else "Continue",
-            onClick = { viewModel.verifyOtp(uiState.otpDigits) },
-            enabled = !uiState.isSendingOtp && !uiState.isVerifyingOtp,
-            modifier = Modifier.padding(top = SakhiSpacing.space3),
-        )
-    }
+                PrimaryButton(
+                    text = if (uiState.isVerifyingOtp) {
+                        stringResource(R.string.auth_otp_verifying)
+                    } else {
+                        stringResource(R.string.auth_phone_continue)
+                    },
+                    onClick = { viewModel.verifyOtp(uiState.otpDigits) },
+                    enabled = !uiState.isSendingOtp && !uiState.isVerifyingOtp,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+    )
 }

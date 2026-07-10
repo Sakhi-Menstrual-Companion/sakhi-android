@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.care
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -41,6 +42,7 @@ data class CareUiState(
  * Android owns only local form fields and delegates every care mutation to KMM.
  */
 class CareViewModel(
+    private val appContext: Context,
     private val sessionManager: SessionManager,
     private val careStore: CareStore,
     private val hapticManager: AndroidHapticManager,
@@ -75,7 +77,7 @@ class CareViewModel(
                         _uiState.update { state ->
                             state.copy(
                                 isRefreshing = false,
-                                error = throwable.message ?: "Unable to load care status right now.",
+                                error = throwable.message ?: appContext.getString(R.string.care_error_load_status),
                             )
                         }
                     }
@@ -143,7 +145,7 @@ class CareViewModel(
                     _uiState.update {
                         it.copy(
                             isRefreshing = false,
-                            error = throwable.message ?: "Unable to refresh care status right now.",
+                            error = throwable.message ?: appContext.getString(R.string.care_error_refresh_status),
                         )
                     }
                 }
@@ -160,7 +162,7 @@ class CareViewModel(
         viewModelScope.launch {
             runCatching {
                 careStore.createInvitation(
-                    inviterName = session.userName.ifBlank { "User" },
+                    inviterName = session.userName.ifBlank { appContext.getString(R.string.care_fallback_user) },
                     inviteePhone = "",
                     inviteeName = state.inviteeName.trim(),
                     relationType = RelationType.PARTNER.value,
@@ -173,9 +175,9 @@ class CareViewModel(
                     it.copy(
                         isCreatingInvite = false,
                         infoMessage = if (status.invitation?.inviteCode.isNullOrBlank()) {
-                            "The invite is ready whenever you would like to share it."
+                            appContext.getString(R.string.care_info_invite_ready)
                         } else {
-                            "Your invite code is ready to share whenever it feels right."
+                            appContext.getString(R.string.care_info_invite_code_ready)
                         },
                         error = null,
                     )
@@ -184,7 +186,7 @@ class CareViewModel(
                 _uiState.update {
                     it.copy(
                         isCreatingInvite = false,
-                        error = throwable.message ?: "Unable to create an invite right now.",
+                        error = throwable.message ?: appContext.getString(R.string.care_error_create_invite),
                     )
                 }
             }
@@ -196,7 +198,7 @@ class CareViewModel(
         val inviteCode = _uiState.value.acceptInviteCode.trim().uppercase()
         if (inviteCode.isBlank()) {
             hapticManager.error()
-            _uiState.update { it.copy(error = "Enter an invite code to continue.") }
+            _uiState.update { it.copy(error = appContext.getString(R.string.care_error_enter_invite_code)) }
             return
         }
         if (_uiState.value.isAcceptingInvite) return
@@ -214,7 +216,7 @@ class CareViewModel(
                     it.copy(
                         acceptInviteCode = "",
                         isAcceptingInvite = false,
-                        infoMessage = "The invite was accepted.",
+                        infoMessage = appContext.getString(R.string.care_info_invite_accepted),
                         error = null,
                     )
                 }
@@ -223,7 +225,7 @@ class CareViewModel(
                 _uiState.update {
                     it.copy(
                         isAcceptingInvite = false,
-                        error = throwable.message ?: "Unable to accept this invite right now.",
+                        error = throwable.message ?: appContext.getString(R.string.care_error_accept_invite),
                     )
                 }
             }
@@ -240,13 +242,18 @@ class CareViewModel(
         viewModelScope.launch {
             runCatching { careStore.cancelInvitation(invitationId = invitation.id, userId = session.userId) }
                 .onSuccess {
-                    _uiState.update { it.copy(isCancellingInvite = false, infoMessage = "That invite has been closed. Nothing was shared.") }
+                    _uiState.update {
+                        it.copy(
+                            isCancellingInvite = false,
+                            infoMessage = appContext.getString(R.string.care_info_invite_closed),
+                        )
+                    }
                 }
                 .onFailure { throwable ->
                     _uiState.update {
                         it.copy(
                             isCancellingInvite = false,
-                            error = throwable.message ?: "Unable to cancel this invite right now.",
+                            error = throwable.message ?: appContext.getString(R.string.care_error_cancel_invite),
                         )
                     }
                 }
@@ -269,7 +276,7 @@ class CareViewModel(
                     _uiState.update {
                         it.copy(
                             isRemovingPartnership = false,
-                            error = throwable.message ?: "Unable to complete this right now.",
+                            error = throwable.message ?: appContext.getString(R.string.care_error_complete_action),
                         )
                     }
                 }
@@ -296,12 +303,12 @@ class CareViewModel(
                 onComplete(true)
             }.onFailure { throwable ->
                 hapticManager.error()
-                _uiState.update {
-                    it.copy(
-                        isSavingPermissions = false,
-                        error = throwable.message ?: "The latest permission change was not saved. Please try again.",
-                    )
-                }
+                    _uiState.update {
+                        it.copy(
+                            isSavingPermissions = false,
+                            error = throwable.message ?: appContext.getString(R.string.care_error_permission_change_not_saved),
+                        )
+                    }
                 onComplete(false)
             }
         }

@@ -5,8 +5,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiRadius
@@ -48,6 +50,7 @@ fun CountryPicker(
     selectedCountry: PhoneCountry? = null,
     onCountrySelected: (PhoneCountry) -> Unit,
     onDismiss: () -> Unit = {},
+    asSheet: Boolean = false,
 ) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(query) {
@@ -64,26 +67,36 @@ fun CountryPicker(
 
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .then(
+                if (asSheet) {
+                    Modifier.heightIn(min = SakhiSpacing.space12 * 8, max = SakhiSpacing.space12 * 14)
+                } else {
+                    Modifier
+                }
+            )
             .background(MaterialTheme.colorScheme.background)
             .padding(horizontal = SakhiSpacing.space6),
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = SakhiSpacing.space8, bottom = SakhiSpacing.space5),
+                .padding(
+                    top = if (asSheet) SakhiSpacing.space3 else SakhiSpacing.space8,
+                    bottom = SakhiSpacing.space5,
+                ),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "Select your country",
+                text = stringResource(R.string.auth_country_picker_title),
                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
             )
             IconButton(onClick = onDismiss) {
                 Icon(
                     imageVector = Icons.Rounded.Close,
-                    contentDescription = "Dismiss",
+                    contentDescription = stringResource(R.string.auth_country_picker_dismiss),
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
@@ -92,7 +105,7 @@ fun CountryPicker(
         SakhiTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = "Search for a country...",
+            placeholder = stringResource(R.string.auth_country_picker_search_placeholder),
             leadingContent = {
                 Icon(
                     imageVector = Icons.Rounded.Search,
@@ -104,7 +117,7 @@ fun CountryPicker(
                 if (query.isNotBlank()) {
                     Icon(
                         imageVector = Icons.Rounded.Close,
-                        contentDescription = "Clear search",
+                        contentDescription = stringResource(R.string.auth_country_picker_clear_search),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.clickable { query = "" },
                     )
@@ -172,12 +185,12 @@ private fun EmptyCountrySearchState(query: String) {
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
             ) {
                 Text(
-                    text = "No results for \"$query\"",
+                    text = stringResource(R.string.auth_country_picker_no_results, query),
                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
                 )
                 Text(
-                    text = "Try a different spelling or a dial code like +91",
+                    text = stringResource(R.string.auth_country_picker_try_again),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.62f),
                 )

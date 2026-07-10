@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.profile
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.HelpOutline
@@ -22,6 +24,8 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Storage
@@ -36,7 +40,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
@@ -47,6 +55,7 @@ import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.SheetSurface
+import team.sakhi.models.CycleHealthStatus
 
 /**
  * Real port of iOS `ProfileView.swift`'s grouped settings list: same section
@@ -84,9 +93,12 @@ fun ProfileScreen(
     viewModel: ProfileViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val isPartnerRole = uiState.session?.isViewingOwnData == false
+    val uriHandler = LocalUriHandler.current
 
     val groups = profileSettingGroups(
+        context = context,
         isPartnerRole = isPartnerRole,
         onLogHistoryClick = onLogHistoryClick,
         onAppIntegrationClick = onAppIntegrationClick,
@@ -105,10 +117,10 @@ fun ProfileScreen(
     if (uiState.showSignOutConfirm) {
         AlertDialog(
             onDismissRequest = viewModel::dismissSignOutConfirm,
-            title = { Text("Sign Out") },
+            title = { Text(stringResource(R.string.profile_sign_out_title)) },
             text = {
                 Column {
-                    Text("Are you sure you want to sign out?")
+                    Text(stringResource(R.string.profile_sign_out_confirm))
                     uiState.signOutError?.let { error ->
                         Text(
                             text = error,
@@ -124,13 +136,16 @@ fun ProfileScreen(
                     if (uiState.isSigningOut) {
                         CircularProgressIndicator(modifier = Modifier.size(16.dp))
                     } else {
-                        Text("Sign Out", color = MaterialTheme.colorScheme.error)
+                        Text(
+                            text = stringResource(R.string.profile_sign_out_title),
+                            color = MaterialTheme.colorScheme.error,
+                        )
                     }
                 }
             },
             dismissButton = {
                 TextButton(onClick = viewModel::dismissSignOutConfirm, enabled = !uiState.isSigningOut) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.profile_cancel))
                 }
             },
         )
@@ -147,7 +162,7 @@ fun ProfileScreen(
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
         ) {
             Text(
-                text = "Profile",
+                text = stringResource(R.string.profile_title),
                 style = MaterialTheme.typography.headlineMedium,
                 modifier = Modifier.padding(
                     horizontal = SakhiSpacing.space2,
@@ -157,13 +172,14 @@ fun ProfileScreen(
 
             ProfileCard(
                 uiState = uiState,
+                context = context,
                 isPartnerRole = isPartnerRole,
                 onClick = onEditProfileClick,
             )
 
             if (uiState.isLoading) {
                 Text(
-                    text = "Loading profile",
+                    text = stringResource(R.string.profile_loading),
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(horizontal = SakhiSpacing.space2),
                 )
@@ -202,6 +218,8 @@ fun ProfileScreen(
                     }
                 }
             }
+
+            ProfileFooter(onConnectClick = { uriHandler.openUri("https://sakhi.rachna.co") })
         }
     }
 }
@@ -209,6 +227,7 @@ fun ProfileScreen(
 @Composable
 private fun ProfileCard(
     uiState: ProfileUiState,
+    context: android.content.Context,
     isPartnerRole: Boolean,
     onClick: () -> Unit,
 ) {
@@ -229,21 +248,57 @@ private fun ProfileCard(
                 horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
             ) {
                 Surface(
-                    shape = RoundedCornerShape(SakhiRadius.lg),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(52.dp),
-                ) {}
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val initials = avatarInitials(uiState)
+                        if (initials != null) {
+                            Text(
+                                text = initials,
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                            )
+                        }
+                    }
+                }
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isPartnerRole) profileName(uiState) else "You",
+                        text = if (isPartnerRole) profileName(context, uiState) else stringResource(R.string.profile_you),
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                     )
-                    Text(
-                        text = if (uiState.isOfflineUser) "On this device only" else "Synced to your account",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = if (uiState.isOfflineUser) Icons.Filled.PhoneAndroid else Icons.Filled.CheckCircle,
+                            contentDescription = null,
+                            tint = if (uiState.isOfflineUser) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            text = if (uiState.isOfflineUser) {
+                                stringResource(R.string.profile_on_device)
+                            } else {
+                                stringResource(R.string.profile_synced_secure)
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (uiState.isOfflineUser) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                        )
+                    }
                 }
 
                 Icon(
@@ -262,14 +317,13 @@ private fun ProfileCard(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = "Cycle Health",
+                        text = stringResource(R.string.profile_cycle_health),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Text(
-                        text = profilePhone(uiState),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    uiState.cycleHealthStatus?.let { status ->
+                        CycleHealthBadge(status = status)
+                    }
                 }
             }
         }
@@ -323,6 +377,7 @@ private data class ProfileSettingGroup(
 
 /** Same group labels, order, and item titles as iOS `ProfileView.groups`/`partnerGroups`. */
 private fun profileSettingGroups(
+    context: android.content.Context,
     isPartnerRole: Boolean,
     onLogHistoryClick: () -> Unit,
     onAppIntegrationClick: () -> Unit,
@@ -341,61 +396,121 @@ private fun profileSettingGroups(
 
     if (!isPartnerRole) {
         groups += ProfileSettingGroup(
-            label = "Cycle & Health",
+            label = context.getString(R.string.profile_group_cycle_health),
             items = listOf(
-                ProfileSettingItem(Icons.Filled.CalendarMonth, "Log History", onLogHistoryClick),
-                ProfileSettingItem(Icons.Filled.MonitorHeart, "App Integration", onAppIntegrationClick),
-                ProfileSettingItem(Icons.Filled.Description, "Health Report", onHealthDataClick),
+                ProfileSettingItem(Icons.Filled.CalendarMonth, context.getString(R.string.profile_item_log_history), onLogHistoryClick),
+                ProfileSettingItem(Icons.Filled.MonitorHeart, context.getString(R.string.profile_item_app_integration), onAppIntegrationClick),
+                ProfileSettingItem(Icons.Filled.Description, context.getString(R.string.profile_item_health_report), onHealthDataClick),
             ),
         )
     }
 
     groups += ProfileSettingGroup(
-        label = "Preferences",
+        label = context.getString(R.string.profile_group_preferences),
         items = listOf(
-            ProfileSettingItem(Icons.Filled.NotificationsActive, "Reminders & Alerts", onNotificationsClick),
-            ProfileSettingItem(Icons.Filled.Palette, "Appearance & Theme", onAppearanceClick),
+            ProfileSettingItem(Icons.Filled.NotificationsActive, context.getString(R.string.profile_item_notifications), onNotificationsClick),
+            ProfileSettingItem(Icons.Filled.Palette, context.getString(R.string.profile_item_appearance), onAppearanceClick),
         ),
     )
 
     groups += ProfileSettingGroup(
-        label = "Support",
+        label = context.getString(R.string.profile_group_support),
         items = listOf(
-            ProfileSettingItem(Icons.Filled.HelpOutline, "Help & Support", onHelpSupportClick),
-            ProfileSettingItem(Icons.Filled.Lock, "Privacy & Security", onPrivacySecurityClick),
-            ProfileSettingItem(Icons.Filled.Gavel, "Legal & Compliance", onLegalClick),
+            ProfileSettingItem(Icons.Filled.HelpOutline, context.getString(R.string.profile_item_help_support), onHelpSupportClick),
+            ProfileSettingItem(Icons.Filled.Lock, context.getString(R.string.profile_item_privacy_security), onPrivacySecurityClick),
+            ProfileSettingItem(Icons.Filled.Gavel, context.getString(R.string.profile_item_legal), onLegalClick),
         ),
     )
 
     groups += ProfileSettingGroup(
-        label = "About",
+        label = context.getString(R.string.profile_group_about),
         items = listOf(
-            ProfileSettingItem(Icons.Filled.Info, "About Sakhi", onAboutClick),
-            ProfileSettingItem(Icons.Filled.Favorite, "Share Feedback", onFeedbackClick),
+            ProfileSettingItem(Icons.Filled.Info, context.getString(R.string.profile_item_about), onAboutClick),
+            ProfileSettingItem(Icons.Filled.Favorite, context.getString(R.string.profile_item_feedback), onFeedbackClick),
         ),
     )
 
     groups += ProfileSettingGroup(
-        label = "Account",
+        label = context.getString(R.string.profile_group_account),
         items = listOf(
-            ProfileSettingItem(Icons.Filled.Storage, "Manage Account", onManageAccountClick),
-            ProfileSettingItem(Icons.Filled.Logout, "Sign Out", onSignOutClick, isDestructive = true),
+            ProfileSettingItem(Icons.Filled.Storage, context.getString(R.string.profile_item_manage_account), onManageAccountClick),
+            ProfileSettingItem(Icons.Filled.Logout, context.getString(R.string.profile_item_sign_out), onSignOutClick, isDestructive = true),
         ),
     )
 
     return groups
 }
 
-private fun profileName(uiState: ProfileUiState): String = when {
-    uiState.isLoading -> "Loading profile"
+private fun profileName(context: android.content.Context, uiState: ProfileUiState): String = when {
+    uiState.isLoading -> context.getString(R.string.profile_loading)
     !uiState.profile?.name.isNullOrBlank() -> uiState.profile?.name.orEmpty()
     !uiState.session?.userName.isNullOrBlank() -> uiState.session?.userName.orEmpty()
-    else -> "User"
+    else -> context.getString(R.string.profile_fallback_user)
 }
 
-private fun profilePhone(uiState: ProfileUiState): String = when {
-    !uiState.profile?.phone.isNullOrBlank() -> uiState.profile?.phone.orEmpty()
-    !uiState.profile?.email.isNullOrBlank() -> uiState.profile?.email.orEmpty()
-    !uiState.session?.userId.isNullOrBlank() -> uiState.session?.userId.orEmpty()
-    else -> "No contact info available"
+@Composable
+private fun CycleHealthBadge(status: CycleHealthStatus) {
+    val color = when (status) {
+        CycleHealthStatus.REGULAR -> Color(0xFF34C759)
+        CycleHealthStatus.IRREGULAR -> Color(0xFFF39C48)
+        CycleHealthStatus.DELAYED -> MaterialTheme.colorScheme.error
+    }
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .padding(vertical = 5.dp)
+            .background(color.copy(alpha = 0.12f), CircleShape)
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = color,
+            modifier = Modifier.size(7.dp),
+        ) {}
+        Text(
+            text = status.displayName,
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            color = color,
+        )
+    }
+}
+
+private fun avatarInitials(uiState: ProfileUiState): String? {
+    val name = uiState.profile?.name
+        ?.takeIf { it.isNotBlank() }
+        ?: uiState.session?.userName?.takeIf { it.isNotBlank() }
+        ?: return null
+    val initials = name
+        .trim()
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .take(2)
+        .mapNotNull { it.firstOrNull()?.uppercaseChar() }
+        .joinToString("")
+    return initials.ifBlank { null }
+}
+
+@Composable
+private fun ProfileFooter(onConnectClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = SakhiSpacing.space6),
+        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = stringResource(R.string.profile_footer_body),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        TextButton(onClick = onConnectClick) {
+            Text(
+                text = stringResource(R.string.profile_footer_cta),
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
 }

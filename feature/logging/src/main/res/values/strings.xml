@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="logging_close">Close</string>
+    <string name="logging_flow">Flow</string>
+    <string name="logging_symptoms">Symptoms</string>
+    <string name="logging_section_body">Body</string>
+    <string name="logging_section_weight">Weight</string>
+    <string name="logging_weight_value">%1$d Kg</string>
+    <string name="logging_section_bbt">Basal Body Temperature</string>
+    <string name="logging_bbt_value">%1$.1f °C</string>
+    <string name="logging_section_pain">Pain</string>
+    <string name="logging_section_digestive">Digestive</string>
+    <string name="logging_section_physical">Physical</string>
+    <string name="logging_section_mood">Mood</string>
+    <string name="logging_section_sleep">Sleep</string>
+    <string name="logging_section_discharge">Discharge</string>
+    <string name="logging_section_log">Log</string>
+    <string name="logging_painkiller_taken">Painkiller Taken</string>
+    <string name="logging_doctor_visited">Doctor Visited</string>
+    <string name="logging_notes">Notes</string>
+    <string name="logging_notes_placeholder">Anything about today</string>
+    <string name="logging_partner_lock_message">She made the latest change on this date, so you can no longer edit or remove it.</string>
+    <string name="logging_selected">Selected</string>
+    <string name="logging_not_selected">Not selected</string>
+    <string name="logging_selection_state">%1$s selected</string>
+    <string name="logging_not_selected_state">%1$s not selected</string>
+    <string name="logging_flow_spotting">Spotting</string>
+    <string name="logging_flow_light">Slight</string>
+    <string name="logging_flow_medium">Moderate</string>
+    <string name="logging_flow_heavy">Heavy</string>
+    <string name="logging_save_saving">Saving...</string>
+    <string name="logging_save_saved">Saved</string>
+    <string name="logging_save_retry">Save failed, tap to retry</string>
+    <string name="logging_save">Save</string>
+    <string name="logging_error_session_not_ready">Session is not ready yet.</string>
+    <string name="logging_error_care_role_cannot_save">This care role cannot save period logs.</string>
+    <string name="logging_error_primary_latest_log">This day belongs to the primary user\'s latest log.</string>
+    <string name="logging_save_success">Saved for %1$s</string>
+    <string name="logging_error_failed_to_save">Failed to save log</string>
+    <string name="logging_error_failed_to_load_existing">Failed to load existing logs</string>
+    <string name="logging_error_failed_to_load_daily">Failed to load daily log</string>
+    <string name="logging_error_future_date">You can only log today or earlier.</string>
+    <string name="logging_error_missing_flow">Pick a flow intensity before saving.</string>
+    <string name="logging_error_flow_without_period">Flow cannot be saved without a period.</string>
+</resources>

@@ -20,17 +20,11 @@ import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 
 /**
- * Shared "presented as a sheet" shell — Profile/Care/Chat are each a real
- * `.sheet(...).presentationDetents([.large]).presentationDragIndicator(.hidden)`
- * on iOS (rounded top corners, no drag handle — they rely on their own
- * in-header close button instead). Logging is the one exception: its sheet
- * config uses `.presentationDragIndicator(.visible)` (see `HomeView.swift`
+ * Shared inner "presented as a sheet" surface. `SakhiModalSheet` owns the
+ * outer modal behavior; this wrapper owns the rounded top corners and optional
+ * in-surface drag indicator that iOS uses across Home-owned sheets. Logging is
+ * the one exception that wants the indicator visible (`HomeView.swift`
  * `makeLoggingSheetConfiguration`), so it passes `showDragHandle = true`.
- * Android's nav graph currently pushes all of these as plain full-screen
- * destinations (a deliberate, tracked "wiring first" simplification — see
- * `HomeNavHost.kt`'s doc comment); this wrapper gives them the matching
- * rounded-top look without the bigger nav-architecture change a real
- * modal-sheet destination type would need.
  */
 @Composable
 fun SheetSurface(

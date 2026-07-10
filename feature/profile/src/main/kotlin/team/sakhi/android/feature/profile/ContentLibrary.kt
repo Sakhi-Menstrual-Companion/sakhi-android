@@ -1,14 +1,12 @@
 package team.sakhi.android.feature.profile
 
 /**
- * Verbatim port of iOS `SakhiContentLibrary.swift`'s static fallback content --
- * this is the real, final copy for Legal/About/Help sub-pages, not placeholder
- * text. iOS's live version can additionally fetch a Sanity-CMS override for
- * some pages (`SanityLegalPageView`/`SanityFAQView`), falling back to this same
- * static content when no CMS override exists; Android skips the live-CMS layer
- * entirely (no verified Sanity project wiring for these specific pages this
- * session) and always shows this static content, which is what most users see
- * on iOS anyway since the CMS override is the exception, not the rule.
+ * Verbatim port of iOS `SakhiContentLibrary.swift`'s static fallback content.
+ * This is still the authoritative fallback for Legal/About/Help pages even
+ * after Android's Sanity CMS wiring landed: `ContentPageScreen` now tries the
+ * shared `SanityRepository` first for legal pages / FAQ / team / about-us, then
+ * falls back instantly to this same static body when CMS data is absent, empty,
+ * or not configured.
  */
 enum class ContentPageId {
     PRIVACY_POLICY, TERMS_OF_SERVICE, CODE_OF_CONDUCT,

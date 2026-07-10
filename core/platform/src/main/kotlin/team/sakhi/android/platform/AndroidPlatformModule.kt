@@ -38,4 +38,13 @@ val androidPlatformModule = module {
     single { AndroidLocationProvider(context = get()) }
     single { AndroidHapticManager(appContext = get(), kvStore = get()) }
     single { AndroidAppVersionProvider(appContext = get()) }
+    single {
+        AndroidWidgetSnapshotManager(
+            appContext = get(),
+            sessionManager = get(),
+            cycleDataRepository = get(),
+            periodLogRepository = get(),
+            kvStore = get(),
+        )
+    }
 }

@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.ai
 
+import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -71,6 +72,7 @@ class ChatViewModel(
     private val safePlaceRanker: SafePlaceRanker,
     private val locationProvider: AndroidLocationProvider,
     private val hapticManager: AndroidHapticManager,
+    private val appContext: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ChatUiState(isLoading = true))
@@ -116,7 +118,7 @@ class ChatViewModel(
     fun onLocationPermissionResult(granted: Boolean) {
         _uiState.update { it.copy(needsLocationPermission = false) }
         if (!granted) {
-            appendLocalAssistantMessage("I need location access to find nearby places. You can enable it in Settings any time.")
+            appendLocalAssistantMessage(appContext.getString(R.string.chat_error_location_permission))
         }
     }
 
@@ -140,7 +142,7 @@ class ChatViewModel(
         val requestedSessionKey = activeSessionKey(session)
 
         if (session == null || userId.isBlank()) {
-            appendLocalAssistantMessage("I couldn't generate the report this time. Try again in a moment.")
+            appendLocalAssistantMessage(appContext.getString(R.string.chat_error_report_retry))
             _uiState.update { it.copy(reportSession = null) }
             return
         }
@@ -190,12 +192,12 @@ class ChatViewModel(
             if (activeSessionKey(sessionManager.current) != requestedSessionKey) return@launch
 
             val shareUri = exportResult.getOrElse {
-                appendLocalAssistantMessage("I couldn't generate the report this time. Try again in a moment.")
+                appendLocalAssistantMessage(appContext.getString(R.string.chat_error_report_retry))
                 _uiState.update { state -> state.copy(reportSession = null) }
                 return@launch
             }
 
-            appendLocalAssistantMessage("Your report is ready. Sharing it now.")
+            appendLocalAssistantMessage(appContext.getString(R.string.chat_report_ready))
             _uiState.update { state ->
                 state.copy(
                     reportSession = null,
@@ -233,7 +235,7 @@ class ChatViewModel(
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    error = throwable.message ?: "Unable to load chat history right now.",
+                    error = throwable.message ?: appContext.getString(R.string.chat_error_load_history),
                 )
             }
             emptyList()
@@ -390,7 +392,7 @@ class ChatViewModel(
                     it.copy(
                         messages = it.messages.markFailed(userMessage.id),
                         isSending = false,
-                        error = throwable.message ?: "Unable to send that message right now.",
+                        error = throwable.message ?: appContext.getString(R.string.chat_error_send_message),
                     )
                 }
             }
@@ -420,10 +422,15 @@ class ChatViewModel(
 
     private fun buildContext(session: SessionContext): SakhiAIContext {
         val isPartnerMode = !session.isViewingOwnData
-        val subjectName = session.activePartnership?.partnerName ?: "her"
+        val subjectName = session.activePartnership?.partnerName
+            ?: appContext.getString(R.string.chat_context_subject_default)
 
         return SakhiAIContext(
-            userName = if (isPartnerMode) "her" else session.userName.ifBlank { "you" },
+            userName = if (isPartnerMode) {
+                appContext.getString(R.string.chat_context_subject_default)
+            } else {
+                session.userName.ifBlank { appContext.getString(R.string.chat_context_user_default) }
+            },
             hasCycleData = false,
             hasRecentPeriodLogs = false,
             hasPredictionData = false,
@@ -448,10 +455,10 @@ class ChatViewModel(
         context: SakhiAIContext,
     ): String {
         return if (context.isPartnerMode) {
-            "I’m here. Tell me how you would like to support her today."
+            appContext.getString(R.string.chat_fallback_welcome_partner)
         } else {
-            val name = session.userName.ifBlank { "there" }
-            "Hey, $name. I’m here. Tell me what feels most important today."
+            val name = session.userName.ifBlank { appContext.getString(R.string.chat_fallback_name_default) }
+            appContext.getString(R.string.chat_fallback_welcome_self, name)
         }
     }
 

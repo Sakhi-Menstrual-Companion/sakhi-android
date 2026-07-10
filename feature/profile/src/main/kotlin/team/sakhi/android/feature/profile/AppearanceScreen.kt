@@ -26,13 +26,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import org.koin.compose.koinInject
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
-import team.sakhi.android.ui.SheetSurface
+import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.preferences.ThemeMode
 import team.sakhi.preferences.ThemePreferenceStore
@@ -54,19 +55,11 @@ fun AppearanceScreen(onBack: () -> Unit) {
     val hapticManager = koinInject<AndroidHapticManager>()
     val currentMode by themeStore.mode.collectAsState()
 
-    SheetSurface(showDragHandle = true) {
-        DetailHeader(title = "Appearance", onBack = onBack)
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(SakhiSpacing.space5),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
-        ) {
+    DetailSheetScaffold(title = stringResource(R.string.profile_appearance_title), onBack = onBack) {
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5)) {
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 Text(
-                    text = "THEME",
+                    text = stringResource(R.string.profile_appearance_section_theme),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -77,11 +70,11 @@ fun AppearanceScreen(onBack: () -> Unit) {
                 ) {
                     Column {
                         val options = listOf(
-                            ThemeMode.SYSTEM to "System Default",
-                            ThemeMode.LIGHT to "Light",
-                            ThemeMode.DARK to "Dark",
+                            ThemeMode.SYSTEM to R.string.profile_appearance_theme_system,
+                            ThemeMode.LIGHT to R.string.profile_appearance_theme_light,
+                            ThemeMode.DARK to R.string.profile_appearance_theme_dark,
                         )
-                        options.forEachIndexed { index, (mode, label) ->
+                        options.forEachIndexed { index, (mode, labelRes) ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -92,7 +85,11 @@ fun AppearanceScreen(onBack: () -> Unit) {
                                     .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Text(text = label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                                Text(
+                                    text = stringResource(labelRes),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    modifier = Modifier.weight(1f),
+                                )
                                 if (currentMode == mode) {
                                     Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                 }
@@ -105,7 +102,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
 
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 Text(
-                    text = "INTERACTION",
+                    text = stringResource(R.string.profile_appearance_section_interaction),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -116,14 +113,14 @@ fun AppearanceScreen(onBack: () -> Unit) {
                 ) {
                     Column {
                         PreferenceToggleRow(
-                            title = "Haptic Feedback",
+                            title = stringResource(R.string.profile_appearance_haptics),
                             kvStore = kvStore,
                             key = UserPreferenceKeys.HAPTICS_ENABLED,
                             default = UserPreferenceDefaults.HAPTICS_ENABLED,
                         )
                         HorizontalDivider()
                         PreferenceToggleRow(
-                            title = "Reduce Motion",
+                            title = stringResource(R.string.profile_appearance_reduce_motion),
                             kvStore = kvStore,
                             key = UserPreferenceKeys.REDUCE_MOTION,
                             default = UserPreferenceDefaults.REDUCE_MOTION,
@@ -137,7 +134,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
 
 @Composable
 internal fun PreferenceToggleRow(title: String, kvStore: PlatformKeyValueStore, key: String, default: Boolean) {
-    var checked by remember { mutableStateOf(kvStore.getBool(key, default)) }
+    var checked by remember(key, default) { mutableStateOf(kvStore.getBool(key, default)) }
     Row(
         modifier = Modifier
             .fillMaxWidth()

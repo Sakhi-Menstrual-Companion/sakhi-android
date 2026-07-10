@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.logging
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,8 +23,9 @@ import team.sakhi.models.FlowIntensity
 import team.sakhi.models.LogSource
 import team.sakhi.models.PeriodLog
 import team.sakhi.models.UserCareRole
-import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.android.platform.AndroidHapticManager
+import team.sakhi.android.platform.AndroidWidgetSnapshotManager
+import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
@@ -59,9 +61,11 @@ data class LoggingUiState(
  * stable-id helpers without re-implementing cycle or merge rules on Android.
  */
 class LoggingViewModel(
+    private val appContext: Context,
     private val sessionManager: SessionManager,
     private val periodLogRepository: PeriodLogRepository,
     private val hapticManager: AndroidHapticManager,
+    private val widgetSnapshotManager: AndroidWidgetSnapshotManager,
 ) : ViewModel() {
 
     private val selectedDate = MutableStateFlow(DateConverter.today())
@@ -177,17 +181,17 @@ class LoggingViewModel(
 
     fun save() {
         val session = sessionManager.current ?: run {
-            _uiState.update { it.copy(error = "Session is not ready yet.") }
+            _uiState.update { it.copy(error = appContext.getString(R.string.logging_error_session_not_ready)) }
             return
         }
         val state = _uiState.value
 
         if (!state.canLogPeriod) {
-            _uiState.update { it.copy(error = "This care role cannot save period logs.") }
+            _uiState.update { it.copy(error = appContext.getString(R.string.logging_error_care_role_cannot_save)) }
             return
         }
         if (!state.canMutateSelectedDate) {
-            _uiState.update { it.copy(error = "This day belongs to the primary user's latest log.") }
+            _uiState.update { it.copy(error = appContext.getString(R.string.logging_error_primary_latest_log)) }
             return
         }
         if (state.isSaving) return
@@ -225,14 +229,14 @@ class LoggingViewModel(
                 if (!session.isViewingOwnData &&
                     !PeriodLogPolicy.canCareViewerMutate(sameDayLogs, actorUserId)
                 ) {
-                    _uiState.update {
-                        it.copy(
-                            isSaving = false,
-                            canMutateSelectedDate = false,
-                            error = "This day belongs to the primary user's latest log.",
-                        )
-                    }
-                    return@onSuccess
+                        _uiState.update {
+                            it.copy(
+                                isSaving = false,
+                                canMutateSelectedDate = false,
+                                error = appContext.getString(R.string.logging_error_primary_latest_log),
+                            )
+                        }
+                        return@onSuccess
                 }
 
                 val sourceLogs = logsForSource(
@@ -258,10 +262,14 @@ class LoggingViewModel(
                                 it.copy(
                                     isSaving = false,
                                     canMutateSelectedDate = true,
-                                    saveMessage = "Saved for ${DateConverter.formatForDisplay(state.selectedDate)}",
+                                    saveMessage = appContext.getString(
+                                        R.string.logging_save_success,
+                                        formatSelectedDate(state.selectedDate),
+                                    ),
                                     error = null,
                                 )
                             }
+                            widgetSnapshotManager.refreshAsync()
                             hapticManager.success()
                         }
                     }
@@ -270,7 +278,7 @@ class LoggingViewModel(
                             _uiState.update {
                                 it.copy(
                                     isSaving = false,
-                                    error = throwable.message ?: "Failed to save log",
+                                    error = throwable.message ?: appContext.getString(R.string.logging_error_failed_to_save),
                                 )
                             }
                             hapticManager.error()
@@ -281,7 +289,7 @@ class LoggingViewModel(
                 _uiState.update {
                     it.copy(
                         isSaving = false,
-                        error = throwable.message ?: "Failed to load existing logs",
+                        error = throwable.message ?: appContext.getString(R.string.logging_error_failed_to_load_existing),
                     )
                 }
                 hapticManager.error()
@@ -375,7 +383,7 @@ class LoggingViewModel(
                 isLoadingEntry = false,
                 isSaving = false,
                 saveMessage = null,
-                error = throwable.message ?: "Failed to load daily log",
+                error = throwable.message ?: appContext.getString(R.string.logging_error_failed_to_load_daily),
             )
         }
     }
@@ -513,9 +521,15 @@ class LoggingViewModel(
 
     private fun validationMessage(result: LogTokenEncoder.LogValidationResult): String = when (result) {
         LogTokenEncoder.LogValidationResult.Valid -> ""
-        LogTokenEncoder.LogValidationResult.FutureDate -> "You can only log today or earlier."
-        LogTokenEncoder.LogValidationResult.MissingFlow -> "Pick a flow intensity before saving."
-        LogTokenEncoder.LogValidationResult.FlowWithoutPeriod -> "Flow cannot be saved without a period."
+        LogTokenEncoder.LogValidationResult.FutureDate -> appContext.getString(R.string.logging_error_future_date)
+        LogTokenEncoder.LogValidationResult.MissingFlow -> appContext.getString(R.string.logging_error_missing_flow)
+        LogTokenEncoder.LogValidationResult.FlowWithoutPeriod -> appContext.getString(R.string.logging_error_flow_without_period)
+    }
+
+    private fun formatSelectedDate(date: LocalDate): String {
+        val javaDate = java.time.LocalDate.of(date.year, date.monthNumber, date.dayOfMonth)
+        val formatter = java.time.format.DateTimeFormatter.ofPattern("d MMMM", java.util.Locale.getDefault())
+        return javaDate.format(formatter)
     }
 }
 

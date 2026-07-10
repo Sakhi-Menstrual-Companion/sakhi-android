@@ -48,6 +48,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -61,6 +63,7 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.BackButton
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.care.CareRuntimeState
@@ -192,6 +195,7 @@ private fun PartnerDetailContent(
     onManagePermissions: (() -> Unit)?,
     onRemove: () -> Unit,
 ) {
+    val context = LocalContext.current
     var showConfirmRemove by remember { mutableStateOf(false) }
 
     val resolvedName = partnership.partnerName.takeIf { name ->
@@ -200,20 +204,25 @@ private fun PartnerDetailContent(
             !name.lowercase().contains("sakhi") &&
             name.lowercase() != "unknown"
     }.orEmpty()
-    val headerTitle = if (resolvedName.isEmpty()) "Your Sakhi" else "You & $resolvedName"
-    val displayLabel = resolvedName.ifEmpty { "Your Sakhi" }
+    val fallbackLabel = stringResource(R.string.care_fallback_your_sakhi)
+    val displayLabel = if (resolvedName.isEmpty()) fallbackLabel else resolvedName
+    val headerTitle = if (resolvedName.isEmpty()) {
+        displayLabel
+    } else {
+        stringResource(R.string.care_header_you_and_name, resolvedName)
+    }
     val partnerInitial = displayLabel.take(1).uppercase()
 
     val createdAtDate = DateConverter.isoToLocalDate(partnership.createdAt)
-    val dateString = createdAtDate?.let { formatConnectedSince(it) }
+    val dateString = createdAtDate?.let { formatConnectedSince(it, context) }
     val daysOfCare = createdAtDate?.let {
         DateConverter.daysBetween(it, DateConverter.today()).coerceAtLeast(0)
     }
     val daysValue = daysOfCare?.let {
         when (it) {
-            0 -> "Today"
-            1 -> "1 day"
-            else -> "$it days"
+            0 -> stringResource(R.string.care_today)
+            1 -> stringResource(R.string.care_one_day)
+            else -> pluralStringResource(R.plurals.care_days_plural, it, it)
         }
     }
 
@@ -243,14 +252,14 @@ private fun PartnerDetailContent(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = "Your trusted Sakhi.",
+                    text = stringResource(R.string.care_subtitle_trusted_sakhi),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = SakhiSpacing.space1),
                 )
             }
 
-            SectionHeader(text = "DETAILS")
+            SectionHeader(text = stringResource(R.string.care_section_details))
             Surface(
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
@@ -260,20 +269,31 @@ private fun PartnerDetailContent(
             ) {
                 Column {
                     if (daysValue != null && dateString != null) {
-                        InfoRow(icon = { SparkleGlyph() }, label = "Days of care", value = daysValue)
+                        InfoRow(
+                            icon = { SparkleGlyph() },
+                            label = stringResource(R.string.care_label_days_of_care),
+                            value = daysValue,
+                        )
                         RowDivider()
-                        InfoRow(icon = { Text("📅") }, label = "Connected since", value = dateString)
+                        InfoRow(
+                            icon = { Text("📅") },
+                            label = stringResource(R.string.care_label_connected_since),
+                            value = dateString,
+                        )
                     } else {
                         InfoRow(
                             icon = { Text("📅") },
-                            label = "Connection details",
-                            value = "Unavailable right now",
+                            label = stringResource(R.string.care_label_connection_details),
+                            value = stringResource(R.string.care_value_unavailable_right_now),
                         )
                     }
                 }
             }
 
-            SectionHeader(text = "ACTIONS", modifier = Modifier.padding(top = SakhiSpacing.space6))
+            SectionHeader(
+                text = stringResource(R.string.care_section_actions),
+                modifier = Modifier.padding(top = SakhiSpacing.space6),
+            )
             Surface(
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
@@ -284,14 +304,14 @@ private fun PartnerDetailContent(
                 Column {
                     ActionRow(
                         icon = Icons.Filled.History,
-                        label = "History",
+                        label = stringResource(R.string.care_action_history),
                         onClick = onHistory,
                     )
                     if (!isPartnerRole && onManagePermissions != null) {
                         RowDivider()
                         ActionRow(
                             icon = Icons.Filled.Lock,
-                            label = "Manage Permissions",
+                            label = stringResource(R.string.care_action_manage_permissions),
                             onClick = onManagePermissions,
                         )
                     }
@@ -310,7 +330,11 @@ private fun PartnerDetailContent(
                 .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
         ) {
             Text(
-                text = if (isPartnerRole) "Leave Her" else "Remove $displayLabel",
+                text = if (isPartnerRole) {
+                    stringResource(R.string.care_leave_her)
+                } else {
+                    stringResource(R.string.care_remove_name, displayLabel)
+                },
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
             )
@@ -320,13 +344,21 @@ private fun PartnerDetailContent(
     if (showConfirmRemove) {
         AlertDialog(
             onDismissRequest = { showConfirmRemove = false },
-            title = { Text(if (isPartnerRole) "Leave Her?" else "Remove $displayLabel?") },
+            title = {
+                Text(
+                    if (isPartnerRole) {
+                        stringResource(R.string.care_leave_her_title)
+                    } else {
+                        stringResource(R.string.care_remove_name_title, displayLabel)
+                    }
+                )
+            },
             text = {
                 Text(
                     if (isPartnerRole) {
-                        "She trusted you with something personal. You can always reconnect if she invites you again."
+                        stringResource(R.string.care_leave_her_body)
                     } else {
-                        "$displayLabel will no longer be able to see your data."
+                        stringResource(R.string.care_remove_name_body, displayLabel)
                     }
                 )
             },
@@ -336,14 +368,18 @@ private fun PartnerDetailContent(
                     onRemove()
                 }) {
                     Text(
-                        text = if (isPartnerRole) "Yes, Leave Her" else "Remove",
+                        text = if (isPartnerRole) {
+                            stringResource(R.string.care_confirm_leave_her)
+                        } else {
+                            stringResource(R.string.care_confirm_remove)
+                        },
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showConfirmRemove = false }) {
-                    Text("Cancel")
+                    Text(stringResource(R.string.care_cancel))
                 }
             },
         )
@@ -480,9 +516,13 @@ private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
     }
 }
 
-private fun formatConnectedSince(date: kotlinx.datetime.LocalDate): String {
-    val months = arrayOf("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
-    return "${date.dayOfMonth} ${months[date.monthNumber - 1]}, ${date.year}"
+private fun formatConnectedSince(
+    date: kotlinx.datetime.LocalDate,
+    context: android.content.Context,
+): String {
+    val javaDate = java.time.LocalDate.of(date.year, date.monthNumber, date.dayOfMonth)
+    val formatter = java.time.format.DateTimeFormatter.ofPattern("d MMM, yyyy", java.util.Locale.getDefault())
+    return javaDate.format(formatter)
 }
 
 // ── Pending invitation: PendingPartnerWaitingView parity ───────────────────
@@ -498,14 +538,14 @@ private fun PendingInviteContent(
     val scope = rememberCoroutineScopeCompat()
     val hapticManager = koinInject<AndroidHapticManager>()
 
-    val partnerName = invitation.inviteeName?.takeIf { it.isNotBlank() } ?: "Your Sakhi"
+    val fallbackLabel = stringResource(R.string.care_fallback_your_sakhi)
+    val partnerName = invitation.inviteeName?.takeIf { it.isNotBlank() } ?: fallbackLabel
     val formattedCode = if (invitation.inviteCode.length >= 6) {
         "${invitation.inviteCode.take(3)}-${invitation.inviteCode.takeLast(3)}"
     } else {
         invitation.inviteCode
     }
-    val shareMessage = "Hey! I use Sakhi to track my health. Open Sakhi → My Sakhi → " +
-        "\"I have a code\" → enter: ${invitation.inviteCode} 💕"
+    val shareMessage = context.getString(R.string.care_pending_share_message, invitation.inviteCode)
 
     Column(
         modifier = Modifier
@@ -525,13 +565,13 @@ private fun PendingInviteContent(
         }
 
         Text(
-            text = "Share with $partnerName",
+            text = stringResource(R.string.care_pending_share_with_name, partnerName),
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = SakhiSpacing.space6),
         )
         Text(
-            text = "Waiting for $partnerName to accept. Your code is ready to share.",
+            text = stringResource(R.string.care_pending_waiting_for_name, partnerName),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space6),
@@ -542,13 +582,19 @@ private fun PendingInviteContent(
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
             modifier = Modifier
                 .semantics {
-                    contentDescription = "Invite code $formattedCode. Double tap to copy."
+                    contentDescription = context.getString(
+                        R.string.care_pending_invite_code_description,
+                        formattedCode,
+                    )
                 }
                 .clickable {
                     scope.launch {
                         clipboard.setClipEntry(
                             androidx.compose.ui.platform.ClipEntry(
-                                ClipData.newPlainText("Invite code", invitation.inviteCode)
+                                ClipData.newPlainText(
+                                    context.getString(R.string.care_clip_label_invite_code),
+                                    invitation.inviteCode,
+                                )
                             )
                         )
                         hapticManager.success()
@@ -567,7 +613,7 @@ private fun PendingInviteContent(
                 )
                 Icon(
                     imageVector = Icons.Filled.ContentCopy,
-                    contentDescription = "Copy code",
+                    contentDescription = stringResource(R.string.care_copy_code),
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(16.dp),
                 )
@@ -577,14 +623,16 @@ private fun PendingInviteContent(
         Spacer(modifier = Modifier.weight(1f))
 
         PrimaryButton(
-            text = "Share",
+            text = stringResource(R.string.care_share),
             onClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
                 val sendIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/plain"
                     putExtra(Intent.EXTRA_TEXT, shareMessage)
                 }
-                context.startActivity(Intent.createChooser(sendIntent, null))
+                context.startActivity(
+                    Intent.createChooser(sendIntent, context.getString(R.string.care_share_chooser_title))
+                )
             },
             modifier = Modifier.fillMaxWidth(),
         )
@@ -593,7 +641,13 @@ private fun PendingInviteContent(
             enabled = !isCancelling,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(if (isCancelling) "Cancelling..." else "Cancel Request")
+            Text(
+                if (isCancelling) {
+                    stringResource(R.string.care_cancelling)
+                } else {
+                    stringResource(R.string.care_cancel_request)
+                }
+            )
         }
     }
 }
@@ -620,11 +674,11 @@ private fun InviteCreationContent(
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         Text(
-            text = "Be Her Sakhi",
+            text = stringResource(R.string.care_title_be_her_sakhi),
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
-            text = "If you would like to stay connected with someone you trust, you can share a code from here. This is always optional.",
+            text = stringResource(R.string.care_intro_optional_share),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -638,9 +692,9 @@ private fun InviteCreationContent(
                 modifier = Modifier.padding(SakhiSpacing.space5),
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
             ) {
-                Text(text = "Invite someone you trust", style = MaterialTheme.typography.titleMedium)
+                Text(text = stringResource(R.string.care_invite_someone_you_trust), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = "You can prepare a code here and share it only if and when you feel comfortable.",
+                    text = stringResource(R.string.care_invite_prepare_code),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -649,19 +703,23 @@ private fun InviteCreationContent(
                     value = uiState.inviteeName,
                     onValueChange = onInviteeNameChanged,
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Name, if you want to add one") },
-                    placeholder = { Text("Optional") },
+                    label = { Text(stringResource(R.string.care_label_name_optional)) },
+                    placeholder = { Text(stringResource(R.string.care_placeholder_optional)) },
                 )
                 OutlinedTextField(
                     value = uiState.partnerRelation,
                     onValueChange = onPartnerRelationChanged,
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Relationship") },
-                    placeholder = { Text("Partner, friend, parent, or similar") },
+                    label = { Text(stringResource(R.string.care_label_relationship)) },
+                    placeholder = { Text(stringResource(R.string.care_placeholder_relationship)) },
                 )
 
                 PrimaryButton(
-                    text = if (uiState.isCreatingInvite) "Preparing invite..." else "Create invite code",
+                    text = if (uiState.isCreatingInvite) {
+                        stringResource(R.string.care_preparing_invite)
+                    } else {
+                        stringResource(R.string.care_create_invite_code)
+                    },
                     onClick = onCreateInvitation,
                     enabled = !uiState.isCreatingInvite,
                     modifier = Modifier.fillMaxWidth(),
@@ -678,9 +736,9 @@ private fun InviteCreationContent(
                 modifier = Modifier.padding(SakhiSpacing.space5),
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
             ) {
-                Text(text = "I have a code", style = MaterialTheme.typography.titleMedium)
+                Text(text = stringResource(R.string.care_i_have_a_code), style = MaterialTheme.typography.titleMedium)
                 Text(
-                    text = "If someone shared a Sakhi code with you, you can enter it here.",
+                    text = stringResource(R.string.care_enter_shared_code),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -688,11 +746,15 @@ private fun InviteCreationContent(
                     value = uiState.acceptInviteCode,
                     onValueChange = onAcceptInviteCodeChanged,
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Invite code") },
-                    placeholder = { Text("ABCDEF") },
+                    label = { Text(stringResource(R.string.care_label_invite_code)) },
+                    placeholder = { Text(stringResource(R.string.care_placeholder_invite_code)) },
                 )
                 PrimaryButton(
-                    text = if (uiState.isAcceptingInvite) "Joining..." else "Accept invite",
+                    text = if (uiState.isAcceptingInvite) {
+                        stringResource(R.string.care_joining)
+                    } else {
+                        stringResource(R.string.care_accept_invite)
+                    },
                     onClick = onAcceptInvitation,
                     enabled = !uiState.isAcceptingInvite,
                     modifier = Modifier.fillMaxWidth(),
@@ -745,27 +807,34 @@ private fun PartnerPermissionsEditContent(
                     .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space5),
             ) {
                 Text(
-                    text = "Share only what\nfeels right",
+                    text = stringResource(R.string.care_permissions_title),
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                 )
                 Text(
-                    text = "You're always in control. Change this any time.",
+                    text = stringResource(R.string.care_permissions_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = SakhiSpacing.space2),
                 )
             }
 
-            SectionHeader(text = "WHAT THEY CAN DO")
+            SectionHeader(text = stringResource(R.string.care_section_what_they_can_do))
             Surface(
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space6),
             ) {
-                PermissionToggleRow(title = "Log Periods", checked = canLogPeriods, onCheckedChange = { canLogPeriods = it })
+                PermissionToggleRow(
+                    title = stringResource(R.string.care_permission_log_periods),
+                    checked = canLogPeriods,
+                    onCheckedChange = { canLogPeriods = it },
+                )
             }
 
-            SectionHeader(text = "WHAT THEY CAN SEE", modifier = Modifier.padding(top = SakhiSpacing.space6))
+            SectionHeader(
+                text = stringResource(R.string.care_section_what_they_can_see),
+                modifier = Modifier.padding(top = SakhiSpacing.space6),
+            )
             Surface(
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
@@ -773,18 +842,18 @@ private fun PartnerPermissionsEditContent(
             ) {
                 Column {
                     val rows = listOf(
-                        Triple("Period Dates", sharePeriodDates) { v: Boolean -> sharePeriodDates = v },
-                        Triple("Cycle History", shareCycleHistory) { v: Boolean -> shareCycleHistory = v },
-                        Triple("Cycle Predictions", sharePredictions) { v: Boolean -> sharePredictions = v },
-                        Triple("Symptoms", shareSymptoms) { v: Boolean -> shareSymptoms = v },
-                        Triple("Moods", shareMoods) { v: Boolean -> shareMoods = v },
-                        Triple("Daily Health Logs", shareDailyLogs) { v: Boolean -> shareDailyLogs = v },
-                        Triple("Ovulation Tests", shareOvulationTests) { v: Boolean -> shareOvulationTests = v },
-                        Triple("Medications", shareMedications) { v: Boolean -> shareMedications = v },
-                        Triple("Body Temperature", shareTemperature) { v: Boolean -> shareTemperature = v },
-                        Triple("Weight & Body", shareWeight) { v: Boolean -> shareWeight = v },
-                        Triple("Discharge", shareDischarge) { v: Boolean -> shareDischarge = v },
-                        Triple("Personal Notes", shareNotes) { v: Boolean -> shareNotes = v },
+                        Triple(stringResource(R.string.care_permission_period_dates), sharePeriodDates) { v: Boolean -> sharePeriodDates = v },
+                        Triple(stringResource(R.string.care_permission_cycle_history), shareCycleHistory) { v: Boolean -> shareCycleHistory = v },
+                        Triple(stringResource(R.string.care_permission_cycle_predictions), sharePredictions) { v: Boolean -> sharePredictions = v },
+                        Triple(stringResource(R.string.care_permission_symptoms), shareSymptoms) { v: Boolean -> shareSymptoms = v },
+                        Triple(stringResource(R.string.care_permission_moods), shareMoods) { v: Boolean -> shareMoods = v },
+                        Triple(stringResource(R.string.care_permission_daily_health_logs), shareDailyLogs) { v: Boolean -> shareDailyLogs = v },
+                        Triple(stringResource(R.string.care_permission_ovulation_tests), shareOvulationTests) { v: Boolean -> shareOvulationTests = v },
+                        Triple(stringResource(R.string.care_permission_medications), shareMedications) { v: Boolean -> shareMedications = v },
+                        Triple(stringResource(R.string.care_permission_body_temperature), shareTemperature) { v: Boolean -> shareTemperature = v },
+                        Triple(stringResource(R.string.care_permission_weight_body), shareWeight) { v: Boolean -> shareWeight = v },
+                        Triple(stringResource(R.string.care_permission_discharge), shareDischarge) { v: Boolean -> shareDischarge = v },
+                        Triple(stringResource(R.string.care_permission_personal_notes), shareNotes) { v: Boolean -> shareNotes = v },
                     )
                     rows.forEachIndexed { index, (title, checked, onChange) ->
                         PermissionToggleRow(title = title, checked = checked, onCheckedChange = onChange)
@@ -794,7 +863,7 @@ private fun PartnerPermissionsEditContent(
             }
 
             Text(
-                text = "Sexual activity is always kept private and cannot be shared.",
+                text = stringResource(R.string.care_permission_sexual_activity_private),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
@@ -805,7 +874,7 @@ private fun PartnerPermissionsEditContent(
 
         HorizontalDivider()
         PrimaryButton(
-            text = if (isSaving) "Saving..." else "Save",
+            text = if (isSaving) stringResource(R.string.care_saving) else stringResource(R.string.care_save),
             enabled = !isSaving,
             onClick = {
                 onSave(
@@ -865,9 +934,11 @@ private fun PartnerHistoryContent(
     onBack: () -> Unit,
     periodLogRepository: team.sakhi.repositories.PeriodLogRepository = org.koin.compose.koinInject(),
 ) {
+    val context = LocalContext.current
     var logs by remember { mutableStateOf<List<team.sakhi.models.PeriodLog>>(emptyList()) }
     var isLoaded by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
+    val fallbackLabel = stringResource(R.string.care_fallback_your_sakhi)
 
     androidx.compose.runtime.LaunchedEffect(partnership.userId) {
         logs = emptyList()
@@ -880,7 +951,7 @@ private fun PartnerHistoryContent(
                     .sortedByDescending { it.logDate.toString() }
             }
             .onFailure { throwable ->
-                loadError = throwable.message ?: "Couldn't load activity right now."
+                loadError = throwable.message ?: context.getString(R.string.care_error_load_activity_right_now)
             }
         isLoaded = true
     }
@@ -892,11 +963,9 @@ private fun PartnerHistoryContent(
                 .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            androidx.compose.material3.IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-            }
+            BackButton(onClick = onBack)
             Text(
-                text = "Activity",
+                text = stringResource(R.string.care_title_activity),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             )
         }
@@ -924,7 +993,7 @@ private fun PartnerHistoryContent(
                     modifier = Modifier.size(32.dp),
                 )
                 Text(
-                    text = "Couldn't load activity",
+                    text = stringResource(R.string.care_error_couldnt_load_activity),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
@@ -951,12 +1020,15 @@ private fun PartnerHistoryContent(
                     modifier = Modifier.size(32.dp),
                 )
                 Text(
-                    text = "No activity yet",
+                    text = stringResource(R.string.care_empty_no_activity_yet),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Text(
-                    text = "When ${partnership.partnerName} logs something for you, it will show up here.",
+                    text = stringResource(
+                        R.string.care_empty_when_name_logs,
+                        partnership.partnerName.ifBlank { fallbackLabel },
+                    ),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -970,7 +1042,7 @@ private fun PartnerHistoryContent(
                 .verticalScroll(rememberScrollState())
                 .padding(SakhiSpacing.space5),
         ) {
-            SectionHeader(text = "RECENT ACTIVITY")
+            SectionHeader(text = stringResource(R.string.care_section_recent_activity))
             Surface(
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
@@ -987,17 +1059,24 @@ private fun PartnerHistoryContent(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = if (log.periodPresent) "Period logged" else "Period cleared",
+                                    text = if (log.periodPresent) {
+                                        stringResource(R.string.care_period_logged)
+                                    } else {
+                                        stringResource(R.string.care_period_cleared)
+                                    },
                                     style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                                 )
                                 Text(
-                                    text = log.logDate.toString(),
+                                    text = formatConnectedSince(log.logDate, context),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             Text(
-                                text = "by ${partnership.partnerName}",
+                                text = stringResource(
+                                    R.string.care_by_name,
+                                    partnership.partnerName.ifBlank { fallbackLabel },
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

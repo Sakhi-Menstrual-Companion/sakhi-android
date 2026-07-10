@@ -1,0 +1,7 @@
+<resources>
+    <string name="back">Back</string>
+    <string name="offline_banner_default">You are offline. Sakhi will sync again when the connection returns.</string>
+    <string name="sakhi_alert_dismiss">Dismiss</string>
+    <string name="force_update_contact_support">Contact support</string>
+    <string name="force_update_update_now">Update Now</string>
+</resources>

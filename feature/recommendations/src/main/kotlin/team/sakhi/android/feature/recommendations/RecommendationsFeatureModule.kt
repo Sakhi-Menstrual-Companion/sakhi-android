@@ -11,6 +11,7 @@ val recommendationsFeatureModule = module {
             cycleDataRepository = get(),
             userProfileRepository = get(),
             recommendationRepository = get(),
+            appContext = get(),
         )
     }
 }

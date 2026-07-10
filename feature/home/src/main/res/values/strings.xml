@@ -1,0 +1,243 @@
+<resources>
+    <string name="home_waiting_for_session">Waiting for session</string>
+    <string name="home_session_summary_own">Showing %1$s\'s cycle</string>
+    <string name="home_session_summary_partner">Viewing %1$s access for user %2$s</string>
+
+    <string name="home_sync_idle">Sync idle</string>
+    <string name="home_sync_syncing">Syncing</string>
+    <string name="home_sync_synced">Synced</string>
+    <string name="home_sync_stale">Data marked stale</string>
+    <string name="home_sync_failed">Sync failed</string>
+
+    <string name="home_partner_snapshot_revision">Partner snapshot revision %1$d</string>
+    <string name="home_partner_snapshot_refreshed">refreshed %1$s</string>
+
+    <string name="home_calendar_content_description">Calendar</string>
+    <string name="home_log_content_description">Log</string>
+    <string name="home_refresh_content_description">Refresh</string>
+    <string name="home_open_profile_content_description">Open profile</string>
+    <string name="home_open_care_content_description">Open care mode</string>
+
+    <string name="home_other_symptoms">Other symptoms  ›</string>
+    <string name="home_flow_selected">%1$s  ✓</string>
+
+    <string name="home_hero_not_started_partner">she hasn\'t started tracking</string>
+    <string name="home_hero_not_started_self">start tracking today</string>
+    <string name="home_hero_period_of_her">of her period</string>
+    <string name="home_hero_period_of_your">of your period</string>
+    <string name="home_hero_period_delayed_her">her period is delayed</string>
+    <string name="home_hero_period_delayed_self">period is delayed</string>
+    <string name="home_hero_until_next_her">until her next period</string>
+    <string name="home_hero_until_next_self">until next period</string>
+
+    <plurals name="home_day_count">
+        <item quantity="one">%d Day</item>
+        <item quantity="other">%d Days</item>
+    </plurals>
+
+    <string name="home_logged_partner_title">Her day</string>
+    <string name="home_logged_self_title">Logged today</string>
+    <string name="home_logged_partner_empty">She hasn\'t logged today yet</string>
+    <string name="home_logged_self_empty">Log your day</string>
+    <string name="home_log_category_flow">Flow</string>
+    <string name="home_log_category_weight">Weight</string>
+    <string name="home_log_category_bbt">BBT</string>
+    <string name="home_log_category_symptoms">Symptoms</string>
+    <string name="home_log_category_mood">Mood</string>
+
+    <string name="home_current_cycle_title">Current Cycle</string>
+    <string name="home_cycle_day_today">today\'s cycle day</string>
+    <string name="home_cycle_day_label">cycle day</string>
+    <string name="home_cycle_started">Started %1$s</string>
+    <string name="home_cycle_legend_period">Period</string>
+    <string name="home_cycle_legend_ovulation">Ovulation</string>
+    <string name="home_cycle_length_title">Cycle Length</string>
+    <string name="home_period_length_title">Period Length</string>
+    <string name="home_cycle_pill_today">today</string>
+    <string name="home_cycle_pill_period_day">period day</string>
+    <string name="home_cycle_pill_predicted_ovulation">predicted ovulation day</string>
+
+    <plurals name="home_cycle_length_days">
+        <item quantity="one">%d day</item>
+        <item quantity="other">%d days</item>
+    </plurals>
+
+    <string name="home_phase_info_partner_title">What\'s happening to her body?</string>
+    <string name="home_phase_info_self_title">What\'s happening in your body</string>
+    <string name="home_phase_info_body_changes">BODY CHANGES</string>
+
+    <string name="home_partner_checklist_title">What You Can Do</string>
+    <string name="home_partner_checklist_loading">Finding today\'s ideas...</string>
+    <string name="home_partner_checklist_failed">Couldn\'t load today\'s list</string>
+    <string name="home_retry">Retry</string>
+    <string name="home_partner_no_data_title">She hasn\'t started tracking yet</string>
+    <string name="home_partner_no_data_body">Once she logs her first period, her cycle data will appear here.</string>
+    <string name="home_partner_heads_up_days">days</string>
+    <string name="home_partner_heads_up_tomorrow">Period tomorrow</string>
+    <string name="home_partner_heads_up_long_period">Long period, day %1$d</string>
+
+    <plurals name="home_partner_heads_up_period_in">
+        <item quantity="one">Period in %d day</item>
+        <item quantity="other">Period in %d days</item>
+    </plurals>
+
+    <plurals name="home_partner_heads_up_past_expected">
+        <item quantity="one">%d day past expected date</item>
+        <item quantity="other">%d days past expected date</item>
+    </plurals>
+
+    <string name="home_empty_state_body">Your body runs on a 4-phase cycle. Each phase shapes your energy, mood, and how you feel. Log your first period and Sakhi starts tracking from there.</string>
+
+    <string name="home_nutrition_title">What to Eat</string>
+    <string name="home_nutrition_empty">No food recommendations are available right now.</string>
+    <string name="home_insight_partner_title">How to be there for her today</string>
+    <string name="home_insight_self_title">Sakhi\'s tip for today</string>
+    <string name="home_insight_powered">Powered by Sakhi AI</string>
+
+    <string name="home_phase_menstrual">Menstrual phase</string>
+    <string name="home_phase_follicular">Follicular phase</string>
+    <string name="home_phase_ovulation">Ovulation phase</string>
+    <string name="home_phase_luteal">Luteal phase</string>
+    <string name="home_phase_delayed">Delayed period</string>
+    <string name="home_phase_first_period_partner">Her first period</string>
+    <string name="home_phase_first_period_self">Track your first period</string>
+
+    <string name="home_phase_snippet_menstrual_overview">Your period is here. Your body is shedding the lining it built last month, and starting fresh. It\'s completely normal to feel tired, crampy, or a little low, your hormones are at their lowest point right now.</string>
+    <string name="home_phase_snippet_menstrual_body_1">Your uterus gently cramps to help shed the lining, that\'s what causes period pain</string>
+    <string name="home_phase_snippet_menstrual_body_2">Estrogen and progesterone are at their lowest, which can affect your mood and energy</string>
+    <string name="home_phase_snippet_menstrual_body_3">Your body is already quietly preparing for next month\'s cycle</string>
+    <string name="home_phase_snippet_follicular_overview">This is often the best week of your cycle. Estrogen is rising and you\'ll likely notice more energy, a clearer head, and a better mood. Your body is getting ready to ovulate.</string>
+    <string name="home_phase_snippet_follicular_body_1">Estrogen is rising, which is why you might feel brighter and more motivated</string>
+    <string name="home_phase_snippet_follicular_body_2">Your uterine lining is rebuilding itself after your period</string>
+    <string name="home_phase_snippet_follicular_body_3">One follicle in your ovary is growing and getting ready to release an egg</string>
+    <string name="home_phase_snippet_ovulation_overview">Your body is releasing an egg right now, this is ovulation. Many girls feel their best this week: confident, social, and full of energy. It\'s a natural peak.</string>
+    <string name="home_phase_snippet_ovulation_body_1">Your ovary releases a mature egg, which can be fertilised for about 12–24 hours</string>
+    <string name="home_phase_snippet_ovulation_body_2">You might notice your discharge becomes clearer and more slippery, this is normal and healthy</string>
+    <string name="home_phase_snippet_ovulation_body_3">Your body temperature rises very slightly after the egg is released</string>
+    <string name="home_phase_snippet_luteal_overview">Your body is now in wind-down mode. Progesterone rises to prepare for a potential pregnancy. If that doesn\'t happen, your hormones start dropping and PMS can creep in, mood swings, bloating, cravings. All very normal.</string>
+    <string name="home_phase_snippet_luteal_body_1">Progesterone rises, which can make you feel heavier, bloated, or more emotional</string>
+    <string name="home_phase_snippet_luteal_body_2">Your body temperature stays a little higher than usual</string>
+    <string name="home_phase_snippet_luteal_body_3">Towards the end of this phase you may notice PMS symptoms, your period is coming soon</string>
+    <string name="home_phase_snippet_delayed_overview">Your period is running a little late. This happens to almost everyone at some point and is usually nothing to worry about. Stress, a change in routine, or hormonal shifts are the most common reasons.</string>
+    <string name="home_phase_snippet_delayed_body_1">Stress can raise cortisol, which sometimes delays ovulation and pushes your period back</string>
+    <string name="home_phase_snippet_delayed_body_2">Changes in sleep, travel, or diet can affect your hormone rhythm</string>
+    <string name="home_phase_snippet_delayed_body_3">If this happens often, it\'s worth mentioning to a doctor, just to rule anything out</string>
+    <string name="home_phase_snippet_unknown_overview">Sakhi needs a little more data to figure out your phase. Log your period start date and you\'ll start seeing personalised insights right here.</string>
+
+    <string name="home_learning_feel_title">How you feel through your cycle</string>
+    <string name="home_learning_feel_intro">Your energy, mood, sleep, skin, and appetite are not random, they follow your hormones, and your hormones follow your cycle. Once Sakhi knows your pattern, it can tell you exactly why you feel the way you do on any given day.</string>
+    <string name="home_learning_high_energy_title">High energy</string>
+    <string name="home_learning_high_energy_body">Around ovulation, estrogen peaks and most people feel their sharpest and most social</string>
+    <string name="home_learning_slow_days_title">Slow days</string>
+    <string name="home_learning_slow_days_body">Late in the luteal phase, progesterone drops and tiredness, cravings, and low mood are normal</string>
+    <string name="home_learning_period_cramps_title">Period cramps</string>
+    <string name="home_learning_period_cramps_body">Prostaglandins cause the uterus to contract, some days are harder than others, and that is valid</string>
+    <string name="home_learning_mood_shifts_title">Mood shifts</string>
+    <string name="home_learning_mood_shifts_body">Estrogen and progesterone directly affect serotonin and dopamine, so mood changes are biological, not personal</string>
+
+    <string name="home_learning_cycle_works_title">How your cycle works</string>
+    <string name="home_learning_cycle_works_intro">A menstrual cycle is 21–35 days long, 28 days on average. It runs on four hormones: FSH, LH, estrogen, and progesterone. Each phase is shaped by how those hormones rise and fall, and they affect your energy, mood, skin, digestion, and sleep every single day.</string>
+    <string name="home_learning_phase_menstrual_name">Menstrual</string>
+    <string name="home_learning_phase_follicular_name">Follicular</string>
+    <string name="home_learning_phase_ovulation_name">Ovulation</string>
+    <string name="home_learning_phase_luteal_name">Luteal</string>
+    <string name="home_learning_phase_menstrual_days">Days 1–5</string>
+    <string name="home_learning_phase_follicular_days">Days 6–13</string>
+    <string name="home_learning_phase_ovulation_days">~Day 14</string>
+    <string name="home_learning_phase_luteal_days">Days 15–28</string>
+
+    <string name="home_learning_detail_menstrual_overview">Your period. Estrogen and progesterone drop to their lowest, and your uterus sheds its lining. Energy dips, rest is the best thing you can do right now.</string>
+    <string name="home_learning_detail_menstrual_point_1">Cramping, bloating, and lower back pain are common</string>
+    <string name="home_learning_detail_menstrual_point_2">Iron levels drop as you bleed, iron-rich foods help</string>
+    <string name="home_learning_detail_menstrual_point_3">Gentle walks and warm packs ease cramps better than staying still</string>
+    <string name="home_learning_detail_follicular_overview">FSH rises and a follicle starts growing in your ovary. Estrogen climbs with it, bringing a natural boost in energy, focus, and confidence. Often the best week of the month.</string>
+    <string name="home_learning_detail_follicular_point_1">Energy and social drive naturally peak</string>
+    <string name="home_learning_detail_follicular_point_2">Skin tends to be at its clearest</string>
+    <string name="home_learning_detail_follicular_point_3">A great time for new projects, workouts, and big plans</string>
+    <string name="home_learning_detail_ovulation_overview">An LH surge triggers egg release. Your most fertile window, the egg survives 12–24 hours. Communication, confidence, and charisma tend to peak here.</string>
+    <string name="home_learning_detail_ovulation_point_1">Discharge becomes clear and stretchy, like egg whites</string>
+    <string name="home_learning_detail_ovulation_point_2">A mild one-sided pelvic ache is normal</string>
+    <string name="home_learning_detail_ovulation_point_3">Basal body temperature rises slightly after ovulation</string>
+    <string name="home_learning_detail_luteal_overview">Progesterone rises to prepare the uterine lining. If no pregnancy happens, hormone levels drop, and your next period begins. PMS symptoms may appear in the second half.</string>
+    <string name="home_learning_detail_luteal_point_1">Energy slows as your body works harder internally</string>
+    <string name="home_learning_detail_luteal_point_2">Bloating, mood swings, and cravings are hormonal, not weakness</string>
+    <string name="home_learning_detail_luteal_point_3">Magnesium and B6 are clinically shown to ease PMS symptoms</string>
+
+    <string name="home_learning_log_title">What to log with Sakhi</string>
+    <string name="home_learning_log_tip_1">Period dates, when it starts and ends each month</string>
+    <string name="home_learning_log_tip_2">Flow level, light, medium, or heavy each day</string>
+    <string name="home_learning_log_tip_3">Symptoms, cramps, mood, energy, sleep, headaches, cravings</string>
+    <string name="home_learning_log_tip_4">Discharge, colour and texture help pinpoint ovulation</string>
+
+    <string name="home_learning_hormones_title">The hormones behind it all</string>
+    <string name="home_learning_hormone_fsh_name">Follicle-stimulating hormone</string>
+    <string name="home_learning_hormone_fsh_desc">Rises to kick off follicle development at the start of your cycle</string>
+    <string name="home_learning_hormone_lh_name">Luteinizing hormone</string>
+    <string name="home_learning_hormone_lh_desc">Surges mid-cycle to trigger ovulation, the key signal Sakhi watches</string>
+    <string name="home_learning_hormone_e2_name">Estrogen</string>
+    <string name="home_learning_hormone_e2_desc">Builds through follicular phase, lifts mood, energy, and skin glow</string>
+    <string name="home_learning_hormone_p4_name">Progesterone</string>
+    <string name="home_learning_hormone_p4_desc">Rises after ovulation, prepares the uterus, causes PMS if it drops</string>
+
+    <string name="home_learning_eat_title">Eat with your cycle</string>
+    <string name="home_learning_eat_period_desc">Spinach, lentils, dark chocolate, ginger tea, replenish iron and ease cramps</string>
+    <string name="home_learning_eat_follicular_desc">Lean protein, fermented foods, broccoli, support rising estrogen</string>
+    <string name="home_learning_eat_ovulation_desc">Berries, leafy greens, zinc-rich seeds, antioxidants protect the egg</string>
+    <string name="home_learning_eat_luteal_desc">Magnesium (nuts, seeds), B6 foods, complex carbs, reduce PMS and cravings</string>
+
+    <string name="home_learning_tracking_title">Tips for better tracking</string>
+    <string name="home_learning_tracking_tip_1">Log your period on the first day of bleeding, not spotting</string>
+    <string name="home_learning_tracking_tip_2">Track at the same time each day for the most consistent data</string>
+    <string name="home_learning_tracking_tip_3">Sleep quality and stress both affect your cycle length, log them too</string>
+    <string name="home_learning_tracking_tip_4">Cycles vary month to month. Three cycles gives Sakhi a reliable baseline</string>
+
+    <string name="home_ask_sakhi_partner_menstrual_1">How\'s she feeling today?</string>
+    <string name="home_ask_sakhi_partner_menstrual_2">What can I do for her right now?</string>
+    <string name="home_ask_sakhi_partner_menstrual_3">What does she need during her period?</string>
+    <string name="home_ask_sakhi_partner_menstrual_4">How can we help her through this?</string>
+    <string name="home_ask_sakhi_partner_follicular_1">How\'s her energy this week?</string>
+    <string name="home_ask_sakhi_partner_follicular_2">What does she need from me now?</string>
+    <string name="home_ask_sakhi_partner_follicular_3">What\'s good for her this phase?</string>
+    <string name="home_ask_sakhi_partner_follicular_4">How\'s she doing this week?</string>
+    <string name="home_ask_sakhi_partner_ovulation_1">How\'s she feeling right now?</string>
+    <string name="home_ask_sakhi_partner_ovulation_2">What does she need today?</string>
+    <string name="home_ask_sakhi_partner_ovulation_3">What\'s she going through this week?</string>
+    <string name="home_ask_sakhi_partner_ovulation_4">How can I be there for her today?</string>
+    <string name="home_ask_sakhi_partner_luteal_1">Why might she seem off today?</string>
+    <string name="home_ask_sakhi_partner_luteal_2">What does she need right now?</string>
+    <string name="home_ask_sakhi_partner_luteal_3">How can I help her this week?</string>
+    <string name="home_ask_sakhi_partner_luteal_4">What\'s she going through?</string>
+    <string name="home_ask_sakhi_partner_delayed_1">How\'s she doing with the delay?</string>
+    <string name="home_ask_sakhi_partner_delayed_2">What does she need from me?</string>
+    <string name="home_ask_sakhi_partner_delayed_3">Is she okay?</string>
+    <string name="home_ask_sakhi_partner_delayed_4">How can I support her right now?</string>
+    <string name="home_ask_sakhi_partner_unknown_1">How\'s she doing today?</string>
+    <string name="home_ask_sakhi_partner_unknown_2">What does she need?</string>
+    <string name="home_ask_sakhi_partner_unknown_3">What can we figure out for her?</string>
+    <string name="home_ask_sakhi_partner_unknown_4">Ask about her cycle...</string>
+
+    <string name="home_ask_sakhi_self_menstrual_1">How are you managing today?</string>
+    <string name="home_ask_sakhi_self_menstrual_2">Ask about cramp relief...</string>
+    <string name="home_ask_sakhi_self_menstrual_3">What helps with fatigue?</string>
+    <string name="home_ask_sakhi_self_menstrual_4">Talk to Sakhi about your flow...</string>
+    <string name="home_ask_sakhi_self_follicular_1">What should I eat this week?</string>
+    <string name="home_ask_sakhi_self_follicular_2">How\'s your energy level?</string>
+    <string name="home_ask_sakhi_self_follicular_3">Ask about cycle nutrition...</string>
+    <string name="home_ask_sakhi_self_follicular_4">Plan something for your glow-up phase...</string>
+    <string name="home_ask_sakhi_self_ovulation_1">Am I in my fertile window?</string>
+    <string name="home_ask_sakhi_self_ovulation_2">Ask about ovulation signs...</string>
+    <string name="home_ask_sakhi_self_ovulation_3">What\'s my body doing right now?</string>
+    <string name="home_ask_sakhi_self_ovulation_4">Tips for your peak energy day...</string>
+    <string name="home_ask_sakhi_self_luteal_1">Why do I feel this way?</string>
+    <string name="home_ask_sakhi_self_luteal_2">Ask about PMS remedies...</string>
+    <string name="home_ask_sakhi_self_luteal_3">What helps with bloating?</string>
+    <string name="home_ask_sakhi_self_luteal_4">Talk to Sakhi about your mood...</string>
+    <string name="home_ask_sakhi_self_delayed_1">Why is my period late?</string>
+    <string name="home_ask_sakhi_self_delayed_2">Should I be worried?</string>
+    <string name="home_ask_sakhi_self_delayed_3">Ask Sakhi about irregular cycles...</string>
+    <string name="home_ask_sakhi_self_delayed_4">What could cause a delay?</string>
+    <string name="home_ask_sakhi_self_unknown_1">Ask Sakhi anything...</string>
+    <string name="home_ask_sakhi_self_unknown_2">How do I start tracking?</string>
+    <string name="home_ask_sakhi_self_unknown_3">Tell me about my cycle phases...</string>
+    <string name="home_ask_sakhi_self_unknown_4">What should I log today?</string>
+</resources>

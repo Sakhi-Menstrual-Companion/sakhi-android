@@ -91,10 +91,20 @@ class Rule:
 STRICT_RULE_IDS: frozenset[str] = frozenset()
 
 RULE_ALLOWLISTS: dict[str, tuple[AllowlistEntry, ...]] = {
-    "feature_direct_network_clients": (),
+    "feature_direct_network_clients": (
+        AllowlistEntry(
+            path="feature/profile/src/main/kotlin/team/sakhi/android/feature/profile/ContentLibrary.kt",
+            reason="Static legal/about/license copy can mention backend vendors without being runtime client usage.",
+        ),
+    ),
     "feature_viewmodel_edge_function_names": (),
     "feature_handrolled_cycle_period_logic": (),
-    "feature_handrolled_permission_logic": (),
+    "feature_handrolled_permission_logic": (
+        AllowlistEntry(
+            path="feature/profile/src/main/kotlin/team/sakhi/android/feature/profile/NotificationsScreen.kt",
+            reason="Android POST_NOTIFICATIONS runtime permission is OS-level platform wiring, not care or product permission logic.",
+        ),
+    ),
     "feature_local_business_state": (),
 }
 

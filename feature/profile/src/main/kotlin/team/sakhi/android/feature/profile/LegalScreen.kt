@@ -4,19 +4,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,7 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
-import team.sakhi.android.ui.SheetSurface
+import team.sakhi.android.ui.DetailSheetScaffold
 
 /** Ports iOS `LegalView.swift`: documents list + data-rights list + a privacy note. */
 @Composable
@@ -38,20 +35,12 @@ fun LegalScreen(onBack: () -> Unit) {
     var openPage by remember { mutableStateOf<ContentPageId?>(null) }
 
     openPage?.let { id ->
-        ContentPageScreen(page = ContentLibrary.page(for_ = id), onBack = { openPage = null })
+        ContentPageScreen(pageId = id, onBack = { openPage = null })
         return
     }
 
-    SheetSurface(showDragHandle = true) {
-        DetailHeader(title = "Legal & Compliance", onBack = onBack)
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(SakhiSpacing.space5),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
-        ) {
+    DetailSheetScaffold(title = "Legal & Compliance", onBack = onBack) {
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5)) {
             SettingsSectionCard(
                 label = "DOCUMENTS",
                 rows = listOf(
@@ -88,25 +77,6 @@ fun LegalScreen(onBack: () -> Unit) {
             }
         }
     }
-}
-
-@Composable
-internal fun DetailHeader(title: String, onBack: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space2, vertical = SakhiSpacing.space2),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(onClick = onBack) {
-            Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
-        }
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-        )
-    }
-    HorizontalDivider()
 }
 
 @Composable

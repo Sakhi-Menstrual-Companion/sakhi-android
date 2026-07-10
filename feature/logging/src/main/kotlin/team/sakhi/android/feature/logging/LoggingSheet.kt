@@ -33,6 +33,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -49,6 +51,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.KeyboardSafeScaffold
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.logging.DischargeColor
@@ -94,269 +97,284 @@ fun LoggingSheet(
     onClose: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
 
     // iOS's Logging sheet config is the one exception that uses
     // `.presentationDragIndicator(.visible)` (see `HomeView.swift`
     // `makeLoggingSheetConfiguration`) -- every other sheet hides it.
     SheetSurface(showDragHandle = true) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = formattedHeaderDate(uiState.selectedDate),
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-            IconButton(onClick = onClose) {
-                Icon(imageVector = Icons.Filled.Close, contentDescription = "Close")
-            }
-        }
-        HorizontalDivider()
-
-        if (uiState.isLoadingEntry) {
-            Box(modifier = Modifier.fillMaxWidth().padding(SakhiSpacing.space6), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        }
-
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
-        ) {
-            // Flow section
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
-                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-            ) {
-                Text(
-                    text = "Flow",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
+        KeyboardSafeScaffold(
+            topBar = {
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    FlowIntensity.entries.forEach { flow ->
-                        FlowCard(
-                            flow = flow,
-                            selected = uiState.selectedFlow == flow,
-                            enabled = uiState.canLogPeriod,
-                            onClick = {
-                                viewModel.onFlowSelected(if (uiState.selectedFlow == flow) null else flow)
-                            },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-            }
-
-            if (uiState.selectedFlow != null) {
-                HorizontalDivider()
-
-                Text(
-                    text = "Symptoms",
-                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
-                )
-
-                Surface(
-                    shape = RoundedCornerShape(SakhiRadius.xl),
-                    tonalElevation = SakhiSpacing.space1,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = SakhiSpacing.space6),
-                ) {
-                    Column {
-                        symptomSection(
-                            title = "Body",
-                            symptoms = listOf(Symptom.ACNE),
-                            selected = uiState.selectedSymptoms,
-                            enabled = uiState.canEditSymptoms,
-                            onToggle = viewModel::toggleSymptom,
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
-                        ExpandableValueRow(
-                            label = "Weight",
-                            value = uiState.weightKg,
-                            enabled = uiState.canEditSymptoms,
-                            formatValue = { "${it.roundToInt()} Kg" },
-                            defaultValue = 60.0,
-                            valueRange = 30f..150f,
-                            onValueChange = viewModel::onWeightChanged,
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
-                        ExpandableValueRow(
-                            label = "Basal Body Temperature",
-                            value = uiState.bbtCelsius,
-                            enabled = uiState.canEditSymptoms,
-                            formatValue = { "%.1f °C".format(it) },
-                            defaultValue = 35.0,
-                            valueRange = 30f..42f,
-                            onValueChange = viewModel::onBbtChanged,
-                        )
-                        symptomSection(
-                            title = "Pain",
-                            symptoms = listOf(
-                                Symptom.CRAMPS,
-                                Symptom.BACK_PAIN,
-                                Symptom.PELVIS_PAIN,
-                                Symptom.BREAST_TENDERNESS,
-                                Symptom.HEADACHE,
-                            ),
-                            selected = uiState.selectedSymptoms,
-                            enabled = uiState.canEditSymptoms,
-                            onToggle = viewModel::toggleSymptom,
-                        )
-                        symptomSection(
-                            title = "Digestive",
-                            symptoms = listOf(Symptom.BLOATING, Symptom.NAUSEA, Symptom.DIARRHEA, Symptom.CONSTIPATION),
-                            selected = uiState.selectedSymptoms,
-                            enabled = uiState.canEditSymptoms,
-                            onToggle = viewModel::toggleSymptom,
-                        )
-                        symptomSection(
-                            title = "Physical",
-                            symptoms = listOf(
-                                Symptom.FATIGUE,
-                                Symptom.DIZZINESS,
-                                Symptom.FEVER,
-                                Symptom.CHILLS,
-                                Symptom.WATER_RETENTION,
-                            ),
-                            selected = uiState.selectedSymptoms,
-                            enabled = uiState.canEditSymptoms,
-                            onToggle = viewModel::toggleSymptom,
-                        )
-                        symptomSection(
-                            title = "Mood",
-                            symptoms = listOf(
-                                Symptom.MOOD_SWINGS,
-                                Symptom.IRRITABILITY,
-                                Symptom.ANXIETY,
-                                Symptom.SADNESS_LOW_MOOD,
-                                Symptom.BRAIN_FOG,
-                            ),
-                            selected = uiState.selectedSymptoms,
-                            enabled = uiState.canEditSymptoms,
-                            onToggle = viewModel::toggleSymptom,
-                        )
-                        symptomSection(
-                            title = "Sleep",
-                            symptoms = listOf(Symptom.INSOMNIA, Symptom.RESTLESS_SLEEP),
-                            selected = uiState.selectedSymptoms,
-                            enabled = uiState.canEditSymptoms,
-                            onToggle = viewModel::toggleSymptom,
-                        )
-                        Text(
-                            text = "DISCHARGE",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
-                        )
-                        DischargeColorRow(
-                            selected = uiState.dischargeColor,
-                            enabled = uiState.canEditSymptoms,
-                            onSelect = viewModel::onDischargeColorSelected,
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
-                        SymptomRow(
-                            label = Symptom.UNUSUAL_DISCHARGE_SMELL.displayName,
-                            checked = Symptom.UNUSUAL_DISCHARGE_SMELL in uiState.selectedSymptoms,
-                            enabled = uiState.canEditSymptoms,
-                            onClick = { viewModel.toggleSymptom(Symptom.UNUSUAL_DISCHARGE_SMELL) },
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
-                        SymptomRow(
-                            label = Symptom.VAGINAL_ITCHING.displayName,
-                            checked = Symptom.VAGINAL_ITCHING in uiState.selectedSymptoms,
-                            enabled = uiState.canEditSymptoms,
-                            onClick = { viewModel.toggleSymptom(Symptom.VAGINAL_ITCHING) },
-                        )
-                        Text(
-                            text = "LOG",
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
-                        )
-                        SymptomRow(
-                            label = "Painkiller Taken",
-                            checked = uiState.painkillerTaken,
-                            enabled = uiState.canEditSymptoms,
-                            onClick = viewModel::togglePainkillerTaken,
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
-                        SymptomRow(
-                            label = "Doctor Visited",
-                            checked = uiState.doctorVisited,
-                            enabled = uiState.canEditSymptoms,
-                            onClick = viewModel::toggleDoctorVisited,
-                        )
-                    }
-                }
-            }
-
-            if (uiState.canEditNotes) {
-                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
-                    verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = "Notes",
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                    )
-                    OutlinedTextField(
-                        value = uiState.notes,
-                        onValueChange = viewModel::onNotesChanged,
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        placeholder = { Text("Anything about today") },
-                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = formattedHeaderDate(uiState.selectedDate),
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    IconButton(onClick = onClose) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.logging_close),
+                        )
+                    }
                 }
-            }
+                HorizontalDivider()
+            },
+            body = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState()),
+                ) {
+                    if (uiState.isLoadingEntry) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(SakhiSpacing.space6),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
 
-            if (!uiState.canMutateSelectedDate && uiState.session?.isViewingOwnData == false) {
-                Text(
-                    text = "She made the latest change on this date, so you can no longer edit or remove it.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
+                        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.logging_flow),
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            FlowIntensity.entries.forEach { flow ->
+                                FlowCard(
+                                    flow = flow,
+                                    selected = uiState.selectedFlow == flow,
+                                    enabled = uiState.canLogPeriod,
+                                    onClick = {
+                                        viewModel.onFlowSelected(if (uiState.selectedFlow == flow) null else flow)
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
+                    }
+
+                    if (uiState.selectedFlow != null) {
+                        HorizontalDivider()
+
+                        Text(
+                            text = stringResource(R.string.logging_symptoms),
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
+                        )
+
+                        Surface(
+                            shape = RoundedCornerShape(SakhiRadius.xl),
+                            tonalElevation = SakhiSpacing.space1,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = SakhiSpacing.space6),
+                        ) {
+                            Column {
+                                symptomSection(
+                                    title = stringResource(R.string.logging_section_body),
+                                    symptoms = listOf(Symptom.ACNE),
+                                    selected = uiState.selectedSymptoms,
+                                    enabled = uiState.canEditSymptoms,
+                                    onToggle = viewModel::toggleSymptom,
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                ExpandableValueRow(
+                                    label = stringResource(R.string.logging_section_weight),
+                                    value = uiState.weightKg,
+                                    enabled = uiState.canEditSymptoms,
+                                    formatValue = {
+                                        context.getString(R.string.logging_weight_value, it.roundToInt())
+                                    },
+                                    defaultValue = 60.0,
+                                    valueRange = 30f..150f,
+                                    onValueChange = viewModel::onWeightChanged,
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                ExpandableValueRow(
+                                    label = stringResource(R.string.logging_section_bbt),
+                                    value = uiState.bbtCelsius,
+                                    enabled = uiState.canEditSymptoms,
+                                    formatValue = { context.getString(R.string.logging_bbt_value, it) },
+                                    defaultValue = 35.0,
+                                    valueRange = 30f..42f,
+                                    onValueChange = viewModel::onBbtChanged,
+                                )
+                                symptomSection(
+                                    title = stringResource(R.string.logging_section_pain),
+                                    symptoms = listOf(
+                                        Symptom.CRAMPS,
+                                        Symptom.BACK_PAIN,
+                                        Symptom.PELVIS_PAIN,
+                                        Symptom.BREAST_TENDERNESS,
+                                        Symptom.HEADACHE,
+                                    ),
+                                    selected = uiState.selectedSymptoms,
+                                    enabled = uiState.canEditSymptoms,
+                                    onToggle = viewModel::toggleSymptom,
+                                )
+                                symptomSection(
+                                    title = stringResource(R.string.logging_section_digestive),
+                                    symptoms = listOf(Symptom.BLOATING, Symptom.NAUSEA, Symptom.DIARRHEA, Symptom.CONSTIPATION),
+                                    selected = uiState.selectedSymptoms,
+                                    enabled = uiState.canEditSymptoms,
+                                    onToggle = viewModel::toggleSymptom,
+                                )
+                                symptomSection(
+                                    title = stringResource(R.string.logging_section_physical),
+                                    symptoms = listOf(
+                                        Symptom.FATIGUE,
+                                        Symptom.DIZZINESS,
+                                        Symptom.FEVER,
+                                        Symptom.CHILLS,
+                                        Symptom.WATER_RETENTION,
+                                    ),
+                                    selected = uiState.selectedSymptoms,
+                                    enabled = uiState.canEditSymptoms,
+                                    onToggle = viewModel::toggleSymptom,
+                                )
+                                symptomSection(
+                                    title = stringResource(R.string.logging_section_mood),
+                                    symptoms = listOf(
+                                        Symptom.MOOD_SWINGS,
+                                        Symptom.IRRITABILITY,
+                                        Symptom.ANXIETY,
+                                        Symptom.SADNESS_LOW_MOOD,
+                                        Symptom.BRAIN_FOG,
+                                    ),
+                                    selected = uiState.selectedSymptoms,
+                                    enabled = uiState.canEditSymptoms,
+                                    onToggle = viewModel::toggleSymptom,
+                                )
+                                symptomSection(
+                                    title = stringResource(R.string.logging_section_sleep),
+                                    symptoms = listOf(Symptom.INSOMNIA, Symptom.RESTLESS_SLEEP),
+                                    selected = uiState.selectedSymptoms,
+                                    enabled = uiState.canEditSymptoms,
+                                    onToggle = viewModel::toggleSymptom,
+                                )
+                                Text(
+                                    text = stringResource(R.string.logging_section_discharge).uppercase(),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
+                                )
+                                DischargeColorRow(
+                                    selected = uiState.dischargeColor,
+                                    enabled = uiState.canEditSymptoms,
+                                    onSelect = viewModel::onDischargeColorSelected,
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                SymptomRow(
+                                    label = Symptom.UNUSUAL_DISCHARGE_SMELL.displayName,
+                                    checked = Symptom.UNUSUAL_DISCHARGE_SMELL in uiState.selectedSymptoms,
+                                    enabled = uiState.canEditSymptoms,
+                                    onClick = { viewModel.toggleSymptom(Symptom.UNUSUAL_DISCHARGE_SMELL) },
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                SymptomRow(
+                                    label = Symptom.VAGINAL_ITCHING.displayName,
+                                    checked = Symptom.VAGINAL_ITCHING in uiState.selectedSymptoms,
+                                    enabled = uiState.canEditSymptoms,
+                                    onClick = { viewModel.toggleSymptom(Symptom.VAGINAL_ITCHING) },
+                                )
+                                Text(
+                                    text = stringResource(R.string.logging_section_log).uppercase(),
+                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
+                                )
+                                SymptomRow(
+                                    label = stringResource(R.string.logging_painkiller_taken),
+                                    checked = uiState.painkillerTaken,
+                                    enabled = uiState.canEditSymptoms,
+                                    onClick = viewModel::togglePainkillerTaken,
+                                )
+                                HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                SymptomRow(
+                                    label = stringResource(R.string.logging_doctor_visited),
+                                    checked = uiState.doctorVisited,
+                                    enabled = uiState.canEditSymptoms,
+                                    onClick = viewModel::toggleDoctorVisited,
+                                )
+                            }
+                        }
+                    }
+
+                    if (uiState.canEditNotes) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
+                            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.logging_notes),
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                            )
+                            OutlinedTextField(
+                                value = uiState.notes,
+                                onValueChange = viewModel::onNotesChanged,
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 3,
+                                placeholder = { Text(stringResource(R.string.logging_notes_placeholder)) },
+                            )
+                        }
+                    }
+
+                    if (!uiState.canMutateSelectedDate && uiState.session?.isViewingOwnData == false) {
+                        Text(
+                            text = stringResource(R.string.logging_partner_lock_message),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
+                        )
+                    }
+
+                    uiState.error?.let { error ->
+                        Text(
+                            text = error,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(SakhiSpacing.space8))
+                }
+            },
+            footer = {
+                HorizontalDivider()
+                SaveBar(
+                    isSaving = uiState.isSaving,
+                    isSaved = uiState.saveMessage != null,
+                    hasError = uiState.error != null && !uiState.isSaving,
+                    enabled = uiState.canLogPeriod && uiState.canMutateSelectedDate,
+                    onClick = viewModel::save,
                 )
             }
-
-            uiState.error?.let { error ->
-                Text(
-                    text = error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
-                )
-            }
-
-            Spacer(modifier = Modifier.height(SakhiSpacing.space8))
-        }
-
-        HorizontalDivider()
-        SaveBar(
-            isSaving = uiState.isSaving,
-            isSaved = uiState.saveMessage != null,
-            hasError = uiState.error != null && !uiState.isSaving,
-            enabled = uiState.canLogPeriod && uiState.canMutateSelectedDate,
-            onClick = viewModel::save,
         )
     }
 }
@@ -391,13 +409,18 @@ private fun symptomSection(
 
 @Composable
 private fun SymptomRow(label: String, checked: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .semantics {
                 selected = checked
                 role = Role.Checkbox
-                stateDescription = if (checked) "Selected" else "Not selected"
+                stateDescription = if (checked) {
+                    context.getString(R.string.logging_selected)
+                } else {
+                    context.getString(R.string.logging_not_selected)
+                }
             }
             .clickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
@@ -452,12 +475,8 @@ private fun FlowCard(
     // iOS's local FlowLevel enum (HomeLoggingSheet.swift) uses "Slight"/"Moderate"
     // here, not the shared KMM FlowIntensity.displayName ("Light"/"Medium") --
     // matching the real rendered iOS copy, not the KMM string.
-    val label = when (flow) {
-        FlowIntensity.SPOTTING -> "Spotting"
-        FlowIntensity.LIGHT -> "Slight"
-        FlowIntensity.MEDIUM -> "Moderate"
-        FlowIntensity.HEAVY -> "Heavy"
-    }
+    val context = LocalContext.current
+    val label = context.getString(flowLabelRes(flow))
 
     Surface(
         shape = RoundedCornerShape(SakhiRadius.lg),
@@ -466,7 +485,11 @@ private fun FlowCard(
             .semantics {
                 this.selected = selected
                 role = Role.RadioButton
-                stateDescription = if (selected) "$label selected" else "$label not selected"
+                stateDescription = if (selected) {
+                    context.getString(R.string.logging_selection_state, label)
+                } else {
+                    context.getString(R.string.logging_not_selected_state, label)
+                }
             }
             .clickable(enabled = enabled, onClick = onClick),
     ) {
@@ -575,6 +598,7 @@ private fun DischargeColorRow(
             .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
     ) {
+        val context = LocalContext.current
         DischargeColor.entries.forEach { color ->
             val isSelected = selected == color
             Surface(
@@ -584,7 +608,11 @@ private fun DischargeColorRow(
                     .semantics {
                         this.selected = isSelected
                         role = Role.RadioButton
-                        stateDescription = if (isSelected) "${color.displayName} selected" else "${color.displayName} not selected"
+                        stateDescription = if (isSelected) {
+                            context.getString(R.string.logging_selection_state, color.displayName)
+                        } else {
+                            context.getString(R.string.logging_not_selected_state, color.displayName)
+                        }
                     }
                     .clickable(enabled = enabled) { onSelect(color) },
             ) {
@@ -608,10 +636,10 @@ private fun SaveBar(
     onClick: () -> Unit,
 ) {
     val label = when {
-        isSaving -> "Saving..."
-        isSaved -> "Saved"
-        hasError -> "Save failed, tap to retry"
-        else -> "Save"
+        isSaving -> stringResource(R.string.logging_save_saving)
+        isSaved -> stringResource(R.string.logging_save_saved)
+        hasError -> stringResource(R.string.logging_save_retry)
+        else -> stringResource(R.string.logging_save)
     }
 
     // PrimaryButton is text-only (core:ui has no leading-icon variant yet), so
@@ -627,10 +655,15 @@ private fun SaveBar(
     )
 }
 
+private fun flowLabelRes(flow: FlowIntensity): Int = when (flow) {
+    FlowIntensity.SPOTTING -> R.string.logging_flow_spotting
+    FlowIntensity.LIGHT -> R.string.logging_flow_light
+    FlowIntensity.MEDIUM -> R.string.logging_flow_medium
+    FlowIntensity.HEAVY -> R.string.logging_flow_heavy
+}
+
 private fun formattedHeaderDate(date: kotlinx.datetime.LocalDate): String {
-    val months = arrayOf(
-        "January", "February", "March", "April", "May", "June",
-        "July", "August", "September", "October", "November", "December",
-    )
-    return "${date.dayOfMonth} ${months[date.monthNumber - 1]}"
+    val javaDate = java.time.LocalDate.of(date.year, date.monthNumber, date.dayOfMonth)
+    val formatter = java.time.format.DateTimeFormatter.ofPattern("d MMMM", java.util.Locale.getDefault())
+    return javaDate.format(formatter)
 }

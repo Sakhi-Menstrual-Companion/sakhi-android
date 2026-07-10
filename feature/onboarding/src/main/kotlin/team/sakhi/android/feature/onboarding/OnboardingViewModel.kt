@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.onboarding
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,7 @@ import java.time.YearMonth
  */
 class OnboardingViewModel(
     val flowId: String,
+    private val appContext: Context,
     private val flowStore: OnboardingFlowStore,
     private val authRepository: AuthRepository,
     private val careStore: CareStore,
@@ -160,7 +162,7 @@ class OnboardingViewModel(
                 hapticManager.error()
                 _conversionUiState.value = _conversionUiState.value.copy(
                     isConverting = false,
-                    error = throwable.message ?: "Something went wrong. Please try again.",
+                    error = throwable.message ?: appContext.getString(R.string.onboarding_error_generic),
                 )
             }
         }
@@ -178,13 +180,16 @@ class OnboardingViewModel(
     fun acceptBeHerSakhiInvite() {
         val userId = authRepository.currentUserId ?: run {
             hapticManager.error()
-            _acceptUiState.value = _acceptUiState.value.copy(error = "Something went wrong. Please try again.")
+            _acceptUiState.value = _acceptUiState.value.copy(error = appContext.getString(R.string.onboarding_error_generic))
             return
         }
         val code = navState.value.pendingInviteCode
         if (code.isBlank()) {
             hapticManager.error()
-            _acceptUiState.value = _acceptUiState.value.copy(error = "This code doesn't exist. Please double-check with your partner.", canRetry = false)
+            _acceptUiState.value = _acceptUiState.value.copy(
+                error = appContext.getString(R.string.onboarding_error_code_missing),
+                canRetry = false,
+            )
             return
         }
         if (_acceptUiState.value.isAccepting) return
@@ -203,7 +208,7 @@ class OnboardingViewModel(
                 hapticManager.error()
                 _acceptUiState.value = _acceptUiState.value.copy(
                     isAccepting = false,
-                    error = throwable.message ?: "Something went wrong. Please try again.",
+                    error = throwable.message ?: appContext.getString(R.string.onboarding_error_generic),
                     canRetry = true,
                 )
             }
@@ -234,7 +239,7 @@ class OnboardingViewModel(
         }
 
         val userId = authRepository.currentUserId ?: run {
-            _setupUiState.value = _setupUiState.value.copy(error = "Something went wrong. Please try again.")
+            _setupUiState.value = _setupUiState.value.copy(error = appContext.getString(R.string.onboarding_error_generic))
             return
         }
         if (_setupUiState.value.isSaving) return
@@ -274,7 +279,7 @@ class OnboardingViewModel(
             }.onFailure { throwable ->
                 _setupUiState.value = _setupUiState.value.copy(
                     isSaving = false,
-                    error = throwable.message ?: "Something went wrong. Please try again.",
+                    error = throwable.message ?: appContext.getString(R.string.onboarding_error_generic),
                 )
             }
         }
@@ -311,7 +316,7 @@ class OnboardingViewModel(
         val userId = authRepository.currentUserId ?: run {
             hapticManager.error()
             _careInviteUiState.value = _careInviteUiState.value.copy(
-                errorMessage = "Please sign in before creating a care invite.",
+                errorMessage = appContext.getString(R.string.onboarding_error_sign_in_before_invite),
             )
             return
         }
@@ -347,7 +352,7 @@ class OnboardingViewModel(
             runCatching {
                 withContext(Dispatchers.IO) {
                     careStore.createInvitation(
-                        inviterName = "User",
+                        inviterName = appContext.getString(R.string.onboarding_fallback_user),
                         inviteePhone = contactPhone,
                         inviteeName = contactName,
                         relationType = RelationType.PARTNER.value,
@@ -370,7 +375,7 @@ class OnboardingViewModel(
                 hapticManager.error()
                 _careInviteUiState.value = _careInviteUiState.value.copy(
                     isCreatingInvite = false,
-                    errorMessage = throwable.message ?: "Couldn't create invite right now. Please try again.",
+                    errorMessage = throwable.message ?: appContext.getString(R.string.onboarding_error_create_invite),
                 )
             }
         }
@@ -400,7 +405,7 @@ class OnboardingViewModel(
                     invitationId = "",
                     inviteCode = "",
                     pendingInvitation = null,
-                    cancelMessage = "That invite has been closed. Nothing was shared.",
+                    cancelMessage = appContext.getString(R.string.onboarding_info_invite_closed),
                 )
                 if (closeFlowOnSuccess) {
                     flowStore.send(OnboardingFlowIntent.Complete)
@@ -409,7 +414,7 @@ class OnboardingViewModel(
                 hapticManager.error()
                 _careInviteUiState.value = _careInviteUiState.value.copy(
                     isCancellingInvite = false,
-                    errorMessage = throwable.message ?: "Could not cancel request.",
+                    errorMessage = throwable.message ?: appContext.getString(R.string.onboarding_error_cancel_request),
                 )
             }
         }
@@ -463,16 +468,16 @@ class OnboardingViewModel(
             importFromHealthConnect()
         } else {
             hapticManager.error()
-            failDataSourceImport("Health Connect access was not granted.")
+            failDataSourceImport(appContext.getString(R.string.onboarding_error_health_connect_permission_denied))
             refreshDataSourceCapabilities()
         }
     }
 
     fun handleUnavailableHealthConnectSelection() {
         val message = when (_dataSourceUiState.value.availability) {
-            HealthConnectAvailability.NotInstalled -> "Health Connect is not available on this device."
-            HealthConnectAvailability.NotSupported -> "Health Connect is not supported on this device."
-            HealthConnectAvailability.Available -> "Health Connect access was not granted."
+            HealthConnectAvailability.NotInstalled -> appContext.getString(R.string.onboarding_error_health_connect_unavailable)
+            HealthConnectAvailability.NotSupported -> appContext.getString(R.string.onboarding_error_health_connect_unsupported)
+            HealthConnectAvailability.Available -> appContext.getString(R.string.onboarding_error_health_connect_permission_denied)
         }
         hapticManager.error()
         failDataSourceImport(message)
@@ -509,14 +514,14 @@ class OnboardingViewModel(
                     } else {
                         hapticManager.error()
                         failDataSourceImport(
-                            result.failureMessage ?: "Health Connect doesn't have the details needed for onboarding.",
+                            result.failureMessage ?: appContext.getString(R.string.onboarding_error_health_connect_missing_details),
                         )
                     }
                 }
                 .onFailure { throwable ->
                     hapticManager.error()
                     failDataSourceImport(
-                        throwable.message ?: "Health Connect access was not granted.",
+                        throwable.message ?: appContext.getString(R.string.onboarding_error_health_connect_permission_denied),
                     )
                 }
         }
@@ -657,15 +662,25 @@ class OnboardingViewModel(
         state: OnboardingHealthUiState,
     ): String? = when (step) {
         OnboardingFlowStep.DateOfBirth ->
-            if (!ValidationRules.isValidDateOfBirth(state.dateOfBirth.toKmmLocalDate())) "Choose a valid date of birth" else null
+            if (!ValidationRules.isValidDateOfBirth(state.dateOfBirth.toKmmLocalDate())) {
+                appContext.getString(R.string.onboarding_validation_invalid_dob)
+            } else null
         OnboardingFlowStep.Height ->
-            if (!ValidationRules.isValidHeightCm(state.heightCm)) "Choose a valid height" else null
+            if (!ValidationRules.isValidHeightCm(state.heightCm)) {
+                appContext.getString(R.string.onboarding_validation_invalid_height)
+            } else null
         OnboardingFlowStep.Weight ->
-            if (!ValidationRules.isValidWeightKg(state.weightKg)) "Choose a valid weight" else null
+            if (!ValidationRules.isValidWeightKg(state.weightKg)) {
+                appContext.getString(R.string.onboarding_validation_invalid_weight)
+            } else null
         OnboardingFlowStep.LastPeriod ->
-            if (!ValidationRules.isValidLogDate(state.lastPeriodDate.toKmmLocalDate())) "Choose a valid date" else null
+            if (!ValidationRules.isValidLogDate(state.lastPeriodDate.toKmmLocalDate())) {
+                appContext.getString(R.string.onboarding_validation_invalid_date)
+            } else null
         OnboardingFlowStep.CycleLength ->
-            if (!ValidationRules.isValidCycleLength(state.cycleLength)) "Choose a valid cycle length" else null
+            if (!ValidationRules.isValidCycleLength(state.cycleLength)) {
+                appContext.getString(R.string.onboarding_validation_invalid_cycle_length)
+            } else null
         else -> null
     }
 }

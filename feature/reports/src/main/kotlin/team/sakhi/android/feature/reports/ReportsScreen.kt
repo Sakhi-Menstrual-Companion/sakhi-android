@@ -36,13 +36,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import java.time.Month
+import java.time.format.TextStyle
+import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -65,6 +70,7 @@ import team.sakhi.report.ReportInsight
  */
 @Composable
 fun ReportsScreen(
+    onClose: (() -> Unit)? = null,
     viewModel: ReportsViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -77,7 +83,12 @@ fun ReportsScreen(
             putExtra(Intent.EXTRA_STREAM, shareUri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(Intent.createChooser(shareIntent, "Share health report").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        context.startActivity(
+            Intent.createChooser(
+                shareIntent,
+                context.getString(R.string.reports_share_health_report),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
         viewModel.consumeSharePdf()
     }
 
@@ -94,6 +105,7 @@ fun ReportsScreen(
         ReportsPhase.Error,
         -> ReportsConfigScreen(
             uiState = uiState,
+            onClose = onClose,
             onPresetSelected = viewModel::selectPreset,
             onToggleSection = viewModel::toggleSection,
             onGenerate = viewModel::generate,
@@ -113,13 +125,14 @@ private enum class PreviewPageType {
 }
 
 private data class PreviewPage(
-    val title: String,
+    val titleRes: Int,
     val type: PreviewPageType,
 )
 
 @Composable
 private fun ReportsConfigScreen(
     uiState: ReportsUiState,
+    onClose: (() -> Unit)?,
     onPresetSelected: (ReportDateRangePreset) -> Unit,
     onToggleSection: (ReportSection) -> Unit,
     onGenerate: () -> Unit,
@@ -137,25 +150,31 @@ private fun ReportsConfigScreen(
                 .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space6),
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
         ) {
+            onClose?.let { close ->
+                SecondaryButton(
+                    text = stringResource(R.string.reports_back),
+                    onClick = close,
+                )
+            }
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 Text(
-                    text = "Health Report",
+                    text = stringResource(R.string.reports_title),
                     style = MaterialTheme.typography.headlineMedium,
                 )
                 Text(
-                    text = "Choose what to include in your PDF report",
+                    text = stringResource(R.string.reports_config_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
-            ReportsSectionLabel("DATE RANGE")
+            ReportsSectionLabel(stringResource(R.string.reports_section_date_range))
             DateRangeCard(
                 config = uiState.config,
                 onPresetSelected = onPresetSelected,
             )
 
-            ReportsSectionLabel("INCLUDE IN REPORT")
+            ReportsSectionLabel(stringResource(R.string.reports_section_include))
             GlassCard {
                 ReportSection.entries.forEachIndexed { index, section ->
                     if (index > 0) {
@@ -176,8 +195,8 @@ private fun ReportsConfigScreen(
 
             if (ReportSection.Medications in uiState.config.sections) {
                 SakhiAlert(
-                    title = "Shared report gap",
-                    message = "Medications & Visits is selectable to match iOS, but Android still needs those fields surfaced by the shared report payload before the preview can render real data.",
+                    title = stringResource(R.string.reports_shared_gap_title),
+                    message = stringResource(R.string.reports_shared_gap_message),
                 )
             }
 
@@ -186,7 +205,7 @@ private fun ReportsConfigScreen(
 
         FooterBar(
             modifier = Modifier.align(Alignment.BottomCenter),
-            buttonText = "Generate PDF",
+            buttonText = stringResource(R.string.reports_generate_pdf),
             buttonEnabled = uiState.phase != ReportsPhase.Generating,
             note = null,
             onButtonClick = onGenerate,
@@ -194,8 +213,8 @@ private fun ReportsConfigScreen(
 
         if (uiState.phase == ReportsPhase.Generating) {
             FullscreenMessage(
-                title = "Building your report…",
-                subtitle = "Gathering your cycle data and crafting personalised insights.",
+                title = stringResource(R.string.reports_building_title),
+                subtitle = stringResource(R.string.reports_building_subtitle),
             )
         }
 
@@ -228,11 +247,15 @@ private fun DateRangeCard(
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
             ) {
                 Text(
-                    text = config.preset.rowLabel,
+                    text = stringResource(config.preset.rowLabelRes),
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    text = "${DateConverter.formatShort(config.startDate)} to ${DateConverter.formatShort(config.endDate)}",
+                    text = stringResource(
+                        R.string.reports_date_range_span,
+                        DateConverter.formatShort(config.startDate),
+                        DateConverter.formatShort(config.endDate),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -240,7 +263,7 @@ private fun DateRangeCard(
 
             Box {
                 TextButton(onClick = { expanded = true }) {
-                    Text(config.preset.shortLabel)
+                    Text(stringResource(config.preset.shortLabelRes))
                 }
                 DropdownMenu(
                     expanded = expanded,
@@ -248,7 +271,7 @@ private fun DateRangeCard(
                 ) {
                     ReportDateRangePreset.entries.forEach { preset ->
                         DropdownMenuItem(
-                            text = { Text(preset.shortLabel) },
+                            text = { Text(stringResource(preset.shortLabelRes)) },
                             onClick = {
                                 expanded = false
                                 onPresetSelected(preset)
@@ -279,11 +302,11 @@ private fun SectionToggleRow(
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
         ) {
             Text(
-                text = section.title,
+                text = stringResource(section.titleRes),
                 style = MaterialTheme.typography.titleMedium,
             )
             Text(
-                text = section.subtitle,
+                text = stringResource(section.subtitleRes),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -304,8 +327,8 @@ private fun ReportsPreviewScreen(
 ) {
     val report = uiState.report ?: run {
         EmptyState(
-            title = "Preview unavailable",
-            subtitle = "Generate the report again to rebuild this preview.",
+            title = stringResource(R.string.reports_preview_unavailable),
+            subtitle = stringResource(R.string.reports_preview_unavailable_subtitle),
             modifier = Modifier.fillMaxSize(),
         )
         return
@@ -337,7 +360,7 @@ private fun ReportsPreviewScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             SecondaryButton(
-                text = "Back",
+                text = stringResource(R.string.reports_back),
                 onClick = onBack,
             )
 
@@ -345,12 +368,12 @@ private fun ReportsPreviewScreen(
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "Report Preview",
+                    text = stringResource(R.string.reports_preview_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = "${pages.size} page${if (pages.size == 1) "" else "s"}",
+                    text = pluralStringResource(R.plurals.reports_page_count, pages.size, pages.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -387,7 +410,7 @@ private fun ReportsPreviewScreen(
                 }
 
                 Text(
-                    text = page.title,
+                    text = stringResource(page.titleRes),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -399,16 +422,16 @@ private fun ReportsPreviewScreen(
         }
 
         FooterBar(
-            buttonText = "Download PDF",
+            buttonText = stringResource(R.string.reports_download_pdf),
             buttonEnabled = !uiState.isExportingPdf,
-            note = "Your data never leaves your device unless you share it.",
+            note = stringResource(R.string.reports_download_note),
             onButtonClick = onDownloadPdf,
         )
 
         if (uiState.isExportingPdf) {
             FullscreenMessage(
-                title = "Preparing your PDF…",
-                subtitle = "Rendering your report pages for download and share.",
+                title = stringResource(R.string.reports_preparing_pdf_title),
+                subtitle = stringResource(R.string.reports_preparing_pdf_subtitle),
             )
         }
 
@@ -447,26 +470,33 @@ private fun CoverPage(report: ReportData) {
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
             Text(
-                text = "Health Report",
+                text = stringResource(R.string.reports_title),
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = "${DateConverter.formatShort(report.periodFrom)} to ${DateConverter.formatShort(report.periodTo)}",
+                text = stringResource(
+                    R.string.reports_date_range_span,
+                    DateConverter.formatShort(report.periodFrom),
+                    DateConverter.formatShort(report.periodTo),
+                ),
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Text(
-                text = "Prepared from your logged cycle data and shared Sakhi insights.",
+                text = stringResource(R.string.reports_cover_subtitle),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
         GlassCard {
-            StatRow("Generated on", report.generatedAt)
-            StatRow("Cycles analyzed", report.cyclesAnalyzed.toString())
-            StatRow("Prediction confidence", "${(report.predictionConfidence * 100).toInt()}%")
+            StatRow(stringResource(R.string.reports_generated_on), report.generatedAt)
+            StatRow(stringResource(R.string.reports_cycles_analyzed), report.cyclesAnalyzed.toString())
+            StatRow(
+                stringResource(R.string.reports_prediction_confidence),
+                stringResource(R.string.reports_percent_value, (report.predictionConfidence * 100).toInt()),
+            )
         }
     }
 }
@@ -480,7 +510,7 @@ private fun CycleSummaryPage(report: ReportData) {
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         Text(
-            text = "Cycle Summary",
+            text = stringResource(R.string.reports_page_cycle_summary),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
@@ -499,12 +529,16 @@ private fun PeriodCalendarPage(report: ReportData) {
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         Text(
-            text = "Period Calendar",
+            text = stringResource(R.string.reports_page_period_calendar),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
         Text(
-            text = "${report.calendarMonths.size} month${if (report.calendarMonths.size == 1) "" else "s"} included",
+            text = pluralStringResource(
+                R.plurals.reports_months_included,
+                report.calendarMonths.size,
+                report.calendarMonths.size,
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -524,7 +558,7 @@ private fun SymptomsFlowPage(report: ReportData) {
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         Text(
-            text = "Symptoms & Flow",
+            text = stringResource(R.string.reports_page_symptoms_flow),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
@@ -553,7 +587,7 @@ private fun MoodPatternsPage(report: ReportData) {
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         Text(
-            text = "Mood Patterns",
+            text = stringResource(R.string.reports_page_mood_patterns),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
@@ -564,8 +598,8 @@ private fun MoodPatternsPage(report: ReportData) {
 @Composable
 private fun MedicationsGapPage() {
     EmptyState(
-        title = "Medications & Visits",
-        subtitle = "This section still needs shared report fields before Android can render the same data iOS exports today.",
+        title = stringResource(R.string.reports_page_medications),
+        subtitle = stringResource(R.string.reports_medications_gap_subtitle),
         modifier = Modifier.fillMaxSize(),
     )
 }
@@ -579,14 +613,14 @@ private fun InsightsPage(report: ReportData) {
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         Text(
-            text = "Health Insights",
+            text = stringResource(R.string.reports_page_insights),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
         if (report.insights.isEmpty()) {
             EmptyState(
-                title = "No insights yet",
-                subtitle = "Keep logging to unlock personalised patterns in this report.",
+                title = stringResource(R.string.reports_no_insights),
+                subtitle = stringResource(R.string.reports_no_insights_subtitle),
             )
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
@@ -603,8 +637,11 @@ private fun StatGrid(report: ReportData) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
-        StatRow("Cycles analyzed", report.cyclesAnalyzed.toString())
-        StatRow("Average cycle length", "${report.averageCycleLength.toInt()} days")
+        StatRow(stringResource(R.string.reports_cycles_analyzed), report.cyclesAnalyzed.toString())
+        StatRow(
+            stringResource(R.string.reports_average_cycle_length),
+            stringResource(R.string.reports_days_value, report.averageCycleLength.toInt()),
+        )
         // iOS's own ReportViewModel gates shortest/longest behind cyclesAnalyzed > 0
         // (nil when there's no real cycle data, omitted from its PDF export note
         // entirely rather than shown as a fabricated range) -- shortestCycleDays/
@@ -613,11 +650,27 @@ private fun StatGrid(report: ReportData) {
         // meaningless "28 / 28 days" range presented as if it were the user's own
         // data. Matching iOS's real gating here, not inventing a new one.
         if (report.cyclesAnalyzed > 0) {
-            StatRow("Shortest / longest", "${report.shortestCycleDays} / ${report.longestCycleDays} days")
+            StatRow(
+                stringResource(R.string.reports_shortest_longest),
+                stringResource(
+                    R.string.reports_shortest_longest_value,
+                    report.shortestCycleDays,
+                    report.longestCycleDays,
+                ),
+            )
         }
-        StatRow("Average period length", "${report.averagePeriodLength.toInt()} days")
-        StatRow("Regularity", "${(report.regularityScore * 100).toInt()}%")
-        StatRow("Prediction confidence", "${(report.predictionConfidence * 100).toInt()}%")
+        StatRow(
+            stringResource(R.string.reports_average_period_length),
+            stringResource(R.string.reports_days_value, report.averagePeriodLength.toInt()),
+        )
+        StatRow(
+            stringResource(R.string.reports_regularity),
+            stringResource(R.string.reports_percent_value, (report.regularityScore * 100).toInt()),
+        )
+        StatRow(
+            stringResource(R.string.reports_prediction_confidence),
+            stringResource(R.string.reports_percent_value, (report.predictionConfidence * 100).toInt()),
+        )
     }
 }
 
@@ -645,12 +698,14 @@ private fun StatRow(label: String, value: String) {
 
 @Composable
 private fun CalendarMonthPreview(month: CalendarMonth) {
+    val context = LocalContext.current
     val sortedDays = remember(month) { month.days.keys.sortedBy { it.toEpochDays() } }
     val firstDay = sortedDays.firstOrNull()
     val monthTitle = if (firstDay == null) {
-        "Month ${month.month}"
+        context.getString(R.string.reports_fallback_month, month.month)
     } else {
-        val monthName = firstDay.month.name.lowercase().replaceFirstChar { it.titlecase() }
+        val monthName = Month.of(firstDay.monthNumber)
+            .getDisplayName(TextStyle.FULL, Locale.getDefault())
         "$monthName ${month.year}"
     }
 
@@ -668,6 +723,7 @@ private fun CalendarMonthPreview(month: CalendarMonth) {
                 ) {
                     week.forEach { date ->
                         val markerKey = month.days[date]?.toString()?.lowercase().orEmpty()
+                        val markerDescription = reportMarkerDescription(context, markerKey)
                         val markerColor = when {
                             "ovulation" in markerKey || "fertile" in markerKey -> MaterialTheme.colorScheme.tertiary
                             "predicted" in markerKey -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
@@ -685,7 +741,7 @@ private fun CalendarMonthPreview(month: CalendarMonth) {
                                         append(date.dayOfMonth)
                                         append(" ")
                                         append(monthTitle)
-                                        reportMarkerDescription(markerKey)?.let {
+                                        markerDescription?.let {
                                             append(", ")
                                             append(it)
                                         }
@@ -712,7 +768,7 @@ private fun FrequencyList(items: List<Pair<String, Double>>) {
         modifier = Modifier.fillMaxWidth(),
     ) {
         items.take(5).forEach { (name, percentage) ->
-            StatRow(name, "${percentage.toInt()}%")
+            StatRow(name, stringResource(R.string.reports_percent_value, percentage.toInt()))
         }
     }
 }
@@ -748,12 +804,12 @@ private fun InsightCard(insight: ReportInsight) {
     }
 }
 
-private fun reportMarkerDescription(markerKey: String): String? = when {
-    "ovulation" in markerKey -> "ovulation day"
-    "fertile" in markerKey -> "fertile window"
-    "predicted" in markerKey -> "predicted period"
-    "pms" in markerKey -> "PMS day"
-    "period" in markerKey -> "period day"
+private fun reportMarkerDescription(context: android.content.Context, markerKey: String): String? = when {
+    "ovulation" in markerKey -> context.getString(R.string.reports_marker_ovulation)
+    "fertile" in markerKey -> context.getString(R.string.reports_marker_fertile)
+    "predicted" in markerKey -> context.getString(R.string.reports_marker_predicted)
+    "pms" in markerKey -> context.getString(R.string.reports_marker_pms)
+    "period" in markerKey -> context.getString(R.string.reports_marker_period)
     else -> null
 }
 
@@ -841,10 +897,10 @@ private fun ErrorOverlay(
         contentAlignment = Alignment.Center,
     ) {
         SakhiAlert(
-            title = "Something went wrong",
+            title = stringResource(R.string.reports_error_title),
             message = message,
             tone = SakhiAlertTone.Error,
-            dismissLabel = "Try Again",
+            dismissLabel = stringResource(R.string.reports_error_retry),
             onDismiss = onDismiss,
             modifier = Modifier.padding(SakhiSpacing.space6),
         )
@@ -889,11 +945,22 @@ private fun PageDots(
 
 @Composable
 private fun WeekdayHeader() {
+    val weekdays = remember {
+        listOf(
+            java.time.DayOfWeek.SUNDAY,
+            java.time.DayOfWeek.MONDAY,
+            java.time.DayOfWeek.TUESDAY,
+            java.time.DayOfWeek.WEDNESDAY,
+            java.time.DayOfWeek.THURSDAY,
+            java.time.DayOfWeek.FRIDAY,
+            java.time.DayOfWeek.SATURDAY,
+        ).map { it.getDisplayName(TextStyle.NARROW, Locale.getDefault()) }
+    }
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        listOf("S", "M", "T", "W", "T", "F", "S").forEach { day ->
+        weekdays.forEach { day ->
             Text(
                 text = day,
                 style = MaterialTheme.typography.labelSmall,
@@ -909,18 +976,18 @@ private fun buildPreviewPages(
 ): List<PreviewPage> {
     val pages = mutableListOf(
         PreviewPage(
-            title = "Cover",
+            titleRes = R.string.reports_page_cover,
             type = PreviewPageType.Cover,
         ),
         PreviewPage(
-            title = "Cycle Summary",
+            titleRes = R.string.reports_page_cycle_summary,
             type = PreviewPageType.CycleSummary,
         ),
     )
 
     if (ReportSection.PeriodCalendar in selectedSections && report.calendarMonths.isNotEmpty()) {
         pages += PreviewPage(
-            title = "Period Calendar",
+            titleRes = R.string.reports_page_period_calendar,
             type = PreviewPageType.PeriodCalendar,
         )
     }
@@ -928,25 +995,25 @@ private fun buildPreviewPages(
         (report.topSymptoms.isNotEmpty() || report.flowTimeline.isNotEmpty())
     ) {
         pages += PreviewPage(
-            title = "Symptoms & Flow",
+            titleRes = R.string.reports_page_symptoms_flow,
             type = PreviewPageType.SymptomsFlow,
         )
     }
     if (ReportSection.MoodPatterns in selectedSections && report.topMoods.isNotEmpty()) {
         pages += PreviewPage(
-            title = "Mood Patterns",
+            titleRes = R.string.reports_page_mood_patterns,
             type = PreviewPageType.MoodPatterns,
         )
     }
     if (ReportSection.Medications in selectedSections) {
         pages += PreviewPage(
-            title = "Medications & Visits",
+            titleRes = R.string.reports_page_medications,
             type = PreviewPageType.Medications,
         )
     }
     if (ReportSection.Insights in selectedSections && report.insights.isNotEmpty()) {
         pages += PreviewPage(
-            title = "Health Insights",
+            titleRes = R.string.reports_page_insights,
             type = PreviewPageType.Insights,
         )
     }

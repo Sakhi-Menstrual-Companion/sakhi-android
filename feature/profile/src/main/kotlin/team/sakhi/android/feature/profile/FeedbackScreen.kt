@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,17 +34,17 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.PrimaryButton
-import team.sakhi.android.ui.SheetSurface
 
 private const val FEEDBACK_EMAIL = "hello@getswipe.in"
 private const val MAX_CHARS = 500
 
-private enum class FeedbackType(val label: String, val placeholder: String) {
-    GENERAL("General Feedback", "Share what's on your mind..."),
-    FEATURE("Feature Idea", "What would make Sakhi more useful for you?"),
-    BUG("Bug Report", "What went wrong? What did you expect to happen?"),
-    OTHER("Other", "Tell us anything..."),
+private enum class FeedbackType(val labelRes: Int, val placeholderRes: Int) {
+    GENERAL(R.string.profile_feedback_type_general, R.string.profile_feedback_type_general_placeholder),
+    FEATURE(R.string.profile_feedback_type_feature, R.string.profile_feedback_type_feature_placeholder),
+    BUG(R.string.profile_feedback_type_bug, R.string.profile_feedback_type_bug_placeholder),
+    OTHER(R.string.profile_feedback_type_other, R.string.profile_feedback_type_other_placeholder),
 }
 
 /** Ports iOS `FeedbackView.swift`: type picker + text field, submits via a mailto: intent. */
@@ -55,9 +56,7 @@ fun FeedbackScreen(onBack: () -> Unit) {
     var feedbackText by remember { mutableStateOf("") }
     var submitted by remember { mutableStateOf(false) }
 
-    SheetSurface(showDragHandle = true) {
-        DetailHeader(title = "Share Feedback", onBack = onBack)
-
+    DetailSheetScaffold(title = stringResource(R.string.profile_feedback_title), onBack = onBack) {
         if (submitted) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(
@@ -65,9 +64,12 @@ fun FeedbackScreen(onBack: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
                     modifier = Modifier.padding(SakhiSpacing.space6),
                 ) {
-                    Text(text = "Thank you!", style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold))
                     Text(
-                        text = "Your feedback has been sent. We read every message and use it to make Sakhi better.",
+                        text = stringResource(R.string.profile_feedback_thank_you),
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    )
+                    Text(
+                        text = stringResource(R.string.profile_feedback_success_body),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -75,10 +77,6 @@ fun FeedbackScreen(onBack: () -> Unit) {
             }
         } else {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(SakhiSpacing.space5),
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
             ) {
                 Row(
@@ -96,7 +94,7 @@ fun FeedbackScreen(onBack: () -> Unit) {
                             },
                         ) {
                             Text(
-                                text = type.label,
+                                text = stringResource(type.labelRes),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (selected) androidx.compose.ui.graphics.Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = SakhiSpacing.space3, vertical = SakhiSpacing.space2),
@@ -108,23 +106,26 @@ fun FeedbackScreen(onBack: () -> Unit) {
                 OutlinedTextField(
                     value = feedbackText,
                     onValueChange = { if (it.length <= MAX_CHARS) feedbackText = it },
-                    placeholder = { Text(selectedType.placeholder) },
+                    placeholder = { Text(stringResource(selectedType.placeholderRes)) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(160.dp),
                 )
                 Text(
-                    text = "${feedbackText.length}/$MAX_CHARS",
+                    text = stringResource(R.string.profile_feedback_count, feedbackText.length, MAX_CHARS),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
 
                 PrimaryButton(
-                    text = "Send Feedback",
+                    text = stringResource(R.string.profile_feedback_send),
                     enabled = feedbackText.trim().length >= 10,
                     onClick = {
                         hapticManager.impact(HapticImpact.MEDIUM)
-                        val subject = "Sakhi ${selectedType.label} Feedback"
+                        val subject = context.getString(
+                            R.string.profile_feedback_subject,
+                            context.getString(selectedType.labelRes),
+                        )
                         val intent = Intent(Intent.ACTION_SENDTO, Uri.parse("mailto:$FEEDBACK_EMAIL")).apply {
                             putExtra(Intent.EXTRA_SUBJECT, subject)
                             putExtra(Intent.EXTRA_TEXT, feedbackText.trim())

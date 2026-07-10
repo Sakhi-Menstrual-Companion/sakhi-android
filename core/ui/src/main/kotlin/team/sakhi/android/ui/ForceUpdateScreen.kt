@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -38,6 +39,7 @@ fun ForceUpdateScreen(
     onSupportClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
+    val supportDescription = stringResource(R.string.force_update_contact_support)
     Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(modifier = Modifier.fillMaxSize()) {
             IconButton(
@@ -45,7 +47,7 @@ fun ForceUpdateScreen(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(SakhiSpacing.space4)
-                    .semantics { contentDescription = "Contact support" },
+                    .semantics { contentDescription = supportDescription },
             ) {
                 Icon(imageVector = Icons.Filled.Headphones, contentDescription = null)
             }
@@ -78,7 +80,7 @@ fun ForceUpdateScreen(
                     .padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space6),
             )
             PrimaryButton(
-                text = "Update Now",
+                text = stringResource(R.string.force_update_update_now),
                 onClick = onUpdateClick,
                 modifier = Modifier
                     .fillMaxWidth()

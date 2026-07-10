@@ -67,6 +67,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -75,16 +77,18 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.datetime.Instant
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.ui.KeyboardSafeScaffold
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.models.ConversationMessage
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 /**
  * Sakhi AI chat — ports iOS `SakhiAIChatView.swift` (370 lines) plus
@@ -141,7 +145,12 @@ fun ChatScreen(
             putExtra(Intent.EXTRA_STREAM, shareUri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(Intent.createChooser(shareIntent, "Share health report").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        context.startActivity(
+            Intent.createChooser(
+                shareIntent,
+                context.getString(R.string.chat_share_health_report),
+            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
         viewModel.consumeSharePdf()
     }
 
@@ -160,16 +169,17 @@ fun ChatScreen(
     SheetSurface {
         when (destination) {
             ChatDestination.Thread -> {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    ChatHeader(
-                        uiState = uiState,
-                        onInfoClick = { destination = ChatDestination.Info },
-                        onClose = onClose,
-                    )
-
-                    Box(modifier = Modifier.weight(1f)) {
+                KeyboardSafeScaffold(
+                    topBar = {
+                        ChatHeader(
+                            uiState = uiState,
+                            onInfoClick = { destination = ChatDestination.Info },
+                            onClose = onClose,
+                        )
+                    },
+                    body = {
                         if (messages.isEmpty() && !uiState.isSending) {
-                            Column {
+                            Column(modifier = Modifier.fillMaxSize()) {
                                 Spacer(modifier = Modifier.weight(1f))
                                 SuggestedChipsRow(
                                     chips = uiState.suggestionChips,
@@ -221,18 +231,19 @@ fun ChatScreen(
                                 }
                             }
                         }
-                    }
-
-                    HorizontalDivider()
-                    ChatInputBar(
-                        text = uiState.inputText,
-                        isPartnerMode = uiState.session?.isViewingOwnData == false,
-                        isSending = uiState.isSending,
-                        isLocked = uiState.reportSession != null,
-                        onTextChanged = viewModel::onInputChanged,
-                        onSend = viewModel::sendCurrentMessage,
-                    )
-                }
+                    },
+                    footer = {
+                        HorizontalDivider()
+                        ChatInputBar(
+                            text = uiState.inputText,
+                            isPartnerMode = uiState.session?.isViewingOwnData == false,
+                            isSending = uiState.isSending,
+                            isLocked = uiState.reportSession != null,
+                            onTextChanged = viewModel::onInputChanged,
+                            onSend = viewModel::sendCurrentMessage,
+                        )
+                    },
+                )
             }
 
             ChatDestination.Info -> ChatInfoScreen(
@@ -284,10 +295,10 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.chat_back))
             }
             Text(
-                text = "Nearby Places",
+                text = stringResource(R.string.chat_nearby_places),
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             )
         }
@@ -316,13 +327,13 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
                             Text(text = place.name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold))
                             Row(horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                                 Text(
-                                    text = "${place.formattedDistance} away",
+                                    text = stringResource(R.string.chat_place_distance_away, place.formattedDistance),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 place.rating?.let { rating ->
                                     Text(
-                                        text = "★ ${"%.1f".format(rating)}",
+                                        text = stringResource(R.string.chat_place_rating, rating),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
@@ -347,7 +358,7 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
                                     runCatching { context.startActivity(fallback) }
                                 }
                         }) {
-                            Text("Go")
+                            Text(stringResource(R.string.chat_go))
                         }
                     }
                 }
@@ -389,7 +400,7 @@ private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: (
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Sakhi AI",
+                        text = stringResource(R.string.chat_title),
                         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                         color = MaterialTheme.colorScheme.onSurface,
                     )
@@ -401,14 +412,14 @@ private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: (
                                     .background(MaterialTheme.colorScheme.tertiary, CircleShape),
                             )
                             Text(
-                                text = "online",
+                                text = stringResource(R.string.chat_online),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.tertiary,
                             )
                         }
                     } else {
                         Text(
-                            text = "Ask me anything",
+                            text = stringResource(R.string.chat_prompt_hint),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -417,7 +428,7 @@ private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: (
             }
 
             IconButton(onClick = onClose) {
-                Icon(imageVector = Icons.Filled.Close, contentDescription = "Close")
+                Icon(imageVector = Icons.Filled.Close, contentDescription = stringResource(R.string.chat_close))
             }
         }
         HorizontalDivider()
@@ -432,7 +443,7 @@ private fun TodaySeparator() {
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
         ) {
             Text(
-                text = "Today",
+                text = stringResource(R.string.chat_today),
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space3, vertical = SakhiSpacing.space1),
@@ -524,6 +535,13 @@ private fun MessageBubble(
             .padding(horizontal = SakhiSpacing.space6, vertical = groupTopPadding / 4),
         horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start,
     ) {
+        val speakerYou = stringResource(R.string.chat_speaker_you)
+        val speakerSakhi = stringResource(R.string.chat_speaker_sakhi)
+        val starredLabel = stringResource(R.string.chat_semantics_starred)
+        val failedLabel = stringResource(R.string.chat_status_failed)
+        val sendingLabel = stringResource(R.string.chat_status_sending)
+        val readLabel = stringResource(R.string.chat_status_read)
+        val sentLabel = stringResource(R.string.chat_status_sent)
         Surface(
             shape = bubbleShape,
             color = if (message.isUser) {
@@ -536,7 +554,7 @@ private fun MessageBubble(
                 .fillMaxWidth(0.78f)
                 .semantics(mergeDescendants = true) {
                     contentDescription = buildString {
-                        append(if (message.isUser) "You" else "Sakhi")
+                        append(if (message.isUser) speakerYou else speakerSakhi)
                         append(", ")
                         append(message.content)
                         formattedTime(message.timestamp).takeIf { it.isNotBlank() }?.let {
@@ -544,16 +562,17 @@ private fun MessageBubble(
                             append(it)
                         }
                         if (isStarred) {
-                            append(", starred")
+                            append(", ")
+                            append(starredLabel)
                         }
                         if (message.isUser) {
                             append(", ")
                             append(
                                 when {
-                                    message.isFailed -> "Failed to send"
-                                    !message.isSynced -> "Sending"
-                                    showReadTick -> "Read"
-                                    else -> "Sent"
+                                    message.isFailed -> failedLabel
+                                    !message.isSynced -> sendingLabel
+                                    showReadTick -> readLabel
+                                    else -> sentLabel
                                 },
                             )
                         }
@@ -632,7 +651,7 @@ private fun PlacesCard(places: List<team.sakhi.models.SafePlace>, modifier: Modi
     ) {
         Column(modifier = Modifier.padding(SakhiSpacing.space3)) {
             Text(
-                text = "NEARBY",
+                text = stringResource(R.string.chat_nearby_label),
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary,
             )
@@ -660,7 +679,7 @@ private fun PlacesCard(places: List<team.sakhi.models.SafePlace>, modifier: Modi
             }
             if (places.size > 3) {
                 Text(
-                    text = "View ${places.size - 3} more",
+                    text = pluralStringResource(R.plurals.chat_view_more_places, places.size - 3, places.size - 3),
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = SakhiSpacing.space1),
@@ -725,17 +744,17 @@ private fun TypingIndicator() {
 }
 
 private val chatPlaceholders = listOf(
-    "Ask Sakhi anything...",
-    "How are you feeling today?",
-    "What's on your mind?",
-    "Ask about your cycle...",
-    "Something worrying you?",
+    R.string.chat_placeholder_ask_anything,
+    R.string.chat_placeholder_feeling_today,
+    R.string.chat_placeholder_on_your_mind,
+    R.string.chat_placeholder_about_cycle,
+    R.string.chat_placeholder_worrying,
 )
 private val chatPartnerPlaceholders = listOf(
-    "How's she doing today?",
-    "What does she need right now?",
-    "What's she going through?",
-    "How can we help her today?",
+    R.string.chat_partner_placeholder_hows_she,
+    R.string.chat_partner_placeholder_what_needs,
+    R.string.chat_partner_placeholder_going_through,
+    R.string.chat_partner_placeholder_help_today,
 )
 
 @Composable
@@ -780,7 +799,7 @@ private fun ChatInputBar(
                         transitionSpec = { fadeIn() togetherWith fadeOut() },
                         label = "chat-placeholder",
                     ) { index ->
-                        Text(text = placeholders[index % placeholders.size])
+                        Text(text = stringResource(placeholders[index % placeholders.size]))
                     }
                 },
                 colors = TextFieldDefaults.colors(
@@ -808,7 +827,7 @@ private fun ChatInputBar(
                 } else {
                     Icon(
                         imageVector = Icons.Filled.ArrowUpward,
-                        contentDescription = "Send",
+                        contentDescription = stringResource(R.string.chat_send),
                         tint = if (hasText) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(16.dp),
                     )
@@ -820,14 +839,8 @@ private fun ChatInputBar(
 
 internal fun formattedTime(timestampIso: String): String {
     val instant = runCatching { Instant.parse(timestampIso) }.getOrNull() ?: return ""
-    val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
-    val hour24 = local.hour
-    val amPm = if (hour24 < 12) "AM" else "PM"
-    val hour12 = when {
-        hour24 == 0 -> 12
-        hour24 > 12 -> hour24 - 12
-        else -> hour24
-    }
-    val minute = local.minute.toString().padStart(2, '0')
-    return "$hour12:$minute $amPm"
+    return runCatching {
+        DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+            .format(java.time.Instant.ofEpochMilli(instant.toEpochMilliseconds()).atZone(ZoneId.systemDefault()))
+    }.getOrDefault("")
 }

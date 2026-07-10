@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -86,6 +87,15 @@ fun OnboardingHealthStepScreen(
     onConditionToggled: (HealthCondition) -> Unit,
 ) {
     val copy = healthStepCopy(step)
+    val weekdayLabels = listOf(
+        stringResource(R.string.onboarding_weekday_s),
+        stringResource(R.string.onboarding_weekday_m),
+        stringResource(R.string.onboarding_weekday_t),
+        stringResource(R.string.onboarding_weekday_w),
+        stringResource(R.string.onboarding_weekday_t),
+        stringResource(R.string.onboarding_weekday_f),
+        stringResource(R.string.onboarding_weekday_s),
+    )
 
     Column(
         modifier = Modifier
@@ -100,11 +110,11 @@ fun OnboardingHealthStepScreen(
         )
 
         Text(
-            text = copy.title,
+            text = stringResource(copy.titleRes),
             style = MaterialTheme.typography.headlineMedium,
         )
         Text(
-            text = copy.subtitle,
+            text = stringResource(copy.subtitleRes),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -129,21 +139,22 @@ fun OnboardingHealthStepScreen(
             OnboardingFlowStep.LastPeriod -> LastPeriodStepContent(
                 selectedDate = uiState.lastPeriodDate,
                 displayedMonth = uiState.displayedLastPeriodMonth,
+                weekdayLabels = weekdayLabels,
                 onDateSelected = onLastPeriodDateChanged,
                 onPreviousMonth = onPreviousLastPeriodMonth,
                 onNextMonth = onNextLastPeriodMonth,
             )
             OnboardingFlowStep.PeriodLength -> DaysLengthStepContent(
                 value = uiState.periodLengthText,
-                placeholder = "e.g. 5",
-                infoButtonText = "What is period length?",
+                placeholder = stringResource(R.string.onboarding_period_length_placeholder),
+                infoButtonText = stringResource(R.string.onboarding_period_length_info_button),
                 info = DaysInfo.periodLength,
                 onValueChanged = onPeriodLengthChanged,
             )
             OnboardingFlowStep.CycleLength -> DaysLengthStepContent(
                 value = uiState.cycleLengthText,
-                placeholder = "e.g. 28",
-                infoButtonText = "What is cycle length?",
+                placeholder = stringResource(R.string.onboarding_cycle_length_placeholder),
+                infoButtonText = stringResource(R.string.onboarding_cycle_length_info_button),
                 info = DaysInfo.cycleLength,
                 onValueChanged = onCycleLengthChanged,
             )
@@ -163,14 +174,14 @@ fun OnboardingHealthStepScreen(
         }
 
         PrimaryButton(
-            text = "Continue",
+            text = stringResource(R.string.onboarding_continue),
             onClick = onContinue,
             modifier = Modifier.padding(top = SakhiSpacing.space2),
         )
 
         if (canGoBack) {
             TextButton(onClick = onBack) {
-                Text("Back")
+                Text(stringResource(R.string.onboarding_back))
             }
         }
     }
@@ -243,7 +254,10 @@ private fun HeightStepContent(
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
         ) {
             SegmentedToggle(
-                options = listOf("ft/in", "cm"),
+                options = listOf(
+                    stringResource(R.string.onboarding_height_option_imperial),
+                    stringResource(R.string.onboarding_height_option_metric),
+                ),
                 selectedIndex = if (useImperial) 0 else 1,
                 onSelected = { onUnitChanged(it == 0) },
             )
@@ -259,9 +273,9 @@ private fun HeightStepContent(
                         verticalAlignment = Alignment.Bottom,
                     ) {
                         LargeValueText(text = feet.toString())
-                        UnitText(text = "ft")
+                        UnitText(text = stringResource(R.string.onboarding_unit_ft))
                         LargeValueText(text = inches.toString())
-                        UnitText(text = "in")
+                        UnitText(text = stringResource(R.string.onboarding_unit_in))
                     }
                 } else {
                     Row(
@@ -269,7 +283,7 @@ private fun HeightStepContent(
                         verticalAlignment = Alignment.Bottom,
                     ) {
                         LargeValueText(text = displayCm.toString())
-                        UnitText(text = "cm")
+                        UnitText(text = stringResource(R.string.onboarding_unit_cm))
                     }
                 }
             }
@@ -309,7 +323,10 @@ private fun WeightStepContent(
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
         ) {
             SegmentedToggle(
-                options = listOf("kg", "lbs"),
+                options = listOf(
+                    stringResource(R.string.onboarding_weight_option_metric),
+                    stringResource(R.string.onboarding_weight_option_imperial),
+                ),
                 selectedIndex = if (useMetric) 0 else 1,
                 onSelected = { onUnitChanged(it == 0) },
             )
@@ -321,7 +338,13 @@ private fun WeightStepContent(
             ) {
                 LargeValueText(text = displayWeight.toString())
                 Spacer(modifier = Modifier.width(SakhiSpacing.space1))
-                UnitText(text = if (useMetric) "kg" else "lbs")
+                UnitText(
+                    text = if (useMetric) {
+                        stringResource(R.string.onboarding_unit_kg)
+                    } else {
+                        stringResource(R.string.onboarding_unit_lbs)
+                    }
+                )
             }
 
             // iOS uses a rotating dial wheel here. Android uses a slider until the
@@ -345,6 +368,7 @@ private fun WeightStepContent(
 private fun LastPeriodStepContent(
     selectedDate: LocalDate,
     displayedMonth: YearMonth,
+    weekdayLabels: List<String>,
     onDateSelected: (LocalDate) -> Unit,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
@@ -364,7 +388,7 @@ private fun LastPeriodStepContent(
                 IconButton(onClick = onPreviousMonth) {
                     Icon(
                         imageVector = Icons.Rounded.ChevronLeft,
-                        contentDescription = "Previous month",
+                        contentDescription = stringResource(R.string.onboarding_previous_month),
                     )
                 }
                 Text(
@@ -378,7 +402,7 @@ private fun LastPeriodStepContent(
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.ChevronRight,
-                        contentDescription = "Next month",
+                        contentDescription = stringResource(R.string.onboarding_next_month),
                     )
                 }
             }
@@ -387,7 +411,7 @@ private fun LastPeriodStepContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                WeekdayLabels.forEach { label ->
+                weekdayLabels.forEach { label ->
                     Text(
                         text = label,
                         style = MaterialTheme.typography.labelSmall,
@@ -438,7 +462,7 @@ private fun DaysLengthStepContent(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             trailingContent = {
                 Text(
-                    text = "days",
+                    text = stringResource(R.string.onboarding_days_suffix),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -462,16 +486,22 @@ private fun DaysLengthStepContent(
     if (showInfo) {
         AlertDialog(
             onDismissRequest = { showInfo = false },
-            title = { Text(info.title) },
+            title = { Text(stringResource(info.titleRes)) },
             text = {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
                 ) {
-                    Text(info.explanation)
-                    InfoPill(label = "Normal range", value = info.normalRange)
-                    InfoPill(label = "Average", value = info.average)
+                    Text(stringResource(info.explanationRes))
+                    InfoPill(
+                        label = stringResource(R.string.onboarding_info_normal_range),
+                        value = stringResource(info.normalRangeRes),
+                    )
+                    InfoPill(
+                        label = stringResource(R.string.onboarding_info_average),
+                        value = stringResource(info.averageRes),
+                    )
                     Text(
-                        text = "Source: American College of Obstetricians and Gynecologists (ACOG)",
+                        text = stringResource(R.string.onboarding_info_source_acog),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                     )
@@ -479,7 +509,7 @@ private fun DaysLengthStepContent(
             },
             confirmButton = {
                 TextButton(onClick = { showInfo = false }) {
-                    Text("Done")
+                    Text(stringResource(R.string.onboarding_done))
                 }
             },
         )
@@ -711,28 +741,28 @@ private fun UnitText(text: String) {
 }
 
 private data class HealthStepCopy(
-    val title: String,
-    val subtitle: String,
+    val titleRes: Int,
+    val subtitleRes: Int,
 )
 
 private data class DaysInfo(
-    val title: String,
-    val explanation: String,
-    val normalRange: String,
-    val average: String,
+    val titleRes: Int,
+    val explanationRes: Int,
+    val normalRangeRes: Int,
+    val averageRes: Int,
 ) {
     companion object {
         val periodLength = DaysInfo(
-            title = "Period Length",
-            explanation = "Your period length is the number of days you bleed each cycle. It starts on the first day of noticeable bleeding and ends when it stops completely. A period lasting 3–8 days is considered normal, and the average is about 5 days.",
-            normalRange = "3–8 days",
-            average = "5 days",
+            titleRes = R.string.onboarding_days_info_period_title,
+            explanationRes = R.string.onboarding_days_info_period_explanation,
+            normalRangeRes = R.string.onboarding_days_info_period_range,
+            averageRes = R.string.onboarding_days_info_period_average,
         )
         val cycleLength = DaysInfo(
-            title = "Cycle Length",
-            explanation = "Your cycle length is the number of days from the first day of one period to the first day of the next. Every body is different, a cycle anywhere from 21 to 35 days is completely normal. The average is 28 days.",
-            normalRange = "21–35 days",
-            average = "28 days",
+            titleRes = R.string.onboarding_days_info_cycle_title,
+            explanationRes = R.string.onboarding_days_info_cycle_explanation,
+            normalRangeRes = R.string.onboarding_days_info_cycle_range,
+            averageRes = R.string.onboarding_days_info_cycle_average,
         )
     }
 }
@@ -742,38 +772,39 @@ private object DateFormatters {
     val monthHeader: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())
 }
 
-private val WeekdayLabels = listOf("S", "M", "T", "W", "T", "F", "S")
-
 private fun healthStepCopy(step: OnboardingFlowStep): HealthStepCopy = when (step) {
     OnboardingFlowStep.DateOfBirth -> HealthStepCopy(
-        title = "When were you born?",
-        subtitle = "It helps me understand you more deeply.",
+        titleRes = R.string.onboarding_health_dob_title,
+        subtitleRes = R.string.onboarding_health_generic_subtitle,
     )
     OnboardingFlowStep.Height -> HealthStepCopy(
-        title = "Tell me your height",
-        subtitle = "It helps me understand you more deeply.",
+        titleRes = R.string.onboarding_health_height_title,
+        subtitleRes = R.string.onboarding_health_generic_subtitle,
     )
     OnboardingFlowStep.Weight -> HealthStepCopy(
-        title = "Tell me your weight",
-        subtitle = "It helps me understand you more deeply.",
+        titleRes = R.string.onboarding_health_weight_title,
+        subtitleRes = R.string.onboarding_health_generic_subtitle,
     )
     OnboardingFlowStep.LastPeriod -> HealthStepCopy(
-        title = "When did your last period begin?",
-        subtitle = "It helps me understand you more deeply.",
+        titleRes = R.string.onboarding_health_last_period_title,
+        subtitleRes = R.string.onboarding_health_generic_subtitle,
     )
     OnboardingFlowStep.PeriodLength -> HealthStepCopy(
-        title = "How many days does your period last?",
-        subtitle = "It helps me understand you more deeply.",
+        titleRes = R.string.onboarding_health_period_length_title,
+        subtitleRes = R.string.onboarding_health_generic_subtitle,
     )
     OnboardingFlowStep.CycleLength -> HealthStepCopy(
-        title = "How many days is your cycle?",
-        subtitle = "It helps me understand you more deeply.",
+        titleRes = R.string.onboarding_health_cycle_length_title,
+        subtitleRes = R.string.onboarding_health_generic_subtitle,
     )
     OnboardingFlowStep.HealthConditions -> HealthStepCopy(
-        title = "Anything we should know?",
-        subtitle = "This helps Sakhi give you advice that actually fits you. You can always update this later.",
+        titleRes = R.string.onboarding_health_conditions_title,
+        subtitleRes = R.string.onboarding_health_conditions_subtitle,
     )
-    else -> HealthStepCopy("", "")
+    else -> HealthStepCopy(
+        titleRes = R.string.onboarding_continue,
+        subtitleRes = R.string.onboarding_health_generic_subtitle,
+    )
 }
 
 private fun monthGrid(month: YearMonth): List<LocalDate?> {

@@ -1,0 +1,18 @@
+<resources>
+    <string name="widget_log_today_logged">Logged</string>
+    <string name="widget_subtitle_start_tracking_today">start tracking today</string>
+    <string name="widget_subtitle_she_hasnt_started_tracking">she hasn\'t started tracking</string>
+    <string name="widget_hero_cycle_day">Day %1$d</string>
+    <string name="widget_subtitle_of_her_period">of her period</string>
+    <string name="widget_subtitle_of_your_period">of your period</string>
+    <string name="widget_subtitle_of_her_expected_period">of her expected period</string>
+    <string name="widget_subtitle_of_your_expected_period">of your expected period</string>
+    <string name="widget_subtitle_her_period_delayed">her period is delayed</string>
+    <string name="widget_subtitle_period_delayed">period is delayed</string>
+    <string name="widget_subtitle_until_her_next_period">until her next period</string>
+    <string name="widget_subtitle_until_next_period">until next period</string>
+    <plurals name="widget_day_count">
+        <item quantity="one">%1$d Day</item>
+        <item quantity="other">%1$d Days</item>
+    </plurals>
+</resources>

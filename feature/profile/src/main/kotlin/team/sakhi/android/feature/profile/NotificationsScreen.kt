@@ -27,14 +27,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.annotation.StringRes
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.compose.koinInject
 import team.sakhi.android.platform.AndroidNotificationReminderManager
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
-import team.sakhi.android.ui.SheetSurface
+import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.preferences.UserPreferenceDefaults
 import team.sakhi.preferences.UserPreferenceKeys
@@ -79,77 +81,69 @@ fun NotificationsScreen(onBack: () -> Unit) {
         }
     }
 
-    SheetSurface(showDragHandle = true) {
-        DetailHeader(title = "Reminders & Alerts", onBack = onBack)
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(SakhiSpacing.space5),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
-        ) {
+    DetailSheetScaffold(title = stringResource(R.string.profile_notifications_title), onBack = onBack) {
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5)) {
             if (isPartnerRole) {
                 ToggleSection(
-                    label = "HER HEALTH ALERTS",
+                    labelRes = R.string.profile_notifications_section_her_health_alerts,
                     kvStore = kvStore,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
-                        Triple("Her Period Starting Soon", UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER, UserPreferenceDefaults.NOTIFICATION_PERIOD_REMINDER),
-                        Triple("Her Period Running Late", UserPreferenceKeys.NOTIFICATION_LATE_PERIOD, UserPreferenceDefaults.NOTIFICATION_LATE_PERIOD),
+                        ToggleOption(R.string.profile_notifications_her_period_soon, UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER, UserPreferenceDefaults.NOTIFICATION_PERIOD_REMINDER),
+                        ToggleOption(R.string.profile_notifications_her_period_late, UserPreferenceKeys.NOTIFICATION_LATE_PERIOD, UserPreferenceDefaults.NOTIFICATION_LATE_PERIOD),
                     ),
                 )
                 ToggleSection(
-                    label = "CARE ALERTS",
+                    labelRes = R.string.profile_notifications_section_care_alerts,
                     kvStore = kvStore,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
-                        Triple("Sakhi Care Updates", UserPreferenceKeys.NOTIFICATION_CARE_ALERTS, UserPreferenceDefaults.NOTIFICATION_CARE_ALERTS),
+                        ToggleOption(R.string.profile_notifications_care_updates, UserPreferenceKeys.NOTIFICATION_CARE_ALERTS, UserPreferenceDefaults.NOTIFICATION_CARE_ALERTS),
                     ),
                 )
                 ToggleSection(
-                    label = "REMINDERS",
+                    labelRes = R.string.profile_notifications_section_reminders,
                     kvStore = kvStore,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
-                        Triple("Daily Check-In Reminder", UserPreferenceKeys.NOTIFICATION_PARTNER_CHECKIN, UserPreferenceDefaults.NOTIFICATION_PARTNER_CHECKIN),
+                        ToggleOption(R.string.profile_notifications_daily_checkin, UserPreferenceKeys.NOTIFICATION_PARTNER_CHECKIN, UserPreferenceDefaults.NOTIFICATION_PARTNER_CHECKIN),
                     ),
                 )
             } else {
                 ToggleSection(
-                    label = "PERIOD ALERTS",
+                    labelRes = R.string.profile_notifications_section_period_alerts,
                     kvStore = kvStore,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
-                        Triple("Period Starting Soon", UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER, UserPreferenceDefaults.NOTIFICATION_PERIOD_REMINDER),
-                        Triple("Period Running Late", UserPreferenceKeys.NOTIFICATION_LATE_PERIOD, UserPreferenceDefaults.NOTIFICATION_LATE_PERIOD),
-                        Triple("Period Ended", UserPreferenceKeys.NOTIFICATION_PERIOD_END, UserPreferenceDefaults.NOTIFICATION_PERIOD_END),
+                        ToggleOption(R.string.profile_notifications_period_soon, UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER, UserPreferenceDefaults.NOTIFICATION_PERIOD_REMINDER),
+                        ToggleOption(R.string.profile_notifications_period_late, UserPreferenceKeys.NOTIFICATION_LATE_PERIOD, UserPreferenceDefaults.NOTIFICATION_LATE_PERIOD),
+                        ToggleOption(R.string.profile_notifications_period_end, UserPreferenceKeys.NOTIFICATION_PERIOD_END, UserPreferenceDefaults.NOTIFICATION_PERIOD_END),
                     ),
                 )
                 ToggleSection(
-                    label = "CYCLE & FERTILITY",
+                    labelRes = R.string.profile_notifications_section_cycle_fertility,
                     kvStore = kvStore,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
-                        Triple("Ovulation Day", UserPreferenceKeys.NOTIFICATION_OVULATION_DAY, UserPreferenceDefaults.NOTIFICATION_OVULATION_DAY),
-                        Triple("Fertile Window", UserPreferenceKeys.NOTIFICATION_FERTILE_WINDOW, UserPreferenceDefaults.NOTIFICATION_FERTILE_WINDOW),
+                        ToggleOption(R.string.profile_notifications_ovulation_day, UserPreferenceKeys.NOTIFICATION_OVULATION_DAY, UserPreferenceDefaults.NOTIFICATION_OVULATION_DAY),
+                        ToggleOption(R.string.profile_notifications_fertile_window, UserPreferenceKeys.NOTIFICATION_FERTILE_WINDOW, UserPreferenceDefaults.NOTIFICATION_FERTILE_WINDOW),
                     ),
                 )
                 ToggleSection(
-                    label = "BE HER SAKHI",
+                    labelRes = R.string.profile_notifications_section_be_her_sakhi,
                     kvStore = kvStore,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
-                        Triple("Care Mode Alerts", UserPreferenceKeys.NOTIFICATION_CARE_ALERTS, UserPreferenceDefaults.NOTIFICATION_CARE_ALERTS),
+                        ToggleOption(R.string.profile_notifications_care_mode_alerts, UserPreferenceKeys.NOTIFICATION_CARE_ALERTS, UserPreferenceDefaults.NOTIFICATION_CARE_ALERTS),
                     ),
                 )
                 ToggleSection(
-                    label = "REMINDERS",
+                    labelRes = R.string.profile_notifications_section_reminders,
                     kvStore = kvStore,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
-                        Triple("Daily Log Reminder", UserPreferenceKeys.NOTIFICATION_LOGGING_REMINDER, UserPreferenceDefaults.NOTIFICATION_LOGGING_REMINDER),
-                        Triple("Medicine & Supplements", UserPreferenceKeys.NOTIFICATION_MEDICINE, UserPreferenceDefaults.NOTIFICATION_MEDICINE),
+                        ToggleOption(R.string.profile_notifications_daily_log, UserPreferenceKeys.NOTIFICATION_LOGGING_REMINDER, UserPreferenceDefaults.NOTIFICATION_LOGGING_REMINDER),
+                        ToggleOption(R.string.profile_notifications_medicine, UserPreferenceKeys.NOTIFICATION_MEDICINE, UserPreferenceDefaults.NOTIFICATION_MEDICINE),
                     ),
                 )
             }
@@ -157,16 +151,22 @@ fun NotificationsScreen(onBack: () -> Unit) {
     }
 }
 
+private data class ToggleOption(
+    @StringRes val titleRes: Int,
+    val key: String,
+    val default: Boolean,
+)
+
 @Composable
 private fun ToggleSection(
-    label: String,
+    @StringRes labelRes: Int,
     kvStore: PlatformKeyValueStore,
     onToggleChanged: (String, Boolean) -> Unit,
-    rows: List<Triple<String, String, Boolean>>,
+    rows: List<ToggleOption>,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
         Text(
-            text = label,
+            text = stringResource(labelRes),
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -176,12 +176,12 @@ private fun ToggleSection(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column {
-                rows.forEachIndexed { index, (title, key, default) ->
+                rows.forEachIndexed { index, row ->
                     ToggleRow(
-                        title = title,
+                        title = stringResource(row.titleRes),
                         kvStore = kvStore,
-                        key = key,
-                        default = default,
+                        key = row.key,
+                        default = row.default,
                         onToggleChanged = onToggleChanged,
                     )
                     if (index != rows.lastIndex) HorizontalDivider()

@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -40,7 +41,7 @@ import kotlinx.coroutines.withContext
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
-import team.sakhi.android.ui.SheetSurface
+import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.preferences.UserPreferenceDefaults
 import team.sakhi.preferences.UserPreferenceKeys
@@ -71,19 +72,13 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
     var isExporting by remember { mutableStateOf(false) }
     var exportError by remember { mutableStateOf<String?>(null) }
 
-    SheetSurface(showDragHandle = true) {
-        DetailHeader(title = "Privacy & Security", onBack = onBack)
+    val exportFailedText = stringResource(R.string.profile_privacy_export_failed)
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(SakhiSpacing.space5),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
-        ) {
+    DetailSheetScaffold(title = stringResource(R.string.profile_privacy_title), onBack = onBack) {
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5)) {
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 Text(
-                    text = "PRIVACY",
+                    text = stringResource(R.string.profile_privacy_section_privacy),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -94,14 +89,14 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                 ) {
                     Column {
                         PreferenceToggleRow(
-                            title = "Screenshot Warning",
+                            title = stringResource(R.string.profile_privacy_screenshot_warning),
                             kvStore = kvStore,
                             key = UserPreferenceKeys.PRIVACY_SCREENSHOT_WARNING,
                             default = UserPreferenceDefaults.PRIVACY_SCREENSHOT_WARNING,
                         )
                         HorizontalDivider()
                         PreferenceToggleRow(
-                            title = "Share Anonymous Analytics",
+                            title = stringResource(R.string.profile_privacy_analytics),
                             kvStore = kvStore,
                             key = UserPreferenceKeys.ANALYTICS_OPT_IN,
                             default = UserPreferenceDefaults.ANALYTICS_OPT_IN,
@@ -112,7 +107,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
 
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 Text(
-                    text = "YOUR DATA",
+                    text = stringResource(R.string.profile_privacy_section_your_data),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -138,7 +133,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                                             userProfileRepository = userProfileRepository,
                                         )
                                     }.onFailure {
-                                        exportError = it.message ?: "Couldn't export your data. Please try again."
+                                        exportError = it.message ?: exportFailedText
                                     }
                                     isExporting = false
                                 }
@@ -147,9 +142,9 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(text = "Download my data", style = MaterialTheme.typography.bodyLarge)
+                            Text(text = stringResource(R.string.profile_privacy_download_data), style = MaterialTheme.typography.bodyLarge)
                             Text(
-                                text = "Export a copy of all your health data",
+                                text = stringResource(R.string.profile_privacy_download_data_subtitle),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -164,7 +159,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                 }
 
                 Text(
-                    text = "PERMISSIONS",
+                    text = stringResource(R.string.profile_privacy_section_permissions),
                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -175,9 +170,9 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                 ) {
                     Column {
                         listOf(
-                            "Location Access" to "Used only for emergency SOS",
-                            "Camera & Microphone" to "Never used by Sakhi",
-                            "Contacts" to "For adding care mode contacts",
+                            R.string.profile_privacy_permission_location to R.string.profile_privacy_permission_location_subtitle,
+                            R.string.profile_privacy_permission_camera to R.string.profile_privacy_permission_camera_subtitle,
+                            R.string.profile_privacy_permission_contacts to R.string.profile_privacy_permission_contacts_subtitle,
                         ).forEachIndexed { index, (title, subtitle) ->
                             Row(
                                 modifier = Modifier
@@ -192,8 +187,12 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(text = title, style = MaterialTheme.typography.bodyLarge)
-                                    Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(text = stringResource(title), style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        text = stringResource(subtitle),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                                 Icon(Icons.Filled.ArrowOutward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
@@ -252,7 +251,7 @@ private suspend fun exportUserData(
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
         }
-        context.startActivity(Intent.createChooser(shareIntent, "Export Sakhi data").apply {
+        context.startActivity(Intent.createChooser(shareIntent, context.getString(R.string.profile_privacy_export_chooser)).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         })
     }

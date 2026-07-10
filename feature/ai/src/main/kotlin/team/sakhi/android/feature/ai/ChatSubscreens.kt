@@ -50,6 +50,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -61,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.BackButton
 import team.sakhi.android.feature.reports.ReportDateRangePreset
 import team.sakhi.android.ui.EmptyState
 import team.sakhi.android.ui.GlassCard
@@ -213,11 +215,11 @@ internal fun ChatReportCard(
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Health Report",
+                    text = stringResource(R.string.chat_report_card_title),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 )
                 Text(
-                    text = "Your cycle data as a PDF",
+                    text = stringResource(R.string.chat_report_card_subtitle),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -227,7 +229,7 @@ internal fun ChatReportCard(
                 IconButton(onClick = onDismiss) {
                     Icon(
                         imageVector = Icons.Filled.Close,
-                        contentDescription = "Close report card",
+                        contentDescription = stringResource(R.string.chat_report_card_close),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -252,7 +254,7 @@ internal fun ChatReportCard(
                     strokeWidth = 2.dp,
                 )
                 Text(
-                    text = "Building your report…",
+                    text = stringResource(R.string.chat_report_card_building),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -572,9 +574,7 @@ private fun ChatSubscreenHeader(
                 .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            IconButton(onClick = onBack) {
-                Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = "Back")
-            }
+            BackButton(onClick = onBack)
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),

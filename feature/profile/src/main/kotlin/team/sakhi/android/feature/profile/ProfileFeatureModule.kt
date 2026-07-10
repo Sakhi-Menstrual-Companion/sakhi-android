@@ -9,6 +9,7 @@ val profileFeatureModule = module {
         ProfileViewModel(
             sessionManager = get(),
             userProfileRepository = get(),
+            cycleDataRepository = get(),
             authRepository = get(),
             appStateInputBridge = get(),
             featureAccessState = get(),
@@ -19,6 +20,12 @@ val profileFeatureModule = module {
         AppIntegrationViewModel(
             sessionManager = get(),
             healthConnectManager = get(),
+            appContext = get(),
+        )
+    }
+    viewModel {
+        SanityContentViewModel(
+            sanityRepository = get(),
         )
     }
 }
