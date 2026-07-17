@@ -13,15 +13,27 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth as FilledCalendarMonth
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Healing
+import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.SentimentSatisfied
+import androidx.compose.material.icons.outlined.Autorenew
+import androidx.compose.material.icons.outlined.CalendarMonth as OutlinedCalendarMonth
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -36,38 +48,36 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import java.time.Month
 import java.time.format.TextStyle
 import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.BackButton
+import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.EmptyState
 import team.sakhi.android.ui.GlassCard
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
-import team.sakhi.android.ui.SecondaryButton
 import team.sakhi.date.DateConverter
 import team.sakhi.report.CalendarMonth
 import team.sakhi.report.InsightSeverity
 import team.sakhi.report.ReportData
 import team.sakhi.report.ReportInsight
 
-/**
- * Android port of the iOS health-report flow: config sheet, generating overlay,
- * then preview carousel. PDF export/share is still a platform gap, so the flow
- * stops at preview with an explicit note instead of faking the last step.
- */
+/** Android port of the iOS health-report flow: config sheet, real PDF generation, then preview/share. */
 @Composable
 fun ReportsScreen(
     onClose: (() -> Unit)? = null,
@@ -120,7 +130,6 @@ private enum class PreviewPageType {
     PeriodCalendar,
     SymptomsFlow,
     MoodPatterns,
-    Medications,
     Insights,
 }
 
@@ -138,36 +147,19 @@ private fun ReportsConfigScreen(
     onGenerate: () -> Unit,
     onDismissError: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space6),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
+    Box(modifier = Modifier.fillMaxSize()) {
+        DetailSheetScaffold(
+            title = stringResource(R.string.reports_title),
+            subtitle = stringResource(R.string.reports_config_subtitle),
+            headerIcon = Icons.Filled.Description,
+            onBack = onClose ?: {},
+            contentPadding = PaddingValues(
+                start = SakhiSpacing.space5,
+                top = SakhiSpacing.space5,
+                end = SakhiSpacing.space5,
+                bottom = SakhiSpacing.space16,
+            ),
         ) {
-            onClose?.let { close ->
-                SecondaryButton(
-                    text = stringResource(R.string.reports_back),
-                    onClick = close,
-                )
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
-                Text(
-                    text = stringResource(R.string.reports_title),
-                    style = MaterialTheme.typography.headlineMedium,
-                )
-                Text(
-                    text = stringResource(R.string.reports_config_subtitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
             ReportsSectionLabel(stringResource(R.string.reports_section_date_range))
             DateRangeCard(
                 config = uiState.config,
@@ -193,14 +185,6 @@ private fun ReportsConfigScreen(
                 }
             }
 
-            if (ReportSection.Medications in uiState.config.sections) {
-                SakhiAlert(
-                    title = stringResource(R.string.reports_shared_gap_title),
-                    message = stringResource(R.string.reports_shared_gap_message),
-                )
-            }
-
-            Spacer(modifier = Modifier.height(SakhiSpacing.space10))
         }
 
         FooterBar(
@@ -242,6 +226,12 @@ private fun DateRangeCard(
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Icon(
+                imageVector = Icons.Filled.FilledCalendarMonth,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
@@ -250,20 +240,26 @@ private fun DateRangeCard(
                     text = stringResource(config.preset.rowLabelRes),
                     style = MaterialTheme.typography.titleMedium,
                 )
-                Text(
-                    text = stringResource(
-                        R.string.reports_date_range_span,
-                        DateConverter.formatShort(config.startDate),
-                        DateConverter.formatShort(config.endDate),
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
             Box {
-                TextButton(onClick = { expanded = true }) {
-                    Text(stringResource(config.preset.shortLabelRes))
+                Surface(
+                    shape = RoundedCornerShape(percent = 50),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                ) {
+                    TextButton(onClick = { expanded = true }) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(stringResource(config.preset.shortLabelRes))
+                            Icon(
+                                imageVector = Icons.Rounded.KeyboardArrowDown,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
                 DropdownMenu(
                     expanded = expanded,
@@ -297,6 +293,11 @@ private fun SectionToggleRow(
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        Icon(
+            imageVector = reportSectionIcon(section),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+        )
         Column(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
@@ -325,7 +326,7 @@ private fun ReportsPreviewScreen(
     onDownloadPdf: () -> Unit,
     onDismissExportError: () -> Unit,
 ) {
-    val report = uiState.report ?: run {
+    val document = uiState.document ?: run {
         EmptyState(
             title = stringResource(R.string.reports_preview_unavailable),
             subtitle = stringResource(R.string.reports_preview_unavailable_subtitle),
@@ -334,9 +335,9 @@ private fun ReportsPreviewScreen(
         return
     }
 
-    val pages = remember(report, uiState.config.sections) {
+    val pages = remember(document.report, uiState.config.sections) {
         buildPreviewPages(
-            report = report,
+            report = document.report,
             selectedSections = uiState.config.sections,
         )
     }
@@ -356,31 +357,38 @@ private fun ReportsPreviewScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
+                .padding(
+                    start = SakhiSpacing.space6,
+                    top = SakhiSpacing.space5,
+                    end = SakhiSpacing.space6,
+                    bottom = SakhiSpacing.space3,
+                ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            SecondaryButton(
-                text = stringResource(R.string.reports_back),
-                onClick = onBack,
-            )
+            BackButton(onClick = onBack)
 
             Spacer(modifier = Modifier.weight(1f))
 
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = stringResource(R.string.reports_preview_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                    ),
                 )
                 Text(
                     text = pluralStringResource(R.plurals.reports_page_count, pages.size, pages.size),
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 11.sp * 1.4f,
+                    ),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
 
             Spacer(modifier = Modifier.weight(1f))
-            Spacer(modifier = Modifier.size(88.dp))
+            Spacer(modifier = Modifier.size(40.dp))
         }
 
         HorizontalPager(
@@ -392,48 +400,47 @@ private fun ReportsPreviewScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = SakhiSpacing.space5),
+                    .padding(horizontal = SakhiSpacing.space6),
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Surface(
-                    shape = RoundedCornerShape(SakhiRadius.xxl),
-                    tonalElevation = SakhiSpacing.space1,
+                    shape = RoundedCornerShape(SakhiRadius.lg),
+                    border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outlineVariant),
                     modifier = Modifier
                         .fillMaxWidth()
                         .aspectRatio(595.28f / 841.89f),
                 ) {
                     ReportPreviewPageContent(
                         page = page,
-                        report = report,
+                        document = document,
                     )
                 }
 
-                Text(
-                    text = stringResource(page.titleRes),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                PageDots(
-                    count = pages.size,
-                    currentPage = pagerState.currentPage,
-                )
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+                ) {
+                    Text(
+                        text = stringResource(page.titleRes),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    PageDots(
+                        count = pages.size,
+                        currentPage = pagerState.currentPage,
+                    )
+                }
             }
         }
 
         FooterBar(
             buttonText = stringResource(R.string.reports_download_pdf),
-            buttonEnabled = !uiState.isExportingPdf,
+            buttonEnabled = true,
             note = stringResource(R.string.reports_download_note),
             onButtonClick = onDownloadPdf,
         )
-
-        if (uiState.isExportingPdf) {
-            FullscreenMessage(
-                title = stringResource(R.string.reports_preparing_pdf_title),
-                subtitle = stringResource(R.string.reports_preparing_pdf_subtitle),
-            )
-        }
 
         if (uiState.exportErrorMessage != null) {
             ErrorOverlay(
@@ -447,65 +454,126 @@ private fun ReportsPreviewScreen(
 @Composable
 private fun ReportPreviewPageContent(
     page: PreviewPage,
-    report: ReportData,
+    document: ReportDocument,
 ) {
     when (page.type) {
-        PreviewPageType.Cover -> CoverPage(report)
-        PreviewPageType.CycleSummary -> CycleSummaryPage(report)
-        PreviewPageType.PeriodCalendar -> PeriodCalendarPage(report)
-        PreviewPageType.SymptomsFlow -> SymptomsFlowPage(report)
-        PreviewPageType.MoodPatterns -> MoodPatternsPage(report)
-        PreviewPageType.Medications -> MedicationsGapPage()
-        PreviewPageType.Insights -> InsightsPage(report)
+        PreviewPageType.Cover -> CoverPage(document)
+        PreviewPageType.CycleSummary -> CycleSummaryPage(document)
+        PreviewPageType.PeriodCalendar -> PeriodCalendarPage(document.report)
+        PreviewPageType.SymptomsFlow -> SymptomsFlowPage(document.report)
+        PreviewPageType.MoodPatterns -> MoodPatternsPage(document.report)
+        PreviewPageType.Insights -> InsightsPage(document.report)
     }
 }
 
 @Composable
-private fun CoverPage(report: ReportData) {
+private fun CoverPage(document: ReportDocument) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(SakhiSpacing.space6),
+            .background(MaterialTheme.colorScheme.surface)
+            .padding(bottom = SakhiSpacing.space4),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+
+            Column(
+                modifier = Modifier.padding(SakhiSpacing.space6),
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1)) {
+                    Text(
+                        text = stringResource(R.string.reports_cover_title_menstrual),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = stringResource(R.string.reports_cover_title_health_report),
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                        .background(MaterialTheme.colorScheme.outlineVariant),
+                )
+
+                GlassCard {
+                    PreviewInfoRow(
+                        label = stringResource(R.string.reports_prepared_for),
+                        value = document.subjectName,
+                    )
+                    PreviewInfoRow(
+                        label = stringResource(R.string.reports_report_period),
+                        value = stringResource(
+                            R.string.reports_date_range_span,
+                            DateConverter.formatShort(document.report.periodFrom),
+                            DateConverter.formatShort(document.report.periodTo),
+                        ),
+                    )
+                    PreviewInfoRow(
+                        label = stringResource(R.string.reports_generated_on),
+                        value = fullDate(document.generatedOn),
+                    )
+                    PreviewInfoRow(
+                        label = stringResource(R.string.reports_data_source),
+                        value = stringResource(R.string.reports_source_app_name),
+                    )
+                }
+            }
+        }
+
+        Text(
+            text = stringResource(R.string.reports_pdf_disclaimer),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            lineHeight = 18.sp,
+            modifier = Modifier.padding(horizontal = SakhiSpacing.space6),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space6),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             Text(
-                text = stringResource(R.string.reports_title),
-                style = MaterialTheme.typography.headlineMedium,
+                text = stringResource(R.string.reports_brand_wordmark),
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
             )
             Text(
-                text = stringResource(
-                    R.string.reports_date_range_span,
-                    DateConverter.formatShort(report.periodFrom),
-                    DateConverter.formatShort(report.periodTo),
-                ),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(R.string.reports_cover_subtitle),
-                style = MaterialTheme.typography.bodyMedium,
+                text = stringResource(R.string.reports_confidential),
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-
-        GlassCard {
-            StatRow(stringResource(R.string.reports_generated_on), report.generatedAt)
-            StatRow(stringResource(R.string.reports_cycles_analyzed), report.cyclesAnalyzed.toString())
-            StatRow(
-                stringResource(R.string.reports_prediction_confidence),
-                stringResource(R.string.reports_percent_value, (report.predictionConfidence * 100).toInt()),
-            )
-        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp)
+                .background(MaterialTheme.colorScheme.primary),
+        )
     }
 }
 
 @Composable
-private fun CycleSummaryPage(report: ReportData) {
+private fun CycleSummaryPage(document: ReportDocument) {
+    val report = document.report
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
@@ -514,17 +582,125 @@ private fun CycleSummaryPage(report: ReportData) {
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
-        StatGrid(report)
+        Text(
+            text = stringResource(R.string.reports_key_statistics),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+        )
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            StatRow(
+                label = stringResource(R.string.reports_average_cycle_length),
+                value = stringResource(R.string.reports_days_value, report.averageCycleLength.toInt()),
+                valueColor = MaterialTheme.colorScheme.primary,
+                note = if (report.cyclesAnalyzed > 0) {
+                    stringResource(R.string.reports_range_value, report.shortestCycleDays, report.longestCycleDays)
+                } else {
+                    null
+                },
+            )
+            StatRow(
+                label = stringResource(R.string.reports_average_period_length),
+                value = stringResource(R.string.reports_days_value_decimal, report.averagePeriodLength),
+                valueColor = MaterialTheme.colorScheme.primary,
+            )
+            StatRow(
+                label = stringResource(R.string.reports_cycles_tracked),
+                value = document.trackedCyclesCount.toString(),
+                note = stringResource(R.string.reports_cycles_tracked_note),
+            )
+            StatRow(
+                label = stringResource(R.string.reports_regularity),
+                value = stringResource(
+                    R.string.reports_regularity_value,
+                    report.regularityPercent(),
+                    report.regularityLabel(),
+                ),
+            )
+            StatRow(
+                label = stringResource(R.string.reports_period_days_logged),
+                value = stringResource(R.string.reports_days_value, report.totalPeriodDays()),
+            )
+        }
+        if (document.nextPredictedPeriod != null) {
+            Surface(
+                shape = RoundedCornerShape(SakhiRadius.lg),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(SakhiSpacing.space4),
+                    verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+                ) {
+                    Text(
+                        text = stringResource(R.string.reports_next_period_prediction),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = fullDate(document.nextPredictedPeriod),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = stringResource(R.string.reports_expected_start_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        LoggedActivityGrid(report)
+    }
+}
+
+// Matches iOS's real `ReportCyclePage`'s always-shown "Logged Activity" table
+// (`SakhiReportPDFGenerator.swift`) -- was missing entirely from Android's Cycle
+// Summary page and PDF, since the shared `ReportData` had no fields for
+// painkiller/doctor-visit/notes days at all until this fix.
+@Composable
+private fun LoggedActivityGrid(report: ReportData) {
+    Text(
+        text = stringResource(R.string.reports_logged_activity),
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+    )
+    GlassCard(
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        StatRow(
+            stringResource(R.string.reports_total_symptoms_logged),
+            stringResource(R.string.reports_entries_value, report.topSymptoms.sumOf { it.count }),
+        )
+        StatRow(
+            stringResource(R.string.reports_total_mood_entries),
+            stringResource(R.string.reports_entries_value, report.topMoods.sumOf { it.count }),
+        )
+        StatRow(
+            stringResource(R.string.reports_days_with_notes),
+            stringResource(R.string.reports_days_value, report.daysWithNotes),
+        )
+        StatRow(
+            stringResource(R.string.reports_medication_days),
+            stringResource(R.string.reports_days_value, report.painkillerDays),
+        )
+        StatRow(
+            stringResource(R.string.reports_doctor_visits),
+            stringResource(R.string.reports_count_value, report.doctorVisitDays),
+        )
     }
 }
 
 @Composable
 private fun PeriodCalendarPage(report: ReportData) {
-    val previewMonths = report.calendarMonths.take(2)
+    val previewMonths = report.calendarMonths.take(3)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
@@ -542,6 +718,7 @@ private fun PeriodCalendarPage(report: ReportData) {
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        CalendarLegend()
 
         previewMonths.forEach { month ->
             CalendarMonthPreview(month)
@@ -554,6 +731,7 @@ private fun SymptomsFlowPage(report: ReportData) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
@@ -562,18 +740,44 @@ private fun SymptomsFlowPage(report: ReportData) {
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
-        if (report.topSymptoms.isNotEmpty()) {
-            FrequencyList(report.topSymptoms.map { it.name to it.percentage })
-        }
-        if (report.flowTimeline.isNotEmpty()) {
-            GlassCard {
-                report.flowTimeline.takeLast(4).forEach { point ->
-                    StatRow(
-                        label = DateConverter.formatShort(point.date),
-                        value = point.intensity,
-                    )
-                }
-            }
+        Text(
+            text = stringResource(R.string.reports_symptom_frequency),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+        )
+        FrequencyTableCard(
+            headers = Triple(
+                stringResource(R.string.reports_table_symptom),
+                stringResource(R.string.reports_table_days),
+                stringResource(R.string.reports_table_percent_tracked),
+            ),
+            rows = report.topSymptoms.take(8).map { symptom ->
+                Triple(
+                    symptom.name,
+                    symptom.count.toString(),
+                    contextPercent(symptom.percentage),
+                )
+            },
+        )
+        val flowDistribution = report.flowDistribution()
+        if (flowDistribution.isNotEmpty()) {
+            Text(
+                text = stringResource(R.string.reports_flow_distribution),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+            )
+            FrequencyTableCard(
+                headers = Triple(
+                    stringResource(R.string.reports_table_flow_level),
+                    "",
+                    stringResource(R.string.reports_table_days),
+                ),
+                rows = flowDistribution.map { entry ->
+                    Triple(entry.label, "", entry.count.toString())
+                },
+            )
         }
     }
 }
@@ -583,6 +787,7 @@ private fun MoodPatternsPage(report: ReportData) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
@@ -591,17 +796,34 @@ private fun MoodPatternsPage(report: ReportData) {
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
-        FrequencyList(report.topMoods.map { it.name to it.percentage })
+        Text(
+            text = stringResource(R.string.reports_mood_frequency),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.Bold,
+        )
+        FrequencyTableCard(
+            headers = Triple(
+                stringResource(R.string.reports_table_mood),
+                stringResource(R.string.reports_table_days),
+                stringResource(R.string.reports_table_percent_logged),
+            ),
+            rows = report.topMoods.take(8).map { mood ->
+                Triple(mood.name, mood.count.toString(), contextPercent(mood.percentage))
+            },
+        )
+        Surface(
+            shape = RoundedCornerShape(SakhiRadius.lg),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
+        ) {
+            Text(
+                text = stringResource(R.string.reports_mood_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(SakhiSpacing.space4),
+            )
+        }
     }
-}
-
-@Composable
-private fun MedicationsGapPage() {
-    EmptyState(
-        title = stringResource(R.string.reports_page_medications),
-        subtitle = stringResource(R.string.reports_medications_gap_subtitle),
-        modifier = Modifier.fillMaxSize(),
-    )
 }
 
 @Composable
@@ -609,6 +831,7 @@ private fun InsightsPage(report: ReportData) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
@@ -617,15 +840,168 @@ private fun InsightsPage(report: ReportData) {
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
-        if (report.insights.isEmpty()) {
-            EmptyState(
-                title = stringResource(R.string.reports_no_insights),
-                subtitle = stringResource(R.string.reports_no_insights_subtitle),
+        Text(
+            text = stringResource(R.string.reports_insights_disclaimer),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
+            report.insights.take(4).forEach { insight ->
+                InsightCard(insight)
+            }
+        }
+        Surface(
+            shape = RoundedCornerShape(SakhiRadius.lg),
+            color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.08f),
+        ) {
+            Column(
+                modifier = Modifier.padding(SakhiSpacing.space4),
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+            ) {
+                Text(
+                    text = stringResource(R.string.reports_doctor_title),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = stringResource(R.string.reports_doctor_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatRow(
+    label: String,
+    value: String,
+    valueColor: androidx.compose.ui.graphics.Color? = null,
+    note: String? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .semantics(mergeDescendants = true) {}
+            .padding(vertical = SakhiSpacing.space1),
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f),
+        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = valueColor ?: MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.End,
             )
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
-                report.insights.take(3).forEach { insight ->
-                    InsightCard(insight)
+            if (!note.isNullOrBlank()) {
+                Text(
+                    text = note,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CalendarLegend() {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        CalendarLegendItem(
+            label = stringResource(R.string.reports_marker_period),
+            color = MaterialTheme.colorScheme.primary,
+        )
+        CalendarLegendItem(
+            label = stringResource(R.string.reports_marker_predicted),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+        )
+        CalendarLegendItem(
+            label = stringResource(R.string.reports_marker_fertile_ovulation),
+            color = MaterialTheme.colorScheme.tertiary,
+        )
+    }
+}
+
+@Composable
+private fun CalendarLegendItem(
+    label: String,
+    color: androidx.compose.ui.graphics.Color,
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun CalendarMonthPreview(month: CalendarMonth) {
+    GlassCard {
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
+            Text(
+                text = month.title(),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            WeekdayHeader()
+            month.weeks().forEach { week ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    week.forEach { date ->
+                        if (date == null) {
+                            Spacer(modifier = Modifier.size(28.dp))
+                        } else {
+                            val dayMark = month.dayMark(date)
+                            val markerColor = when {
+                                dayMark?.isPeriod == true -> MaterialTheme.colorScheme.primary
+                                dayMark?.isPredictedPeriod == true -> MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+                                dayMark?.isOvulation == true -> MaterialTheme.colorScheme.tertiary
+                                dayMark?.isFertile == true -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.22f)
+                                else -> MaterialTheme.colorScheme.surfaceVariant
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(markerColor),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = date.dayOfMonth.toString(),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (dayMark?.isPeriod == true || dayMark?.isOvulation == true) {
+                                        MaterialTheme.colorScheme.onPrimary
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurface
+                                    },
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -633,55 +1009,79 @@ private fun InsightsPage(report: ReportData) {
 }
 
 @Composable
-private fun StatGrid(report: ReportData) {
+private fun FrequencyTableCard(
+    headers: Triple<String, String, String>,
+    rows: List<Triple<String, String, String>>,
+) {
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
-        StatRow(stringResource(R.string.reports_cycles_analyzed), report.cyclesAnalyzed.toString())
-        StatRow(
-            stringResource(R.string.reports_average_cycle_length),
-            stringResource(R.string.reports_days_value, report.averageCycleLength.toInt()),
-        )
-        // iOS's own ReportViewModel gates shortest/longest behind cyclesAnalyzed > 0
-        // (nil when there's no real cycle data, omitted from its PDF export note
-        // entirely rather than shown as a fabricated range) -- shortestCycleDays/
-        // longestCycleDays both default to CycleStatistics.default's placeholder
-        // (28) when zero cycles are analyzed, which would otherwise render as a
-        // meaningless "28 / 28 days" range presented as if it were the user's own
-        // data. Matching iOS's real gating here, not inventing a new one.
-        if (report.cyclesAnalyzed > 0) {
-            StatRow(
-                stringResource(R.string.reports_shortest_longest),
-                stringResource(
-                    R.string.reports_shortest_longest_value,
-                    report.shortestCycleDays,
-                    report.longestCycleDays,
-                ),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = headers.first,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            if (headers.second.isNotBlank()) {
+                Text(
+                    text = headers.second,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                text = headers.third,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        StatRow(
-            stringResource(R.string.reports_average_period_length),
-            stringResource(R.string.reports_days_value, report.averagePeriodLength.toInt()),
-        )
-        StatRow(
-            stringResource(R.string.reports_regularity),
-            stringResource(R.string.reports_percent_value, (report.regularityScore * 100).toInt()),
-        )
-        StatRow(
-            stringResource(R.string.reports_prediction_confidence),
-            stringResource(R.string.reports_percent_value, (report.predictionConfidence * 100).toInt()),
-        )
+        rows.forEach { row ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = SakhiSpacing.space1),
+                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+                verticalAlignment = Alignment.Top,
+            ) {
+                Text(
+                    text = row.first,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                if (row.second.isNotBlank()) {
+                    Text(
+                        text = row.second,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Text(
+                    text = row.third,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.End,
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun StatRow(label: String, value: String) {
+private fun PreviewInfoRow(
+    label: String,
+    value: String,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .semantics(mergeDescendants = true) {}
             .padding(vertical = SakhiSpacing.space1),
         horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.Top,
     ) {
         Text(
             text = label,
@@ -692,84 +1092,8 @@ private fun StatRow(label: String, value: String) {
             text = value,
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.End,
+            modifier = Modifier.weight(1f),
         )
-    }
-}
-
-@Composable
-private fun CalendarMonthPreview(month: CalendarMonth) {
-    val context = LocalContext.current
-    val sortedDays = remember(month) { month.days.keys.sortedBy { it.toEpochDays() } }
-    val firstDay = sortedDays.firstOrNull()
-    val monthTitle = if (firstDay == null) {
-        context.getString(R.string.reports_fallback_month, month.month)
-    } else {
-        val monthName = Month.of(firstDay.monthNumber)
-            .getDisplayName(TextStyle.FULL, Locale.getDefault())
-        "$monthName ${month.year}"
-    }
-
-    GlassCard {
-        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
-            Text(
-                text = monthTitle,
-                style = MaterialTheme.typography.titleMedium,
-            )
-            WeekdayHeader()
-            sortedDays.take(14).chunked(7).forEach { week ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    week.forEach { date ->
-                        val markerKey = month.days[date]?.toString()?.lowercase().orEmpty()
-                        val markerDescription = reportMarkerDescription(context, markerKey)
-                        val markerColor = when {
-                            "ovulation" in markerKey || "fertile" in markerKey -> MaterialTheme.colorScheme.tertiary
-                            "predicted" in markerKey -> MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
-                            "pms" in markerKey -> MaterialTheme.colorScheme.secondary
-                            "period" in markerKey -> MaterialTheme.colorScheme.primary
-                            else -> MaterialTheme.colorScheme.outlineVariant
-                        }
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(CircleShape)
-                                .background(markerColor)
-                                .semantics {
-                                    contentDescription = buildString {
-                                        append(date.dayOfMonth)
-                                        append(" ")
-                                        append(monthTitle)
-                                        markerDescription?.let {
-                                            append(", ")
-                                            append(it)
-                                        }
-                                    }
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Text(
-                                text = date.dayOfMonth.toString(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onPrimary,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FrequencyList(items: List<Pair<String, Double>>) {
-    GlassCard(
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        items.take(5).forEach { (name, percentage) ->
-            StatRow(name, stringResource(R.string.reports_percent_value, percentage.toInt()))
-        }
     }
 }
 
@@ -802,15 +1126,6 @@ private fun InsightCard(insight: ReportInsight) {
             )
         }
     }
-}
-
-private fun reportMarkerDescription(context: android.content.Context, markerKey: String): String? = when {
-    "ovulation" in markerKey -> context.getString(R.string.reports_marker_ovulation)
-    "fertile" in markerKey -> context.getString(R.string.reports_marker_fertile)
-    "predicted" in markerKey -> context.getString(R.string.reports_marker_predicted)
-    "pms" in markerKey -> context.getString(R.string.reports_marker_pms)
-    "period" in markerKey -> context.getString(R.string.reports_marker_period)
-    else -> null
 }
 
 @Composable
@@ -970,53 +1285,31 @@ private fun WeekdayHeader() {
     }
 }
 
+private fun fullDate(date: kotlinx.datetime.LocalDate): String {
+    return "${date.dayOfMonth} ${java.time.Month.of(date.monthNumber).getDisplayName(TextStyle.FULL, Locale.getDefault())} ${date.year}"
+}
+
+private fun contextPercent(value: Double): String = "${value.toInt()}%"
+
 private fun buildPreviewPages(
     report: ReportData,
     selectedSections: Set<ReportSection>,
-): List<PreviewPage> {
-    val pages = mutableListOf(
-        PreviewPage(
-            titleRes = R.string.reports_page_cover,
-            type = PreviewPageType.Cover,
-        ),
-        PreviewPage(
-            titleRes = R.string.reports_page_cycle_summary,
-            type = PreviewPageType.CycleSummary,
-        ),
-    )
+): List<PreviewPage> = buildReportPages(report, selectedSections).map { page ->
+    when (page) {
+        ReportDocumentPage.Cover -> PreviewPage(R.string.reports_page_cover, PreviewPageType.Cover)
+        ReportDocumentPage.CycleSummary -> PreviewPage(R.string.reports_page_cycle_summary, PreviewPageType.CycleSummary)
+        ReportDocumentPage.PeriodCalendar -> PreviewPage(R.string.reports_page_period_calendar, PreviewPageType.PeriodCalendar)
+        ReportDocumentPage.SymptomsFlow -> PreviewPage(R.string.reports_page_symptoms_flow, PreviewPageType.SymptomsFlow)
+        ReportDocumentPage.MoodPatterns -> PreviewPage(R.string.reports_page_mood_patterns, PreviewPageType.MoodPatterns)
+        ReportDocumentPage.Insights -> PreviewPage(R.string.reports_page_insights, PreviewPageType.Insights)
+    }
+}
 
-    if (ReportSection.PeriodCalendar in selectedSections && report.calendarMonths.isNotEmpty()) {
-        pages += PreviewPage(
-            titleRes = R.string.reports_page_period_calendar,
-            type = PreviewPageType.PeriodCalendar,
-        )
-    }
-    if (ReportSection.Symptoms in selectedSections &&
-        (report.topSymptoms.isNotEmpty() || report.flowTimeline.isNotEmpty())
-    ) {
-        pages += PreviewPage(
-            titleRes = R.string.reports_page_symptoms_flow,
-            type = PreviewPageType.SymptomsFlow,
-        )
-    }
-    if (ReportSection.MoodPatterns in selectedSections && report.topMoods.isNotEmpty()) {
-        pages += PreviewPage(
-            titleRes = R.string.reports_page_mood_patterns,
-            type = PreviewPageType.MoodPatterns,
-        )
-    }
-    if (ReportSection.Medications in selectedSections) {
-        pages += PreviewPage(
-            titleRes = R.string.reports_page_medications,
-            type = PreviewPageType.Medications,
-        )
-    }
-    if (ReportSection.Insights in selectedSections && report.insights.isNotEmpty()) {
-        pages += PreviewPage(
-            titleRes = R.string.reports_page_insights,
-            type = PreviewPageType.Insights,
-        )
-    }
-
-    return pages
+private fun reportSectionIcon(section: ReportSection): ImageVector = when (section) {
+    ReportSection.CycleOverview -> Icons.Outlined.Autorenew
+    ReportSection.PeriodCalendar -> Icons.Outlined.OutlinedCalendarMonth
+    ReportSection.Symptoms -> Icons.Filled.Healing
+    ReportSection.MoodPatterns -> Icons.Filled.SentimentSatisfied
+    ReportSection.Medications -> Icons.Filled.Medication
+    ReportSection.Insights -> Icons.Filled.Lightbulb
 }

@@ -18,10 +18,12 @@ import kotlinx.datetime.minus
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.date.DateConverter
-import team.sakhi.report.ReportData
 import team.sakhi.report.ReportDataBuilder
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.PeriodLogRepository
+import team.sakhi.repositories.UserProfileRepository
+import team.sakhi.session.Permission
+import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 
 enum class ReportsPhase {
@@ -108,9 +110,8 @@ data class ReportConfigUiState(
 data class ReportsUiState(
     val phase: ReportsPhase,
     val config: ReportConfigUiState,
-    val report: ReportData? = null,
+    val document: ReportDocument? = null,
     val errorMessage: String? = null,
-    val isExportingPdf: Boolean = false,
     val exportErrorMessage: String? = null,
     val sharePdfUri: Uri? = null,
 )
@@ -123,6 +124,7 @@ class ReportsViewModel(
     private val sessionManager: SessionManager,
     private val cycleDataRepository: CycleDataRepository,
     private val periodLogRepository: PeriodLogRepository,
+    private val userProfileRepository: UserProfileRepository,
     private val reportPdfExporter: ReportPdfExporter,
     private val hapticManager: AndroidHapticManager,
     private val appContext: Context,
@@ -130,12 +132,16 @@ class ReportsViewModel(
 
     private val _uiState = MutableStateFlow(defaultUiState())
     val uiState: StateFlow<ReportsUiState> = _uiState.asStateFlow()
+    private var preparedSharePdfUri: Uri? = null
 
     fun selectPreset(preset: ReportDateRangePreset) {
         val (startDate, endDate) = preset.dateRange()
+        clearPreparedPdf()
         _uiState.value = _uiState.value.copy(
             phase = ReportsPhase.Config,
             errorMessage = null,
+            exportErrorMessage = null,
+            sharePdfUri = null,
             config = _uiState.value.config.copy(
                 preset = preset,
                 startDate = startDate,
@@ -150,7 +156,10 @@ class ReportsViewModel(
         if (!updatedSections.add(section)) {
             updatedSections.remove(section)
         }
+        clearPreparedPdf()
         _uiState.value = _uiState.value.copy(
+            exportErrorMessage = null,
+            sharePdfUri = null,
             config = _uiState.value.config.copy(sections = updatedSections),
         )
     }
@@ -171,16 +180,17 @@ class ReportsViewModel(
     }
 
     fun returnToConfig() {
+        clearPreparedPdf()
         _uiState.value = _uiState.value.copy(
             phase = ReportsPhase.Config,
             exportErrorMessage = null,
             sharePdfUri = null,
-            isExportingPdf = false,
         )
     }
 
     fun generate() {
-        val userId = sessionManager.current?.targetUserId
+        val requestedSession = sessionManager.current
+        val userId = requestedSession?.targetUserId
         if (userId.isNullOrBlank()) {
             _uiState.value = _uiState.value.copy(
                 phase = ReportsPhase.Error,
@@ -188,11 +198,34 @@ class ReportsViewModel(
             )
             return
         }
+        // Real security fix (2026-07-15): partner-mode report generation is a
+        // legitimate feature, but per Karan's explicit direction it must depend
+        // entirely on the primary user having granted this specific permission --
+        // same authorization model as every granular Logging view permission.
+        // Before this fix there was NO gate here at all: any connected partner
+        // could generate/export a full report regardless of what was actually
+        // granted, and `SakhiDeepLink.OpenReport` reaches this screen without
+        // even the `!isPartnerRole` nav-item hiding the main Profile route relies
+        // on -- a real, live unauthorized-access path, the same class as the four
+        // `targetUserId` instances fixed earlier today, just needing a permission
+        // check added instead of a self-only block, since this one is meant to
+        // work for an authorized partner.
+        if (!requestedSession.isViewingOwnData && !requestedSession.can(Permission.GENERATE_REPORTS)) {
+            _uiState.value = _uiState.value.copy(
+                phase = ReportsPhase.Error,
+                errorMessage = appContext.getString(R.string.reports_permission_denied_error),
+            )
+            return
+        }
+        val activeSession = requestedSession ?: return
 
         val config = _uiState.value.config
+        clearPreparedPdf()
         _uiState.value = _uiState.value.copy(
             phase = ReportsPhase.Generating,
             errorMessage = null,
+            exportErrorMessage = null,
+            sharePdfUri = null,
         )
 
         viewModelScope.launch {
@@ -204,16 +237,18 @@ class ReportsViewModel(
                     to = config.endDate,
                 )
             }
+            val profileDeferred = async { userProfileRepository.get(userId) }
 
             val cyclesResult = cyclesDeferred.await()
             val logsResult = logsDeferred.await()
 
-            if (discardStaleGeneration(userId)) return@launch
+            if (discardStaleGeneration(activeSession)) return@launch
 
             val cycles = cyclesResult.getOrNull()
             val logs = logsResult.getOrNull()
 
             if (cycles == null || logs == null) {
+                if (discardStaleGeneration(activeSession)) return@launch
                 val errorMessage = cyclesResult.exceptionOrNull()?.message
                     ?: logsResult.exceptionOrNull()?.message
                     ?: appContext.getString(R.string.reports_load_failed)
@@ -224,73 +259,134 @@ class ReportsViewModel(
                 return@launch
             }
 
+            val cyclesForReport = cycles.filteredForReportWindow(
+                from = config.startDate,
+                to = config.endDate,
+            )
             val report = ReportDataBuilder.build(
                 userId = userId,
-                cycles = cycles,
+                cycles = cyclesForReport,
                 logs = logs,
                 from = config.startDate,
                 to = config.endDate,
             )
+            val profile = profileDeferred.await().getOrNull()
+            val document = ReportDocument(
+                report = report,
+                subjectName = activeSession.resolveSubjectName(profile?.name),
+                generatedOn = DateConverter.today(),
+                nextPredictedPeriod = profile?.cycleStatistics?.predictedNextPeriod
+                    ?: cyclesForReport.maxByOrNull { it.cycleStartDate }?.cycleEndDate?.let { cycleEndDate ->
+                        DateConverter.addDays(cycleEndDate, 1)
+                    },
+                trackedCyclesCount = cyclesForReport.count { it.isComplete && it.cycleLength != null },
+            )
+            if (discardStaleGeneration(activeSession)) return@launch
+
+            val preparedUri = runCatching {
+                withContext(Dispatchers.IO) {
+                    val file = reportPdfExporter.export(
+                        document = document,
+                        selectedSections = config.sections,
+                    )
+                    reportPdfExporter.buildShareUri(file)
+                }
+            }.getOrElse { throwable ->
+                if (discardStaleGeneration(activeSession)) return@launch
+                _uiState.value = _uiState.value.copy(
+                    phase = ReportsPhase.Error,
+                    errorMessage = throwable.message
+                        ?: appContext.getString(R.string.reports_export_failed),
+                )
+                return@launch
+            }
+
+            if (discardStaleGeneration(activeSession)) return@launch
+            preparedSharePdfUri = preparedUri
 
             _uiState.value = _uiState.value.copy(
                 phase = ReportsPhase.Preview,
-                report = report,
+                document = document,
                 errorMessage = null,
                 exportErrorMessage = null,
             )
         }
     }
 
-    private fun discardStaleGeneration(requestedTargetUserId: String): Boolean {
-        if (sessionManager.current?.targetUserId == requestedTargetUserId) {
+    private fun discardStaleGeneration(requestedSession: SessionContext?): Boolean {
+        if (isStillCurrent(requestedSession)) {
             return false
         }
 
         if (_uiState.value.phase == ReportsPhase.Generating) {
+            clearPreparedPdf()
             _uiState.value = _uiState.value.copy(
                 phase = ReportsPhase.Config,
+                document = null,
                 errorMessage = null,
+                exportErrorMessage = null,
+                sharePdfUri = null,
             )
         }
         return true
     }
 
     fun exportPdf() {
-        val report = _uiState.value.report ?: run {
+        val preparedUri = preparedSharePdfUri ?: run {
             _uiState.value = _uiState.value.copy(
-                exportErrorMessage = appContext.getString(R.string.reports_export_before_preview),
+                exportErrorMessage = appContext.getString(
+                    if (_uiState.value.document == null) {
+                        R.string.reports_export_before_preview
+                    } else {
+                        R.string.reports_export_failed
+                    },
+                ),
             )
             return
         }
         hapticManager.impact(HapticImpact.MEDIUM)
-
-        val selectedSections = _uiState.value.config.sections
         _uiState.value = _uiState.value.copy(
-            isExportingPdf = true,
             exportErrorMessage = null,
-            sharePdfUri = null,
+            sharePdfUri = preparedUri,
         )
+    }
 
-        viewModelScope.launch {
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    val file = reportPdfExporter.export(
-                        report = report,
-                        selectedSections = selectedSections,
-                    )
-                    reportPdfExporter.buildShareUri(file)
-                }
-            }.onSuccess { uri ->
-                _uiState.value = _uiState.value.copy(
-                    isExportingPdf = false,
-                    sharePdfUri = uri,
-                )
-            }.onFailure { throwable ->
-                _uiState.value = _uiState.value.copy(
-                    isExportingPdf = false,
-                    exportErrorMessage = throwable.message ?: appContext.getString(R.string.reports_export_failed),
-                )
-            }
+    private fun isStillCurrent(session: SessionContext?): Boolean = sessionManager.current == session
+
+    private fun clearPreparedPdf() {
+        preparedSharePdfUri = null
+    }
+
+    private fun SessionContext.resolveSubjectName(profileName: String?): String {
+        return when {
+            profileName.isMeaningfulPersonName() -> profileName.orEmpty()
+            !isViewingOwnData -> activePartnership?.partnerName
+                ?.takeIfMeaningfulPersonName()
+                ?: appContext.getString(R.string.reports_subject_default)
+            userName.isMeaningfulPersonName() -> userName
+            else -> appContext.getString(R.string.reports_subject_default)
+        }
+    }
+
+    private fun String?.isMeaningfulPersonName(): Boolean = !takeIfMeaningfulPersonName().isNullOrEmpty()
+
+    private fun String?.takeIfMeaningfulPersonName(): String? {
+        val trimmed = this?.trim().orEmpty()
+        if (trimmed.isEmpty()) return null
+        val normalized = trimmed.lowercase()
+        if (normalized.contains("partner") || normalized.contains("sakhi") || normalized == "unknown") {
+            return null
+        }
+        return trimmed
+    }
+
+    private fun List<team.sakhi.models.CycleData>.filteredForReportWindow(
+        from: LocalDate,
+        to: LocalDate,
+    ): List<team.sakhi.models.CycleData> {
+        val earliestCycleStart = from.minus(2, DateTimeUnit.YEAR)
+        return filter { cycle ->
+            cycle.cycleStartDate >= earliestCycleStart && cycle.cycleStartDate <= to
         }
     }
 
