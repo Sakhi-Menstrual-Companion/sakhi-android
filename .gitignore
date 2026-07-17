@@ -25,3 +25,17 @@ captures/
 
 ## Kotlin/KSP generated
 **/generated/
+.kotlin/
+
+## Local worker-sandbox Gradle/Android/Kotlin state — machine-local, never commit
+.gradle-codex/
+.gradle-sandbox-builds/
+.gradle-local/
+.gradle-project-cache/
+.gradle-sandbox.init.gradle.kts
+.home-codex/
+.kotlin-codex/
+.android-codex/
+
+## Supabase CLI local project-link cache
+supabase/.temp/
