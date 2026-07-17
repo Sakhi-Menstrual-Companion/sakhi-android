@@ -2,6 +2,7 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.androidx.baselineprofile)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
@@ -31,6 +32,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+        // Temporary fallback keeps clean checkouts buildable, but the new
+        // Nearby Places map surfaces still need a Maps-authorized runtime key.
+        manifestPlaceholders["googleMapsApiKey"] = secret(
+            "GOOGLE_MAPS_API_KEY",
+            secret("GOOGLE_PLACES_API_KEY"),
+        )
 
         buildConfigField("String", "SUPABASE_URL", "\"${secret("SUPABASE_URL")}\"")
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${secret("SUPABASE_ANON_KEY")}\"")
@@ -46,7 +53,14 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            // No real release keystore yet (BLOCKED ON KARAN, see plan Section 8 /
+            // Release readiness) -- signed with the implicit debug key purely so this
+            // minified build can be installed and smoke-tested on a real
+            // emulator/device. Must be replaced with a real signing config before
+            // this build type is ever used for an actual release artifact.
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 
@@ -91,6 +105,7 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.profileinstaller)
     // FragmentActivity is required by MainActivity — BiometricPrompt (:core:platform)
     // needs a FragmentActivity host, not a plain ComponentActivity.
     implementation("androidx.fragment:fragment-ktx:1.8.9")
@@ -102,6 +117,25 @@ dependencies {
 
     implementation(libs.koin.core)
     implementation(libs.koin.android)
-    implementation(libs.koin.compose)
-    implementation(libs.koin.androidx.compose)
+    // Excludes org.jetbrains.compose.foundation/runtime: koin-compose(-android) pulls these
+    // in at a strict 1.8.2, a duplicate of this app's real androidx.compose 1.11.4 stack
+    // under the same package names -- caused a real compile failure (Modifier.weight()
+    // resolving against the wrong artifact) before being excluded.
+    implementation(libs.koin.compose) {
+        exclude(group = "org.jetbrains.compose.foundation")
+        exclude(group = "org.jetbrains.compose.runtime")
+    }
+    implementation(libs.koin.androidx.compose) {
+        exclude(group = "org.jetbrains.compose.foundation")
+        exclude(group = "org.jetbrains.compose.runtime")
+    }
+
+    baselineProfile(project(":baseline-profile"))
+}
+
+baselineProfile {
+    // Copies any successfully-generated profile into app/src/... so release
+    // builds consume it automatically; actual generation still requires a
+    // bootable test device/emulator.
+    saveInSrc = true
 }

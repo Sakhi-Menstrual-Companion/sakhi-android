@@ -14,16 +14,21 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.access.FeatureAccessState
+import team.sakhi.android.R
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.feature.auth.AuthViewModel
 import team.sakhi.android.feature.auth.OtpScreen
 import team.sakhi.android.feature.auth.PhoneScreen
 import team.sakhi.android.platform.AndroidAppVersionProvider
@@ -44,6 +49,7 @@ import team.sakhi.auth.resolvedUserId
 import team.sakhi.care.CareRealtimeCoordinator
 import team.sakhi.care.CareRuntimeState
 import team.sakhi.care.CareStore
+import team.sakhi.sync.SyncStore
 import team.sakhi.deeplink.SakhiDeepLink
 import team.sakhi.onboarding.OnboardingCompletionBridge
 import team.sakhi.onboarding.OnboardingFlowCompletion
@@ -93,6 +99,10 @@ fun RootNavHost() {
     // blocked regardless of sign-in state (matches the "keep your data safe"
     // motivation in `ForceUpdatePolicy`'s doc comment).
     LaunchedEffect(Unit) {
+        // The update fetch can wait until the first composition frame commits; it
+        // is not needed to render the first signed-out/home surface, but it does
+        // contend with auth restore and Compose work during cold start.
+        withFrameNanos { }
         updateGateController.checkNow(appVersionProvider.currentVersion)
     }
 
@@ -101,8 +111,8 @@ fun RootNavHost() {
     LaunchedEffect(updateGateState.updateAvailable, updateGateState.forceUpdate) {
         if (updateGateState.updateAvailable && !updateGateState.forceUpdate) {
             ToastManager.show(
-                title = "Update available",
-                message = "A new version of Sakhi is ready.",
+                title = context.getString(R.string.app_update_available_title),
+                message = context.getString(R.string.app_update_available_message),
                 type = ToastType.INFO,
             )
         }
@@ -110,9 +120,9 @@ fun RootNavHost() {
 
     if (updateGateState.forceUpdate) {
         ForceUpdateScreen(
-            title = updateGateState.title ?: "Please update Sakhi",
+            title = updateGateState.title ?: context.getString(R.string.app_force_update_fallback_title),
             message = updateGateState.message
-                ?: "This version is no longer supported. Please update to keep your data safe and the app running properly.",
+                ?: context.getString(R.string.app_force_update_fallback_message),
             onUpdateClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
                 val packageName = context.packageName
@@ -130,8 +140,8 @@ fun RootNavHost() {
             onSupportClick = {
                 hapticManager.impact(HapticImpact.LIGHT)
                 ToastManager.show(
-                    title = "Support",
-                    message = "Please use Help & Support from Profile if the update does not work.",
+                    title = context.getString(R.string.app_support_title),
+                    message = context.getString(R.string.app_force_update_support_message),
                     type = ToastType.INFO,
                 )
             },
@@ -193,11 +203,15 @@ fun RootNavHost() {
     // `Loading` state forever on every cold start unless the user went through a
     // brand-new phone/OTP verification in that process -- a previously
     // signed-in user reopening the app would be stuck on the Splash screen
-    // permanently. Runs once per process; `AuthViewModel.verifyOtp` continues to
-    // own the bridge for in-session sign-in/sign-out after this.
+    // permanently. Run the restore itself on a background dispatcher so the
+    // signed-out cold-start path is not paying secure-storage/session parsing
+    // cost on the main thread before the phone screen can mount.
     LaunchedEffect(Unit) {
-        authRepository.initialize()
-        when (val state = authRepository.sessionState.first()) {
+        val state = withContext(Dispatchers.IO) {
+            authRepository.initialize()
+            authRepository.currentSessionState()
+        }
+        when (state) {
             is SessionState.Authenticated -> appStateInputBridge.setAuthenticated(state.userId)
             is SessionState.LocalOnlyUser -> appStateInputBridge.setLocalOnly(state.userId)
             is SessionState.SessionExpired -> appStateInputBridge.setUnauthenticated()
@@ -283,6 +297,7 @@ private fun HomeSessionGate(
     careStore: CareStore = koinInject(),
     careRealtimeCoordinator: CareRealtimeCoordinator = koinInject(),
     widgetSnapshotManager: AndroidWidgetSnapshotManager = koinInject(),
+    syncStore: SyncStore = koinInject(),
 ) {
     var isReady by remember(session.userId) { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -326,10 +341,21 @@ private fun HomeSessionGate(
     // alive so a later re-entry to Home can call startAsOwner again. destroy()
     // cancels that scope permanently -- only appropriate at real process
     // shutdown, not a Home->SignedOut transition (e.g. sign out then back in).
+    //
+    // `syncStore.clearPartnerHealth()` belongs in this same teardown: `SyncStore`
+    // is a process-lifetime Koin singleton (like `CareStore`), and its
+    // `_partnerHealthSnapshot`/`_syncState` otherwise keep the previous signed-in
+    // user's partner-health data around for whoever `HomeViewModel` reads it for
+    // next -- confirmed via grep that `clearPartnerHealth()` (which already
+    // existed for exactly this purpose) was never called anywhere on either
+    // platform. Found doing the equivalent check for `CareStore.reset()` above:
+    // both are the same "process-lifetime singleton never reset on sign-out" bug
+    // class, just two different stores.
     DisposableEffect(session.userId) {
         onDispose {
             scope.launch { careRealtimeCoordinator.stop() }
             sessionManager.stop()
+            syncStore.clearPartnerHealth()
         }
     }
 
@@ -353,10 +379,25 @@ private fun SplashPlaceholder() {
  * Once verified, `AuthViewModel` itself drives `AppStateInputBridge`, so
  * `AppStateStore.appRoute` moves on to `Onboarding`/`Home` on its own — this local
  * `showOtp` flag only tracks which of the two screens to render meanwhile.
+ *
+ * `resetPhoneFlow()` runs once per fresh entry into this route, synchronously
+ * during composition (via `remember`, not `LaunchedEffect`): `AuthViewModel`
+ * is retained for the whole Activity lifetime (a real sign-out then a later
+ * sign-in in the same process reuses the same instance), so without this reset
+ * a leftover `otpSentTo` from an *earlier* session forces an immediate,
+ * incorrect jump straight to `OtpScreen` — this previously left the real
+ * sign-out screen blank (see the fix note on `AuthViewModel.resetPhoneFlow`).
+ * `LaunchedEffect` was tried first but runs *after* the initial composition
+ * commits, so `PhoneScreen`'s own first read of the stale `uiState` in that
+ * same first frame still hit the bad state and forced the same wrong jump one
+ * cycle later (proven live: it appeared to fix a first sign-out, then
+ * reproduced identically on a second sign-in/sign-out cycle in the same
+ * process) -- `remember` runs the reset before any child composes.
  */
 @Composable
-private fun SignedOutFlow() {
+private fun SignedOutFlow(viewModel: AuthViewModel = koinViewModel()) {
     var showOtp by remember { mutableStateOf(false) }
+    remember(viewModel) { viewModel.resetPhoneFlow() }
 
     if (showOtp) {
         OtpScreen(onOtpVerified = { /* AppStateStore route re-resolves via AppStateInputBridge */ })

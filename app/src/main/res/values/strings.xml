@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">Sakhi</string>
+    <string name="app_update_available_title">Update available</string>
+    <string name="app_update_available_message">A new version of Sakhi is ready.</string>
+    <string name="app_force_update_fallback_title">Please update Sakhi</string>
+    <string name="app_force_update_fallback_message">This version is no longer supported. Please update to keep your data safe and the app running properly.</string>
+    <string name="app_force_update_support_message">Please use Help &amp; Support from Profile if the update does not work.</string>
+    <string name="app_support_title">Support</string>
 </resources>

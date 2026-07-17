@@ -1,6 +1,11 @@
 package team.sakhi.android.app
 
 import android.app.Application
+import android.view.Choreographer
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import org.koin.android.ext.koin.androidContext
 import org.koin.core.context.startKoin
 import org.koin.mp.KoinPlatform
@@ -15,6 +20,7 @@ import team.sakhi.android.feature.onboarding.onboardingFeatureModule
 import team.sakhi.android.feature.profile.profileFeatureModule
 import team.sakhi.android.feature.recommendations.recommendationsFeatureModule
 import team.sakhi.android.feature.reports.reportsFeatureModule
+import team.sakhi.android.platform.AndroidLocaleManager
 import team.sakhi.android.platform.AndroidNotificationReminderManager
 import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.platform.CurrentActivityHolder
@@ -34,6 +40,8 @@ import team.sakhi.platform.BuildConfigProvider
  * only, per the thin-shell rule (plan Section 0).
  */
 class SakhiApplication : Application() {
+    private val deferredStartupScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     override fun onCreate() {
         super.onCreate()
 
@@ -76,10 +84,21 @@ class SakhiApplication : Application() {
             )
         }
 
+        val koin = KoinPlatform.getKoin()
         // CurrentActivityHolder must be attached to the Activity lifecycle explicitly —
         // Koin only constructs it lazily on first `get()`, it doesn't register callbacks.
-        registerActivityLifecycleCallbacks(KoinPlatform.getKoin().get<CurrentActivityHolder>())
-        KoinPlatform.getKoin().get<AndroidNotificationReminderManager>().start()
-        KoinPlatform.getKoin().get<AndroidWidgetSnapshotManager>().start()
+        registerActivityLifecycleCallbacks(koin.get<CurrentActivityHolder>())
+
+        // Locale store reconciliation, reminder scheduling, and widget snapshot
+        // observation are all real startup work, but none are required to draw
+        // the first signed-out/home frame. Move them off the cold-start critical
+        // path so `Application.onCreate()` only does DI/bootstrap wiring.
+        Choreographer.getInstance().postFrameCallback {
+            koin.get<AndroidLocaleManager>().syncPersistedLanguageWithActiveLocale()
+            deferredStartupScope.launch {
+                koin.get<AndroidNotificationReminderManager>().start()
+                koin.get<AndroidWidgetSnapshotManager>().start()
+            }
+        }
     }
 }

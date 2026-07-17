@@ -11,12 +11,15 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
+import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.ui.SakhiModalSheet
 import team.sakhi.android.feature.ai.ChatScreen
 import team.sakhi.android.feature.calendar.CalendarScreen
 import team.sakhi.android.feature.care.CareScreen
 import team.sakhi.android.feature.home.HomeScreen
+import team.sakhi.android.feature.home.HomeViewModel
 import team.sakhi.android.feature.logging.LoggingSheet
 import team.sakhi.android.feature.profile.AboutScreen
 import team.sakhi.android.feature.profile.ActivityLogScreen
@@ -61,7 +64,9 @@ private sealed interface HomeOverlaySheet {
     data class Profile(val initialScreen: ProfileSheetScreen = ProfileSheetScreen.Root) : HomeOverlaySheet
     data object Calendar : HomeOverlaySheet
     data object Chat : HomeOverlaySheet
-    data object Logging : HomeOverlaySheet
+    // Non-null when opened for a specific date other than today -- e.g. Calendar's
+    // own "Log" button/quick-log menu, matching iOS's real per-date `calendarLogVM`.
+    data class Logging(val initialDate: LocalDate? = null) : HomeOverlaySheet
     data class Care(val prefillInviteCode: String? = null) : HomeOverlaySheet
 }
 
@@ -92,6 +97,19 @@ fun HomeNavHost() {
     val navController = rememberNavController()
     var activeOverlaySheet by remember { mutableStateOf<HomeOverlaySheet?>(null) }
     val overlaySheetState = rememberSakhiModalSheetState()
+    // Hoisted (rather than left to HomeScreen's own default `koinViewModel()`) so
+    // the Logging sheet's dismiss below can call `refreshSelectedDate()` on the
+    // exact same instance Home reads `hasLoggedForSelectedDate`/`selectedLog`
+    // from. Real bug found on
+    // the first-ever signed-in walkthrough: `LoggingSheet` uses its own
+    // `koinViewModel<LoggingViewModel>()` instance (unrelated to Home's own
+    // `quickLogViewModel`), and this sheet never leaves the Activity resumed
+    // state, so neither of `HomeScreen`'s two existing refresh triggers
+    // (ON_RESUME, `quickLogViewModel.isSaving` flip) ever fired after a save
+    // through this sheet -- "Logged today" stayed stuck on "Log your day" even
+    // though the save itself succeeded and persisted correctly.
+    val homeViewModel: HomeViewModel = koinViewModel()
+    val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
     // Signed-in deep links resolve here, not in RootNavHost: Care/Reports/Chat/
     // Profile are all routes this graph owns, and Home is guaranteed mounted by
@@ -123,26 +141,55 @@ fun HomeNavHost() {
     NavHost(navController = navController, startDestination = HomeGraphRoute.Home) {
         composable<HomeGraphRoute.Home> {
             HomeScreen(
+                viewModel = homeViewModel,
                 onOpenProfile = { activeOverlaySheet = HomeOverlaySheet.Profile() },
                 onOpenCare = { activeOverlaySheet = HomeOverlaySheet.Care() },
                 onOpenCalendar = { activeOverlaySheet = HomeOverlaySheet.Calendar },
                 onOpenChat = { activeOverlaySheet = HomeOverlaySheet.Chat },
-                onQuickLogClick = { activeOverlaySheet = HomeOverlaySheet.Logging },
+                onQuickLogClick = { date -> activeOverlaySheet = HomeOverlaySheet.Logging(initialDate = date) },
             )
         }
     }
 
     activeOverlaySheet?.let { sheet ->
         SakhiModalSheet(
-            onDismissRequest = { activeOverlaySheet = null },
+            onDismissRequest = {
+                if (sheet is HomeOverlaySheet.Logging) homeViewModel.refreshSelectedDate()
+                activeOverlaySheet = null
+            },
             sheetState = overlaySheetState,
         ) {
             when (sheet) {
                 is HomeOverlaySheet.Profile -> ProfileOverlaySheet(initialScreen = sheet.initialScreen)
-                HomeOverlaySheet.Calendar -> SheetSurface(showDragHandle = true) { CalendarScreen() }
+                HomeOverlaySheet.Calendar -> SheetSurface(showDragHandle = true) {
+                    CalendarScreen(
+                        // Android's overlay lane only supports one active sheet at a
+                        // time (unlike SwiftUI's layered `.sheet()`s), so both actions
+                        // reassign `activeOverlaySheet` directly to the target sheet.
+                        // NOTE: since `overlaySheetState`/this `SakhiModalSheet` call
+                        // site aren't keyed per sheet type, this is an in-place content
+                        // swap inside the same persistent bottom-sheet surface, not a
+                        // real dismiss-then-reopen -- unverified on-device whether that
+                        // reads as an acceptable instant transition or an abrupt cut;
+                        // confirm as part of task #117's on-device walkthrough.
+                        onAskSakhi = { activeOverlaySheet = HomeOverlaySheet.Chat },
+                        onLog = { date -> activeOverlaySheet = HomeOverlaySheet.Logging(initialDate = date) },
+                        onDaySelected = homeViewModel::selectDate,
+                    )
+                }
                 HomeOverlaySheet.Chat -> ChatScreen(onClose = { activeOverlaySheet = null })
-                HomeOverlaySheet.Logging -> LoggingSheet(onClose = { activeOverlaySheet = null })
-                is HomeOverlaySheet.Care -> CareScreen(prefillInviteCode = sheet.prefillInviteCode)
+                is HomeOverlaySheet.Logging -> LoggingSheet(
+                    hasPeriodData = homeUiState.hasCycleData || homeUiState.cyclesAnalyzed > 0,
+                    initialDate = sheet.initialDate,
+                    onClose = {
+                        homeViewModel.refreshSelectedDate()
+                        activeOverlaySheet = null
+                    },
+                )
+                is HomeOverlaySheet.Care -> CareScreen(
+                    prefillInviteCode = sheet.prefillInviteCode,
+                    onClose = { activeOverlaySheet = null },
+                )
             }
         }
     }
