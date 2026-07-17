@@ -1,11 +1,16 @@
 package team.sakhi.android.designsystem
 
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -122,15 +127,46 @@ private fun sakhiTypography(): Typography {
 fun phasePrimaryColor(phase: CyclePhase): androidx.compose.ui.graphics.Color =
     PhaseVisualStyle.colorHex(phase).toComposeColor()
 
+/**
+ * The app's actual resolved dark/light state, as `MainActivity` computed it from
+ * `ThemePreferenceStore` (System/Light/Dark) -- NOT the raw OS setting. Any
+ * composable deciding which phase-color variant to draw (`SakhiColors.resolved(isDark)`,
+ * calendar marker fills, etc.) must read this, not call `isSystemInDarkTheme()`
+ * directly: doing so ignores the user's in-app Light/Dark override and desyncs
+ * from `MaterialTheme.colorScheme`, which *does* honor it -- e.g. Home's food-list
+ * text silently went near-invisible (light-on-light) when the OS was in light mode
+ * but the in-app Theme was set to Dark, since `MaterialTheme.colorScheme.onSurface`
+ * correctly went dark-mode-light while the phase background stayed on the
+ * OS-detected light palette. Found via a real light/dark on-device comparison.
+ */
+val LocalSakhiDarkTheme = compositionLocalOf { false }
+
 @Composable
 fun SakhiTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
     val brand = if (darkTheme) DarkBrandColors else LightBrandColors
-    MaterialTheme(
-        colorScheme = materialColorScheme(brand, darkTheme),
-        typography = sakhiTypography(),
-        content = content,
-    )
+    CompositionLocalProvider(LocalSakhiDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = materialColorScheme(brand, darkTheme),
+            typography = sakhiTypography(),
+        ) {
+            // Material3's `LocalContentColor` defaults to plain black app-wide unless
+            // something explicitly provides it -- normally a `Surface`/`Scaffold` does
+            // this. This app has neither at the root (each screen paints its own
+            // background), so every `Text` without an explicit `color` silently
+            // rendered black regardless of theme -- invisible in light mode by
+            // coincidence, but genuinely illegible dark-on-dark throughout the app in
+            // dark mode. Found via a real light/dark on-device comparison (Home's card
+            // titles and stat numbers). This root `Surface` is fully painted over by
+            // every screen's own background (verified), so it changes nothing visually
+            // except correctly seeding `LocalContentColor` from `colorScheme.onBackground`.
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background,
+                content = content,
+            )
+        }
+    }
 }
