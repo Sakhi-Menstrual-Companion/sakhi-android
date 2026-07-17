@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.calendar
 
+import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -66,6 +67,7 @@ class CalendarViewModel(
     private val sessionManager: SessionManager,
     private val cycleDataRepository: CycleDataRepository,
     private val hapticManager: AndroidHapticManager,
+    private val appContext: Context,
 ) : ViewModel() {
 
     private val visibleMonth = MutableStateFlow(currentMonthStart())
@@ -160,6 +162,7 @@ class CalendarViewModel(
     ) {
         val selectedDate = _uiState.value.selectedDate
         cachedSession = session
+        cachedCycles = emptyList()
         if (session == null) {
             val monthCache = buildMonthCache(
                 months = preloadMonthsFor(month),
@@ -187,6 +190,19 @@ class CalendarViewModel(
             error = null,
             hasAnyCalendarAccess = hasCalendarAccess(session),
         )
+
+        if (!hasCalendarAccess(session)) {
+            _uiState.value = CalendarUiState(
+                visibleMonth = month,
+                selectedDate = selectedDate,
+                days = initialCache[month],
+                monthCache = initialCache,
+                isLoading = false,
+                error = null,
+                hasAnyCalendarAccess = false,
+            )
+            return
+        }
 
         val requestedTargetUserId = session.targetUserId
         cycleDataRepository.getAll(requestedTargetUserId)
@@ -227,7 +243,8 @@ class CalendarViewModel(
                     days = monthCache[month],
                     monthCache = monthCache,
                     isLoading = false,
-                    error = throwable.message ?: "Failed to load calendar",
+                    error = throwable.message
+                        ?: appContext.getString(R.string.calendar_load_failed),
                     hasAnyCalendarAccess = hasCalendarAccess(session),
                 )
             }

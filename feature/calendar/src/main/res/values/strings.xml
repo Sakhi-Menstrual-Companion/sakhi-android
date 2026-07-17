@@ -2,10 +2,21 @@
     <string name="calendar_no_access">This viewer does not have calendar access.</string>
     <string name="calendar_previous_month">Previous month</string>
     <string name="calendar_next_month">Next month</string>
+    <string name="calendar_month_year">%1$s %2$d</string>
     <string name="calendar_expand_year_view">Expand year view</string>
     <string name="calendar_today">Today</string>
+    <string name="calendar_load_failed">Failed to load calendar</string>
     <string name="calendar_previous_year">Previous year</string>
     <string name="calendar_collapse_year_view">Collapse year view</string>
     <string name="calendar_current_year">Current year</string>
     <string name="calendar_next_year">Next year</string>
+    <string name="calendar_edit_period_dates">Edit Period Dates</string>
+    <string name="calendar_edit_period_dates_active">Edit period dates</string>
+    <string name="calendar_edit_period_dates_cancel">Cancel editing period dates</string>
+    <string name="calendar_edit_period_dates_undo">Undo</string>
+    <string name="calendar_edit_period_dates_save">Save</string>
+    <plurals name="calendar_edit_period_dates_count">
+        <item quantity="one">%1$d day</item>
+        <item quantity="other">%1$d days</item>
+    </plurals>
 </resources>
