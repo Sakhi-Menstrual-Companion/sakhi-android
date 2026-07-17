@@ -208,6 +208,22 @@ class AuthViewModel(
         _uiState.value = _uiState.value.copy(verifiedAuthResult = null)
     }
 
+    // `AuthViewModel` is Koin `viewModel`-scoped (retained for the Activity's
+    // whole lifetime, not recreated per sign-in attempt), so a real sign-out
+    // followed by a return to `PhoneScreen` reuses this same instance with
+    // whatever `otpSentTo` was left over from the *previous* successful
+    // login -- `consumeVerifiedAuthResult()` clears `verifiedAuthResult` but
+    // never touched `otpSentTo`. `PhoneScreen`'s own `otpSentTo != null &&
+    // verifiedAuthResult == null` guard then fires on the very first
+    // recomposition after sign-out and force-navigates to `OtpScreen` using a
+    // phone number from a prior session, as a same-composition-frame state
+    // write rather than a real user action -- the real, reproducible cause of
+    // the sign-out screen going blank. Called once per fresh entry into the
+    // `SignedOut` route (see `SignedOutFlow`).
+    fun resetPhoneFlow() {
+        _uiState.value = PhoneUiState()
+    }
+
     private fun normalizedPhoneOrNull(state: PhoneUiState): String? {
         return if (state.validation == PhoneValidationResult.Valid) {
             "${state.selectedCountry.dialCode}${state.localDigits}"

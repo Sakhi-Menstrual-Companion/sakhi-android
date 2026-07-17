@@ -24,16 +24,23 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.delay
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -53,6 +60,8 @@ fun CountryPicker(
     asSheet: Boolean = false,
 ) {
     var query by remember { mutableStateOf("") }
+    val searchFieldFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
     val filtered = remember(query) {
         if (query.isBlank()) {
             PhoneCountry.all
@@ -63,6 +72,13 @@ fun CountryPicker(
                     it.dialCode.contains(normalizedQuery)
             }
         }
+    }
+    LaunchedEffect(asSheet) {
+        if (!asSheet) return@LaunchedEffect
+        // Match iOS CountryPickerSheet's focusOnAppear behavior once the sheet lands.
+        delay(150)
+        searchFieldFocusRequester.requestFocus()
+        keyboardController?.show()
     }
 
     Column(
@@ -102,10 +118,12 @@ fun CountryPicker(
             }
         }
 
+        val searchFieldLabel = stringResource(R.string.auth_country_picker_search_placeholder)
         SakhiTextField(
             value = query,
             onValueChange = { query = it },
-            placeholder = stringResource(R.string.auth_country_picker_search_placeholder),
+            placeholder = searchFieldLabel,
+            textFieldModifier = Modifier.focusRequester(searchFieldFocusRequester),
             leadingContent = {
                 Icon(
                     imageVector = Icons.Rounded.Search,
@@ -123,7 +141,12 @@ fun CountryPicker(
                     )
                 }
             },
-            modifier = Modifier.padding(bottom = SakhiSpacing.space2),
+            // Placeholder text alone disappears from the accessibility tree once the
+            // field has real input, same class of gap fixed on PhoneScreen's field above --
+            // this keeps "Search for a country" announced by TalkBack persistently.
+            modifier = Modifier
+                .padding(bottom = SakhiSpacing.space2)
+                .semantics { contentDescription = searchFieldLabel },
         )
 
         if (filtered.isEmpty()) {

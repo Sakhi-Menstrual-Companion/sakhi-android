@@ -22,17 +22,30 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.semantics.semantics
+import kotlinx.coroutines.delay
 import team.sakhi.android.designsystem.SakhiRadius
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiFontSize
@@ -55,6 +68,7 @@ fun PhoneScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var showCountryPicker by remember { mutableStateOf(false) }
+    var phoneFieldFocusToken by remember { mutableIntStateOf(0) }
     val countryPickerSheetState = rememberSakhiModalSheetState()
 
     uiState.otpSentTo?.takeIf { uiState.verifiedAuthResult == null }?.let { phone ->
@@ -64,7 +78,10 @@ fun PhoneScreen(
 
     if (showCountryPicker) {
         SakhiModalSheet(
-            onDismissRequest = { showCountryPicker = false },
+            onDismissRequest = {
+                showCountryPicker = false
+                phoneFieldFocusToken += 1
+            },
             sheetState = countryPickerSheetState,
         ) {
             CountryPicker(
@@ -72,8 +89,12 @@ fun PhoneScreen(
                 onCountrySelected = { country ->
                     viewModel.selectCountry(country)
                     showCountryPicker = false
+                    phoneFieldFocusToken += 1
                 },
-                onDismiss = { showCountryPicker = false },
+                onDismiss = {
+                    showCountryPicker = false
+                    phoneFieldFocusToken += 1
+                },
                 asSheet = true,
             )
         }
@@ -105,6 +126,7 @@ fun PhoneScreen(
                     onDigitsChanged = viewModel::onPhoneDigitsChanged,
                     hasError = uiState.error != null,
                     errorText = uiState.error,
+                    focusRequestToken = phoneFieldFocusToken,
                     modifier = Modifier.padding(top = SakhiSpacing.space6),
                 )
             }
@@ -135,8 +157,19 @@ private fun PhoneEntryField(
     onDigitsChanged: (String) -> Unit,
     hasError: Boolean,
     errorText: String?,
+    focusRequestToken: Int,
     modifier: Modifier = Modifier,
 ) {
+    val phoneFieldFocusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    var isFocused by remember { mutableStateOf(false) }
+    LaunchedEffect(focusRequestToken) {
+        // Match iOS PhoneStep's initial focusOnAppear and its refocus after the
+        // country picker sheet closes so typing can continue without another tap.
+        delay(150)
+        phoneFieldFocusRequester.requestFocus()
+        keyboardController?.show()
+    }
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
@@ -160,9 +193,20 @@ private fun PhoneEntryField(
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            val countryCodeLabel = stringResource(R.string.auth_country_code_label)
+            val countryCodeValue = stringResource(
+                R.string.auth_country_code_value,
+                countryFlag,
+                dialCode,
+            )
             Row(
                 modifier = Modifier
                     .clickable(onClick = onCountryTap)
+                    .clearAndSetSemantics {
+                        contentDescription = countryCodeLabel
+                        stateDescription = countryCodeValue
+                        role = Role.Button
+                    }
                     .padding(horizontal = SakhiSpacing.space4)
                     .height(SakhiSpacing.space12 + SakhiSpacing.space2),
                 verticalAlignment = Alignment.CenterVertically,
@@ -179,7 +223,7 @@ private fun PhoneEntryField(
                 )
                 Icon(
                     imageVector = Icons.Rounded.KeyboardArrowDown,
-                    contentDescription = stringResource(R.string.auth_select_country),
+                    contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
                 )
             }
@@ -193,6 +237,7 @@ private fun PhoneEntryField(
                     .background(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
             )
 
+            val phoneFieldLabel = stringResource(R.string.auth_phone_field_label)
             BasicTextField(
                 value = phoneDigits,
                 onValueChange = onDigitsChanged,
@@ -204,15 +249,18 @@ private fun PhoneEntryField(
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = SakhiSpacing.space4),
+                    .padding(horizontal = SakhiSpacing.space4)
+                    .onFocusChanged { isFocused = it.isFocused }
+                    .focusRequester(phoneFieldFocusRequester)
+                    .semantics { contentDescription = phoneFieldLabel },
                 decorationBox = { innerTextField ->
                     Box(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.CenterStart,
                     ) {
-                        if (phoneDigits.isEmpty()) {
+                        if (phoneDigits.isEmpty() && !isFocused) {
                             Text(
-                                text = stringResource(R.string.auth_phone_placeholder_number),
+                                text = phoneFieldLabel,
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
                             )

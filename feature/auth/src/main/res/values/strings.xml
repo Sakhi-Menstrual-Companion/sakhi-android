@@ -5,6 +5,9 @@
     <string name="auth_phone_sending">Sending...</string>
     <string name="auth_phone_placeholder_number">7898565431</string>
     <string name="auth_select_country">Select your country</string>
+    <string name="auth_country_code_label">Country code</string>
+    <string name="auth_country_code_value">%1$s %2$s</string>
+    <string name="auth_phone_field_label">Phone number</string>
 
     <string name="auth_otp_title">Our Secret Code</string>
     <string name="auth_otp_subtitle">Enter the code we sent to confirm it\'s you.</string>
