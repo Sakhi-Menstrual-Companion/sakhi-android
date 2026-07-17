@@ -8,6 +8,26 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-07-17 21:56 IST, Instructor: generated the real release keystore
+  with Karan's explicit go-ahead, wired it into the build, verified
+  end-to-end.** `keystore/sakhi-release.jks` generated via `keytool`
+  (RSA 2048, alias `sakhi-release`, 10000-day validity, PKCS12 format —
+  store and key password must match for PKCS12, hit and fixed a
+  `Given final block not properly padded` signingReport error from an
+  earlier attempt that used two different passwords). Store/key
+  passwords written only to the git-ignored `secrets.properties`, never
+  printed to any log or chat output. `app/build.gradle.kts` now defines
+  a real `release` signingConfig, falling back to debug only when the
+  keystore file is absent. Verified for real: `:app:signingReport`
+  shows the correct cert, and `:app:assembleRelease` produced a signed
+  APK confirmed via `apksigner verify --print-certs`
+  (SHA-256 `04:B8:FD:D9:BB:38:CB:13:06:EB:FD:E8:42:E4:0A:D4:44:3A:D3:66:E7:3D:BA:E9:07:4E:CC:72:FC:80:11:5D`).
+  Filled the real fingerprint into `config/app-links/assetlinks.json.template`,
+  closing that App Links item down to just "needs hosting." Progress:
+  Development must-ship 105/112 (94%), Overall must-ship 125/140 (89%).
+  Karan still needs to back up the keystore file + passwords himself
+  outside this repo.
+
 - **2026-07-17 15:02:39 IST +0530, Android Work (Claude): full regression pass
   is genuinely green — `BUILD SUCCESSFUL` for
   `testDebugUnitTest` (every module) + `:app:assembleDebug` +

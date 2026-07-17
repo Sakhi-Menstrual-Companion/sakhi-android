@@ -68,9 +68,9 @@ task; append a new entry there after finishing one, per the workflow rules above
 included in "Raw %" (total real coverage, including nice-to-haves). Recompute
 both by hand after ticking or re-tagging any box — do not let this drift.
 
-- **Development — raw: 114 / 123 (93%) · must-ship: 104 / 112 (93%)**
+- **Development — raw: 115 / 123 (93%) · must-ship: 105 / 112 (94%)**
 - **Testing — raw: 24 / 32 (75%) · must-ship: 20 / 28 (71%)**
-- **Overall — raw: 138 / 155 (89%) · must-ship: 124 / 140 (89%)**
+- **Overall — raw: 139 / 155 (90%) · must-ship: 125 / 140 (89%)**
 
 *(2026-07-17 14:38:21 IST +0530: follow-up close-out on Karan's remaining
 non-credential/non-device backlog. One optional UI item closed for real:
@@ -1018,6 +1018,13 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
       the code side is genuinely ready; the only remaining piece is external
       (hosting the file + a real release signing cert), confirmed not something
       this session can resolve, not re-checked as "maybe already done."
+      **Update (2026-07-17):** the real release signing cert now exists (see
+      "Release signing config" above) — `config/app-links/assetlinks.json.template`
+      has the real SHA-256 fingerprint filled in. Only remaining step is
+      Karan/whoever manages the domains hosting this content at
+      `/.well-known/assetlinks.json` on both `sakhi.com` and
+      `sakhi-care.web.app` (the latter is Firebase Hosting — confirm it can
+      serve `/.well-known/` before assuming this is a drop-in).
         - `app/src/main/AndroidManifest.xml`'s https intent-filter already has
           `android:autoVerify="true"` correctly set (line 67), on both
           `sakhi-care.web.app` and `sakhi.com` — no bug, nothing to fix. Grepped
@@ -2442,8 +2449,19 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
 - [x] `SakhiCore` `consumer-rules.pro` written (kotlinx.serialization keep rules) — was
       zero-risk groundwork while `isMinifyEnabled` was false; now actually load-bearing
       since release minification is on (see below)
-- [ ] Release signing config with a real keystore `(BLOCKED ON KARAN)` — only the implicit
-      debug key exists today
+- [x] Release signing config with a real keystore — generated 2026-07-17 with
+      Karan's explicit go-ahead (`keystore/sakhi-release.jks`, git-ignored,
+      alias `sakhi-release`, RSA 2048, 10000-day validity; store/key
+      passwords in `secrets.properties`, also git-ignored — never committed).
+      `app/build.gradle.kts` now defines a real `release` signingConfig that
+      falls back to the debug config only when the keystore file is absent
+      (e.g. a clean CI checkout without the real file). Verified end-to-end:
+      `:app:signingReport` shows the real cert, and a full `:app:assembleRelease`
+      produced a genuinely signed APK confirmed via `apksigner verify --print-certs`
+      (SHA-256 `04:B8:FD:D9:BB:38:CB:13:06:EB:FD:E8:42:E4:0A:D4:44:3A:D3:66:E7:3D:BA:E9:07:4E:CC:72:FC:80:11:5D`).
+      Karan must back up the keystore file + passwords himself outside this
+      repo (e.g. a password manager) — losing them means the app can never be
+      updated on Play Store under this signing identity again.
 - [x] R8 minification (`isMinifyEnabled = true`) enabled and verified safe on a real
       emulator, **including Room**, closing out the earlier partial version of this item.
       Flipped `isMinifyEnabled = true` for the `release` build type in

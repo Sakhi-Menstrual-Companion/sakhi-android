@@ -51,16 +51,32 @@ android {
         buildConfigField("String", "USDA_API_KEY", "\"${secret("USDA_API_KEY")}\"")
     }
 
+    // Real release keystore, generated 2026-07-17 (keystore/sakhi-release.jks,
+    // git-ignored). Falls back to the debug config on a clean checkout where the
+    // keystore/secrets aren't present (e.g. CI without the real file), so the
+    // project still builds -- but any actual release artifact must be built
+    // where the real keystore file and secrets.properties entries exist.
+    val releaseKeystoreFile = rootProject.file(secret("RELEASE_KEYSTORE_PATH", "keystore/sakhi-release.jks"))
+    signingConfigs {
+        if (releaseKeystoreFile.exists()) {
+            create("release") {
+                storeFile = releaseKeystoreFile
+                storePassword = secret("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = secret("RELEASE_KEYSTORE_ALIAS")
+                keyPassword = secret("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            // No real release keystore yet (BLOCKED ON KARAN, see plan Section 8 /
-            // Release readiness) -- signed with the implicit debug key purely so this
-            // minified build can be installed and smoke-tested on a real
-            // emulator/device. Must be replaced with a real signing config before
-            // this build type is ever used for an actual release artifact.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (releaseKeystoreFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 
