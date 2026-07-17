@@ -3,7 +3,7 @@ package team.sakhi.android.feature.ai
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
-/** Registered by :app once the AI route stops using the placeholder shell. */
+/** Koin module for the AI feature. */
 val aiFeatureModule = module {
     viewModel {
         ChatViewModel(
@@ -15,6 +15,8 @@ val aiFeatureModule = module {
             safePlaceRanker = get(),
             locationProvider = get(),
             hapticManager = get(),
+            widgetSnapshotManager = get(),
+            localStore = get(),
             appContext = get(),
         )
     }

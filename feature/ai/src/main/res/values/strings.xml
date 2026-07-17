@@ -5,9 +5,17 @@
     <string name="chat_send">Send</string>
     <string name="chat_title">Sakhi AI</string>
     <string name="chat_online">online</string>
-    <string name="chat_prompt_hint">Ask me anything</string>
+    <string name="chat_open_nearby_places">Open nearby places</string>
+    <string name="chat_header_accessibility_label">Sakhi AI chat</string>
+    <string name="chat_header_accessibility_online">Online</string>
+    <string name="chat_header_accessibility_last_seen_today_at">Last seen today at %1$s</string>
+    <string name="chat_last_seen_today_at">last seen today at %1$s</string>
+    <string name="chat_last_seen_time_format">h:mm a</string>
     <string name="chat_today">Today</string>
     <string name="chat_nearby_places">Nearby Places</string>
+    <string name="chat_places_within_radius">%1$d within %2$s</string>
+    <string name="chat_search_radius">Search radius</string>
+    <string name="chat_no_places_within">No places within %1$s</string>
     <string name="chat_place_distance_away">%1$s away</string>
     <string name="chat_place_rating">★ %1$.1f</string>
     <string name="chat_go">Go</string>
@@ -19,35 +27,110 @@
 
     <string name="chat_speaker_you">You</string>
     <string name="chat_speaker_sakhi">Sakhi</string>
+    <string name="chat_message_content_description">%1$s, %2$s</string>
     <string name="chat_semantics_starred">starred</string>
     <string name="chat_status_failed">Failed to send</string>
     <string name="chat_status_sending">Sending</string>
     <string name="chat_status_read">Read</string>
     <string name="chat_status_sent">Sent</string>
+    <string name="chat_typing">Sakhi is typing</string>
 
     <string name="chat_placeholder_ask_anything">Ask Sakhi anything...</string>
     <string name="chat_placeholder_feeling_today">How are you feeling today?</string>
     <string name="chat_placeholder_on_your_mind">What\'s on your mind?</string>
     <string name="chat_placeholder_about_cycle">Ask about your cycle...</string>
     <string name="chat_placeholder_worrying">Something worrying you?</string>
+    <string name="chat_placeholder_focused">Message Sakhi...</string>
     <string name="chat_partner_placeholder_hows_she">How\'s she doing today?</string>
     <string name="chat_partner_placeholder_what_needs">What does she need right now?</string>
     <string name="chat_partner_placeholder_going_through">What\'s she going through?</string>
     <string name="chat_partner_placeholder_help_today">How can we help her today?</string>
+    <string name="chat_partner_placeholder_focused">Ask about her...</string>
 
     <string name="chat_report_card_title">Health Report</string>
     <string name="chat_report_card_subtitle">Your cycle data as a PDF</string>
     <string name="chat_report_card_close">Close report card</string>
     <string name="chat_report_card_building">Building your report…</string>
+    <string name="chat_report_card_range_prompt">How far back should I go?</string>
+    <string name="chat_report_card_generate">Generate Report</string>
+
+    <string name="chat_info_subtitle">Your personal health companion</string>
+    <string name="chat_info_stat_messages">Messages</string>
+    <string name="chat_info_stat_cards">Cards</string>
+    <string name="chat_info_stat_starred">Starred</string>
+    <string name="chat_info_search_title">Search in chat</string>
+    <string name="chat_info_media_title">Media and cards</string>
+    <string name="chat_info_starred_title">Starred messages</string>
+    <string name="chat_info_clear_title">Clear conversation</string>
+    <string name="chat_info_clear_message">All your messages with Sakhi will be permanently deleted. This can\'t be undone.</string>
+    <string name="chat_info_clear_cancel">Cancel</string>
+
+    <string name="chat_search_title">Search</string>
+    <string name="chat_search_placeholder">Search in conversation</string>
+    <string name="chat_search_empty_title">Search messages</string>
+    <string name="chat_search_empty_subtitle">Search anything you\'ve said or Sakhi has shared</string>
+    <string name="chat_search_no_results_title">No results</string>
+    <string name="chat_search_no_results_subtitle">Nothing found for \'%1$s\'</string>
+
+    <string name="chat_media_title">Media, links and docs</string>
+    <string name="chat_media_tab_media">Media</string>
+    <string name="chat_media_tab_links">Links</string>
+    <string name="chat_media_tab_docs">Docs</string>
+    <string name="chat_media_empty_cards_title">No health cards yet</string>
+    <string name="chat_media_empty_cards_subtitle">Ask Sakhi about your cycle, mood, or symptoms to see health cards here</string>
+    <string name="chat_media_empty_links_title">No links</string>
+    <string name="chat_media_empty_links_subtitle">Links shared in your conversation will appear here</string>
+    <string name="chat_media_empty_docs_title">No documents</string>
+    <string name="chat_media_empty_docs_subtitle">Health summaries and reports shared by Sakhi will appear here</string>
+
+    <string name="chat_starred_title">Starred</string>
+    <string name="chat_starred_empty_title">No starred messages</string>
+    <string name="chat_starred_empty_subtitle">Long press any message in the chat to star it. It will appear here.</string>
+    <string name="chat_starred_unstar">Unstar</string>
+
+    <string name="chat_option_selected">Selected</string>
+    <string name="chat_option_not_selected">Not selected</string>
+
+    <string name="chat_card_cycle_status">Cycle status</string>
+    <string name="chat_card_period_prediction">Period prediction</string>
+    <string name="chat_card_phase_info">Phase info</string>
+    <string name="chat_card_ovulation_window">Ovulation window</string>
+    <string name="chat_card_flow">Flow</string>
+    <string name="chat_card_cramp_relief">Cramp relief</string>
+    <string name="chat_card_symptom_summary">Symptom summary</string>
+    <string name="chat_card_mood">Mood</string>
+    <string name="chat_card_doctor_visit">Doctor visit</string>
+    <string name="chat_card_safety">Safety</string>
+    <string name="chat_card_tip">Tip</string>
+    <string name="chat_card_affirmation">Affirmation</string>
+    <string name="chat_card_hydration">Hydration</string>
+    <string name="chat_card_sleep">Sleep</string>
+    <string name="chat_card_stress_relief">Stress relief</string>
+    <string name="chat_card_medication">Medication</string>
+    <string name="chat_card_check_in">Check-in</string>
+    <string name="chat_card_temperature">Temperature</string>
+    <string name="chat_card_calendar_preview">Calendar preview</string>
+    <string name="chat_card_pms">PMS</string>
+    <string name="chat_card_care_alert">Care alert</string>
+    <string name="chat_card_nearby_places">Nearby places</string>
+    <string name="chat_card_default">Sakhi card</string>
 
     <string name="chat_error_location_permission">I need location access to find nearby places. You can enable it in Settings any time.</string>
+    <string name="chat_error_places_unavailable">I couldn\'t load nearby places right now. Try again in a moment.</string>
+    <string name="chat_error_no_nearby_places">I couldn\'t find any nearby places from your current location.</string>
     <string name="chat_error_report_retry">I couldn\'t generate the report this time. Try again in a moment.</string>
+    <string name="chat_error_report_permission_denied">She hasn\'t given you permission to generate or export reports.</string>
     <string name="chat_report_ready">Your report is ready. Sharing it now.</string>
     <string name="chat_error_load_history">Unable to load chat history right now.</string>
     <string name="chat_error_send_message">Unable to send that message right now.</string>
-    <string name="chat_fallback_welcome_partner">I\'m here. Tell me how you would like to support her today.</string>
-    <string name="chat_fallback_welcome_self">Hey, %1$s. I\'m here. Tell me what feels most important today.</string>
-    <string name="chat_fallback_name_default">there</string>
+    <string name="chat_auto_log_title">Logged %1$s</string>
+    <string name="chat_auto_log_undo">Undo</string>
+    <string name="chat_welcome_intro_named">Hey, %1$s. I\'m Sakhi. I\'ve been waiting to meet you.</string>
+    <string name="chat_welcome_intro_unnamed">Hey. I\'m Sakhi. I\'ve been waiting to meet you.</string>
+    <string name="chat_welcome_follow_up_named">How has your body been feeling lately? Or if something is on your mind today, just say it.</string>
+    <string name="chat_welcome_follow_up_unnamed">I don\'t know your name yet. What should I call you?</string>
+    <string name="chat_welcome_partner_intro">I\'m here.</string>
+    <string name="chat_welcome_partner_follow_up">Tell me how you would like to support her today.</string>
     <string name="chat_context_subject_default">her</string>
     <string name="chat_context_user_default">you</string>
 </resources>

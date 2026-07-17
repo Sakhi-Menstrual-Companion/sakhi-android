@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,24 +22,27 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ViewCarousel
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -60,13 +64,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.annotation.StringRes
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.BackButton
 import team.sakhi.android.feature.reports.ReportDateRangePreset
 import team.sakhi.android.ui.EmptyState
 import team.sakhi.android.ui.GlassCard
-import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiTextField
 import team.sakhi.models.AICardType
 import team.sakhi.models.ConversationMessage
@@ -83,18 +87,43 @@ internal enum class ChatDestination {
 internal fun ChatInfoScreen(
     messages: List<ConversationMessage>,
     starredStore: StarredMessagesStore,
+    showClearConfirm: Boolean,
     onBack: () -> Unit,
     onOpenSearch: () -> Unit,
     onOpenMedia: () -> Unit,
     onOpenStarred: () -> Unit,
+    onRequestClear: () -> Unit,
+    onDismissClearConfirm: () -> Unit,
+    onConfirmClear: () -> Unit,
 ) {
     val mediaCount = remember(messages) { messages.count { it.isAssistant && it.cardType != AICardType.GENERAL } }
     val linkCount = remember(messages) { extractLinkItems(messages).size }
     val starredCount = remember(messages, starredStore.ids) { messages.count { starredStore.isStarred(it.id) } }
     val messageCount = remember(messages) { messages.count { it.sessionId != "welcome" } }
 
+    if (showClearConfirm) {
+        AlertDialog(
+            onDismissRequest = onDismissClearConfirm,
+            title = { Text(stringResource(R.string.chat_info_clear_title)) },
+            text = { Text(stringResource(R.string.chat_info_clear_message)) },
+            confirmButton = {
+                TextButton(onClick = onConfirmClear) {
+                    Text(
+                        text = stringResource(R.string.chat_info_clear_title),
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissClearConfirm) {
+                    Text(stringResource(R.string.chat_info_clear_cancel))
+                }
+            },
+        )
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
-        ChatSubscreenHeader(title = "Sakhi AI", onBack = onBack)
+        ChatSubscreenHeader(title = stringResource(R.string.chat_title), onBack = onBack)
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
@@ -123,11 +152,11 @@ internal fun ChatInfoScreen(
                         )
                     }
                     Text(
-                        text = "Sakhi AI",
+                        text = stringResource(R.string.chat_title),
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                     )
                     Text(
-                        text = "Your personal health companion",
+                        text = stringResource(R.string.chat_info_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -139,9 +168,21 @@ internal fun ChatInfoScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
                 ) {
-                    ChatStatTile(value = messageCount.toString(), label = "Messages", modifier = Modifier.weight(1f))
-                    ChatStatTile(value = mediaCount.toString(), label = "Cards", modifier = Modifier.weight(1f))
-                    ChatStatTile(value = starredCount.toString(), label = "Starred", modifier = Modifier.weight(1f))
+                    ChatStatTile(
+                        value = messageCount.toString(),
+                        label = stringResource(R.string.chat_info_stat_messages),
+                        modifier = Modifier.weight(1f),
+                    )
+                    ChatStatTile(
+                        value = mediaCount.toString(),
+                        label = stringResource(R.string.chat_info_stat_cards),
+                        modifier = Modifier.weight(1f),
+                    )
+                    ChatStatTile(
+                        value = starredCount.toString(),
+                        label = stringResource(R.string.chat_info_stat_starred),
+                        modifier = Modifier.weight(1f),
+                    )
                 }
             }
 
@@ -149,7 +190,7 @@ internal fun ChatInfoScreen(
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     ChatActionRow(
                         icon = Icons.Filled.Search,
-                        title = "Search in chat",
+                        title = stringResource(R.string.chat_info_search_title),
                         isLast = true,
                         onClick = onOpenSearch,
                     )
@@ -160,7 +201,7 @@ internal fun ChatInfoScreen(
                 GlassCard(modifier = Modifier.fillMaxWidth()) {
                     ChatActionRow(
                         icon = Icons.Filled.ViewCarousel,
-                        title = "Media and cards",
+                        title = stringResource(R.string.chat_info_media_title),
                         badge = (mediaCount + linkCount).takeIf { it > 0 }?.toString(),
                         isLast = false,
                         onClick = onOpenMedia,
@@ -171,10 +212,24 @@ internal fun ChatInfoScreen(
                     )
                     ChatActionRow(
                         icon = Icons.Filled.Star,
-                        title = "Starred messages",
+                        title = stringResource(R.string.chat_info_starred_title),
                         badge = starredCount.takeIf { it > 0 }?.toString(),
                         isLast = true,
                         onClick = onOpenStarred,
+                    )
+                }
+            }
+
+            // Real port of iOS `SakhiAIInfoView.swift`'s `dangerCard` -- was missing
+            // from Android entirely before this pass.
+            item(key = "danger") {
+                GlassCard(modifier = Modifier.fillMaxWidth()) {
+                    ChatActionRow(
+                        icon = Icons.Filled.Delete,
+                        title = stringResource(R.string.chat_info_clear_title),
+                        isLast = true,
+                        destructive = true,
+                        onClick = onRequestClear,
                     )
                 }
             }
@@ -226,12 +281,28 @@ internal fun ChatReportCard(
             }
 
             if (!session.isGenerating) {
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.chat_report_card_close),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Box(
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clickable(onClick = onDismiss),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(26.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = CircleShape,
+                            ),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Close,
+                            contentDescription = stringResource(R.string.chat_report_card_close),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(11.dp),
+                        )
+                    }
                 }
             }
         }
@@ -263,7 +334,7 @@ internal fun ChatReportCard(
         }
 
         Text(
-            text = "How far back should I go?",
+            text = stringResource(R.string.chat_report_card_range_prompt),
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
             modifier = Modifier.padding(top = SakhiSpacing.space4),
         )
@@ -279,9 +350,13 @@ internal fun ChatReportCard(
                 ReportDateRangePreset.OneYear,
             ).forEach { preset ->
                 val isSelected = session.selectedRange == preset
+                val stateDescription = stringResource(
+                    if (isSelected) R.string.chat_option_selected else R.string.chat_option_not_selected,
+                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .padding(horizontal = SakhiSpacing.space1)
                         .background(
                             color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else Color.Transparent,
                             shape = RoundedCornerShape(10.dp),
@@ -289,14 +364,14 @@ internal fun ChatReportCard(
                         .semantics {
                             this.selected = isSelected
                             role = Role.RadioButton
-                            stateDescription = if (isSelected) "Selected" else "Not selected"
+                            this.stateDescription = stateDescription
                         }
                         .clickable { onSelectRange(preset) }
                         .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = preset.shortLabel,
+                        text = stringResource(preset.shortLabelRes),
                         style = MaterialTheme.typography.bodyMedium.copy(
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                         ),
@@ -315,13 +390,23 @@ internal fun ChatReportCard(
             }
         }
 
-        PrimaryButton(
-            text = "Generate Report",
+        Button(
             onClick = onGenerate,
+            shape = RoundedCornerShape(SakhiRadius.full),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ),
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = SakhiSpacing.space4),
-        )
+                .padding(top = SakhiSpacing.space4)
+                .height(52.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.chat_report_card_generate),
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+            )
+        }
     }
 }
 
@@ -338,11 +423,11 @@ internal fun ChatSearchScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        ChatSubscreenHeader(title = "Search", onBack = onBack)
+        ChatSubscreenHeader(title = stringResource(R.string.chat_search_title), onBack = onBack)
         SakhiTextField(
             value = query.text,
             onValueChange = { query = query.copy(text = it) },
-            placeholder = "Search in conversation",
+            placeholder = stringResource(R.string.chat_search_placeholder),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
@@ -351,8 +436,8 @@ internal fun ChatSearchScreen(
         when {
             trimmedQuery.isEmpty() -> {
                 EmptyState(
-                    title = "Search messages",
-                    subtitle = "Search anything you've said or Sakhi has shared",
+                    title = stringResource(R.string.chat_search_empty_title),
+                    subtitle = stringResource(R.string.chat_search_empty_subtitle),
                     modifier = Modifier.padding(top = SakhiSpacing.space8),
                     icon = {
                         Icon(
@@ -366,8 +451,8 @@ internal fun ChatSearchScreen(
             }
             results.isEmpty() -> {
                 EmptyState(
-                    title = "No results",
-                    subtitle = "Nothing found for '$trimmedQuery'",
+                    title = stringResource(R.string.chat_search_no_results_title),
+                    subtitle = stringResource(R.string.chat_search_no_results_subtitle, trimmedQuery),
                     modifier = Modifier.padding(top = SakhiSpacing.space8),
                     icon = {
                         Icon(
@@ -388,7 +473,11 @@ internal fun ChatSearchScreen(
                     ),
                 ) {
                     items(results, key = { it.id }) { message ->
-                        SearchResultRow(message = message)
+                        SearchResultRow(
+                            message = message,
+                            timestampText = formattedTime(message.timestamp),
+                            contentMaxLines = 2,
+                        )
                     }
                 }
             }
@@ -418,7 +507,7 @@ internal fun ChatMediaScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        ChatSubscreenHeader(title = "Media, links and docs", onBack = onBack)
+        ChatSubscreenHeader(title = stringResource(R.string.chat_media_title), onBack = onBack)
 
         Row(
             modifier = Modifier
@@ -427,8 +516,11 @@ internal fun ChatMediaScreen(
         ) {
             MediaTab.entries.forEach { tab ->
                 val isSelected = selectedTab == tab
+                val stateDescription = stringResource(
+                    if (isSelected) R.string.chat_option_selected else R.string.chat_option_not_selected,
+                )
                 Text(
-                    text = tab.label,
+                    text = stringResource(tab.labelRes),
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     ),
@@ -438,7 +530,7 @@ internal fun ChatMediaScreen(
                         .semantics {
                             this.selected = isSelected
                             role = Role.Button
-                            stateDescription = if (isSelected) "Selected" else "Not selected"
+                            this.stateDescription = stateDescription
                         }
                         .clickable { selectedTab = tab }
                         .padding(vertical = SakhiSpacing.space2),
@@ -451,8 +543,8 @@ internal fun ChatMediaScreen(
                 if (mediaMessages.isEmpty()) {
                     ChatEmptyState(
                         icon = Icons.Filled.ViewCarousel,
-                        title = "No health cards yet",
-                        subtitle = "Ask Sakhi about your cycle, mood, or symptoms to see health cards here",
+                        title = stringResource(R.string.chat_media_empty_cards_title),
+                        subtitle = stringResource(R.string.chat_media_empty_cards_subtitle),
                     )
                 } else {
                     LazyColumn(
@@ -473,8 +565,8 @@ internal fun ChatMediaScreen(
                 if (linkItems.isEmpty()) {
                     ChatEmptyState(
                         icon = Icons.Filled.Link,
-                        title = "No links",
-                        subtitle = "Links shared in your conversation will appear here",
+                        title = stringResource(R.string.chat_media_empty_links_title),
+                        subtitle = stringResource(R.string.chat_media_empty_links_subtitle),
                     )
                 } else {
                     LazyColumn(
@@ -495,8 +587,8 @@ internal fun ChatMediaScreen(
                 if (docMessages.isEmpty()) {
                     ChatEmptyState(
                         icon = Icons.Filled.Description,
-                        title = "No documents",
-                        subtitle = "Health summaries and reports shared by Sakhi will appear here",
+                        title = stringResource(R.string.chat_media_empty_docs_title),
+                        subtitle = stringResource(R.string.chat_media_empty_docs_subtitle),
                     )
                 } else {
                     LazyColumn(
@@ -507,7 +599,7 @@ internal fun ChatMediaScreen(
                         ),
                     ) {
                         items(docMessages, key = { it.id }) { message ->
-                            MediaMessageRow(message = message)
+                            DocMessageRow(message = message)
                         }
                     }
                 }
@@ -527,13 +619,13 @@ internal fun ChatStarredScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        ChatSubscreenHeader(title = "Starred", onBack = onBack)
+        ChatSubscreenHeader(title = stringResource(R.string.chat_starred_title), onBack = onBack)
 
         if (starredMessages.isEmpty()) {
             ChatEmptyState(
                 icon = Icons.Filled.Star,
-                title = "No starred messages",
-                subtitle = "Long press any message in the chat to star it. It will appear here.",
+                title = stringResource(R.string.chat_starred_empty_title),
+                subtitle = stringResource(R.string.chat_starred_empty_subtitle),
             )
         } else {
             LazyColumn(
@@ -546,12 +638,20 @@ internal fun ChatStarredScreen(
                 items(starredMessages, key = { it.id }) { message ->
                     SearchResultRow(
                         message = message,
+                        timestampText = formattedDate(message.timestamp),
+                        contentMaxLines = 3,
                         trailing = {
-                            IconButton(onClick = { starredStore.toggle(message.id) }) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clickable { starredStore.toggle(message.id) },
+                                contentAlignment = Alignment.Center,
+                            ) {
                                 Icon(
                                     imageVector = Icons.Filled.Star,
-                                    contentDescription = "Unstar",
+                                    contentDescription = stringResource(R.string.chat_starred_unstar),
                                     tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp),
                                 )
                             }
                         },
@@ -610,8 +710,10 @@ private fun ChatActionRow(
     title: String,
     badge: String? = null,
     isLast: Boolean,
+    destructive: Boolean = false,
     onClick: () -> Unit,
 ) {
+    val tint = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -624,19 +726,20 @@ private fun ChatActionRow(
         Box(
             modifier = Modifier
                 .size(32.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
+                .background(tint.copy(alpha = 0.12f), RoundedCornerShape(8.dp)),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
+                tint = tint,
                 modifier = Modifier.size(16.dp),
             )
         }
         Text(
             text = title,
             style = MaterialTheme.typography.bodyLarge,
+            color = if (destructive) tint else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
         if (!badge.isNullOrBlank()) {
@@ -646,20 +749,26 @@ private fun ChatActionRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Icon(
-            imageVector = Icons.Filled.ArrowForward,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier
-                .size(14.dp)
-                .width(14.dp),
-        )
+        // iOS's `dangerCard` row (`SakhiAIInfoView.swift`) has no trailing chevron --
+        // this is a direct destructive action, not a drill-down navigation row.
+        if (!destructive) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier
+                    .size(14.dp)
+                    .width(14.dp),
+            )
+        }
     }
 }
 
 @Composable
 private fun SearchResultRow(
     message: ConversationMessage,
+    timestampText: String,
+    contentMaxLines: Int,
     trailing: @Composable (() -> Unit)? = null,
 ) {
     GlassCard(modifier = Modifier.fillMaxWidth()) {
@@ -689,12 +798,14 @@ private fun SearchResultRow(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        text = if (message.isUser) "You" else "Sakhi",
+                        text = stringResource(
+                            if (message.isUser) R.string.chat_speaker_you else R.string.chat_speaker_sakhi,
+                        ),
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
-                        text = formattedTime(message.timestamp),
+                        text = timestampText,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -703,7 +814,7 @@ private fun SearchResultRow(
                     text = message.content,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 3,
+                    maxLines = contentMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -735,7 +846,7 @@ private fun MediaMessageRow(message: ConversationMessage) {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = titleForCardType(message.cardType),
+                    text = stringResource(titleForCardTypeRes(message.cardType)),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 )
                 Text(
@@ -747,10 +858,46 @@ private fun MediaMessageRow(message: ConversationMessage) {
                 )
             }
             Text(
-                text = formattedTime(message.timestamp),
+                text = formattedDate(message.timestamp),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+        }
+    }
+}
+
+@Composable
+private fun DocMessageRow(message: ConversationMessage) {
+    GlassCard(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.semantics(mergeDescendants = true) {},
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(10.dp)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(titleForCardTypeRes(message.cardType)),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+                Text(
+                    text = formattedDate(message.timestamp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
@@ -826,10 +973,10 @@ private fun ChatEmptyState(
     )
 }
 
-private enum class MediaTab(val label: String) {
-    Media("Media"),
-    Links("Links"),
-    Docs("Docs"),
+private enum class MediaTab(@StringRes val labelRes: Int) {
+    Media(R.string.chat_media_tab_media),
+    Links(R.string.chat_media_tab_links),
+    Docs(R.string.chat_media_tab_docs),
 }
 
 private data class LinkItem(
@@ -894,30 +1041,31 @@ private fun openUrl(context: Context, url: String) {
     }
 }
 
-private fun titleForCardType(cardType: String): String = when (cardType) {
-    AICardType.CYCLE_STATUS -> "Cycle status"
-    AICardType.PERIOD_PREDICTION -> "Period prediction"
-    AICardType.PHASE_INFO -> "Phase info"
-    AICardType.OVULATION_WINDOW -> "Ovulation window"
-    AICardType.FLOW -> "Flow"
-    AICardType.CRAMP_RELIEF -> "Cramp relief"
-    AICardType.SYMPTOM_SUMMARY -> "Symptom summary"
-    AICardType.MOOD -> "Mood"
-    AICardType.DOCTOR_VISIT -> "Doctor visit"
-    AICardType.SAFETY -> "Safety"
-    AICardType.TIP -> "Tip"
-    AICardType.AFFIRMATION -> "Affirmation"
-    AICardType.HYDRATION -> "Hydration"
-    AICardType.SLEEP -> "Sleep"
-    AICardType.STRESS_RELIEF -> "Stress relief"
-    AICardType.MEDICATION -> "Medication"
-    AICardType.CHECK_IN -> "Check-in"
-    AICardType.TEMPERATURE -> "Temperature"
-    AICardType.CALENDAR_PREVIEW -> "Calendar preview"
-    AICardType.PMS -> "PMS"
-    AICardType.CARE_ALERT -> "Care alert"
-    AICardType.PLACES -> "Nearby places"
-    else -> "Sakhi card"
+@StringRes
+private fun titleForCardTypeRes(cardType: String): Int = when (cardType) {
+    AICardType.CYCLE_STATUS -> R.string.chat_card_cycle_status
+    AICardType.PERIOD_PREDICTION -> R.string.chat_card_period_prediction
+    AICardType.PHASE_INFO -> R.string.chat_card_phase_info
+    AICardType.OVULATION_WINDOW -> R.string.chat_card_ovulation_window
+    AICardType.FLOW -> R.string.chat_card_flow
+    AICardType.CRAMP_RELIEF -> R.string.chat_card_cramp_relief
+    AICardType.SYMPTOM_SUMMARY -> R.string.chat_card_symptom_summary
+    AICardType.MOOD -> R.string.chat_card_mood
+    AICardType.DOCTOR_VISIT -> R.string.chat_card_doctor_visit
+    AICardType.SAFETY -> R.string.chat_card_safety
+    AICardType.TIP -> R.string.chat_card_tip
+    AICardType.AFFIRMATION -> R.string.chat_card_affirmation
+    AICardType.HYDRATION -> R.string.chat_card_hydration
+    AICardType.SLEEP -> R.string.chat_card_sleep
+    AICardType.STRESS_RELIEF -> R.string.chat_card_stress_relief
+    AICardType.MEDICATION -> R.string.chat_card_medication
+    AICardType.CHECK_IN -> R.string.chat_card_check_in
+    AICardType.TEMPERATURE -> R.string.chat_card_temperature
+    AICardType.CALENDAR_PREVIEW -> R.string.chat_card_calendar_preview
+    AICardType.PMS -> R.string.chat_card_pms
+    AICardType.CARE_ALERT -> R.string.chat_card_care_alert
+    AICardType.PLACES -> R.string.chat_card_nearby_places
+    else -> R.string.chat_card_default
 }
 
 private fun iconForCardType(cardType: String): ImageVector = when (cardType) {
