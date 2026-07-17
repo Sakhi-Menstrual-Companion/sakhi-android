@@ -80,7 +80,7 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         if (notification == SakhiNotification.Unknown) return
 
         ensureChannel(applicationContext)
-        val (title, body) = titleAndBody(notification) ?: return
+        val (title, body) = titleAndBody(applicationContext, notification) ?: return
         postPushNotification(applicationContext, notification, title, body, deepLinkUri(notification))
     }
 
@@ -104,29 +104,40 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         is SakhiNotification.PeriodReminder, SakhiNotification.LoggingReminder, SakhiNotification.Unknown -> null
     }
 
-    private fun titleAndBody(notification: SakhiNotification): Pair<String, String>? = when (notification) {
+    private fun titleAndBody(context: Context, notification: SakhiNotification): Pair<String, String>? = when (notification) {
         is SakhiNotification.PartnerLoggedPeriod ->
-            "Sakhi" to "${notification.partnerName} logged their period today"
+            context.getString(R.string.platform_notification_app_name) to
+                context.getString(R.string.platform_push_partner_logged_period, notification.partnerName)
         is SakhiNotification.InvitationAccepted ->
-            "Sakhi" to "${notification.partnerName} accepted your invite"
+            context.getString(R.string.platform_notification_app_name) to
+                context.getString(R.string.platform_push_invitation_accepted, notification.partnerName)
         is SakhiNotification.InvitationReceived ->
-            "Sakhi" to "${notification.inviterName} invited you to Be Her Sakhi"
+            context.getString(R.string.platform_notification_app_name) to
+                context.getString(R.string.platform_push_invitation_received, notification.inviterName)
         is SakhiNotification.LogRequestReceived ->
-            "Sakhi" to "${notification.partnerName} asked you to log today"
+            context.getString(R.string.platform_notification_app_name) to
+                context.getString(R.string.platform_push_log_request_received, notification.partnerName)
         is SakhiNotification.LogRequestResponse ->
-            "Sakhi" to if (notification.approved) {
-                "${notification.partnerName} shared today's log with you"
+            context.getString(R.string.platform_notification_app_name) to if (notification.approved) {
+                context.getString(R.string.platform_push_log_request_approved, notification.partnerName)
             } else {
-                "${notification.partnerName} isn't ready to share today's log"
+                context.getString(R.string.platform_push_log_request_declined, notification.partnerName)
             }
         is SakhiNotification.NewCareMessage ->
-            notification.senderName to "New message"
+            notification.senderName to context.getString(R.string.platform_push_new_message)
         is SakhiNotification.PeriodReminder ->
-            "Sakhi" to "Your period is expected in ${notification.daysUntil} days"
+            context.getString(R.string.platform_notification_app_name) to
+                context.resources.getQuantityString(
+                    R.plurals.platform_push_period_reminder,
+                    notification.daysUntil,
+                    notification.daysUntil,
+                )
         is SakhiNotification.LoggingReminder ->
-            "Sakhi" to "How are you feeling today?"
+            context.getString(R.string.platform_notification_app_name) to
+                context.getString(R.string.platform_push_logging_reminder)
         is SakhiNotification.Sos ->
-            "Sakhi" to "Emergency alert -- tap to open"
+            context.getString(R.string.platform_notification_app_name) to
+                context.getString(R.string.platform_push_sos)
         SakhiNotification.Unknown -> null
     }
 
@@ -150,10 +161,10 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "Sakhi updates",
+                context.getString(R.string.platform_push_channel_name),
                 NotificationManager.IMPORTANCE_DEFAULT,
             ).apply {
-                description = "Partner activity, invites, and care messages"
+                description = context.getString(R.string.platform_push_channel_description)
             }
             manager.createNotificationChannel(channel)
         }

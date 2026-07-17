@@ -13,7 +13,7 @@ import team.sakhi.platform.BiometricInterface
  */
 val androidPlatformModule = module {
     single { CurrentActivityHolder() }
-    single<BiometricInterface> { AndroidBiometricAdapter(activityHolder = get()) }
+    single<BiometricInterface> { AndroidBiometricAdapter(activityHolder = get(), appContext = get()) }
     single {
         val factory = PlatformRoomDatabaseFactory().apply { init(get()) }
         SakhiPhaseALocalStore(factory = factory)
@@ -37,6 +37,7 @@ val androidPlatformModule = module {
     }
     single { AndroidLocationProvider(context = get()) }
     single { AndroidHapticManager(appContext = get(), kvStore = get()) }
+    single { AndroidLocaleManager(languageStore = get()) }
     single { AndroidAppVersionProvider(appContext = get()) }
     single {
         AndroidWidgetSnapshotManager(

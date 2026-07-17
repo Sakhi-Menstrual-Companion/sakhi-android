@@ -1,5 +1,20 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Real lint-hygiene fix (2026-07-16): this module calls permission-gated
+         APIs (Vibrator.vibrate, NotificationManagerCompat.notify,
+         FusedLocationProviderClient/LocationManager) but, until now, only the
+         consuming `app` module's manifest declared the permissions; correct
+         at runtime (the merged manifest always had them), but `core:platform`
+         wasn't self-describing when lint-checked standalone. Declaring them
+         here too is redundant with `app`'s manifest (harmlessly deduped by
+         manifest merging) but makes this module correct regardless of which
+         app consumes it. ACCESS_FINE_LOCATION deliberately NOT declared here,
+         matching AndroidLocationProvider's real design: only coarse location
+         is ever requested, sufficient for the 2km nearby-places radius. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
     <application>
         <!-- FCM push transport (see SakhiFirebaseMessagingService kdoc), not
              wired to a live Firebase project yet, no google-services.json in
@@ -16,7 +31,7 @@
         <receiver
             android:name=".SakhiPeriodWidgetReceiver"
             android:exported="false"
-            android:label="@string/app_name"
+            android:label="@string/platform_notification_app_name"
             android:permission="android.permission.BIND_APPWIDGET">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />

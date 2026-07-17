@@ -43,7 +43,6 @@ private const val HEALTH_CONNECT_INSIGHTS_DAYS = 7L
 private const val TYPE_SLEEP = "sleep_session"
 private const val TYPE_STEPS = "steps"
 private const val TYPE_TEMPERATURE = "basal_body_temperature"
-private const val NOTE_IMPORTED_FROM_HEALTH_CONNECT = "Imported from Health Connect"
 private const val KEY_ENABLED = "health_connect.enabled"
 private const val KEY_LAST_SYNC_AT = "health_connect.last_sync_at"
 
@@ -148,18 +147,18 @@ class AndroidHealthConnectManager(
     suspend fun importOnboardingSnapshot(): OnboardingHealthConnectImportResult {
         return when (availability()) {
             HealthConnectAvailability.NotInstalled -> OnboardingHealthConnectImportResult(
-                failureMessage = "Health Connect is not available on this device.",
+                failureMessage = appContext.getString(R.string.platform_health_connect_not_available),
             )
 
             HealthConnectAvailability.NotSupported -> OnboardingHealthConnectImportResult(
-                failureMessage = "Health Connect is not supported on this device.",
+                failureMessage = appContext.getString(R.string.platform_health_connect_not_supported),
             )
 
             HealthConnectAvailability.Available -> {
                 val granted = client().permissionController.getGrantedPermissions()
                 if (!granted.containsAll(onboardingRequiredPermissions)) {
                     return OnboardingHealthConnectImportResult(
-                        failureMessage = "Health Connect access was not granted.",
+                        failureMessage = appContext.getString(R.string.platform_health_connect_access_not_granted),
                     )
                 }
 
@@ -180,7 +179,7 @@ class AndroidHealthConnectManager(
                         observedPeriodLength == null &&
                         observedCycleLength == null
                     ) {
-                        "Health Connect doesn't have the details needed for onboarding."
+                        appContext.getString(R.string.platform_health_connect_onboarding_no_data)
                     } else {
                         null
                     },
@@ -197,7 +196,9 @@ class AndroidHealthConnectManager(
     suspend fun syncNow(): HealthConnectSyncResult {
         val session = requireOwnSession()
         val granted = client().permissionController.getGrantedPermissions()
-        require(granted.containsAll(requiredPermissions)) { "Health Connect permissions are not granted." }
+        require(granted.containsAll(requiredPermissions)) {
+            appContext.getString(R.string.platform_health_connect_permissions_not_granted)
+        }
 
         val nowIso = Clock.System.now().toString()
         val importedFlowRecords = importPeriodFlow(session, nowIso)
@@ -460,16 +461,16 @@ class AndroidHealthConnectManager(
             loggedBy = LogSource.SYSTEM,
             createdByUserId = userId,
             sourceUserId = userId,
-            notes = NOTE_IMPORTED_FROM_HEALTH_CONNECT,
+            notes = appContext.getString(R.string.platform_health_connect_imported_note),
             createdAt = timestampIso,
             updatedAt = timestampIso,
         )
 
         return base.copy(
-            periodPresent = base.periodPresent || importedFlow != null,
+            periodPresent = true,
             flowIntensity = PeriodLogPolicy.strongestFlow(base.flowIntensity, importedFlow),
             loggedBy = if (base.loggedBy == LogSource.USER) LogSource.USER else LogSource.SYSTEM,
-            notes = base.notes ?: NOTE_IMPORTED_FROM_HEALTH_CONNECT,
+            notes = base.notes ?: appContext.getString(R.string.platform_health_connect_imported_note),
             updatedAt = timestampIso,
         )
     }
@@ -581,8 +582,12 @@ class AndroidHealthConnectManager(
     }
 
     private fun requireOwnSession(): SessionContext {
-        val session = requireNotNull(sessionManager.current) { "Session is not ready yet." }
-        require(session.isViewingOwnData) { "Health Connect is only available when viewing your own data." }
+        val session = requireNotNull(sessionManager.current) {
+            appContext.getString(R.string.platform_health_connect_session_not_ready)
+        }
+        require(session.isViewingOwnData) {
+            appContext.getString(R.string.platform_health_connect_own_data_only)
+        }
         return session
     }
 

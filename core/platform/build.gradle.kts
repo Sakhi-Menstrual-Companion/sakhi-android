@@ -41,14 +41,15 @@ dependencies {
     // 1.4.x never left alpha (verified against Maven metadata) — 1.1.0 is the newest stable.
     implementation("androidx.biometric:biometric:1.1.0")
     implementation("androidx.fragment:fragment-ktx:1.8.9")
+    // Per-app language switching (`AppCompatDelegate.setApplicationLocales`) — works down to
+    // minSdk 26 without requiring `AppCompatActivity`; 1.6.0+ ships its own manifest-merged
+    // backport service that persists the choice and re-applies it on cold start.
+    implementation("androidx.appcompat:appcompat:1.7.0")
 
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging.ktx)
+    implementation(libs.google.play.services.location)
 
     testImplementation(kotlin("test"))
-
-    // Maps SDK, FusedLocation, Play Billing, camera/photo-picker adapters land
-    // here in later phases (Section 6 of the plan). Each adapter's dependency
-    // is added when its Kotlin file is written, not speculatively — avoids
-    // dragging in unused SDKs this early.
+    testImplementation(libs.mockk)
 }

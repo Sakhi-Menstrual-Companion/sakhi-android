@@ -1,5 +1,6 @@
 package team.sakhi.android.platform
 
+import android.content.Context
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.core.content.ContextCompat
@@ -16,6 +17,7 @@ import kotlin.coroutines.resume
  */
 class AndroidBiometricAdapter(
     private val activityHolder: CurrentActivityHolder,
+    private val appContext: Context,
 ) : BiometricInterface {
 
     override suspend fun canAuthenticate(): Boolean {
@@ -27,7 +29,7 @@ class AndroidBiometricAdapter(
 
     override suspend fun authenticate(reason: String): BiometricResult {
         val activity = activityHolder.current
-            ?: return BiometricResult.Failure("No active screen to show the biometric prompt")
+            ?: return BiometricResult.Failure(appContext.getString(R.string.platform_biometric_prompt_unavailable))
 
         return suspendCancellableCoroutine { continuation ->
             val executor = ContextCompat.getMainExecutor(activity)
@@ -58,7 +60,7 @@ class AndroidBiometricAdapter(
             val promptInfo = BiometricPrompt.PromptInfo.Builder()
                 .setTitle(reason)
                 .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-                .setNegativeButtonText("Cancel")
+                .setNegativeButtonText(activity.getString(R.string.platform_biometric_cancel))
                 .build()
 
             prompt.authenticate(promptInfo)

@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
-    android:description="@string/app_name"
+    android:description="@string/platform_notification_app_name"
     android:initialLayout="@layout/sakhi_period_widget_loading"
     android:minWidth="120dp"
     android:minHeight="120dp"

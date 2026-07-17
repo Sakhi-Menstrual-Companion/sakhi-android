@@ -154,10 +154,10 @@ class AndroidNotificationReminderManager(
         val manager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel(
             CHANNEL_ID,
-            "Sakhi reminders",
+            appContext.getString(R.string.platform_reminder_channel_name),
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "Private cycle and logging reminders from Sakhi"
+            description = appContext.getString(R.string.platform_reminder_channel_description)
         }
         manager.createNotificationChannel(channel)
     }
@@ -279,8 +279,8 @@ class AndroidNotificationReminderManager(
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle("Sakhi")
-                .setContentText("Open Sakhi for today's update")
+                .setContentTitle(context.getString(R.string.platform_notification_app_name))
+                .setContentText(context.getString(R.string.platform_reminder_open_today))
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setContentIntent(contentIntent)
