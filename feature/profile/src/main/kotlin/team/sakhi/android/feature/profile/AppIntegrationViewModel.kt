@@ -3,6 +3,7 @@ package team.sakhi.android.feature.profile
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -73,10 +74,22 @@ class AppIntegrationViewModel(
 
     fun syncNow() {
         viewModelScope.launch {
+            val requestedSession = sessionManager.current
+            if (requestedSession == null || !requestedSession.isViewingOwnData) {
+                refresh()
+                return@launch
+            }
             _uiState.update { it.copy(isSyncing = true, error = null) }
-            runCatching { healthConnectManager.syncNow() }
-                .onSuccess { result ->
-                    val insights = healthConnectManager.loadInsights()
+            runCatching {
+                val result = healthConnectManager.syncNow()
+                if (!isStillCurrent(requestedSession)) return@runCatching null
+                val insights = healthConnectManager.loadInsights()
+                if (!isStillCurrent(requestedSession)) return@runCatching null
+                result to insights
+            }
+                .onSuccess { outcome ->
+                    if (outcome == null || !isStillCurrent(requestedSession)) return@onSuccess
+                    val (result, insights) = outcome
                     _uiState.update {
                         it.copy(
                             hasPermissions = true,
@@ -93,6 +106,7 @@ class AppIntegrationViewModel(
                     }
                 }
                 .onFailure { throwable ->
+                    if (!isStillCurrent(requestedSession)) return@onFailure
                     _uiState.update {
                         it.copy(
                             isSyncing = false,
@@ -115,8 +129,10 @@ class AppIntegrationViewModel(
     }
 
     private suspend fun refresh(session: SessionContext?) {
+        if (!isStillCurrent(session)) return
         val availability = healthConnectManager.availability()
         if (session == null) {
+            if (!isStillCurrent(null)) return
             _uiState.value = AppIntegrationUiState(
                 session = null,
                 availability = availability,
@@ -125,6 +141,7 @@ class AppIntegrationViewModel(
             return
         }
         if (!session.isViewingOwnData || availability != HealthConnectAvailability.Available) {
+            if (!isStillCurrent(session)) return
             _uiState.value = AppIntegrationUiState(
                 session = session,
                 availability = availability,
@@ -134,12 +151,14 @@ class AppIntegrationViewModel(
         }
 
         val hasPermissions = runCatching { healthConnectManager.hasAllPermissions() }.getOrDefault(false)
+        if (!isStillCurrent(session)) return
         val enabled = healthConnectManager.isEnabled()
         val insights = if (hasPermissions && enabled) {
             runCatching { healthConnectManager.loadInsights() }.getOrDefault(team.sakhi.android.platform.HealthConnectInsights())
         } else {
             team.sakhi.android.platform.HealthConnectInsights()
         }
+        if (!isStillCurrent(session)) return
 
         _uiState.value = AppIntegrationUiState(
             session = session,
@@ -159,11 +178,53 @@ class AppIntegrationViewModel(
 
     private fun formatLastSynced(iso: String): String {
         return runCatching {
-            val time = Instant.parse(iso).atZone(ZoneId.systemDefault())
+            val zoneId = ZoneId.systemDefault()
+            val now = Instant.now().atZone(zoneId)
+            val time = Instant.parse(iso).atZone(zoneId)
+            val elapsedSeconds = Duration.between(time.toInstant(), now.toInstant()).seconds
+            val relativeLabel = when {
+                elapsedSeconds < MINUTE_IN_SECONDS -> {
+                    appContext.getString(R.string.profile_app_integration_last_synced_just_now)
+                }
+
+                elapsedSeconds < HOUR_IN_SECONDS -> {
+                    val minutes = (elapsedSeconds / MINUTE_IN_SECONDS).toInt()
+                    appContext.resources.getQuantityString(
+                        R.plurals.profile_app_integration_last_synced_minutes_ago,
+                        minutes,
+                        minutes,
+                    )
+                }
+
+                elapsedSeconds < DAY_IN_SECONDS -> {
+                    val hours = (elapsedSeconds / HOUR_IN_SECONDS).toInt()
+                    appContext.resources.getQuantityString(
+                        R.plurals.profile_app_integration_last_synced_hours_ago,
+                        hours,
+                        hours,
+                    )
+                }
+
+                time.toLocalDate() == now.toLocalDate().minusDays(1) -> {
+                    appContext.getString(R.string.profile_app_integration_last_synced_yesterday)
+                }
+
+                else -> {
+                    time.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.MEDIUM))
+                }
+            }
             appContext.getString(
                 R.string.profile_app_integration_last_synced,
-                time.format(DateTimeFormatter.ofLocalizedDateTime(FormatStyle.MEDIUM, FormatStyle.SHORT)),
+                relativeLabel,
             )
         }.getOrDefault(iso)
+    }
+
+    private fun isStillCurrent(session: SessionContext?): Boolean = sessionManager.current == session
+
+    private companion object {
+        const val MINUTE_IN_SECONDS = 60L
+        const val HOUR_IN_SECONDS = 60L * MINUTE_IN_SECONDS
+        const val DAY_IN_SECONDS = 24L * HOUR_IN_SECONDS
     }
 }

@@ -3,7 +3,7 @@ package team.sakhi.android.feature.profile
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
-/** Registered by :app once the root profile placeholder is swapped to the real feature. */
+/** Koin module for the profile feature. */
 val profileFeatureModule = module {
     viewModel {
         ProfileViewModel(
@@ -14,6 +14,7 @@ val profileFeatureModule = module {
             appStateInputBridge = get(),
             featureAccessState = get(),
             hapticManager = get(),
+            appContext = get(),
         )
     }
     viewModel {
@@ -26,6 +27,18 @@ val profileFeatureModule = module {
     viewModel {
         SanityContentViewModel(
             sanityRepository = get(),
+        )
+    }
+    viewModel {
+        MyDataViewModel(
+            sessionManager = get(),
+            localStore = get(),
+            userProfileRepository = get(),
+            periodLogRepository = get(),
+            cycleDataRepository = get(),
+            partnerCareRepository = get(),
+            aiRepository = get(),
+            appContext = get(),
         )
     }
 }

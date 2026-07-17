@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.profile
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,6 +50,7 @@ class ProfileViewModel(
     private val appStateInputBridge: AppStateInputBridge,
     private val featureAccessState: FeatureAccessState,
     private val hapticManager: AndroidHapticManager,
+    private val appContext: Context,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ProfileUiState())
@@ -100,7 +102,8 @@ class ProfileViewModel(
                     _uiState.update {
                         it.copy(
                             isSigningOut = false,
-                            signOutError = throwable.message ?: "Couldn't sign out. Please try again.",
+                            signOutError = throwable.message
+                                ?: appContext.getString(R.string.profile_sign_out_failed),
                         )
                     }
                     hapticManager.error()
@@ -149,7 +152,8 @@ class ProfileViewModel(
                         session = session,
                         profile = null,
                         isLoading = false,
-                        error = throwable.message ?: "Failed to load profile",
+                        error = throwable.message
+                            ?: appContext.getString(R.string.profile_load_failed),
                     )
                 }
             }

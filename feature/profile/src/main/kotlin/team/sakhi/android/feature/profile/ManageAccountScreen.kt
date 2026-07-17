@@ -16,16 +16,22 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowRightAlt
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Forum
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.WaterDrop
@@ -59,8 +65,10 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.annotation.StringRes
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import org.koin.androidx.compose.koinViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -70,6 +78,7 @@ import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.PrimaryButton
+import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
 import team.sakhi.appstate.AppStateInputBridge
@@ -81,6 +90,7 @@ import team.sakhi.session.SessionManager
 
 private enum class ManageAccountRoute {
     Menu,
+    MyData,
     Reset,
     Delete,
 }
@@ -128,19 +138,26 @@ private data class ManageAccountStats(
     val careConnectionCount: Int = 0,
 )
 
+private val ManageDataMenuFootnoteSize = 11.sp
+private val ManageDataMenuFootnoteLineHeight = 16.sp
+
 /**
- * Profile danger-zone parity port of iOS `DataResetView.swift`.
+ * Profile manage-data parity port of iOS `ManageDataView.swift` / `MyDataView.swift`
+ * / `DataResetView.swift`.
  *
- * Android keeps the same real destructive behavior already wired earlier:
+ * Android now keeps the same real structure iOS uses:
+ * - "Show All My Data" drills into truthful local/cloud snapshots built from the
+ *   shared Room store plus the existing shared repositories.
  * - "Start fresh" signs out and clears this device's session.
  * - "Delete my account" calls `delete-user-data`, then signs out.
  *
- * This pass replaces the earlier simplified confirmation rows with the real
- * iOS flow structure: a full reset explainer screen, plus the 3-step delete
- * wizard with real counts and optional leave reasons.
+ * The destructive behavior itself stays exactly what Android already wired earlier:
+ * - "Start fresh" signs out and clears this device's session.
+ * - "Delete my account" calls `delete-user-data`, then signs out.
  */
 @Composable
 fun ManageAccountScreen(onBack: () -> Unit) {
+    val myDataViewModel: MyDataViewModel = koinViewModel()
     val authRepository = koinInject<AuthRepository>()
     val accountRepository = koinInject<AccountRepository>()
     val appStateInputBridge = koinInject<AppStateInputBridge>()
@@ -163,7 +180,19 @@ fun ManageAccountScreen(onBack: () -> Unit) {
 
     LaunchedEffect(session) {
         val activeSession = session
-        val userId = activeSession?.targetUserId
+        // Real bug found in this session's own critical self-review (same class as
+        // MyDataViewModel's `targetUserId` bug, found while re-reading this exact
+        // file for other instances of it): these stats back the Reset All Data /
+        // Delete Account confirmation cards ("this will remove N logs, M cycles").
+        // Both destructive actions themselves are correctly self-scoped server-side
+        // (AccountRepository.deleteServerAccount()/AuthRepository.signOut() take no
+        // user id, resolved from the actor's own auth JWT) -- but this preview was
+        // reading `targetUserId` (whoever a partner is viewing in care mode), so a
+        // partner would see the PRIMARY USER's log/cycle counts in a confirmation
+        // screen for an action that actually resets/deletes the partner's OWN
+        // account. A real info leak, and a correctness mismatch between what's
+        // shown and what the action actually does.
+        val userId = activeSession?.userId
         if (userId == null) {
             stats = ManageAccountStats()
             return@LaunchedEffect
@@ -190,6 +219,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
     fun handleBack() {
         when (route) {
             ManageAccountRoute.Menu -> onBack()
+            ManageAccountRoute.MyData -> route = ManageAccountRoute.Menu
             ManageAccountRoute.Reset -> route = ManageAccountRoute.Menu
             ManageAccountRoute.Delete -> {
                 if (deleteStep == 0) {
@@ -204,8 +234,24 @@ fun ManageAccountScreen(onBack: () -> Unit) {
     DetailSheetScaffold(
         title = when (route) {
             ManageAccountRoute.Menu -> stringResource(R.string.profile_manage_account_title)
+            ManageAccountRoute.MyData -> stringResource(R.string.profile_my_data_title)
             ManageAccountRoute.Reset -> stringResource(R.string.profile_manage_account_start_fresh)
             ManageAccountRoute.Delete -> stringResource(R.string.profile_manage_account_delete_account)
+        },
+        subtitle = when (route) {
+            ManageAccountRoute.Menu -> stringResource(R.string.profile_manage_account_header_subtitle)
+            ManageAccountRoute.MyData -> stringResource(R.string.profile_my_data_subtitle)
+            else -> null
+        },
+        headerIcon = when (route) {
+            ManageAccountRoute.Menu -> Icons.Filled.Storage
+            ManageAccountRoute.MyData -> Icons.Filled.Lock
+            else -> null
+        },
+        trailingHeaderContent = {
+            if (route == ManageAccountRoute.MyData) {
+                MyDataHeaderRefreshAction(viewModel = myDataViewModel)
+            }
         },
         onBack = ::handleBack,
         scrollable = false,
@@ -216,6 +262,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
             when (route) {
                 ManageAccountRoute.Menu -> {
                     MenuContent(
+                        onShowMyData = { route = ManageAccountRoute.MyData },
                         onStartFresh = { route = ManageAccountRoute.Reset },
                         onDeleteAccount = {
                             deleteStep = 0
@@ -223,6 +270,10 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                         },
                         error = error,
                     )
+                }
+
+                ManageAccountRoute.MyData -> {
+                    MyDataRouteContent(viewModel = myDataViewModel)
                 }
 
                 ManageAccountRoute.Reset -> {
@@ -310,7 +361,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                         isBusy = true
                         error = null
                         scope.launch {
-                            authRepository.signOut()
+                            resetProfileData(authRepository)
                                 .onSuccess {
                                     appStateInputBridge.setUnauthenticated()
                                 }
@@ -346,9 +397,8 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                         isBusy = true
                         error = null
                         scope.launch {
-                            runCatching { accountRepository.deleteServerAccount() }
+                            deleteAccountAndSignOut(accountRepository, authRepository)
                                 .onSuccess {
-                                    authRepository.signOut()
                                     appStateInputBridge.setUnauthenticated()
                                 }
                                 .onFailure {
@@ -373,6 +423,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
 
 @Composable
 private fun MenuContent(
+    onShowMyData: () -> Unit,
     onStartFresh: () -> Unit,
     onDeleteAccount: () -> Unit,
     error: String?,
@@ -385,11 +436,24 @@ private fun MenuContent(
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
-            Text(
-                text = stringResource(R.string.profile_manage_account_danger_zone),
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_your_data))
+            Surface(
+                shape = RoundedCornerShape(SakhiRadius.xl),
+                tonalElevation = SakhiSpacing.space1,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                DangerRow(
+                    icon = Icons.Filled.Lock,
+                    iconTint = MaterialTheme.colorScheme.primary,
+                    title = stringResource(R.string.profile_manage_account_menu_show_all_my_data),
+                    subtitle = stringResource(R.string.profile_manage_account_menu_show_all_my_data_subtitle),
+                    onClick = onShowMyData,
+                )
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
+            ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_danger_zone))
             Surface(
                 shape = RoundedCornerShape(SakhiRadius.xl),
                 tonalElevation = SakhiSpacing.space1,
@@ -397,23 +461,39 @@ private fun MenuContent(
             ) {
                 Column {
                     DangerRow(
-                        icon = Icons.Filled.WarningAmber,
-                        iconTint = MaterialTheme.colorScheme.primary,
-                        title = stringResource(R.string.profile_manage_account_start_fresh),
-                        subtitle = stringResource(R.string.profile_manage_account_start_fresh_subtitle),
+                        icon = Icons.Filled.Restore,
+                        iconTint = MaterialTheme.colorScheme.error,
+                        title = stringResource(R.string.profile_manage_account_menu_reset_all_data),
+                        subtitle = stringResource(R.string.profile_manage_account_menu_reset_all_data_subtitle),
+                        titleColor = MaterialTheme.colorScheme.error,
+                        chevronTint = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
                         onClick = onStartFresh,
                     )
-                    HorizontalDivider()
+                    HorizontalDivider(modifier = Modifier.padding(horizontal = SakhiSpacing.space4))
                     DangerRow(
-                        icon = Icons.Filled.DeleteForever,
+                        icon = Icons.Filled.Delete,
                         iconTint = MaterialTheme.colorScheme.error,
-                        title = stringResource(R.string.profile_manage_account_delete_account),
-                        subtitle = stringResource(R.string.profile_manage_account_delete_account_subtitle),
+                        title = stringResource(R.string.profile_manage_account_menu_delete_account),
+                        subtitle = stringResource(R.string.profile_manage_account_menu_delete_account_subtitle),
                         titleColor = MaterialTheme.colorScheme.error,
+                        chevronTint = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
                         onClick = onDeleteAccount,
                     )
                 }
             }
+            Text(
+                text = stringResource(R.string.profile_manage_account_delete_footnote),
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = ManageDataMenuFootnoteSize,
+                    lineHeight = ManageDataMenuFootnoteLineHeight,
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(
+                    start = SakhiSpacing.space5,
+                    top = SakhiSpacing.space1,
+                    end = SakhiSpacing.space5,
+                ),
+            )
         }
 
         error?.let {
@@ -445,18 +525,14 @@ private fun ResetContent(
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
         ) {
             StepHeader(
-                icon = Icons.Filled.WarningAmber,
+                icon = Icons.Filled.Restore,
                 iconTint = MaterialTheme.colorScheme.primary,
                 title = stringResource(R.string.profile_manage_account_start_fresh),
                 subtitle = stringResource(R.string.profile_manage_account_reset_header_subtitle),
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
-                Text(
-                    text = stringResource(R.string.profile_manage_account_what_gets_removed),
-                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_what_gets_removed))
                 Surface(
                     shape = RoundedCornerShape(SakhiRadius.xl),
                     tonalElevation = SakhiSpacing.space1,
@@ -467,7 +543,7 @@ private fun ResetContent(
                         IndentedDivider()
                         LossRow(Icons.Filled.CalendarMonth, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_loss_cycle_history))
                         IndentedDivider()
-                        LossRow(Icons.Filled.Favorite, Color(0xFF6B7CE3), stringResource(R.string.profile_manage_account_loss_conditions))
+                        LossRow(Icons.Filled.MonitorHeart, Color(0xFF6B7CE3), stringResource(R.string.profile_manage_account_loss_conditions))
                         IndentedDivider()
                         LossRow(Icons.Filled.People, Color(0xFF2E9E7E), stringResource(R.string.profile_manage_account_loss_care_settings))
                         IndentedDivider()
@@ -544,7 +620,7 @@ private fun DeleteContent(
             when (step) {
                 0 -> {
                     StepHeader(
-                        icon = Icons.Filled.DeleteForever,
+                        icon = Icons.Filled.Favorite,
                         iconTint = MaterialTheme.colorScheme.primary,
                         title = stringResource(R.string.profile_manage_account_before_you_go),
                         subtitle = stringResource(R.string.profile_manage_account_before_you_go_subtitle),
@@ -565,7 +641,7 @@ private fun DeleteContent(
                             subtitle = stringResource(R.string.profile_manage_account_period_data_subtitle),
                         )
                         BigLossCard(
-                            icon = Icons.Filled.CalendarMonth,
+                            icon = Icons.Filled.MonitorHeart,
                             iconTint = MaterialTheme.colorScheme.primary,
                             title = if (stats.cycleCount > 0) {
                                 pluralStringResource(
@@ -597,7 +673,7 @@ private fun DeleteContent(
 
                 1 -> {
                     StepHeader(
-                        icon = Icons.Filled.Info,
+                        icon = Icons.Filled.Forum,
                         iconTint = MaterialTheme.colorScheme.primary,
                         title = stringResource(R.string.profile_manage_account_leave_reason_title),
                         subtitle = stringResource(R.string.profile_manage_account_leave_reason_subtitle),
@@ -622,7 +698,7 @@ private fun DeleteContent(
 
                 else -> {
                     StepHeader(
-                        icon = Icons.Filled.Favorite,
+                        icon = Icons.Filled.AutoAwesome,
                         iconTint = MaterialTheme.colorScheme.primary,
                         title = stringResource(R.string.profile_manage_account_thank_you_for_trusting),
                         subtitle = stringResource(R.string.profile_manage_account_thank_you_subtitle),
@@ -648,7 +724,7 @@ private fun DeleteContent(
                             }
                             if (stats.cycleCount > 0) {
                                 StatPill(
-                                    icon = Icons.Filled.CalendarMonth,
+                                    icon = Icons.Filled.Autorenew,
                                     iconTint = MaterialTheme.colorScheme.primary,
                                     value = stats.cycleCount.toString(),
                                     label = pluralStringResource(
@@ -663,11 +739,7 @@ private fun DeleteContent(
                     }
 
                     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
-                        Text(
-                            text = stringResource(R.string.profile_manage_account_what_will_be_removed),
-                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_what_will_be_removed))
                         Surface(
                             shape = RoundedCornerShape(SakhiRadius.xl),
                             tonalElevation = SakhiSpacing.space1,
@@ -694,7 +766,7 @@ private fun DeleteContent(
                             verticalAlignment = Alignment.Top,
                         ) {
                             Icon(
-                                imageVector = Icons.Filled.Info,
+                                imageVector = Icons.Filled.Schedule,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
                                 modifier = Modifier.padding(top = 2.dp),
@@ -1024,6 +1096,22 @@ private fun LossRow(
     }
 }
 
+internal suspend fun resetProfileData(authRepository: AuthRepository): Result<Unit> {
+    return authRepository.signOut()
+}
+
+internal suspend fun deleteAccountAndSignOut(
+    accountRepository: AccountRepository,
+    authRepository: AuthRepository,
+): Result<Unit> {
+    return runCatching {
+        accountRepository.deleteServerAccount()
+    }.fold(
+        onSuccess = { authRepository.signOut() },
+        onFailure = { Result.failure(it) },
+    )
+}
+
 @Composable
 private fun IndentedDivider() {
     HorizontalDivider(modifier = Modifier.padding(start = 68.dp))
@@ -1037,6 +1125,7 @@ private fun DangerRow(
     subtitle: String,
     onClick: () -> Unit,
     titleColor: Color = MaterialTheme.colorScheme.onSurface,
+    chevronTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
 ) {
     Row(
         modifier = Modifier
@@ -1047,15 +1136,23 @@ private fun DangerRow(
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = iconTint,
-        )
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(iconTint.copy(alpha = 0.10f), RoundedCornerShape(12.dp)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(14.dp),
+            )
+        }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.bodyMedium,
                 color = titleColor,
             )
             Text(
@@ -1065,9 +1162,10 @@ private fun DangerRow(
             )
         }
         Icon(
-            imageVector = Icons.Filled.ArrowRightAlt,
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = chevronTint,
+            modifier = Modifier.size(16.dp),
         )
     }
 }

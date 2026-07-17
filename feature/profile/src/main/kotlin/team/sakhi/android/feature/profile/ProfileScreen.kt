@@ -1,35 +1,40 @@
 package team.sakhi.android.feature.profile
 
+import android.content.Context
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Help
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.ChevronRight
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Gavel
-import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.NotificationsActive
-import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.MonitorHeart
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -39,6 +44,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -49,13 +55,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.models.CycleHealthStatus
+import team.sakhi.preferences.ThemeMode
+import team.sakhi.preferences.ThemePreferenceStore
 
 /**
  * Real port of iOS `ProfileView.swift`'s grouped settings list: same section
@@ -96,10 +108,13 @@ fun ProfileScreen(
     val context = LocalContext.current
     val isPartnerRole = uiState.session?.isViewingOwnData == false
     val uriHandler = LocalUriHandler.current
+    val themeStore = koinInject<ThemePreferenceStore>()
+    val currentThemeMode by themeStore.mode.collectAsState()
 
     val groups = profileSettingGroups(
         context = context,
         isPartnerRole = isPartnerRole,
+        appearanceModeLabel = appearanceModeLabel(context, currentThemeMode),
         onLogHistoryClick = onLogHistoryClick,
         onAppIntegrationClick = onAppIntegrationClick,
         onHealthDataClick = onHealthDataClick,
@@ -194,14 +209,9 @@ fun ProfileScreen(
             }
 
             groups.forEach { group ->
-                Text(
+                ProfileSectionLabel(
                     text = group.label.uppercase(),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(
-                        start = SakhiSpacing.space4,
-                        top = SakhiSpacing.space3,
-                    ),
+                    modifier = Modifier.padding(top = SakhiSpacing.space3),
                 )
                 Surface(
                     shape = RoundedCornerShape(SakhiRadius.xxl),
@@ -212,7 +222,7 @@ fun ProfileScreen(
                         group.items.forEachIndexed { index, item ->
                             ProfileSettingRow(item = item)
                             if (index != group.items.lastIndex) {
-                                HorizontalDivider()
+                                HorizontalDivider(modifier = Modifier.padding(start = ProfileSettingDividerInset))
                             }
                         }
                     }
@@ -284,7 +294,7 @@ private fun ProfileCard(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Icon(
-                            imageVector = if (uiState.isOfflineUser) Icons.Filled.PhoneAndroid else Icons.Filled.CheckCircle,
+                            imageVector = if (uiState.isOfflineUser) Icons.Filled.PhoneAndroid else Icons.Filled.VerifiedUser,
                             contentDescription = null,
                             tint = if (uiState.isOfflineUser) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(12.dp),
@@ -302,7 +312,7 @@ private fun ProfileCard(
                 }
 
                 Icon(
-                    imageVector = Icons.Filled.ChevronRight,
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -339,27 +349,49 @@ private fun ProfileSettingRow(item: ProfileSettingItem) {
             .clickable(onClick = item.onClick)
             .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
     ) {
-        Icon(
-            imageVector = item.icon,
-            contentDescription = null,
-            tint = if (item.isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
-        )
+        Box(
+            modifier = Modifier.width(ProfileSettingLeadingIconWidth),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            Icon(
+                imageVector = item.icon,
+                contentDescription = null,
+                tint = if (item.isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(ProfileSettingLeadingIconSize),
+            )
+        }
         Text(
             text = item.title,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyLarge.copy(fontSize = ProfileSettingTitleSize),
             color = if (item.isDestructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
         item.value?.let { value ->
             Text(
                 text = value,
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = ProfileSettingValueSize),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            contentDescription = null,
+            tint = if (item.isDestructive) {
+                MaterialTheme.colorScheme.error.copy(alpha = 0.45f)
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
+            modifier = Modifier.size(ProfileSettingChevronSize),
+        )
     }
+}
+
+private fun appearanceModeLabel(context: Context, themeMode: ThemeMode): String = when (themeMode) {
+    ThemeMode.SYSTEM -> context.getString(R.string.profile_appearance_theme_system)
+    ThemeMode.LIGHT -> context.getString(R.string.profile_appearance_theme_light)
+    ThemeMode.DARK -> context.getString(R.string.profile_appearance_theme_dark)
 }
 
 private data class ProfileSettingItem(
@@ -375,10 +407,18 @@ private data class ProfileSettingGroup(
     val items: List<ProfileSettingItem>,
 )
 
+private val ProfileSettingLeadingIconWidth = 28.dp
+private val ProfileSettingLeadingIconSize = 18.dp
+private val ProfileSettingTitleSize = 15.sp
+private val ProfileSettingValueSize = 13.sp
+private val ProfileSettingChevronSize = 11.dp
+private val ProfileSettingDividerInset = SakhiSpacing.space4 + ProfileSettingLeadingIconWidth + SakhiSpacing.space2
+
 /** Same group labels, order, and item titles as iOS `ProfileView.groups`/`partnerGroups`. */
 private fun profileSettingGroups(
-    context: android.content.Context,
+    context: Context,
     isPartnerRole: Boolean,
+    appearanceModeLabel: String,
     onLogHistoryClick: () -> Unit,
     onAppIntegrationClick: () -> Unit,
     onHealthDataClick: () -> Unit,
@@ -408,16 +448,21 @@ private fun profileSettingGroups(
     groups += ProfileSettingGroup(
         label = context.getString(R.string.profile_group_preferences),
         items = listOf(
-            ProfileSettingItem(Icons.Filled.NotificationsActive, context.getString(R.string.profile_item_notifications), onNotificationsClick),
-            ProfileSettingItem(Icons.Filled.Palette, context.getString(R.string.profile_item_appearance), onAppearanceClick),
+            ProfileSettingItem(Icons.Filled.Notifications, context.getString(R.string.profile_item_notifications), onNotificationsClick),
+            ProfileSettingItem(
+                Icons.Filled.Brush,
+                context.getString(R.string.profile_item_appearance),
+                onAppearanceClick,
+                value = appearanceModeLabel,
+            ),
         ),
     )
 
     groups += ProfileSettingGroup(
         label = context.getString(R.string.profile_group_support),
         items = listOf(
-            ProfileSettingItem(Icons.Filled.HelpOutline, context.getString(R.string.profile_item_help_support), onHelpSupportClick),
-            ProfileSettingItem(Icons.Filled.Lock, context.getString(R.string.profile_item_privacy_security), onPrivacySecurityClick),
+            ProfileSettingItem(Icons.AutoMirrored.Filled.Help, context.getString(R.string.profile_item_help_support), onHelpSupportClick),
+            ProfileSettingItem(Icons.Filled.Shield, context.getString(R.string.profile_item_privacy_security), onPrivacySecurityClick),
             ProfileSettingItem(Icons.Filled.Gavel, context.getString(R.string.profile_item_legal), onLegalClick),
         ),
     )
@@ -434,7 +479,7 @@ private fun profileSettingGroups(
         label = context.getString(R.string.profile_group_account),
         items = listOf(
             ProfileSettingItem(Icons.Filled.Storage, context.getString(R.string.profile_item_manage_account), onManageAccountClick),
-            ProfileSettingItem(Icons.Filled.Logout, context.getString(R.string.profile_item_sign_out), onSignOutClick, isDestructive = true),
+            ProfileSettingItem(Icons.AutoMirrored.Filled.Logout, context.getString(R.string.profile_item_sign_out), onSignOutClick, isDestructive = true),
         ),
     )
 
@@ -496,16 +541,21 @@ private fun ProfileFooter(onConnectClick: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = SakhiSpacing.space6),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+            .padding(top = SakhiSpacing.space6, bottom = SakhiSpacing.space10),
+        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(
             text = stringResource(R.string.profile_footer_body),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
-        TextButton(onClick = onConnectClick) {
+        TextButton(
+            onClick = onConnectClick,
+            contentPadding = PaddingValues(0.dp),
+        ) {
             Text(
                 text = stringResource(R.string.profile_footer_cta),
                 style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
