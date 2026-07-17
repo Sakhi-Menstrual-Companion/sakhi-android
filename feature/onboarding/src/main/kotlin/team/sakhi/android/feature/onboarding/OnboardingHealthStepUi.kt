@@ -1,6 +1,7 @@
 package team.sakhi.android.feature.onboarding
 
 import android.app.DatePickerDialog
+import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,10 +23,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.ChevronLeft
-import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -105,7 +106,7 @@ fun OnboardingHealthStepScreen(
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         LinearProgressIndicator(
-            progress = navStateProgress.coerceIn(0f, 1f),
+            progress = { navStateProgress.coerceIn(0f, 1f) },
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -196,6 +197,7 @@ private fun DateOfBirthStepContent(
     val zoneId = remember { ZoneId.systemDefault() }
     val minDate = remember { LocalDate.now().minusYears(80) }
     val maxDate = remember { LocalDate.now().minusYears(12) }
+    val dateOfBirthFormatter = rememberDateFormatter(R.string.onboarding_date_of_birth_format)
 
     PinkCard(
         modifier = Modifier.fillMaxWidth(),
@@ -225,7 +227,7 @@ private fun DateOfBirthStepContent(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = dateOfBirth.format(DateFormatters.dateOfBirth),
+                text = dateOfBirth.format(dateOfBirthFormatter),
                 style = MaterialTheme.typography.bodyLarge,
             )
             Icon(
@@ -375,6 +377,7 @@ private fun LastPeriodStepContent(
 ) {
     val currentMonth = remember { YearMonth.now() }
     val days = remember(displayedMonth) { monthGrid(displayedMonth) }
+    val monthHeaderFormatter = rememberDateFormatter(R.string.onboarding_month_header_format)
 
     PinkCard {
         Column(
@@ -387,12 +390,12 @@ private fun LastPeriodStepContent(
             ) {
                 IconButton(onClick = onPreviousMonth) {
                     Icon(
-                        imageVector = Icons.Rounded.ChevronLeft,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = stringResource(R.string.onboarding_previous_month),
                     )
                 }
                 Text(
-                    text = displayedMonth.format(DateFormatters.monthHeader),
+                    text = displayedMonth.format(monthHeaderFormatter),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -401,7 +404,7 @@ private fun LastPeriodStepContent(
                     enabled = displayedMonth < currentMonth,
                 ) {
                     Icon(
-                        imageVector = Icons.Rounded.ChevronRight,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = stringResource(R.string.onboarding_next_month),
                     )
                 }
@@ -767,9 +770,14 @@ private data class DaysInfo(
     }
 }
 
-private object DateFormatters {
-    val dateOfBirth: DateTimeFormatter = DateTimeFormatter.ofPattern("dd / MM / yyyy", Locale.getDefault())
-    val monthHeader: DateTimeFormatter = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.getDefault())
+@Composable
+private fun rememberDateFormatter(
+    @StringRes patternRes: Int,
+): DateTimeFormatter {
+    val pattern = stringResource(patternRes)
+    return remember(pattern) {
+        DateTimeFormatter.ofPattern(pattern, Locale.getDefault())
+    }
 }
 
 private fun healthStepCopy(step: OnboardingFlowStep): HealthStepCopy = when (step) {

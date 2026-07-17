@@ -4,7 +4,7 @@ import org.koin.core.module.dsl.viewModel
 import org.koin.core.parameter.parametersOf
 import org.koin.dsl.module
 
-/** Registered by :app once onboarding replaces the shell placeholder route. */
+/** Koin module for the onboarding feature. */
 val onboardingFeatureModule = module {
     viewModel { params ->
         val flowId: String = params.get()

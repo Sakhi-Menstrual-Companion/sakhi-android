@@ -3,6 +3,7 @@ package team.sakhi.android.feature.onboarding
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
+import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -58,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
@@ -287,6 +289,13 @@ private fun ModeSelectionScreen(
 ) {
     val hapticManager = koinInject<AndroidHapticManager>()
     var isPartnerSelected by remember { mutableStateOf(false) }
+    val title = stringResource(R.string.onboarding_mode_selection_title)
+    val subtitle = stringResource(R.string.onboarding_mode_selection_subtitle)
+    val myselfTitle = stringResource(R.string.onboarding_mode_selection_myself_title)
+    val myselfDescription = stringResource(R.string.onboarding_mode_selection_myself_description)
+    val partnerTitle = stringResource(R.string.onboarding_mode_selection_partner_title)
+    val partnerDescription = stringResource(R.string.onboarding_mode_selection_partner_description)
+    val continueLabel = stringResource(R.string.onboarding_continue)
 
     Column(
         modifier = Modifier
@@ -295,19 +304,19 @@ private fun ModeSelectionScreen(
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         Text(
-            text = "Who Are You Here For?",
+            text = title,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
-            text = "We'll tailor your experience just for you.",
+            text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         ModeSelectionCard(
             icon = Icons.Filled.Person,
-            title = "Myself",
-            description = "Track your own health and cycle, and get answers made just for you.",
+            title = myselfTitle,
+            description = myselfDescription,
             isSelected = !isPartnerSelected,
             onClick = {
                 hapticManager.impact(HapticImpact.LIGHT)
@@ -316,8 +325,8 @@ private fun ModeSelectionScreen(
         )
         ModeSelectionCard(
             icon = Icons.Filled.Groups,
-            title = "My Partner",
-            description = "Care for someone you love. See what they share and be there when it matters.",
+            title = partnerTitle,
+            description = partnerDescription,
             isSelected = isPartnerSelected,
             onClick = {
                 hapticManager.impact(HapticImpact.LIGHT)
@@ -328,7 +337,7 @@ private fun ModeSelectionScreen(
         Spacer(modifier = Modifier.weight(1f))
 
         PrimaryButton(
-            text = "Continue",
+            text = continueLabel,
             onClick = { onModeSelected(isPartnerSelected) },
             modifier = Modifier.fillMaxWidth(),
         )
@@ -343,6 +352,8 @@ private fun ModeSelectionCard(
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
+    val stateSelected = stringResource(R.string.onboarding_state_selected)
+    val stateNotSelected = stringResource(R.string.onboarding_state_not_selected)
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xxl),
         color = if (isSelected) {
@@ -363,7 +374,7 @@ private fun ModeSelectionCard(
             .semantics {
                 this.selected = isSelected
                 role = Role.RadioButton
-                stateDescription = if (isSelected) "Selected" else "Not selected"
+                stateDescription = if (isSelected) stateSelected else stateNotSelected
             }
             .clickable(onClick = onClick),
     ) {
@@ -434,17 +445,25 @@ private fun PartnerInvitePromptScreen(
     onStartCareInviteUpgrade: () -> Unit,
 ) {
     val hapticManager = koinInject<AndroidHapticManager>()
+    val title = stringResource(R.string.onboarding_partner_invite_prompt_title)
+    val subtitle = stringResource(R.string.onboarding_partner_invite_prompt_subtitle)
+    val feature1 = stringResource(R.string.onboarding_partner_invite_prompt_feature_1)
+    val feature2 = stringResource(R.string.onboarding_partner_invite_prompt_feature_2)
+    val feature3 = stringResource(R.string.onboarding_partner_invite_prompt_feature_3)
+    val continueLabel = stringResource(R.string.onboarding_continue)
+    val backLabel = stringResource(R.string.onboarding_back)
+    val continueAsPartnerLabel = stringResource(R.string.onboarding_partner_invite_prompt_continue_as_partner)
     Column(
         modifier = Modifier
             .fillMaxSize()
             .padding(SakhiSpacing.space6),
     ) {
         Text(
-            text = "Bring Someone In?",
+            text = title,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
-            text = "Someone who cares about you might want to be here for you. You can always do this later from Settings.",
+            text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = SakhiSpacing.space2),
@@ -478,22 +497,22 @@ private fun PartnerInvitePromptScreen(
 
             CarePromptBullet(
                 icon = Icons.Filled.VisibilityOff,
-                text = "They only see what you choose to share",
+                text = feature1,
             )
             CarePromptBullet(
                 icon = Icons.Filled.Notifications,
-                text = "Get gentle check-ins when it matters",
+                text = feature2,
             )
             CarePromptBullet(
                 icon = Icons.Filled.Favorite,
-                text = "They can help log your period on your behalf",
+                text = feature3,
             )
         }
 
         Spacer(modifier = Modifier.weight(1f))
 
         PrimaryButton(
-            text = "Invite a Care Partner",
+            text = continueLabel,
             onClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
                 onContinue()
@@ -506,14 +525,14 @@ private fun PartnerInvitePromptScreen(
                 onClick = onBack,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             ) {
-                Text("Back")
+                Text(backLabel)
             }
         } else {
             TextButton(
                 onClick = onStartCareInviteUpgrade,
                 modifier = Modifier.align(Alignment.CenterHorizontally),
             ) {
-                Text("Continue as Care Partner")
+                Text(continueAsPartnerLabel)
             }
         }
     }
@@ -561,6 +580,7 @@ private fun InvitePermissionsScreen(
     onDismissError: () -> Unit,
 ) {
     var allowAll by remember(uiState.permissions) { mutableStateOf(uiState.permissions.isFullyShared()) }
+    val continueLabel = stringResource(R.string.onboarding_continue)
 
     Column(
         modifier = Modifier
@@ -570,18 +590,18 @@ private fun InvitePermissionsScreen(
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         Text(
-            text = "Share Only What Feels Right",
+            text = stringResource(R.string.onboarding_invite_permissions_title),
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
-            text = "What stays on, they see. What stays off, stays yours.",
+            text = stringResource(R.string.onboarding_invite_permissions_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         uiState.errorMessage?.let { error ->
             SakhiAlert(
-                title = "Couldn't create invite",
+                title = stringResource(R.string.onboarding_invite_permissions_error_title),
                 message = error,
                 tone = SakhiAlertTone.Error,
                 onDismiss = onDismissError,
@@ -590,8 +610,8 @@ private fun InvitePermissionsScreen(
 
         PermissionCard(
             icon = Icons.Filled.AutoAwesome,
-                title = "Allow everything",
-                description = "She can see all your cycle data and help log periods.",
+                title = stringResource(R.string.onboarding_invite_permissions_allow_all_title),
+                description = stringResource(R.string.onboarding_invite_permissions_allow_all_description),
                 isOn = allowAll,
                 onToggle = { enabled ->
                     allowAll = enabled
@@ -604,8 +624,8 @@ private fun InvitePermissionsScreen(
         if (!allowAll) {
             PermissionCard(
                 icon = Icons.Filled.CalendarMonth,
-                title = "Cycle & Periods",
-                description = "Period dates, cycle history, predictions, period logging.",
+                title = stringResource(R.string.onboarding_invite_permissions_cycle_title),
+                description = stringResource(R.string.onboarding_invite_permissions_cycle_description),
                 isOn = uiState.permissions.isCycleEnabled(),
                 onToggle = { enabled ->
                     onPermissionsChanged(uiState.permissions.withCyclePermissions(enabled))
@@ -614,8 +634,8 @@ private fun InvitePermissionsScreen(
             )
             PermissionCard(
                 icon = Icons.Filled.Favorite,
-                title = "Symptoms & Moods",
-                description = "How you're feeling physically and emotionally each day.",
+                title = stringResource(R.string.onboarding_invite_permissions_symptoms_title),
+                description = stringResource(R.string.onboarding_invite_permissions_symptoms_description),
                 isOn = uiState.permissions.isSymptomsEnabled(),
                 onToggle = { enabled ->
                     onPermissionsChanged(uiState.permissions.withSymptomsPermissions(enabled))
@@ -624,8 +644,8 @@ private fun InvitePermissionsScreen(
             )
             PermissionCard(
                 icon = Icons.Filled.CheckCircle,
-                title = "Daily Logs",
-                description = "Daily check-ins and ovulation test results.",
+                title = stringResource(R.string.onboarding_invite_permissions_daily_logs_title),
+                description = stringResource(R.string.onboarding_invite_permissions_daily_logs_description),
                 isOn = uiState.permissions.isDailyLogsEnabled(),
                 onToggle = { enabled ->
                     onPermissionsChanged(uiState.permissions.withDailyLogPermissions(enabled))
@@ -634,8 +654,8 @@ private fun InvitePermissionsScreen(
             )
             PermissionCard(
                 icon = Icons.Filled.Sync,
-                title = "Body Stats",
-                description = "Temperature, weight, and discharge tracking.",
+                title = stringResource(R.string.onboarding_invite_permissions_body_stats_title),
+                description = stringResource(R.string.onboarding_invite_permissions_body_stats_description),
                 isOn = uiState.permissions.isBodyStatsEnabled(),
                 onToggle = { enabled ->
                     onPermissionsChanged(uiState.permissions.withBodyStatsPermissions(enabled))
@@ -644,8 +664,8 @@ private fun InvitePermissionsScreen(
             )
             PermissionCard(
                 icon = Icons.Filled.Lock,
-                title = "Private Data",
-                description = "Personal notes and medications.",
+                title = stringResource(R.string.onboarding_invite_permissions_private_data_title),
+                description = stringResource(R.string.onboarding_invite_permissions_private_data_description),
                 isOn = uiState.permissions.isPrivateDataEnabled(),
                 onToggle = { enabled ->
                     onPermissionsChanged(uiState.permissions.withPrivateDataPermissions(enabled))
@@ -655,7 +675,11 @@ private fun InvitePermissionsScreen(
         }
 
         PrimaryButton(
-            text = if (uiState.isCreatingInvite) "Creating invite..." else "Continue",
+            text = if (uiState.isCreatingInvite) {
+                stringResource(R.string.onboarding_invite_permissions_creating)
+            } else {
+                continueLabel
+            },
             onClick = onContinue,
             enabled = !uiState.isCreatingInvite,
             modifier = Modifier
@@ -729,8 +753,18 @@ private fun InviteShareScreen(
 ) {
     val context = LocalContext.current
     val hapticManager = koinInject<AndroidHapticManager>()
-    val displayName = uiState.pendingInvitation.displayName()
-    val shareMessage = "Hey! I use Sakhi to track my health. Open the app, go to My Sakhi, tap I have a code, and enter: ${uiState.inviteCode}"
+    val displayName = uiState.pendingInvitation.displayName().ifBlank {
+        context.getString(R.string.onboarding_invite_fallback_partner)
+    }
+    val shareMessage = context.getString(R.string.onboarding_invite_share_message, uiState.inviteCode)
+    val shareTitle = stringResource(R.string.onboarding_invite_share_title, displayName)
+    val shareSubtitle = stringResource(R.string.onboarding_invite_share_subtitle, displayName)
+    val errorTitle = stringResource(R.string.onboarding_invite_action_error_title)
+    val codeCopiedTitle = stringResource(R.string.onboarding_invite_code_copied_title)
+    val codeCopiedMessage = stringResource(R.string.onboarding_invite_code_copied_message, displayName)
+    val shareButtonLabel = stringResource(R.string.onboarding_invite_share_button)
+    val cancelLabel = stringResource(R.string.onboarding_invite_cancel)
+    val cancellingLabel = stringResource(R.string.onboarding_invite_cancelling)
     var copyNotice by remember { mutableStateOf<String?>(null) }
     var previousConnected by remember { mutableStateOf(uiState.isConnected) }
 
@@ -752,13 +786,13 @@ private fun InviteShareScreen(
         InviteHero(icon = Icons.Filled.Share)
 
         Text(
-            text = "Share with $displayName",
+            text = shareTitle,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = SakhiSpacing.space6),
         )
         Text(
-            text = "Ask $displayName to open Sakhi and enter this code to connect.",
+            text = shareSubtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -767,7 +801,7 @@ private fun InviteShareScreen(
 
         uiState.errorMessage?.let { error ->
             SakhiAlert(
-                title = "Couldn't finish that",
+                title = errorTitle,
                 message = error,
                 tone = SakhiAlertTone.Error,
                 onDismiss = onDismissError,
@@ -777,7 +811,7 @@ private fun InviteShareScreen(
 
         copyNotice?.let { notice ->
             SakhiAlert(
-                title = "Code Copied",
+                title = codeCopiedTitle,
                 message = notice,
                 modifier = Modifier.padding(top = SakhiSpacing.space4),
                 onDismiss = { copyNotice = null },
@@ -790,14 +824,14 @@ private fun InviteShareScreen(
             onCopy = {
                 hapticManager.success()
                 copyInviteCode(context = context, code = uiState.inviteCode)
-                copyNotice = "Share it with $displayName."
+                copyNotice = codeCopiedMessage
             },
         )
 
         Spacer(modifier = Modifier.weight(1f))
 
         PrimaryButton(
-            text = "Share",
+            text = shareButtonLabel,
             onClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
                 shareInviteMessage(context, shareMessage)
@@ -807,7 +841,7 @@ private fun InviteShareScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         SecondaryButton(
-            text = if (uiState.isCancellingInvite) "Cancelling..." else "Cancel",
+            text = if (uiState.isCancellingInvite) cancellingLabel else cancelLabel,
             onClick = onCancelInvitation,
             enabled = !uiState.isCancellingInvite,
             modifier = Modifier
@@ -826,8 +860,21 @@ private fun InviteWaitingScreen(
 ) {
     val context = LocalContext.current
     val hapticManager = koinInject<AndroidHapticManager>()
-    val displayName = uiState.pendingInvitation.displayName()
-    val shareMessage = "Hey! I use Sakhi to track my health. Open the app, go to My Sakhi, tap I have a code, and enter: ${uiState.inviteCode}"
+    val displayName = uiState.pendingInvitation.displayName().ifBlank {
+        context.getString(R.string.onboarding_invite_fallback_partner)
+    }
+    val shareMessage = context.getString(R.string.onboarding_invite_share_message, uiState.inviteCode)
+    val connectedTitle = stringResource(R.string.onboarding_invite_connected_title)
+    val connectedSubtitle = stringResource(R.string.onboarding_invite_connected_subtitle, displayName)
+    val waitingTitle = stringResource(R.string.onboarding_invite_waiting_title, displayName)
+    val waitingSubtitle = stringResource(R.string.onboarding_invite_waiting_subtitle, displayName)
+    val errorTitle = stringResource(R.string.onboarding_invite_action_error_title)
+    val codeCopiedTitle = stringResource(R.string.onboarding_invite_code_copied_title)
+    val codeCopiedMessage = stringResource(R.string.onboarding_invite_code_copied_message, displayName)
+    val connectedButtonLabel = stringResource(R.string.onboarding_invite_connected_button)
+    val shareButtonLabel = stringResource(R.string.onboarding_invite_share_button)
+    val cancelLabel = stringResource(R.string.onboarding_invite_cancel)
+    val cancellingLabel = stringResource(R.string.onboarding_invite_cancelling)
     var copyNotice by remember { mutableStateOf<String?>(null) }
 
     Column(
@@ -841,14 +888,14 @@ private fun InviteWaitingScreen(
         InviteHero(icon = if (uiState.isConnected) Icons.Filled.CheckCircle else Icons.Filled.Groups)
 
         val title = if (uiState.isConnected) {
-            "Connected"
+            connectedTitle
         } else {
-            "Waiting for $displayName to accept. I'm making something just between you two."
+            waitingTitle
         }
         val subtitle = if (uiState.isConnected) {
-            "$displayName is now your care partner."
+            connectedSubtitle
         } else {
-            "We'll let you know as soon as $displayName connects."
+            waitingSubtitle
         }
 
         Text(
@@ -867,7 +914,7 @@ private fun InviteWaitingScreen(
 
         uiState.errorMessage?.let { error ->
             SakhiAlert(
-                title = "Couldn't finish that",
+                title = errorTitle,
                 message = error,
                 tone = SakhiAlertTone.Error,
                 onDismiss = onDismissError,
@@ -884,7 +931,7 @@ private fun InviteWaitingScreen(
 
         copyNotice?.let { notice ->
             SakhiAlert(
-                title = "Code Copied",
+                title = codeCopiedTitle,
                 message = notice,
                 modifier = Modifier.padding(top = SakhiSpacing.space4),
                 onDismiss = { copyNotice = null },
@@ -898,7 +945,7 @@ private fun InviteWaitingScreen(
                 onCopy = {
                     hapticManager.success()
                     copyInviteCode(context = context, code = uiState.inviteCode)
-                    copyNotice = "Share it with $displayName."
+                    copyNotice = codeCopiedMessage
                 },
             )
         }
@@ -907,7 +954,7 @@ private fun InviteWaitingScreen(
 
         if (uiState.isConnected) {
             PrimaryButton(
-                text = "Let's Get Started",
+                text = connectedButtonLabel,
                 onClick = {
                     hapticManager.impact(HapticImpact.MEDIUM)
                     onContinue()
@@ -916,7 +963,7 @@ private fun InviteWaitingScreen(
             )
         } else {
             PrimaryButton(
-                text = "Share",
+                text = shareButtonLabel,
                 onClick = {
                     hapticManager.impact(HapticImpact.MEDIUM)
                     shareInviteMessage(context, shareMessage)
@@ -925,7 +972,7 @@ private fun InviteWaitingScreen(
                 modifier = Modifier.fillMaxWidth(),
             )
             SecondaryButton(
-                text = if (uiState.isCancellingInvite) "Cancelling..." else "Cancel",
+                text = if (uiState.isCancellingInvite) cancellingLabel else cancelLabel,
                 onClick = onCancelInvitation,
                 enabled = !uiState.isCancellingInvite,
                 modifier = Modifier
@@ -995,7 +1042,9 @@ private fun copyInviteCode(
     code: String,
 ) {
     val clipboard = context.getSystemService(ClipboardManager::class.java) ?: return
-    clipboard.setPrimaryClip(ClipData.newPlainText("Sakhi invite code", code))
+    clipboard.setPrimaryClip(
+        ClipData.newPlainText(context.getString(R.string.onboarding_invite_clipboard_label), code),
+    )
 }
 
 private fun shareInviteMessage(
@@ -1022,8 +1071,7 @@ private fun formatInviteCode(code: String): String {
 }
 
 private fun team.sakhi.models.PartnerInvitation?.displayName(): String {
-    val name = this?.inviteeName?.trim().orEmpty()
-    return if (name.isBlank()) "your partner" else name
+    return this?.inviteeName?.trim().orEmpty()
 }
 
 private fun ParentChildPermissions.isFullyShared(): Boolean =
@@ -1107,10 +1155,16 @@ private fun ParentChildPermissions.withPrivateDataPermissions(enabled: Boolean):
 @Composable
 private fun PrivacyScreen(onContinue: (offline: Boolean) -> Unit) {
     var isOfflineSelected by remember { mutableStateOf(false) }
+    val title = stringResource(R.string.onboarding_privacy_title)
+    val secureTitle = stringResource(R.string.onboarding_privacy_secure_title)
+    val secureDescription = stringResource(R.string.onboarding_privacy_secure_description)
+    val offlineTitle = stringResource(R.string.onboarding_privacy_offline_title)
+    val offlineDescription = stringResource(R.string.onboarding_privacy_offline_description)
+    val continueLabel = stringResource(R.string.onboarding_continue)
 
     Column(modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6)) {
         Text(
-            text = "Your Privacy Comes First, Always.",
+            text = title,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
             modifier = Modifier.padding(bottom = SakhiSpacing.space6),
         )
@@ -1118,15 +1172,15 @@ private fun PrivacyScreen(onContinue: (offline: Boolean) -> Unit) {
         Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4)) {
             PrivacyChoiceCard(
                 icon = Icons.Filled.Shield,
-                title = "Secure my data",
-                description = "Create an account to safely back up your data and access it anytime, across your devices.",
+                title = secureTitle,
+                description = secureDescription,
                 isSelected = !isOfflineSelected,
                 onClick = { isOfflineSelected = false },
             )
             PrivacyChoiceCard(
                 icon = Icons.Filled.PhoneAndroid,
-                title = "Keep data on this device only",
-                description = "Your data stays on this device and won't be available if you change or lose your phone.",
+                title = offlineTitle,
+                description = offlineDescription,
                 isSelected = isOfflineSelected,
                 onClick = { isOfflineSelected = true },
             )
@@ -1135,7 +1189,7 @@ private fun PrivacyScreen(onContinue: (offline: Boolean) -> Unit) {
         Spacer(modifier = Modifier.weight(1f))
 
         PrimaryButton(
-            text = "Continue",
+            text = continueLabel,
             onClick = { onContinue(isOfflineSelected) },
             modifier = Modifier.fillMaxWidth(),
         )
@@ -1151,6 +1205,9 @@ private fun PrivacyChoiceCard(
     isError: Boolean = false,
     onClick: () -> Unit,
 ) {
+    val stateNeedsAttention = stringResource(R.string.onboarding_state_needs_attention)
+    val stateSelected = stringResource(R.string.onboarding_state_selected)
+    val stateNotSelected = stringResource(R.string.onboarding_state_not_selected)
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xl),
         tonalElevation = SakhiSpacing.space1,
@@ -1161,9 +1218,9 @@ private fun PrivacyChoiceCard(
                 this.selected = isSelected
                 role = Role.RadioButton
                 stateDescription = when {
-                    isError -> "Needs attention"
-                    isSelected -> "Selected"
-                    else -> "Not selected"
+                    isError -> stateNeedsAttention
+                    isSelected -> stateSelected
+                    else -> stateNotSelected
                 }
             }
             .clickable(onClick = onClick),
@@ -1226,28 +1283,25 @@ private fun PrivacyChoiceCard(
 
 // ── Terms ───────────────────────────────────────────────────────────────────
 
-private const val privacyFallbackText = """At Sakhi, protecting your privacy is our highest priority. Your data is securely stored and remains solely under your control.
-
-Your personal information, including cycle data, is never shared with third parties. We do not track, sell, or distribute your data. Only you have access to your information.
-
-By using Sakhi, you retain full control over your data, and you may request its deletion at any time.
-
-We use industry-standard encryption to safeguard your health information. Your cycle, health metrics, and personal details are protected end-to-end.
-
-Sakhi will never sell your data to advertisers or data brokers. We believe your health is your business alone."""
-
 @Composable
 private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> Unit) {
     val hapticManager = koinInject<AndroidHapticManager>()
     var hasAccepted by remember { mutableStateOf(false) }
+    val title = stringResource(R.string.onboarding_terms_title)
+    val subtitle = stringResource(R.string.onboarding_terms_subtitle)
+    val agreementLabel = stringResource(R.string.onboarding_terms_agreement)
+    val privacyText = stringResource(R.string.onboarding_terms_privacy_fallback)
+    val continueLabel = stringResource(R.string.onboarding_continue)
+    val stateSelected = stringResource(R.string.onboarding_state_selected)
+    val stateNotSelected = stringResource(R.string.onboarding_state_not_selected)
 
     Column(modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6)) {
         Text(
-            text = "You're in",
+            text = title,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
-            text = "Sakhi encrypts and protects everything you track.",
+            text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space5),
@@ -1259,7 +1313,7 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
             modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp),
         ) {
             Text(
-                text = privacyFallbackText,
+                text = privacyText,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
                 modifier = Modifier
@@ -1275,7 +1329,7 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
                 .semantics {
                     selected = hasAccepted
                     role = Role.Checkbox
-                    stateDescription = if (hasAccepted) "Selected" else "Not selected"
+                    stateDescription = if (hasAccepted) stateSelected else stateNotSelected
                 }
                 .clickable {
                     hapticManager.impact(HapticImpact.LIGHT)
@@ -1305,7 +1359,7 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
                 }
             }
             Text(
-                text = "I agree to the Terms & Conditions and Privacy Policy",
+                text = agreementLabel,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
@@ -1324,7 +1378,7 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
         Spacer(modifier = Modifier.weight(1f))
 
         PrimaryButton(
-            text = "Continue",
+            text = continueLabel,
             onClick = { onContinue(hasAccepted) },
             modifier = Modifier.fillMaxWidth(),
         )
@@ -1333,24 +1387,107 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
 
 // ── Universal Intro / Celebration / Offline Warning ───────────────────────
 
+// iOS's `UniversalIntroStep` has no hero icon of its own -- the shared
+// `OnboardingFlowView` shell renders just title+subtitle, then the step's
+// `contentView`, which for this step is three `FeatureBulletRow`s (real
+// Sanity-CMS copy, bundled as `onboarding.intro.feature{1,2,3}.title/subtitle`).
+// This was the first real screen a new user sees and was missing this content
+// entirely on Android.
 @Composable
 private fun UniversalIntroScreen(onContinue: () -> Unit) {
-    HeroContentStep(
-        icon = Icons.Filled.AutoAwesome,
-        title = "Sakhi",
-        subtitle = "Track your cycle, understand your body, and feel a little more supported every day.",
-        primaryLabel = "Continue",
-        onPrimaryClick = onContinue,
-    )
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(SakhiSpacing.space6),
+    ) {
+        Text(
+            text = stringResource(R.string.onboarding_intro_title),
+            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+        )
+        Text(
+            text = stringResource(R.string.onboarding_intro_subtitle),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space6),
+        )
+
+        FeatureBulletRow(
+            icon = Icons.Filled.TouchApp,
+            title = stringResource(R.string.onboarding_intro_feature_1_title),
+            subtitle = stringResource(R.string.onboarding_intro_feature_1_subtitle),
+        )
+        FeatureBulletRow(
+            icon = Icons.Filled.AutoAwesome,
+            title = stringResource(R.string.onboarding_intro_feature_2_title),
+            subtitle = stringResource(R.string.onboarding_intro_feature_2_subtitle),
+        )
+        FeatureBulletRow(
+            icon = Icons.Filled.Favorite,
+            title = stringResource(R.string.onboarding_intro_feature_3_title),
+            subtitle = stringResource(R.string.onboarding_intro_feature_3_subtitle),
+        )
+
+        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(SakhiSpacing.space6))
+
+        PrimaryButton(
+            text = stringResource(R.string.onboarding_continue),
+            onClick = onContinue,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun FeatureBulletRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = SakhiSpacing.space3),
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = SakhiSpacing.space1),
+            )
+        }
+    }
 }
 
 @Composable
 private fun CelebrationScreen(onContinue: () -> Unit) {
     HeroContentStep(
         icon = Icons.Filled.Favorite,
-        title = "You're all set",
-        subtitle = "Sakhi is ready. Let's start with a few quick things so your cycle stays accurate from day one.",
-        primaryLabel = "Continue",
+        title = stringResource(R.string.onboarding_celebration_title),
+        subtitle = stringResource(R.string.onboarding_celebration_subtitle),
+        primaryLabel = stringResource(R.string.onboarding_celebration_button),
         onPrimaryClick = onContinue,
     )
 }
@@ -1364,6 +1501,8 @@ private fun IntroCarouselScreen(
 ) {
     var pageIndex by remember(slides) { mutableStateOf(0) }
     val currentSlide = slides[pageIndex]
+    val backLabel = stringResource(R.string.onboarding_back)
+    val continueLabel = stringResource(R.string.onboarding_continue)
 
     Column(
         modifier = Modifier
@@ -1376,7 +1515,7 @@ private fun IntroCarouselScreen(
                 onClick = onBack,
                 modifier = Modifier.align(Alignment.Start),
             ) {
-                Text("Back")
+                Text(backLabel)
             }
         } else {
             Spacer(modifier = Modifier.size(SakhiSpacing.space8))
@@ -1391,13 +1530,13 @@ private fun IntroCarouselScreen(
             modifier = Modifier.padding(top = SakhiSpacing.space5),
         )
         Text(
-            text = currentSlide.title,
+            text = stringResource(currentSlide.titleRes),
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = SakhiSpacing.space6),
         )
         Text(
-            text = currentSlide.subtitle,
+            text = stringResource(currentSlide.subtitleRes),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -1407,7 +1546,7 @@ private fun IntroCarouselScreen(
         Spacer(modifier = Modifier.weight(1f))
 
         PrimaryButton(
-            text = "Continue",
+            text = continueLabel,
             onClick = {
                 if (pageIndex < slides.lastIndex) {
                     pageIndex += 1
@@ -1428,11 +1567,11 @@ private fun OfflineWarningScreen(
 ) {
     HeroContentStep(
         icon = Icons.Filled.CloudOff,
-        title = "You can use Sakhi offline",
-        subtitle = "Some features will be limited until you're back online, but your data will stay on this device.",
-        primaryLabel = "Continue",
+        title = stringResource(R.string.onboarding_offline_warning_title),
+        subtitle = stringResource(R.string.onboarding_offline_warning_subtitle),
+        primaryLabel = stringResource(R.string.onboarding_offline_warning_continue),
         onPrimaryClick = onContinue,
-        secondaryLabel = if (canGoBack) "Back" else null,
+        secondaryLabel = if (canGoBack) stringResource(R.string.onboarding_back) else null,
         onSecondaryClick = if (canGoBack) onBack else null,
     )
 }
@@ -1441,9 +1580,9 @@ private fun OfflineWarningScreen(
 private fun JoinFamilyIntroScreen(onContinue: () -> Unit) {
     HeroContentStep(
         icon = Icons.Filled.Groups,
-        title = "You Belong Here",
-        subtitle = "Your history stays safe, right where you left it. And you're no longer doing this alone.",
-        primaryLabel = "Continue",
+        title = stringResource(R.string.onboarding_join_family_intro_title),
+        subtitle = stringResource(R.string.onboarding_join_family_intro_subtitle),
+        primaryLabel = stringResource(R.string.onboarding_continue),
         onPrimaryClick = onContinue,
     )
 }
@@ -1452,9 +1591,9 @@ private fun JoinFamilyIntroScreen(onContinue: () -> Unit) {
 private fun CareUpgradeIntroScreen(onContinue: () -> Unit) {
     HeroContentStep(
         icon = Icons.Filled.CloudOff,
-        title = "You're using Sakhi offline",
-        subtitle = "Care partner setup needs your online account so Sakhi can create and share the invite securely. Your logs stay safe when you continue.",
-        primaryLabel = "Create account",
+        title = stringResource(R.string.onboarding_care_upgrade_intro_title),
+        subtitle = stringResource(R.string.onboarding_care_upgrade_intro_subtitle),
+        primaryLabel = stringResource(R.string.onboarding_care_upgrade_intro_button),
         onPrimaryClick = onContinue,
     )
 }
@@ -1530,38 +1669,38 @@ private fun OnboardingDots(
 
 private data class OnboardingIntroSlide(
     val icon: ImageVector,
-    val title: String,
-    val subtitle: String,
+    @StringRes val titleRes: Int,
+    @StringRes val subtitleRes: Int,
 )
 
 private val myselfIntroSlides = listOf(
     OnboardingIntroSlide(
         icon = Icons.Filled.AutoAwesome,
-        title = "Log It in One Tap",
-        subtitle = "A cramp, a mood, a long day. Tap once and Sakhi remembers, so you never have to carry it all in your head.",
+        titleRes = R.string.onboarding_intro_feature_1_title,
+        subtitleRes = R.string.onboarding_intro_feature_1_subtitle,
     ),
     OnboardingIntroSlide(
         icon = Icons.Filled.Favorite,
-        title = "Made for You",
-        subtitle = "Not the same tips everyone gets. What Sakhi suggests is shaped by your body, your cycle, your day.",
+        titleRes = R.string.onboarding_intro_feature_2_title,
+        subtitleRes = R.string.onboarding_intro_feature_2_subtitle,
     ),
     OnboardingIntroSlide(
         icon = Icons.Filled.Groups,
-        title = "Never Do It Alone",
-        subtitle = "Track just for you, or let someone you trust be there for you. You choose what they see, always.",
+        titleRes = R.string.onboarding_intro_feature_3_title,
+        subtitleRes = R.string.onboarding_intro_feature_3_subtitle,
     ),
 )
 
 private val joinFamilyIntroSlides = listOf(
     OnboardingIntroSlide(
         icon = Icons.Filled.AutoAwesome,
-        title = "Almost There",
-        subtitle = "A safe space built just for you. Your cycle, your body, always protected.",
+        titleRes = R.string.onboarding_join_slide_1_title,
+        subtitleRes = R.string.onboarding_join_slide_1_subtitle,
     ),
     OnboardingIntroSlide(
         icon = Icons.Filled.Shield,
-        title = "Always Yours",
-        subtitle = "Encrypted and private. Sakhi will never share your health information with anyone.",
+        titleRes = R.string.onboarding_join_slide_2_title,
+        subtitleRes = R.string.onboarding_join_slide_2_subtitle,
     ),
 )
 
@@ -1580,6 +1719,13 @@ private fun InviteContactAccessScreen(onContinue: () -> Unit) {
     val hapticManager = koinInject<AndroidHapticManager>()
     var showDeniedSheet by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val accessTitle = stringResource(R.string.onboarding_invite_contact_access_title)
+    val accessSubtitle = stringResource(R.string.onboarding_invite_contact_access_subtitle)
+    val accessButtonLabel = stringResource(R.string.onboarding_invite_contact_access_button)
+    val deniedTitle = stringResource(R.string.onboarding_invite_contact_denied_title)
+    val deniedMessage = stringResource(R.string.onboarding_invite_contact_denied_message)
+    val deniedConfirmLabel = stringResource(R.string.onboarding_invite_contact_denied_confirm)
+    val deniedDismissLabel = stringResource(R.string.onboarding_invite_contact_denied_dismiss)
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission(),
@@ -1606,12 +1752,12 @@ private fun InviteContactAccessScreen(onContinue: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(SakhiSpacing.space6))
         Text(
-            text = "Invite a Care Partner",
+            text = accessTitle,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center,
         )
         Text(
-            text = "Sakhi needs access to your contacts so you can quickly find and invite someone to be your Care Partner.",
+            text = accessSubtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -1619,7 +1765,7 @@ private fun InviteContactAccessScreen(onContinue: () -> Unit) {
         )
         Spacer(modifier = Modifier.weight(1f))
         PrimaryButton(
-            text = "Allow Contacts Access",
+            text = accessButtonLabel,
             onClick = {
                 hapticManager.impact(HapticImpact.LIGHT)
                 permissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
@@ -1634,8 +1780,8 @@ private fun InviteContactAccessScreen(onContinue: () -> Unit) {
     if (showDeniedSheet) {
         AlertDialog(
             onDismissRequest = { showDeniedSheet = false },
-            title = { Text("Contacts access needed") },
-            text = { Text("Sakhi needs contacts access to invite a Care Partner. You can allow it from Settings.") },
+            title = { Text(deniedTitle) },
+            text = { Text(deniedMessage) },
             confirmButton = {
                 TextButton(onClick = {
                     showDeniedSheet = false
@@ -1655,12 +1801,12 @@ private fun InviteContactAccessScreen(onContinue: () -> Unit) {
                         context.startActivity(intent)
                     }
                 }) {
-                    Text("Give Access")
+                    Text(deniedConfirmLabel)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeniedSheet = false }) {
-                    Text("Not Now")
+                    Text(deniedDismissLabel)
                 }
             },
         )
@@ -1678,6 +1824,11 @@ private fun InvitePickContactScreen(
 ) {
     val hapticManager = koinInject<AndroidHapticManager>()
     val context = LocalContext.current
+    val pickTitle = stringResource(R.string.onboarding_invite_pick_title)
+    val pickSubtitle = stringResource(R.string.onboarding_invite_pick_subtitle)
+    val contactPlaceholder = stringResource(R.string.onboarding_invite_pick_placeholder)
+    val relationTitle = stringResource(R.string.onboarding_invite_relation_title)
+    val continueLabel = stringResource(R.string.onboarding_continue)
 
     val contactPickerLauncher = rememberLauncherForActivityResult(
         contract = androidx.activity.result.contract.ActivityResultContracts.PickContact(),
@@ -1697,11 +1848,11 @@ private fun InvitePickContactScreen(
             .verticalScroll(rememberScrollState()),
     ) {
         Text(
-            text = "Choose Who to Invite",
+            text = pickTitle,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
-            text = "Pick someone from your contacts to be your Care Partner.",
+            text = pickSubtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space5),
@@ -1724,7 +1875,7 @@ private fun InvitePickContactScreen(
                 Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Spacer(modifier = Modifier.width(SakhiSpacing.space3))
                 Text(
-                    text = uiState.selectedContactName.ifBlank { "Choose a contact" },
+                    text = uiState.selectedContactName.ifBlank { contactPlaceholder },
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (uiState.selectedContactName.isBlank()) {
                         MaterialTheme.colorScheme.onSurfaceVariant
@@ -1737,7 +1888,7 @@ private fun InvitePickContactScreen(
 
         if (uiState.selectedContactName.isNotBlank()) {
             Text(
-                text = "Their Relation to You",
+                text = relationTitle,
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 modifier = Modifier.padding(top = SakhiSpacing.space6, bottom = SakhiSpacing.space3),
             )
@@ -1745,8 +1896,8 @@ private fun InvitePickContactScreen(
                 partnerRelationOptions.forEach { option ->
                     RelationOptionCard(
                         option = option,
-                        isSelected = option.title == pendingPartnerRelation,
-                        onClick = { onPartnerRelationSelected(option.title) },
+                        isSelected = option.value == pendingPartnerRelation,
+                        onClick = { onPartnerRelationSelected(option.value) },
                     )
                 }
             }
@@ -1763,7 +1914,7 @@ private fun InvitePickContactScreen(
 
         Spacer(modifier = Modifier.height(SakhiSpacing.space6))
         PrimaryButton(
-            text = "Continue",
+            text = continueLabel,
             onClick = {
                 if (uiState.selectedContactName.isBlank() || pendingPartnerRelation.isBlank()) {
                     hapticManager.error()
@@ -1817,15 +1968,50 @@ private fun queryContact(context: android.content.Context, uri: android.net.Uri)
 // empty selection with the exact iOS field-error copy -- same shared-first
 // pattern as `TermsDecided`, not an Android-local validation fork.
 
-private data class RelationOption(val title: String, val subtitle: String, val icon: ImageVector)
+private data class RelationOption(
+    val value: String,
+    @StringRes val titleRes: Int,
+    @StringRes val subtitleRes: Int,
+    val icon: ImageVector,
+)
 
 private val partnerRelationOptions = listOf(
-    RelationOption("Boyfriend", "Your partner", Icons.Filled.Favorite),
-    RelationOption("Husband", "Your life partner", Icons.Filled.Favorite),
-    RelationOption("Brother", "Your sibling", Icons.Filled.Groups),
-    RelationOption("Father", "Your parent", Icons.Filled.Person),
-    RelationOption("Friend", "Your bestie", Icons.Filled.Person),
-    RelationOption("Other", "Someone special", Icons.Filled.AutoAwesome),
+    RelationOption(
+        value = "Boyfriend",
+        titleRes = R.string.onboarding_invite_relation_boyfriend_title,
+        subtitleRes = R.string.onboarding_invite_relation_boyfriend_subtitle,
+        icon = Icons.Filled.Favorite,
+    ),
+    RelationOption(
+        value = "Husband",
+        titleRes = R.string.onboarding_invite_relation_husband_title,
+        subtitleRes = R.string.onboarding_invite_relation_husband_subtitle,
+        icon = Icons.Filled.Favorite,
+    ),
+    RelationOption(
+        value = "Brother",
+        titleRes = R.string.onboarding_invite_relation_brother_title,
+        subtitleRes = R.string.onboarding_invite_relation_brother_subtitle,
+        icon = Icons.Filled.Groups,
+    ),
+    RelationOption(
+        value = "Father",
+        titleRes = R.string.onboarding_invite_relation_father_title,
+        subtitleRes = R.string.onboarding_invite_relation_father_subtitle,
+        icon = Icons.Filled.Person,
+    ),
+    RelationOption(
+        value = "Friend",
+        titleRes = R.string.onboarding_invite_relation_friend_title,
+        subtitleRes = R.string.onboarding_invite_relation_friend_subtitle,
+        icon = Icons.Filled.Person,
+    ),
+    RelationOption(
+        value = "Other",
+        titleRes = R.string.onboarding_invite_relation_other_title,
+        subtitleRes = R.string.onboarding_invite_relation_other_subtitle,
+        icon = Icons.Filled.AutoAwesome,
+    ),
 )
 
 @Composable
@@ -1835,13 +2021,17 @@ private fun PartnerRelationScreen(
     onSelected: (String) -> Unit,
     onContinue: () -> Unit,
 ) {
+    val relationTitle = stringResource(R.string.onboarding_invite_relation_title)
+    val relationSubtitle = stringResource(R.string.onboarding_invite_relation_subtitle)
+    val continueLabel = stringResource(R.string.onboarding_continue)
+
     Column(modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6)) {
         Text(
-            text = "Their Relation to You",
+            text = relationTitle,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
-            text = "Who are you inviting?",
+            text = relationSubtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space5),
@@ -1854,8 +2044,8 @@ private fun PartnerRelationScreen(
             partnerRelationOptions.forEach { option ->
                 RelationOptionCard(
                     option = option,
-                    isSelected = option.title == selected,
-                    onClick = { onSelected(option.title) },
+                    isSelected = option.value == selected,
+                    onClick = { onSelected(option.value) },
                 )
             }
         }
@@ -1869,12 +2059,14 @@ private fun PartnerRelationScreen(
             )
         }
 
-        PrimaryButton(text = "Continue", onClick = onContinue, modifier = Modifier.fillMaxWidth())
+        PrimaryButton(text = continueLabel, onClick = onContinue, modifier = Modifier.fillMaxWidth())
     }
 }
 
 @Composable
 private fun RelationOptionCard(option: RelationOption, isSelected: Boolean, onClick: () -> Unit) {
+    val stateSelected = stringResource(R.string.onboarding_state_selected)
+    val stateNotSelected = stringResource(R.string.onboarding_state_not_selected)
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xl),
         tonalElevation = SakhiSpacing.space1,
@@ -1884,7 +2076,7 @@ private fun RelationOptionCard(option: RelationOption, isSelected: Boolean, onCl
             .semantics {
                 this.selected = isSelected
                 role = Role.RadioButton
-                stateDescription = if (isSelected) "Selected" else "Not selected"
+                stateDescription = if (isSelected) stateSelected else stateNotSelected
             }
             .clickable(onClick = onClick),
     ) {
@@ -1902,9 +2094,12 @@ private fun RelationOptionCard(option: RelationOption, isSelected: Boolean, onCl
                 Icon(imageVector = option.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
             }
             Column(modifier = Modifier.weight(1f)) {
-                Text(text = option.title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
                 Text(
-                    text = option.subtitle,
+                    text = stringResource(option.titleRes),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                )
+                Text(
+                    text = stringResource(option.subtitleRes),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1928,14 +2123,16 @@ private fun BeHerSakhiScreen(
     onBack: () -> Unit,
 ) {
     var code by remember { mutableStateOf("") }
+    val continueLabel = stringResource(R.string.onboarding_continue)
+    val backLabel = stringResource(R.string.onboarding_back)
 
     Column(modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6)) {
         Text(
-            text = "Enter the code",
+            text = stringResource(R.string.onboarding_be_her_sakhi_title),
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
-            text = "Ask the person caring for you to share their Sakhi invite code.",
+            text = stringResource(R.string.onboarding_be_her_sakhi_subtitle),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space5),
@@ -1945,7 +2142,7 @@ private fun BeHerSakhiScreen(
             value = code,
             onValueChange = { code = it.take(6).uppercase() },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("Partner code (e.g. AB3K7R)") },
+            placeholder = { Text(stringResource(R.string.onboarding_be_her_sakhi_placeholder)) },
             singleLine = true,
         )
 
@@ -1960,10 +2157,10 @@ private fun BeHerSakhiScreen(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        PrimaryButton(text = "Continue", onClick = { onSubmit(code) }, modifier = Modifier.fillMaxWidth())
+        PrimaryButton(text = continueLabel, onClick = { onSubmit(code) }, modifier = Modifier.fillMaxWidth())
         if (canGoBack) {
             TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text("Back")
+                Text(backLabel)
             }
         }
     }
@@ -2021,6 +2218,11 @@ private fun BeHerAcceptScreen(
     onComplete: () -> Unit,
 ) {
     LaunchedEffect(Unit) { onAccept() }
+    val successTitle = stringResource(R.string.onboarding_accept_success_title)
+    val successSubtitle = stringResource(R.string.onboarding_accept_success_subtitle)
+    val connectionIssueTitle = stringResource(R.string.onboarding_accept_error_connection_title)
+    val invalidCodeTitle = stringResource(R.string.onboarding_accept_error_invalid_title)
+    val retryLabel = stringResource(R.string.onboarding_retry)
 
     LaunchedEffect(uiState.succeeded) {
         if (uiState.succeeded) {
@@ -2051,13 +2253,13 @@ private fun BeHerAcceptScreen(
                     )
                 }
                 Text(
-                    text = "You're connected!",
+                    text = successTitle,
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = SakhiSpacing.space5),
                 )
                 Text(
-                    text = "You're now her Sakhi. She'll feel the difference.",
+                    text = successSubtitle,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -2066,7 +2268,7 @@ private fun BeHerAcceptScreen(
             }
             uiState.error != null -> {
                 Text(
-                    text = if (uiState.canRetry) "Connection issue" else "Code not valid",
+                    text = if (uiState.canRetry) connectionIssueTitle else invalidCodeTitle,
                     style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                     textAlign = TextAlign.Center,
                 )
@@ -2086,7 +2288,7 @@ private fun BeHerAcceptScreen(
         Spacer(modifier = Modifier.weight(1f))
 
         if (uiState.error != null && uiState.canRetry) {
-            PrimaryButton(text = "Retry", onClick = onAccept, modifier = Modifier.fillMaxWidth())
+            PrimaryButton(text = retryLabel, onClick = onAccept, modifier = Modifier.fillMaxWidth())
         }
     }
 }
@@ -2106,6 +2308,15 @@ private fun PartnerConversionWarningScreen(
 ) {
     val hapticManager = koinInject<AndroidHapticManager>()
     var showConfirm by remember { mutableStateOf(false) }
+    val title = stringResource(R.string.onboarding_partner_conversion_title)
+    val subtitle = stringResource(R.string.onboarding_partner_conversion_subtitle)
+    val continueAsPartnerLabel = stringResource(R.string.onboarding_partner_conversion_continue)
+    val convertingLabel = stringResource(R.string.onboarding_partner_conversion_converting)
+    val keepAccountLabel = stringResource(R.string.onboarding_partner_conversion_keep_account)
+    val confirmTitle = stringResource(R.string.onboarding_partner_conversion_confirm_title)
+    val confirmMessage = stringResource(R.string.onboarding_partner_conversion_confirm_message)
+    val confirmButtonLabel = stringResource(R.string.onboarding_partner_conversion_confirm_button)
+    val cancelLabel = stringResource(R.string.onboarding_cancel)
 
     Column(
         modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6),
@@ -2128,13 +2339,13 @@ private fun PartnerConversionWarningScreen(
         }
 
         Text(
-            text = "You already have an account",
+            text = title,
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = SakhiSpacing.space5),
         )
         Text(
-            text = "Continuing as your Sakhi's care partner will permanently delete all your personal health data. This cannot be undone.",
+            text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -2154,7 +2365,7 @@ private fun PartnerConversionWarningScreen(
         Spacer(modifier = Modifier.weight(1f))
 
         PrimaryButton(
-            text = if (uiState.isConverting) "Converting..." else "Continue as Partner",
+            text = if (uiState.isConverting) convertingLabel else continueAsPartnerLabel,
             enabled = !uiState.isConverting,
             onClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
@@ -2163,25 +2374,25 @@ private fun PartnerConversionWarningScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         TextButton(onClick = onKeepOwnAccount, enabled = !uiState.isConverting, modifier = Modifier.fillMaxWidth()) {
-            Text("Keep My Account")
+            Text(keepAccountLabel)
         }
     }
 
     if (showConfirm) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { showConfirm = false },
-            title = { Text("Delete your data and continue?") },
-            text = { Text("All your personal health data will be permanently deleted. This cannot be undone.") },
+            title = { Text(confirmTitle) },
+            text = { Text(confirmMessage) },
             confirmButton = {
                 TextButton(onClick = {
                     showConfirm = false
                     onConvert()
                 }) {
-                    Text("Delete & Continue as Partner", color = MaterialTheme.colorScheme.error)
+                    Text(confirmButtonLabel, color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showConfirm = false }) { Text("Cancel") }
+                TextButton(onClick = { showConfirm = false }) { Text(cancelLabel) }
             },
         )
     }
@@ -2210,17 +2421,23 @@ private fun DataSourceScreen(
         contract = PermissionController.createRequestPermissionResultContract(),
         onResult = onHealthConnectPermissionsResult,
     )
+    val continueLabel = stringResource(R.string.onboarding_continue)
+    val importingLabel = stringResource(R.string.onboarding_importing)
 
     Column(modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6)) {
         Text(
-            text = if (uiState.importFailed) "Almost There" else "Help Sakhi Know You",
+            text = if (uiState.importFailed) {
+                stringResource(R.string.onboarding_data_source_import_failed_title)
+            } else {
+                stringResource(R.string.onboarding_data_source_title)
+            },
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
             text = if (uiState.importFailed) {
-                "Health Connect didn't have all the details. You can add them below."
+                stringResource(R.string.onboarding_data_source_import_failed_subtitle)
             } else {
-                "Bring your health details from Health Connect and Sakhi will understand you better from day one."
+                stringResource(R.string.onboarding_data_source_subtitle)
             },
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -2230,8 +2447,8 @@ private fun DataSourceScreen(
         Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
             PrivacyChoiceCard(
                 icon = Icons.Filled.Favorite,
-                title = "Import from Health Connect",
-                description = "Bring your height, weight, and health details securely from Health Connect.",
+                title = stringResource(R.string.onboarding_data_source_health_connect_title),
+                description = stringResource(R.string.onboarding_data_source_health_connect_description),
                 isSelected = uiState.selectedChoice == OnboardingDataSourceChoice.HealthConnect,
                 isError = uiState.importFailed,
                 onClick = {
@@ -2244,8 +2461,8 @@ private fun DataSourceScreen(
             )
             PrivacyChoiceCard(
                 icon = Icons.Filled.TouchApp,
-                title = "Add Details Myself",
-                description = "Enter your details and Sakhi will start learning you from the beginning.",
+                title = stringResource(R.string.onboarding_data_source_manual_title),
+                description = stringResource(R.string.onboarding_data_source_manual_description),
                 isSelected = uiState.selectedChoice == OnboardingDataSourceChoice.Manual,
                 onClick = onSelectManual,
             )
@@ -2254,7 +2471,7 @@ private fun DataSourceScreen(
         Spacer(modifier = Modifier.weight(1f))
 
         PrimaryButton(
-            text = if (uiState.isImporting) "Importing..." else "Continue",
+            text = if (uiState.isImporting) importingLabel else continueLabel,
             enabled = !uiState.isImporting,
             onClick = {
                 when (uiState.selectedChoice) {
@@ -2280,16 +2497,16 @@ private fun DataSourceScreen(
     if (uiState.showFailureAlert) {
         AlertDialog(
             onDismissRequest = onAcknowledgeFailure,
-            title = { Text("No Health Data Found") },
+            title = { Text(stringResource(R.string.onboarding_data_source_no_data_title)) },
             text = {
                 Text(
                     uiState.failureMessage
-                        ?: "Health Connect doesn't have your data. Please fill in your details yourself.",
+                        ?: stringResource(R.string.onboarding_data_source_no_data_message),
                 )
             },
             confirmButton = {
                 TextButton(onClick = onAcknowledgeFailure) {
-                    Text("OK")
+                    Text(stringResource(R.string.onboarding_ok))
                 }
             },
         )
@@ -2306,6 +2523,7 @@ private fun DataSourceScreen(
 @Composable
 private fun SetupLoadingScreen(uiState: OnboardingSetupUiState, onSetupLoading: () -> Unit) {
     LaunchedEffect(Unit) { onSetupLoading() }
+    val retryLabel = stringResource(R.string.onboarding_retry)
 
     Column(
         modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6),
@@ -2314,7 +2532,7 @@ private fun SetupLoadingScreen(uiState: OnboardingSetupUiState, onSetupLoading: 
     ) {
         if (uiState.error != null) {
             Text(
-                text = "Something went wrong",
+                text = stringResource(R.string.onboarding_setup_error_title),
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                 textAlign = TextAlign.Center,
             )
@@ -2325,11 +2543,11 @@ private fun SetupLoadingScreen(uiState: OnboardingSetupUiState, onSetupLoading: 
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space5),
             )
-            PrimaryButton(text = "Retry", onClick = onSetupLoading, modifier = Modifier.fillMaxWidth())
+            PrimaryButton(text = retryLabel, onClick = onSetupLoading, modifier = Modifier.fillMaxWidth())
         } else {
             CircularProgressIndicator()
             Text(
-                text = "Setting up your Sakhi...",
+                text = stringResource(R.string.onboarding_setup_loading_message),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = SakhiSpacing.space4),

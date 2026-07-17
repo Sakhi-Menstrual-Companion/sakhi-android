@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -156,9 +157,17 @@ class OnboardingViewModel(
                     cycleDataRepository.deleteAll(userId)
                 }
             }.onSuccess {
+                if (!isStillCurrentUser(userId)) {
+                    _conversionUiState.value = _conversionUiState.value.copy(isConverting = false)
+                    return@onSuccess
+                }
                 _conversionUiState.value = _conversionUiState.value.copy(isConverting = false)
                 flowStore.send(OnboardingFlowIntent.ContinueTapped)
             }.onFailure { throwable ->
+                if (!isStillCurrentUser(userId)) {
+                    _conversionUiState.value = _conversionUiState.value.copy(isConverting = false)
+                    return@onFailure
+                }
                 hapticManager.error()
                 _conversionUiState.value = _conversionUiState.value.copy(
                     isConverting = false,
@@ -202,9 +211,17 @@ class OnboardingViewModel(
                     careStore.acceptInvitation(inviteCode = code, acceptorUserId = userId)
                 }
             }.onSuccess {
+                if (!isStillCurrentUser(userId)) {
+                    _acceptUiState.value = _acceptUiState.value.copy(isAccepting = false)
+                    return@onSuccess
+                }
                 hapticManager.success()
                 _acceptUiState.value = _acceptUiState.value.copy(isAccepting = false, succeeded = true, error = null)
             }.onFailure { throwable ->
+                if (!isStillCurrentUser(userId)) {
+                    _acceptUiState.value = _acceptUiState.value.copy(isAccepting = false)
+                    return@onFailure
+                }
                 hapticManager.error()
                 _acceptUiState.value = _acceptUiState.value.copy(
                     isAccepting = false,
@@ -246,6 +263,7 @@ class OnboardingViewModel(
 
         _setupUiState.value = _setupUiState.value.copy(isSaving = true, error = null)
         val health = _healthUiState.value
+        val startedAtNanos = System.nanoTime()
 
         viewModelScope.launch {
             runCatching {
@@ -274,9 +292,22 @@ class OnboardingViewModel(
                     ).getOrThrow()
                 }
             }.onSuccess {
+                if (!isStillCurrentUser(userId)) {
+                    _setupUiState.value = _setupUiState.value.copy(isSaving = false)
+                    return@onSuccess
+                }
+                val elapsedMs = (System.nanoTime() - startedAtNanos) / 1_000_000L
+                val remainingMs = 900L - elapsedMs
+                if (remainingMs > 0L) {
+                    delay(remainingMs)
+                }
                 _setupUiState.value = _setupUiState.value.copy(isSaving = false)
                 completeOnboarding()
             }.onFailure { throwable ->
+                if (!isStillCurrentUser(userId)) {
+                    _setupUiState.value = _setupUiState.value.copy(isSaving = false)
+                    return@onFailure
+                }
                 _setupUiState.value = _setupUiState.value.copy(
                     isSaving = false,
                     error = throwable.message ?: appContext.getString(R.string.onboarding_error_generic),
@@ -362,6 +393,10 @@ class OnboardingViewModel(
                     )
                 }
             }.onSuccess { status ->
+                if (!isStillCurrentUser(userId)) {
+                    _careInviteUiState.value = _careInviteUiState.value.copy(isCreatingInvite = false)
+                    return@onSuccess
+                }
                 val invitation = status.invitation
                 _careInviteUiState.value = _careInviteUiState.value.copy(
                     isCreatingInvite = false,
@@ -372,6 +407,10 @@ class OnboardingViewModel(
                 hapticManager.success()
                 flowStore.send(OnboardingFlowIntent.ContinueTapped)
             }.onFailure { throwable ->
+                if (!isStillCurrentUser(userId)) {
+                    _careInviteUiState.value = _careInviteUiState.value.copy(isCreatingInvite = false)
+                    return@onFailure
+                }
                 hapticManager.error()
                 _careInviteUiState.value = _careInviteUiState.value.copy(
                     isCreatingInvite = false,
@@ -399,6 +438,10 @@ class OnboardingViewModel(
                     careStore.cancelInvitation(invitationId = invitationId, userId = userId)
                 }
             }.onSuccess {
+                if (!isStillCurrentUser(userId)) {
+                    _careInviteUiState.value = _careInviteUiState.value.copy(isCancellingInvite = false)
+                    return@onSuccess
+                }
                 hapticManager.success()
                 _careInviteUiState.value = _careInviteUiState.value.copy(
                     isCancellingInvite = false,
@@ -411,6 +454,10 @@ class OnboardingViewModel(
                     flowStore.send(OnboardingFlowIntent.Complete)
                 }
             }.onFailure { throwable ->
+                if (!isStillCurrentUser(userId)) {
+                    _careInviteUiState.value = _careInviteUiState.value.copy(isCancellingInvite = false)
+                    return@onFailure
+                }
                 hapticManager.error()
                 _careInviteUiState.value = _careInviteUiState.value.copy(
                     isCancellingInvite = false,
@@ -683,6 +730,8 @@ class OnboardingViewModel(
             } else null
         else -> null
     }
+
+    private fun isStillCurrentUser(userId: String): Boolean = authRepository.currentUserId == userId
 }
 
 data class OnboardingAcceptUiState(
@@ -794,4 +843,5 @@ private fun allEnabledCareInvitePermissions(): ParentChildPermissions = ParentCh
     canViewNotes = true,
     canViewDischarge = true,
     canViewSexualActivity = false,
+    canGenerateReports = true,
 )
