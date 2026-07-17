@@ -9,10 +9,6 @@ on:
 permissions:
   contents: read
 
-defaults:
-  run:
-    working-directory: /Users/runner/work/Sakhi/Sakhi/02-Platforms/02-Android
-
 jobs:
   quality:
     runs-on: ubuntu-latest
