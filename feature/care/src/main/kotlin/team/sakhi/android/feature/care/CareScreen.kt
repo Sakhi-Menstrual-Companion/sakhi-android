@@ -2,6 +2,7 @@ package team.sakhi.android.feature.care
 
 import android.content.ClipData
 import android.content.Intent
+import android.content.pm.PackageManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,12 +23,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -53,6 +62,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,9 +73,13 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.feature.onboarding.OnboardingFlowHost
 import team.sakhi.android.ui.BackButton
+import team.sakhi.android.ui.GlassCard
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SheetSurface
+import team.sakhi.android.ui.ToastManager
+import team.sakhi.android.ui.ToastType
 import team.sakhi.care.CareRuntimeState
 import team.sakhi.date.DateConverter
 import team.sakhi.models.CarePartnership
@@ -77,21 +91,25 @@ import team.sakhi.models.PartnerInvitation
  * state (`CareRuntimeState`), one render, no flash. Real iOS destinations ported:
  * `PartnerDetailView` (connected), `PendingPartnerWaitingView` (pending invite),
  * `PartnerPermissionsEditView` (permission toggles). The disconnected state keeps
- * Android's existing invite-creation form since iOS launches a full onboarding-flow
- * overlay there (`OnboardingFlowView(flow: .carePartnerInvite)`) that depends on
- * account-upgrade machinery not built on Android yet — porting that whole flow is
- * out of scope for this pass; this screen's create/accept forms already call the
- * same KMM `CareStore` mutations so the underlying behaviour matches.
+ * Android now uses the same owner-side invite onboarding flow iOS launches from
+ * the disconnected hub (`OnboardingFlowView(flow: .carePartnerInvite)`), while
+ * still preserving the deep-link prefill accept-code path as a separate
+ * disconnected route.
  */
 @Composable
 fun CareScreen(
     prefillInviteCode: String? = null,
     viewModel: CareViewModel = koinViewModel(),
+    onClose: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val hapticManager = koinInject<AndroidHapticManager>()
     var showPermissionsEdit by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var showOwnerInviteFlow by remember(prefillInviteCode) { mutableStateOf(false) }
+    var autoLaunchInviteFlow by remember(prefillInviteCode) {
+        mutableStateOf(prefillInviteCode.isNullOrBlank())
+    }
 
     // Deep-link entry (`sakhi://invite/CODE` / `https://sakhi-care.web.app/invite/CODE`
     // / `https://sakhi.com/invite/CODE`) -- pre-fills the accept-code field so the
@@ -103,12 +121,39 @@ fun CareScreen(
     val ownerConnected = uiState.careState as? CareRuntimeState.OwnerConnected
     val partnerConnected = uiState.careState as? CareRuntimeState.PartnerConnected
     val connectedPartnership = ownerConnected?.partnership ?: partnerConnected?.partnership
+    val shouldAutoShowInviteFlow = autoLaunchInviteFlow &&
+        prefillInviteCode.isNullOrBlank() &&
+        uiState.careState is CareRuntimeState.Disconnected
+    val showInviteFlowRoute = (showOwnerInviteFlow || shouldAutoShowInviteFlow) &&
+        prefillInviteCode.isNullOrBlank() &&
+        (
+            uiState.careState is CareRuntimeState.Disconnected ||
+                uiState.careState is CareRuntimeState.PendingInvitation ||
+                uiState.careState is CareRuntimeState.OwnerConnected
+            )
+
+    LaunchedEffect(uiState.careState, autoLaunchInviteFlow) {
+        if (autoLaunchInviteFlow && uiState.careState is CareRuntimeState.Disconnected) {
+            showOwnerInviteFlow = true
+        }
+    }
 
     // iOS presents this as a `.sheet(...).presentationDetents([.large])` with a
     // drag indicator over Home -- SheetSurface gives the same rounded-top +
     // drag-handle look without changing the nav-graph push mechanism itself.
     SheetSurface {
-        if (showHistory && connectedPartnership != null) {
+        if (showInviteFlowRoute) {
+            OnboardingFlowHost(
+                flowId = "carePartnerInvite",
+                onFlowCompleted = {
+                    showOwnerInviteFlow = false
+                    autoLaunchInviteFlow = false
+                    if (uiState.careState !is CareRuntimeState.OwnerConnected) {
+                        onClose()
+                    }
+                },
+            )
+        } else if (showHistory && connectedPartnership != null) {
             PartnerHistoryContent(
                 partnership = connectedPartnership,
                 onBack = { showHistory = false },
@@ -213,17 +258,13 @@ private fun PartnerDetailContent(
     }
     val partnerInitial = displayLabel.take(1).uppercase()
 
-    val createdAtDate = DateConverter.isoToLocalDate(partnership.createdAt)
-    val dateString = createdAtDate?.let { formatConnectedSince(it, context) }
-    val daysOfCare = createdAtDate?.let {
-        DateConverter.daysBetween(it, DateConverter.today()).coerceAtLeast(0)
-    }
-    val daysValue = daysOfCare?.let {
-        when (it) {
-            0 -> stringResource(R.string.care_today)
-            1 -> stringResource(R.string.care_one_day)
-            else -> pluralStringResource(R.plurals.care_days_plural, it, it)
-        }
+    val createdAtDate = partnershipStartDate(partnership)
+    val dateString = formatConnectedSince(createdAtDate, context)
+    val daysOfCare = DateConverter.daysBetween(createdAtDate, DateConverter.today()).coerceAtLeast(0)
+    val daysValue = when (daysOfCare) {
+        0 -> stringResource(R.string.care_today)
+        1 -> stringResource(R.string.care_one_day)
+        else -> pluralStringResource(R.plurals.care_days_plural, daysOfCare, daysOfCare)
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -268,25 +309,17 @@ private fun PartnerDetailContent(
                     .padding(horizontal = SakhiSpacing.space6),
             ) {
                 Column {
-                    if (daysValue != null && dateString != null) {
-                        InfoRow(
-                            icon = { SparkleGlyph() },
-                            label = stringResource(R.string.care_label_days_of_care),
-                            value = daysValue,
-                        )
-                        RowDivider()
-                        InfoRow(
-                            icon = { Text("📅") },
-                            label = stringResource(R.string.care_label_connected_since),
-                            value = dateString,
-                        )
-                    } else {
-                        InfoRow(
-                            icon = { Text("📅") },
-                            label = stringResource(R.string.care_label_connection_details),
-                            value = stringResource(R.string.care_value_unavailable_right_now),
-                        )
-                    }
+                    InfoRow(
+                        icon = { SparkleGlyph() },
+                        label = stringResource(R.string.care_label_days_of_care),
+                        value = daysValue,
+                    )
+                    RowDivider()
+                    InfoRow(
+                        icon = { InfoSymbolIcon(Icons.Filled.CalendarToday) },
+                        label = stringResource(R.string.care_label_connected_since),
+                        value = dateString,
+                    )
                 }
             }
 
@@ -310,7 +343,7 @@ private fun PartnerDetailContent(
                     if (!isPartnerRole && onManagePermissions != null) {
                         RowDivider()
                         ActionRow(
-                            icon = Icons.Filled.Lock,
+                            icon = Icons.Filled.Shield,
                             label = stringResource(R.string.care_action_manage_permissions),
                             onClick = onManagePermissions,
                         )
@@ -391,6 +424,7 @@ private fun AvatarPair(partnerInitial: String) {
     Box(modifier = Modifier.size(width = 96.dp, height = 66.dp)) {
         Box(
             modifier = Modifier
+                .align(Alignment.TopEnd)
                 .size(58.dp)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), CircleShape)
                 .padding(0.dp),
@@ -404,6 +438,7 @@ private fun AvatarPair(partnerInitial: String) {
         }
         Box(
             modifier = Modifier
+                .align(Alignment.TopStart)
                 .size(58.dp)
                 .background(MaterialTheme.colorScheme.primary, CircleShape),
             contentAlignment = Alignment.Center,
@@ -416,7 +451,7 @@ private fun AvatarPair(partnerInitial: String) {
         }
         Box(
             modifier = Modifier
-                .padding(start = 34.dp, top = 44.dp)
+                .align(Alignment.BottomCenter)
                 .size(20.dp)
                 .background(MaterialTheme.colorScheme.surface, CircleShape),
             contentAlignment = Alignment.Center,
@@ -440,7 +475,94 @@ private fun AvatarPair(partnerInitial: String) {
 
 @Composable
 private fun SparkleGlyph() {
-    Text("✨")
+    InfoSymbolIcon(Icons.Filled.AutoAwesome)
+}
+
+@Composable
+private fun PartnerAvatarCloud(partnerName: String) {
+    val partnerInitial = partnerName.take(1).uppercase()
+
+    Box(
+        modifier = Modifier.size(width = 196.dp, height = 144.dp),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .size(116.dp)
+                .background(MaterialTheme.colorScheme.surface, CircleShape),
+        )
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .size(116.dp)
+                .background(MaterialTheme.colorScheme.surface, CircleShape),
+        )
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(start = 13.dp, top = 13.dp)
+                .size(90.dp)
+                .background(MaterialTheme.colorScheme.primary, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(34.dp),
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = 13.dp, top = 13.dp)
+                .size(90.dp)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = partnerInitial,
+                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = (-10).dp)
+                .size(30.dp)
+                .background(MaterialTheme.colorScheme.surface, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Favorite,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(10.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoSymbolIcon(imageVector: androidx.compose.ui.graphics.vector.ImageVector) {
+    Icon(
+        imageVector = imageVector,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.size(18.dp),
+    )
 }
 
 @Composable
@@ -509,7 +631,7 @@ private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
             modifier = Modifier.weight(1f),
         )
         Icon(
-            imageVector = Icons.Filled.ChevronRight,
+            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -521,9 +643,43 @@ private fun formatConnectedSince(
     context: android.content.Context,
 ): String {
     val javaDate = java.time.LocalDate.of(date.year, date.monthNumber, date.dayOfMonth)
-    val formatter = java.time.format.DateTimeFormatter.ofPattern("d MMM, yyyy", java.util.Locale.getDefault())
+    val formatter = java.time.format.DateTimeFormatter.ofPattern(
+        context.getString(R.string.care_connected_since_date_format),
+        java.util.Locale.getDefault(),
+    )
     return javaDate.format(formatter)
 }
+
+private fun partnershipStartDate(partnership: CarePartnership): kotlinx.datetime.LocalDate =
+    DateConverter.isoToLocalDate(partnership.createdAt)
+        ?: DateConverter.isoToLocalDate(partnership.updatedAt)
+        ?: DateConverter.today()
+
+private fun sharePendingInvite(
+    context: android.content.Context,
+    shareMessage: String,
+) {
+    val baseIntent = Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_TEXT, shareMessage)
+    }
+    val whatsAppIntent = Intent(baseIntent).apply {
+        `package` = WHATSAPP_PACKAGE
+    }
+    val canOpenWhatsApp = runCatching {
+        context.packageManager.getPackageInfo(WHATSAPP_PACKAGE, PackageManager.GET_ACTIVITIES)
+    }.isSuccess
+
+    if (canOpenWhatsApp) {
+        context.startActivity(whatsAppIntent)
+    } else {
+        context.startActivity(
+            Intent.createChooser(baseIntent, context.getString(R.string.care_share_chooser_title))
+        )
+    }
+}
+
+private const val WHATSAPP_PACKAGE = "com.whatsapp"
 
 // ── Pending invitation: PendingPartnerWaitingView parity ───────────────────
 
@@ -554,15 +710,7 @@ private fun PendingInviteContent(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(modifier = Modifier.weight(1f))
-
-        Box(
-            modifier = Modifier
-                .size(72.dp)
-                .background(MaterialTheme.colorScheme.primary, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(imageVector = Icons.Filled.Person, contentDescription = null, tint = Color.White)
-        }
+        PartnerAvatarCloud(partnerName = partnerName)
 
         Text(
             text = stringResource(R.string.care_pending_share_with_name, partnerName),
@@ -598,6 +746,12 @@ private fun PendingInviteContent(
                             )
                         )
                         hapticManager.success()
+                        ToastManager.show(
+                            title = context.getString(R.string.care_pending_code_copied_title),
+                            message = context.getString(R.string.care_pending_code_copied_message, partnerName),
+                            type = ToastType.SUCCESS,
+                            durationMs = 2000L,
+                        )
                     }
                 },
         ) {
@@ -608,7 +762,11 @@ private fun PendingInviteContent(
             ) {
                 Text(
                     text = formattedCode,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 2.sp,
+                    ),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Icon(
@@ -626,13 +784,7 @@ private fun PendingInviteContent(
             text = stringResource(R.string.care_share),
             onClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
-                val sendIntent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, shareMessage)
-                }
-                context.startActivity(
-                    Intent.createChooser(sendIntent, context.getString(R.string.care_share_chooser_title))
-                )
+                sharePendingInvite(context, shareMessage)
             },
             modifier = Modifier.fillMaxWidth(),
         )
@@ -666,6 +818,12 @@ private fun InviteCreationContent(
     onAcceptInviteCodeChanged: (String) -> Unit,
     onAcceptInvitation: () -> Unit,
 ) {
+    val title = stringResource(R.string.care_disconnected_title)
+    val subtitle = stringResource(R.string.care_intro_optional_share)
+    val feature1 = stringResource(R.string.care_disconnected_feature_1)
+    val feature2 = stringResource(R.string.care_disconnected_feature_2)
+    val feature3 = stringResource(R.string.care_disconnected_feature_3)
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -674,14 +832,54 @@ private fun InviteCreationContent(
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
         Text(
-            text = stringResource(R.string.care_title_be_her_sakhi),
+            text = title,
             style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
-            text = stringResource(R.string.care_intro_optional_share),
+            text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+
+        GlassCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = SakhiSpacing.space2),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = SakhiSpacing.space4),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(88.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Groups,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(40.dp),
+                    )
+                }
+            }
+
+            CarePromptBullet(
+                icon = Icons.Filled.VisibilityOff,
+                text = feature1,
+            )
+            CarePromptBullet(
+                icon = Icons.Filled.Notifications,
+                text = feature2,
+            )
+            CarePromptBullet(
+                icon = Icons.Filled.Favorite,
+                text = feature3,
+            )
+        }
 
         Surface(
             shape = RoundedCornerShape(SakhiRadius.xxl),
@@ -712,6 +910,7 @@ private fun InviteCreationContent(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.care_label_relationship)) },
                     placeholder = { Text(stringResource(R.string.care_placeholder_relationship)) },
+                    singleLine = true,
                 )
 
                 PrimaryButton(
@@ -748,6 +947,7 @@ private fun InviteCreationContent(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(R.string.care_label_invite_code)) },
                     placeholder = { Text(stringResource(R.string.care_placeholder_invite_code)) },
+                    singleLine = true,
                 )
                 PrimaryButton(
                     text = if (uiState.isAcceptingInvite) {
@@ -771,6 +971,40 @@ private fun InviteCreationContent(
     }
 }
 
+@Composable
+private fun CarePromptBullet(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    text: String,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = SakhiSpacing.space2),
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
 // ── Permission editing: PartnerPermissionsEditView parity ──────────────────
 
 @Composable
@@ -782,6 +1016,12 @@ private fun PartnerPermissionsEditContent(
 ) {
     val initial = partnership.enhancedPermissions ?: ParentChildPermissions()
     var canLogPeriods by remember { mutableStateOf(initial.canLogPeriods) }
+    // New granular permission (2026-07-15, real security fix): generating/
+    // exporting a full health report exposes essentially every other
+    // granular field at once, so it's its own explicit action-style grant --
+    // matching `canLogPeriods` above, not folded into the "what they can
+    // see" view-permission list below -- and must never default to enabled.
+    var canGenerateReports by remember { mutableStateOf(initial.canGenerateReports) }
     var sharePeriodDates by remember { mutableStateOf(initial.canViewPeriodDates) }
     var shareCycleHistory by remember { mutableStateOf(initial.canViewCycleHistory) }
     var sharePredictions by remember { mutableStateOf(initial.canViewPredictions) }
@@ -824,11 +1064,19 @@ private fun PartnerPermissionsEditContent(
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space6),
             ) {
-                PermissionToggleRow(
-                    title = stringResource(R.string.care_permission_log_periods),
-                    checked = canLogPeriods,
-                    onCheckedChange = { canLogPeriods = it },
-                )
+                Column {
+                    PermissionToggleRow(
+                        title = stringResource(R.string.care_permission_log_periods),
+                        checked = canLogPeriods,
+                        onCheckedChange = { canLogPeriods = it },
+                    )
+                    RowDivider()
+                    PermissionToggleRow(
+                        title = stringResource(R.string.care_permission_generate_reports),
+                        checked = canGenerateReports,
+                        onCheckedChange = { canGenerateReports = it },
+                    )
+                }
             }
 
             SectionHeader(
@@ -893,6 +1141,7 @@ private fun PartnerPermissionsEditContent(
                         canViewNotes = shareNotes,
                         canViewDischarge = shareDischarge,
                         canViewSexualActivity = false,
+                        canGenerateReports = canGenerateReports,
                     )
                 )
             },
@@ -939,6 +1188,7 @@ private fun PartnerHistoryContent(
     var isLoaded by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
     val fallbackLabel = stringResource(R.string.care_fallback_your_sakhi)
+    val connectedDate = formatConnectedSince(partnershipStartDate(partnership), context)
 
     androidx.compose.runtime.LaunchedEffect(partnership.userId) {
         logs = emptyList()
@@ -1009,10 +1259,12 @@ private fun PartnerHistoryContent(
 
         if (logs.isEmpty()) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(SakhiSpacing.space6),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
             ) {
+                Spacer(modifier = Modifier.weight(1f))
                 Icon(
                     Icons.Filled.History,
                     contentDescription = null,
@@ -1032,6 +1284,8 @@ private fun PartnerHistoryContent(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(modifier = Modifier.weight(1f))
+                ConnectionBadge(connectedDate = connectedDate)
             }
             return
         }
@@ -1056,7 +1310,14 @@ private fun PartnerHistoryContent(
                                 .semantics(mergeDescendants = true) {}
                                 .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
                             verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
                         ) {
+                            Icon(
+                                imageVector = if (log.periodPresent) Icons.Filled.WaterDrop else Icons.Filled.Opacity,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.width(28.dp),
+                            )
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = if (log.periodPresent) {
@@ -1085,6 +1346,67 @@ private fun PartnerHistoryContent(
                     }
                 }
             }
+
+            SectionHeader(
+                text = stringResource(R.string.care_section_connection),
+                modifier = Modifier.padding(top = SakhiSpacing.space6),
+            )
+            Surface(
+                shape = RoundedCornerShape(SakhiRadius.xxl),
+                tonalElevation = SakhiSpacing.space1,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics(mergeDescendants = true) {}
+                        .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Favorite,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.width(28.dp),
+                    )
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(
+                                R.string.care_connected_with_name,
+                                partnership.partnerName.ifBlank { fallbackLabel },
+                            ),
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = connectedDate,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun ConnectionBadge(connectedDate: String) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Favorite,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+            modifier = Modifier.size(12.dp),
+        )
+        Text(
+            text = stringResource(R.string.care_connected_badge, connectedDate),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

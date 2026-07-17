@@ -55,6 +55,16 @@ class CareViewModel(
         viewModelScope.launch {
             sessionManager.session.collectLatest { session ->
                 if (session == null) {
+                    // `careStore` is a process-lifetime singleton, so without this it
+                    // would keep the previous signed-in user's `careState` around --
+                    // the second collectLatest below (combine(session, careStore.
+                    // careState)) reacts to this same session change independently
+                    // and would otherwise be racing to re-apply that stale value
+                    // right after this reset. Resetting the store itself, not just
+                    // this ViewModel's own uiState, makes the two agree regardless
+                    // of collection order. Real bug found writing this ViewModel's
+                    // own test coverage (see CareViewModelTest's sign-out case).
+                    careStore.reset()
                     _uiState.value = CareUiState(careState = CareRuntimeState.Disconnected)
                     return@collectLatest
                 }
@@ -69,11 +79,13 @@ class CareViewModel(
 
                 runCatching { careStore.refresh(session.userId) }
                     .onSuccess {
+                        if (!isStillCurrent(session)) return@onSuccess
                         _uiState.update { state ->
                             state.copy(isRefreshing = false, error = null)
                         }
                     }
                     .onFailure { throwable ->
+                        if (!isStillCurrent(session)) return@onFailure
                         _uiState.update { state ->
                             state.copy(
                                 isRefreshing = false,
@@ -125,7 +137,7 @@ class CareViewModel(
     fun onAcceptInviteCodeChanged(value: String) {
         _uiState.update {
             it.copy(
-                acceptInviteCode = value.uppercase(),
+                acceptInviteCode = value.take(6).uppercase(),
                 error = null,
                 infoMessage = null,
             )
@@ -139,9 +151,11 @@ class CareViewModel(
         viewModelScope.launch {
             runCatching { careStore.refresh(session.userId) }
                 .onSuccess {
+                    if (!isStillCurrent(session)) return@onSuccess
                     _uiState.update { it.copy(isRefreshing = false, error = null) }
                 }
                 .onFailure { throwable ->
+                    if (!isStillCurrent(session)) return@onFailure
                     _uiState.update {
                         it.copy(
                             isRefreshing = false,
@@ -171,6 +185,10 @@ class CareViewModel(
                     userId = session.userId,
                 )
             }.onSuccess { status ->
+                if (!isStillCurrent(session)) {
+                    _uiState.update { it.copy(isCreatingInvite = false) }
+                    return@onSuccess
+                }
                 _uiState.update {
                     it.copy(
                         isCreatingInvite = false,
@@ -183,6 +201,10 @@ class CareViewModel(
                     )
                 }
             }.onFailure { throwable ->
+                if (!isStillCurrent(session)) {
+                    _uiState.update { it.copy(isCreatingInvite = false) }
+                    return@onFailure
+                }
                 _uiState.update {
                     it.copy(
                         isCreatingInvite = false,
@@ -212,6 +234,10 @@ class CareViewModel(
                     acceptorUserId = session.userId,
                 )
             }.onSuccess {
+                if (!isStillCurrent(session)) {
+                    _uiState.update { it.copy(isAcceptingInvite = false) }
+                    return@onSuccess
+                }
                 _uiState.update {
                     it.copy(
                         acceptInviteCode = "",
@@ -221,6 +247,10 @@ class CareViewModel(
                     )
                 }
             }.onFailure { throwable ->
+                if (!isStillCurrent(session)) {
+                    _uiState.update { it.copy(isAcceptingInvite = false) }
+                    return@onFailure
+                }
                 hapticManager.error()
                 _uiState.update {
                     it.copy(
@@ -242,6 +272,10 @@ class CareViewModel(
         viewModelScope.launch {
             runCatching { careStore.cancelInvitation(invitationId = invitation.id, userId = session.userId) }
                 .onSuccess {
+                    if (!isStillCurrent(session)) {
+                        _uiState.update { it.copy(isCancellingInvite = false) }
+                        return@onSuccess
+                    }
                     _uiState.update {
                         it.copy(
                             isCancellingInvite = false,
@@ -250,6 +284,10 @@ class CareViewModel(
                     }
                 }
                 .onFailure { throwable ->
+                    if (!isStillCurrent(session)) {
+                        _uiState.update { it.copy(isCancellingInvite = false) }
+                        return@onFailure
+                    }
                     _uiState.update {
                         it.copy(
                             isCancellingInvite = false,
@@ -270,9 +308,17 @@ class CareViewModel(
         viewModelScope.launch {
             runCatching { careStore.leavePartnership(partnershipId = partnershipId, userId = session.userId) }
                 .onSuccess {
+                    if (!isStillCurrent(session)) {
+                        _uiState.update { it.copy(isRemovingPartnership = false) }
+                        return@onSuccess
+                    }
                     _uiState.update { it.copy(isRemovingPartnership = false, infoMessage = null) }
                 }
                 .onFailure { throwable ->
+                    if (!isStillCurrent(session)) {
+                        _uiState.update { it.copy(isRemovingPartnership = false) }
+                        return@onFailure
+                    }
                     _uiState.update {
                         it.copy(
                             isRemovingPartnership = false,
@@ -298,17 +344,25 @@ class CareViewModel(
                     userId = session.userId,
                 )
             }.onSuccess {
+                if (!isStillCurrent(session)) {
+                    _uiState.update { it.copy(isSavingPermissions = false) }
+                    return@onSuccess
+                }
                 hapticManager.success()
                 _uiState.update { it.copy(isSavingPermissions = false) }
                 onComplete(true)
             }.onFailure { throwable ->
+                if (!isStillCurrent(session)) {
+                    _uiState.update { it.copy(isSavingPermissions = false) }
+                    return@onFailure
+                }
                 hapticManager.error()
-                    _uiState.update {
-                        it.copy(
-                            isSavingPermissions = false,
-                            error = throwable.message ?: appContext.getString(R.string.care_error_permission_change_not_saved),
-                        )
-                    }
+                _uiState.update {
+                    it.copy(
+                        isSavingPermissions = false,
+                        error = throwable.message ?: appContext.getString(R.string.care_error_permission_change_not_saved),
+                    )
+                }
                 onComplete(false)
             }
         }
@@ -322,4 +376,6 @@ class CareViewModel(
         if (stateInvitation != null) return stateInvitation
         return session?.sentInvitations?.firstOrNull()
     }
+
+    private fun isStillCurrent(session: SessionContext?): Boolean = sessionManager.current == session
 }
