@@ -12,6 +12,9 @@
     <string name="recommendations_section_phase_tips">Phase tips</string>
     <string name="recommendations_section_condition_tips">Condition tips</string>
     <string name="recommendations_ai_insight">AI insight</string>
+    <string name="recommendations_powered_by_ai">Powered by Sakhi AI</string>
+    <string name="recommendations_refresh">Refresh</string>
+    <string name="recommendations_refresh_content_description">Refresh AI insight</string>
 
     <string name="recommendations_hidden_phase_foods">Phase-based food recommendations are hidden for this care role.</string>
     <string name="recommendations_hidden_avoid_foods">Avoid-food guidance is hidden for this care role.</string>
@@ -20,6 +23,7 @@
     <string name="recommendations_no_condition_tips">No condition-specific tips are available right now.</string>
     <string name="recommendations_hidden_condition_tips">Condition-specific recommendations are hidden for this care role.</string>
 
+    <string name="recommendations_bullet_item">• %1$s</string>
     <string name="recommendations_food_line">%1$s, %2$s</string>
     <string name="recommendations_nutrition_protein">Protein %1$s g</string>
     <string name="recommendations_nutrition_carbs">Carbs %1$s g</string>

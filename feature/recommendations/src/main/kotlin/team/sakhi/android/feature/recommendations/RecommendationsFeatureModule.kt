@@ -3,7 +3,7 @@ package team.sakhi.android.feature.recommendations
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
-/** Registered by :app once the recommendations route stops using the placeholder shell. */
+/** Koin module for the recommendations feature. */
 val recommendationsFeatureModule = module {
     viewModel {
         RecommendationsViewModel(
@@ -11,6 +11,8 @@ val recommendationsFeatureModule = module {
             cycleDataRepository = get(),
             userProfileRepository = get(),
             recommendationRepository = get(),
+            periodLogRepository = get(),
+            recommendationInsightService = get(),
             appContext = get(),
         )
     }

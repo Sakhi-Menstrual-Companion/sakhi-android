@@ -9,14 +9,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.coroutineScope
 import team.sakhi.cycle.CycleMath
+import team.sakhi.date.DateConverter
+import team.sakhi.logging.Symptom
 import team.sakhi.models.CyclePhase
+import team.sakhi.models.UserProfile
 import team.sakhi.repositories.CycleDataRepository
+import team.sakhi.repositories.PeriodLogRepository
+import team.sakhi.repositories.RecommendationInsightService
 import team.sakhi.repositories.RecommendationRepository
 import team.sakhi.repositories.UserProfileRepository
-import team.sakhi.recommendation.PartnerInsightPolicy
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
@@ -35,6 +40,12 @@ data class RecommendationsUiState(
     val phaseTips: List<String> = emptyList(),
     val conditionTips: List<String> = emptyList(),
     val aiInsight: String? = null,
+    // Matches iOS `RecommendationViewModel.isLoadingInsight` -- scoped to just the
+    // AI insight card's own refresh button/spinner, independent of the
+    // whole-screen `isLoading` (iOS's `HomeDayDetailGlassView+Cards.swift` shows a
+    // small spinner inside the card and disables its "Refresh" affordance while
+    // this is true, without re-showing the full-screen loading state).
+    val isRefreshingInsight: Boolean = false,
     val canViewPhaseRecommendations: Boolean = false,
     val canViewConditionRecommendations: Boolean = false,
     val isLoading: Boolean = false,
@@ -45,12 +56,27 @@ data class RecommendationsUiState(
  * Thin recommendations adapter over shared cycle, profile, and recommendation
  * repositories. Android only orchestrates the existing KMM pipeline and renders
  * the results; recommendation rules remain shared.
+ *
+ * `aiInsight` (the "Sakhi's tip for today" / "How to be there for her today"
+ * card) is a real per-day, per-phase Claude-generated tip via the shared
+ * `RecommendationInsightService.getDailyInsight`/`getPartnerInsight` -- this
+ * mirrors iOS's actual live `RecommendationViewModel.load()`/
+ * `loadPartnerInsight()` (`Features/Recommendations/Repositories/
+ * RecommendationInsightService.swift`), not the KMM-shared `getPartnerContent`
+ * (`partner_content` Supabase table) this previously used. That table read
+ * traces back to iOS's `RecommendationRepository.fetchPartnerCards` and
+ * `PartnerInsightPolicy`, both confirmed dead code on iOS itself (no live
+ * call site renders them) -- porting them here produced a generic, static,
+ * non-personalized string mislabeled as an AI insight instead of the real
+ * per-day tip iOS actually shows.
  */
 class RecommendationsViewModel(
     private val sessionManager: SessionManager,
     private val cycleDataRepository: CycleDataRepository,
     private val userProfileRepository: UserProfileRepository,
     private val recommendationRepository: RecommendationRepository,
+    private val periodLogRepository: PeriodLogRepository,
+    private val recommendationInsightService: RecommendationInsightService,
     private val appContext: Context,
 ) : ViewModel() {
 
@@ -65,17 +91,72 @@ class RecommendationsViewModel(
         }
     }
 
+    /**
+     * Matches iOS's real "Refresh" button on the AI insight card
+     * (`HomeDayDetailGlassView+Cards.swift`'s `sakhiInsightCard`, wired to
+     * `RecommendationViewModel.refreshInsight()`/`refreshPartnerInsight()`) --
+     * clears the cached tip and forces a brand-new Claude-generated one for
+     * today, independent of the whole-screen `isLoading` state.
+     */
+    fun refreshInsight() {
+        val session = sessionManager.current ?: return
+        val state = _uiState.value
+        if (!canViewPhaseRecommendations(session) || state.phase == CyclePhase.UNKNOWN) return
+        if (state.isRefreshingInsight) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshingInsight = true, aiInsight = null) }
+            recommendationInsightService.clearCache()
+
+            val requestedTargetUserId = session.targetUserId
+            val profileName = partnerProfileName(session, requestedTargetUserId)
+            val insight = fetchInsight(session, state.phase, requestedTargetUserId, profileName)
+
+            if (sessionManager.current?.targetUserId != requestedTargetUserId) return@launch
+            _uiState.update { it.copy(isRefreshingInsight = false, aiInsight = insight) }
+        }
+    }
+
+    private suspend fun fetchInsight(
+        session: SessionContext,
+        phase: CyclePhase,
+        requestedTargetUserId: String,
+        partnerProfileName: String?,
+    ): String? {
+        return if (session.isViewingOwnData) {
+            val today = DateConverter.today()
+            val todaySymptoms = periodLogRepository.getForDate(requestedTargetUserId, today)
+                .getOrNull()
+                ?.symptoms
+                ?.mapNotNull { Symptom.from(it) }
+                .orEmpty()
+            recommendationInsightService.getDailyInsight(
+                userId = requestedTargetUserId,
+                dateString = today.toString(),
+                phase = phase,
+                symptoms = todaySymptoms.map { it.value },
+                conditions = profileForConditionTips(requestedTargetUserId)?.healthConditions.orEmpty(),
+            ).getOrNull()?.text
+        } else {
+            session.activePartnership?.id?.let { partnershipId ->
+                recommendationInsightService.getPartnerInsight(
+                    partnershipId = partnershipId,
+                    dateString = DateConverter.today().toString(),
+                    phase = phase,
+                    partnerName = partnerProfileName.orEmpty(),
+                ).getOrNull()?.text
+            }
+        }
+    }
+
     private suspend fun refresh(session: SessionContext?) {
         if (session == null) {
             _uiState.value = RecommendationsUiState()
             return
         }
 
-        val canViewPhaseRecommendations = session.isViewingOwnData ||
-            session.can(Permission.VIEW_PREDICTIONS) ||
-            session.can(Permission.VIEW_CYCLE_HISTORY)
-        val canViewConditionRecommendations = session.isViewingOwnData ||
-            session.can(Permission.VIEW_SYMPTOMS)
+        val canViewPhaseRecommendations = canViewPhaseRecommendations(session)
+        val canViewConditionRecommendations = canViewConditionRecommendations(session)
 
         _uiState.value = RecommendationsUiState(
             session = session,
@@ -88,29 +169,32 @@ class RecommendationsViewModel(
 
         val requestedTargetUserId = session.targetUserId
 
-        val cycleResult = cycleDataRepository.getLatest(requestedTargetUserId)
+        val cycleResult = if (canViewPhaseRecommendations) {
+            cycleDataRepository.getLatest(requestedTargetUserId)
+        } else {
+            Result.success(null)
+        }
         val phase = cycleResult.getOrNull()?.let(CycleMath::currentPhase) ?: CyclePhase.UNKNOWN
 
-        val profile = userProfileRepository.get(requestedTargetUserId).getOrNull()
         val curated = if (canViewPhaseRecommendations) {
             recommendationRepository.getCuratedRecommendations(phase)
         } else {
             recommendationRepository.getCuratedRecommendations(CyclePhase.UNKNOWN)
         }
 
-        val partnerContent = if (canViewPhaseRecommendations) {
-            recommendationRepository.getPartnerContent(phase).getOrDefault(emptyList())
+        val aiInsight = if (canViewPhaseRecommendations && phase != CyclePhase.UNKNOWN) {
+            fetchInsight(
+                session = session,
+                phase = phase,
+                requestedTargetUserId = requestedTargetUserId,
+                partnerProfileName = partnerProfileName(session, requestedTargetUserId),
+            )
         } else {
-            emptyList()
+            null
         }
 
-        val orderedInsight = orderedInsight(
-            phase = phase,
-            insights = partnerContent,
-        )
-
         val conditionTips = if (canViewConditionRecommendations) {
-            profile?.healthConditions
+            profileForConditionTips(requestedTargetUserId)?.healthConditions
                 ?.flatMap { recommendationRepository.getConditionTips(it) }
                 ?.distinct()
                 .orEmpty()
@@ -130,7 +214,7 @@ class RecommendationsViewModel(
             avoidFoods = if (canViewPhaseRecommendations) avoidFoods else emptyList(),
             phaseTips = if (canViewPhaseRecommendations) curated.tips else emptyList(),
             conditionTips = conditionTips,
-            aiInsight = orderedInsight,
+            aiInsight = aiInsight,
             canViewPhaseRecommendations = canViewPhaseRecommendations,
             canViewConditionRecommendations = canViewConditionRecommendations,
             isLoading = false,
@@ -138,19 +222,27 @@ class RecommendationsViewModel(
         )
     }
 
-    private fun orderedInsight(
-        phase: CyclePhase,
-        insights: List<team.sakhi.repositories.PartnerContent>,
+    private fun canViewPhaseRecommendations(session: SessionContext): Boolean {
+        return session.isViewingOwnData ||
+            session.can(Permission.VIEW_PREDICTIONS) ||
+            session.can(Permission.VIEW_CYCLE_HISTORY)
+    }
+
+    private fun canViewConditionRecommendations(session: SessionContext): Boolean {
+        return session.isViewingOwnData || session.can(Permission.VIEW_SYMPTOMS)
+    }
+
+    private suspend fun partnerProfileName(
+        session: SessionContext,
+        requestedTargetUserId: String,
     ): String? {
-        if (insights.isEmpty()) return null
-        val order = PartnerInsightPolicy.cardTypeOrder(phase)
-        return insights
-            .sortedBy { content ->
-                val index = order.indexOf(content.category.lowercase())
-                if (index == -1) Int.MAX_VALUE else index
-            }
-            .firstOrNull()
-            ?.content
+        if (session.isViewingOwnData) return null
+        if (!canViewPhaseRecommendations(session)) return null
+        return userProfileRepository.get(requestedTargetUserId).getOrNull()?.name
+    }
+
+    private suspend fun profileForConditionTips(requestedTargetUserId: String): UserProfile? {
+        return userProfileRepository.get(requestedTargetUserId).getOrNull()
     }
 
     private suspend fun enrichFoods(
