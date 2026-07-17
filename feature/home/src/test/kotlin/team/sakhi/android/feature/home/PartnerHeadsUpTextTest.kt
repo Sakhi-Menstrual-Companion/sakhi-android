@@ -17,13 +17,16 @@ class PartnerHeadsUpTextTest {
     @Test
     fun `follicular shows countdown within 7 days`() {
         val result = partnerHeadsUpText(CyclePhase.FOLLICULAR, dayInCycle = 8, daysUntilNextPeriod = 3)
-        assertEquals(PartnerHeadsUpText("Period in 3 days", 3), result)
+        assertEquals(
+            PartnerHeadsUpText(PartnerHeadsUpTextKind.PERIOD_IN_DAYS, number = 3, days = 3),
+            result,
+        )
     }
 
     @Test
     fun `follicular says tomorrow for 1 day`() {
         val result = partnerHeadsUpText(CyclePhase.FOLLICULAR, dayInCycle = 8, daysUntilNextPeriod = 1)
-        assertEquals(PartnerHeadsUpText("Period tomorrow", 1), result)
+        assertEquals(PartnerHeadsUpText(PartnerHeadsUpTextKind.PERIOD_TOMORROW, days = 1), result)
     }
 
     @Test
@@ -35,7 +38,10 @@ class PartnerHeadsUpTextTest {
     @Test
     fun `ovulation shares the same 7-day window as follicular`() {
         val result = partnerHeadsUpText(CyclePhase.OVULATION, dayInCycle = 14, daysUntilNextPeriod = 7)
-        assertEquals(PartnerHeadsUpText("Period in 7 days", 7), result)
+        assertEquals(
+            PartnerHeadsUpText(PartnerHeadsUpTextKind.PERIOD_IN_DAYS, number = 7, days = 7),
+            result,
+        )
     }
 
     @Test
@@ -47,7 +53,10 @@ class PartnerHeadsUpTextTest {
     @Test
     fun `luteal shows countdown within 5 days`() {
         val result = partnerHeadsUpText(CyclePhase.LUTEAL, dayInCycle = 24, daysUntilNextPeriod = 4)
-        assertEquals(PartnerHeadsUpText("Period in 4 days", 4), result)
+        assertEquals(
+            PartnerHeadsUpText(PartnerHeadsUpTextKind.PERIOD_IN_DAYS, number = 4, days = 4),
+            result,
+        )
     }
 
     @Test
@@ -59,19 +68,28 @@ class PartnerHeadsUpTextTest {
     @Test
     fun `menstrual shows long-period flag from day 6`() {
         val result = partnerHeadsUpText(CyclePhase.MENSTRUAL, dayInCycle = 6, daysUntilNextPeriod = null)
-        assertEquals(PartnerHeadsUpText("Long period, day 6", null), result)
+        assertEquals(
+            PartnerHeadsUpText(PartnerHeadsUpTextKind.LONG_PERIOD_DAY, number = 6, days = null),
+            result,
+        )
     }
 
     @Test
     fun `delayed shows singular day past expected date`() {
         val result = partnerHeadsUpText(CyclePhase.DELAYED, dayInCycle = null, daysUntilNextPeriod = -1)
-        assertEquals(PartnerHeadsUpText("1 day past expected date", null), result)
+        assertEquals(
+            PartnerHeadsUpText(PartnerHeadsUpTextKind.PAST_EXPECTED_DATE, number = 1, days = null),
+            result,
+        )
     }
 
     @Test
     fun `delayed shows plural days past expected date`() {
         val result = partnerHeadsUpText(CyclePhase.DELAYED, dayInCycle = null, daysUntilNextPeriod = -4)
-        assertEquals(PartnerHeadsUpText("4 days past expected date", null), result)
+        assertEquals(
+            PartnerHeadsUpText(PartnerHeadsUpTextKind.PAST_EXPECTED_DATE, number = 4, days = null),
+            result,
+        )
     }
 
     @Test

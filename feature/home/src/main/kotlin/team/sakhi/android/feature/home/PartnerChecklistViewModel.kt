@@ -13,6 +13,8 @@ import team.sakhi.date.DateConverter
 import team.sakhi.models.CyclePhase
 import team.sakhi.models.PartnerChecklistItem
 import team.sakhi.repositories.AIRepository
+import team.sakhi.session.Permission
+import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 
 data class PartnerChecklistUiState(
@@ -42,9 +44,14 @@ class PartnerChecklistViewModel(
 
     private var lastLoadedKey: String? = null
 
-    fun loadOrGenerate(cyclePhase: CyclePhase, cycleDay: Int) {
+    fun loadOrGenerate(
+        cyclePhase: CyclePhase,
+        cycleDay: Int,
+        daysUntilNextPeriod: Int? = null,
+    ) {
         val session = sessionManager.current ?: return
         if (session.isViewingOwnData) return
+        if (!canAccessChecklist(session)) return
         val partnerUserId = session.userId
         val primaryUserId = session.targetUserId
         val partnershipId = session.activePartnership?.id ?: return
@@ -59,6 +66,7 @@ class PartnerChecklistViewModel(
         viewModelScope.launch {
             val existing = aiRepository.getChecklist(partnerUserId, dateString).getOrNull()
             if (existing != null) {
+                if (discardStaleLoad(session, key)) return@launch
                 _uiState.update {
                     it.copy(items = existing.items, completedCount = existing.completedCount, isGenerating = false)
                 }
@@ -74,28 +82,47 @@ class PartnerChecklistViewModel(
                 cycleDay = cycleDay,
                 partnerName = session.userName,
             ).onSuccess { checklist ->
+                if (discardStaleLoad(session, key)) return@onSuccess
                 _uiState.update {
                     it.copy(items = checklist.items, completedCount = checklist.completedCount, isGenerating = false)
                 }
             }.onFailure {
+                if (discardStaleLoad(session, key)) return@onFailure
                 // No on-device fallback list here (unlike iOS's local Realm
                 // fallback texts) -- the retry button re-runs generation
                 // instead, since there's no local persistence layer to fall
                 // back to on Android for this feature.
-                _uiState.update { it.copy(isGenerating = false, failedToGenerate = true) }
+                val fallbackItems = fallbackChecklistItems(
+                    cyclePhase = cyclePhase,
+                    cycleDay = cycleDay,
+                    daysUntilNextPeriod = daysUntilNextPeriod,
+                )
+                _uiState.update {
+                    it.copy(
+                        items = fallbackItems,
+                        completedCount = 0,
+                        isGenerating = false,
+                        failedToGenerate = false,
+                    )
+                }
                 lastLoadedKey = null
             }
         }
     }
 
-    fun retry(cyclePhase: CyclePhase, cycleDay: Int) {
+    fun retry(
+        cyclePhase: CyclePhase,
+        cycleDay: Int,
+        daysUntilNextPeriod: Int? = null,
+    ) {
         lastLoadedKey = null
-        loadOrGenerate(cyclePhase, cycleDay)
+        loadOrGenerate(cyclePhase, cycleDay, daysUntilNextPeriod)
     }
 
     fun toggle(itemId: String) {
         val session = sessionManager.current ?: return
         if (session.isViewingOwnData) return
+        if (!canAccessChecklist(session)) return
         hapticManager.impact(HapticImpact.LIGHT)
 
         val dateString = DateConverter.today().toString()
@@ -108,6 +135,96 @@ class PartnerChecklistViewModel(
 
         viewModelScope.launch {
             aiRepository.toggleChecklistItem(session.userId, dateString, itemId)
+        }
+    }
+
+    private fun discardStaleLoad(
+        requestedSession: SessionContext,
+        requestKey: String,
+    ): Boolean {
+        if (sessionManager.current == requestedSession) return false
+        if (lastLoadedKey == requestKey) {
+            lastLoadedKey = null
+        }
+        return true
+    }
+
+    private fun canAccessChecklist(session: SessionContext): Boolean {
+        return session.can(Permission.VIEW_PREDICTIONS) ||
+            session.can(Permission.VIEW_CYCLE_HISTORY)
+    }
+
+    private fun fallbackChecklistItems(
+        cyclePhase: CyclePhase,
+        cycleDay: Int,
+        daysUntilNextPeriod: Int?,
+    ): List<PartnerChecklistItem> {
+        val texts = when (cyclePhase) {
+            CyclePhase.MENSTRUAL -> {
+                if (cycleDay <= 2) {
+                    listOf(
+                        "Keep a heat pad ready",
+                        "Offer warm food or tea",
+                        "Keep plans light today",
+                        "Ask comfort or space",
+                    )
+                } else {
+                    listOf(
+                        "Let her rest longer",
+                        "Check pain gently once",
+                        "Avoid surprise plans today",
+                        "Handle one small chore",
+                    )
+                }
+            }
+            CyclePhase.FOLLICULAR -> listOf(
+                "Suggest one light plan",
+                "Celebrate one small win",
+                "Match her fresh energy",
+                "Ask what she wants next",
+            )
+            CyclePhase.OVULATION -> listOf(
+                "Give a specific compliment",
+                "Plan quality time together",
+                "Be fully present today",
+                "Say something real",
+            )
+            CyclePhase.LUTEAL -> {
+                if (daysUntilNextPeriod in 1..3) {
+                    listOf(
+                        "Stock her comfort snack",
+                        "Keep evening plans calm",
+                        "Listen without fixing",
+                        "Avoid unnecessary arguments",
+                    )
+                } else {
+                    listOf(
+                        "Give her extra patience",
+                        "Lower pressure around plans",
+                        "Check in softly",
+                        "Let small things pass",
+                    )
+                }
+            }
+            CyclePhase.DELAYED -> listOf(
+                "Keep things normal",
+                "Avoid repeated date questions",
+                "Offer calm reassurance",
+                "Let her set the pace",
+            )
+            CyclePhase.UNKNOWN -> listOf(
+                "Ask how she feels",
+                "Send a gentle voice note",
+                "Offer help without pressure",
+                "Respect what stays private",
+            )
+        }
+        return texts.mapIndexed { index, text ->
+            PartnerChecklistItem(
+                id = "fallback-${cyclePhase.value.lowercase()}-$index",
+                text = text,
+                isCompleted = false,
+            )
         }
     }
 }

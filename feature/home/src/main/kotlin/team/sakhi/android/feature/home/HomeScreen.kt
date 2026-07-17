@@ -2,16 +2,20 @@ package team.sakhi.android.feature.home
 
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.togetherWith
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +28,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
@@ -32,6 +37,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ListAlt
+import androidx.compose.material.icons.automirrored.filled.ShowChart
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Autorenew
@@ -60,6 +66,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SentimentSatisfied
 import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.CircularProgressIndicator
@@ -88,6 +95,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
@@ -98,6 +106,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -105,15 +114,19 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.datetime.LocalDate
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.phasePrimaryColor
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.ui.LoadingShimmer
 import team.sakhi.android.ui.PhaseBadge
+import team.sakhi.android.ui.SakhiBottomActionBar
 import team.sakhi.android.feature.logging.LoggingViewModel
 import team.sakhi.android.feature.recommendations.RecommendationFoodUi
 import team.sakhi.android.feature.recommendations.RecommendationsViewModel
@@ -145,7 +158,7 @@ fun HomeScreen(
     onOpenCare: () -> Unit = {},
     onOpenCalendar: () -> Unit = {},
     onOpenChat: () -> Unit = {},
-    onQuickLogClick: () -> Unit = {},
+    onQuickLogClick: (LocalDate) -> Unit = {},
     viewModel: HomeViewModel = koinViewModel(),
     recommendationsViewModel: RecommendationsViewModel = koinViewModel(),
     quickLogViewModel: LoggingViewModel = koinViewModel(),
@@ -168,12 +181,13 @@ fun HomeScreen(
     }
 
     // `refresh()`'s own triggers (session/syncState/partnerSnapshot) don't fire
-    // on a plain nav pop back from the logging sheet, so `hasLoggedToday` would
-    // otherwise go stale after a save. Re-check on every resume instead.
+    // on a plain nav pop back from the logging sheet, so
+    // `hasLoggedForSelectedDate` would otherwise go stale after a save.
+    // Re-check on every resume instead.
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshToday()
+            if (event == Lifecycle.Event.ON_RESUME) viewModel.refreshSelectedDate()
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
@@ -181,14 +195,23 @@ fun HomeScreen(
 
     // Port of iOS's `HomeLogButton.isSaving` -- a quick-log flow-level tap (see
     // `QuickLogMenuContent`) saves through the same `LoggingViewModel` the full
-    // sheet uses, so `hasLoggedToday` needs a refresh once that save actually
-    // completes (its own `isSaving` flips true -> false), not just on resume.
+    // sheet uses, so `hasLoggedForSelectedDate` needs a refresh once that save
+    // actually completes (its own `isSaving` flips true -> false), not just on
+    // resume.
     var wasQuickLogSaving by remember { mutableStateOf(false) }
     LaunchedEffect(quickLogUiState.isSaving) {
         if (wasQuickLogSaving && !quickLogUiState.isSaving) {
-            viewModel.refreshToday()
+            viewModel.refreshSelectedDate()
         }
         wasQuickLogSaving = quickLogUiState.isSaving
+    }
+
+    // Real feature build (2026-07-16): keeps Home's own quick-log instance
+    // (used by the bottom bar's "+"/pencil quick-flow menu) pointed at
+    // whichever date is currently selected -- same pattern already built for
+    // Calendar's own bottom bar (`CalendarScreen`'s equivalent effect).
+    LaunchedEffect(uiState.selectedDate) {
+        quickLogViewModel.selectDate(uiState.selectedDate)
     }
 
     Box(
@@ -199,6 +222,16 @@ fun HomeScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                // Real bug found on the first-ever signed-in device walkthrough: without
+                // this, the top bar's Profile/Care icons render with ~72% of their real
+                // touch height sitting under the system status bar's own touch-
+                // interceptable window (confirmed via `dumpsys window` -- statusBars
+                // inset frame was [0,0][1080,128], the icons' clickable bounds only
+                // [48,37][174,163]) -- taps at the icon's visual center silently did
+                // nothing because edge-to-edge (`enableEdgeToEdge()` in MainActivity)
+                // draws this screen's content behind the status bar with no inset
+                // padding to compensate.
+                .statusBarsPadding()
                 .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
         ) {
@@ -217,6 +250,10 @@ fun HomeScreen(
                 onOpenCalendar = {
                     hapticManager.selection()
                     onOpenCalendar()
+                },
+                onResetToToday = {
+                    hapticManager.selection()
+                    viewModel.selectDate(DateConverter.today())
                 },
             )
             Text(
@@ -256,10 +293,15 @@ fun HomeScreen(
                     R.string.home_partner_snapshot_revision,
                     revision,
                 )
+                val revisionAndRefreshText = uiState.partnerSnapshotRefreshedAt?.let {
+                    stringResource(
+                        R.string.home_partner_snapshot_revision_with_refreshed,
+                        revisionText,
+                        context.getString(R.string.home_partner_snapshot_refreshed, it),
+                    )
+                }
                 Text(
-                    text = uiState.partnerSnapshotRefreshedAt?.let {
-                        "$revisionText • ${context.getString(R.string.home_partner_snapshot_refreshed, it)}"
-                    } ?: revisionText,
+                    text = revisionAndRefreshText ?: revisionText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -288,18 +330,28 @@ fun HomeScreen(
                 } else if (isPartnerMode) {
                     val checklistViewModel: PartnerChecklistViewModel = koinViewModel()
                     val checklistState by checklistViewModel.uiState.collectAsStateWithLifecycle()
-                    LaunchedEffect(uiState.phase, uiState.dayInCycle) {
-                        checklistViewModel.loadOrGenerate(uiState.phase, uiState.dayInCycle ?: 1)
+                    LaunchedEffect(uiState.phase, uiState.dayInCycle, uiState.daysUntilNextPeriod) {
+                        checklistViewModel.loadOrGenerate(
+                            cyclePhase = uiState.phase,
+                            cycleDay = uiState.dayInCycle ?: 1,
+                            daysUntilNextPeriod = uiState.daysUntilNextPeriod,
+                        )
                     }
                     PartnerChecklistCard(
                         state = checklistState,
                         onToggle = checklistViewModel::toggle,
-                        onRetry = { checklistViewModel.retry(uiState.phase, uiState.dayInCycle ?: 1) },
+                        onRetry = {
+                            checklistViewModel.retry(
+                                cyclePhase = uiState.phase,
+                                cycleDay = uiState.dayInCycle ?: 1,
+                                daysUntilNextPeriod = uiState.daysUntilNextPeriod,
+                            )
+                        },
                         phase = uiState.phase,
                         accentColor = accentColor,
                     )
                     LoggedDetailsCard(
-                        log = uiState.todayLog,
+                        log = uiState.selectedLog,
                         isPartnerMode = true,
                         phase = uiState.phase,
                         accentColor = accentColor,
@@ -317,13 +369,27 @@ fun HomeScreen(
                         PartnerHeadsUpCard(text = headsUp, accentColor = accentColor)
                     }
                     PhaseInfoCard(phase = uiState.phase, isPartnerMode = true, accentColor = accentColor)
+                    // Real gap found in the second parity sweep: iOS's real
+                    // `sakhiInsightCard` renders in partner mode too (its own
+                    // title branches on `isPartnerMode` -- "How to be there for
+                    // her today"), but this card was never called at all in
+                    // Android's partner branch, so partners never saw it.
+                    SakhiInsightCard(
+                        phase = uiState.phase,
+                        insight = recoState.aiInsight,
+                        isLoading = recoState.isLoading,
+                        isPartnerMode = true,
+                        accentColor = accentColor,
+                        onRefresh = recommendationsViewModel::refreshInsight,
+                        isRefreshing = recoState.isRefreshingInsight,
+                    )
                 } else {
                     // Order matches iOS `HomeDayDetailGlassView.body`'s own-data
                     // branch exactly: loggedDetails -> nutrition -> cycleDetails
                     // -> phaseInfo (`SakhiInsightCard` stays last -- it isn't one
                     // of that exact 4-card list, kept where it already was).
                     LoggedDetailsCard(
-                        log = uiState.todayLog,
+                        log = uiState.selectedLog,
                         isPartnerMode = false,
                         phase = uiState.phase,
                         accentColor = accentColor,
@@ -344,6 +410,9 @@ fun HomeScreen(
                             cycleLength = uiState.cycleLength ?: 28,
                             phase = uiState.phase,
                             accentColor = accentColor,
+                            cyclesAnalyzed = uiState.cyclesAnalyzed,
+                            shortestCycle = uiState.shortestCycle,
+                            longestCycle = uiState.longestCycle,
                         )
                     }
                     PhaseInfoCard(phase = uiState.phase, isPartnerMode = false, accentColor = accentColor)
@@ -353,19 +422,22 @@ fun HomeScreen(
                         isLoading = recoState.isLoading,
                         isPartnerMode = false,
                         accentColor = accentColor,
+                        onRefresh = recommendationsViewModel::refreshInsight,
+                        isRefreshing = recoState.isRefreshingInsight,
                     )
                 }
             }
             }
 
-            HomeBottomActionBar(
+            SakhiBottomActionBar(
                 phase = uiState.phase,
                 accentColor = accentColor,
                 isPartnerMode = uiState.session?.isViewingOwnData == false,
                 canLog = uiState.canLogPeriod,
-                hasLoggedToday = uiState.hasLoggedToday,
+                hasLoggedForDate = uiState.hasLoggedForSelectedDate,
                 isLogSaving = quickLogUiState.isSaving,
                 selectedFlow = quickLogUiState.selectedFlow,
+                showCalendarButton = true,
                 onCalendarClick = {
                     hapticManager.selection()
                     onOpenCalendar()
@@ -376,292 +448,13 @@ fun HomeScreen(
                 },
                 onLogClick = {
                     hapticManager.impact(HapticImpact.MEDIUM)
-                    onQuickLogClick()
+                    onQuickLogClick(uiState.selectedDate)
                 },
                 onQuickLogFlow = { level ->
                     hapticManager.selection()
                     quickLogViewModel.onFlowSelected(level)
                     quickLogViewModel.save()
                 },
-            )
-        }
-    }
-}
-
-/**
- * Real port of iOS `SakhiBottomActionBar` (`HomeActionBar.swift`): a circular
- * calendar button, the `HomeAskSakhiBar` capsule (sparkle icon + rotating
- * phase/partner-mode-aware placeholder copy, same 4-second interval and the same
- * exact placeholder strings per phase), and a circular log button (`+` when no
- * entry exists today, pencil once logged; long-press for iOS's
- * `quickLogMenuContent` flow-level quick menu, see [QuickLogMenuContent]).
- *
- * Known gaps vs iOS, left as comments rather than silently diverged:
- * - iOS uses a spring/easing animation for the placeholder swap and a 90°
- *   sparkle-icon rotation on each change; here it's a plain `AnimatedContent`
- *   fade, which reads calmer but not identical.
- */
-@Composable
-private fun HomeBottomActionBar(
-    phase: CyclePhase,
-    accentColor: Color,
-    isPartnerMode: Boolean,
-    canLog: Boolean,
-    hasLoggedToday: Boolean,
-    isLogSaving: Boolean,
-    selectedFlow: FlowIntensity?,
-    onCalendarClick: () -> Unit,
-    onAskSakhiClick: () -> Unit,
-    onLogClick: () -> Unit,
-    onQuickLogFlow: (FlowIntensity?) -> Unit,
-) {
-    val context = LocalContext.current
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        IconButton(
-            onClick = onCalendarClick,
-            modifier = Modifier
-                .size(50.dp)
-                .background(accentColor.copy(alpha = 0.12f), CircleShape),
-        ) {
-            Icon(
-                Icons.Filled.CalendarMonth,
-                contentDescription = stringResource(R.string.home_calendar_content_description),
-                tint = accentColor,
-            )
-        }
-
-        HomeAskSakhiBar(
-            phase = phase,
-            isPartnerMode = isPartnerMode,
-            accentColor = accentColor,
-            onTap = onAskSakhiClick,
-            modifier = Modifier.weight(1f),
-        )
-
-        var showQuickLogMenu by remember { mutableStateOf(false) }
-
-        Box {
-            Box(
-                modifier = Modifier
-                    .size(50.dp)
-                    .background(accentColor, CircleShape)
-                    .combinedClickable(
-                        enabled = canLog && !isLogSaving,
-                        onClick = onLogClick,
-                        onLongClick = { showQuickLogMenu = true },
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (isLogSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Icon(
-                        imageVector = if (hasLoggedToday) Icons.Filled.Edit else Icons.Filled.Add,
-                        contentDescription = stringResource(R.string.home_log_content_description),
-                        tint = Color.White,
-                    )
-                }
-            }
-
-            DropdownMenu(
-                expanded = showQuickLogMenu,
-                onDismissRequest = { showQuickLogMenu = false },
-            ) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.home_other_symptoms)) },
-                    leadingIcon = { Icon(Icons.Filled.MoreHoriz, contentDescription = null) },
-                    onClick = {
-                        showQuickLogMenu = false
-                        onLogClick()
-                    },
-                )
-                HorizontalDivider()
-                listOf(
-                    FlowIntensity.HEAVY,
-                    FlowIntensity.MEDIUM,
-                    FlowIntensity.LIGHT,
-                    FlowIntensity.SPOTTING,
-                ).forEach { level ->
-                    val isSelected = selectedFlow == level
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                if (isSelected) {
-                                    context.getString(R.string.home_flow_selected, level.displayName)
-                                } else {
-                                    level.displayName
-                                },
-                            )
-                        },
-                        onClick = {
-                            showQuickLogMenu = false
-                            onQuickLogFlow(if (isSelected) null else level)
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** Android port of iOS `HomeAskSakhiBar` — see [HomeBottomActionBar] doc comment. */
-@Composable
-private fun HomeAskSakhiBar(
-    phase: CyclePhase,
-    isPartnerMode: Boolean,
-    accentColor: Color,
-    onTap: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val context = LocalContext.current
-    val placeholders = remember(phase, isPartnerMode, context) {
-        askSakhiPlaceholders(context, phase, isPartnerMode)
-    }
-    var placeholderIndex by remember(placeholders) { mutableIntStateOf(0) }
-
-    LaunchedEffect(placeholders) {
-        while (true) {
-            delay(4_000)
-            placeholderIndex = (placeholderIndex + 1) % placeholders.size
-        }
-    }
-
-    Surface(
-        shape = CircleShape,
-        color = accentColor.copy(alpha = 0.08f),
-        onClick = onTap,
-        modifier = modifier.heightIn(min = 50.dp),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = SakhiSpacing.space3),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(30.dp)
-                    .background(accentColor.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    Icons.Filled.AutoAwesome,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-
-            AnimatedContent(
-                targetState = placeholders[placeholderIndex],
-                transitionSpec = { fadeIn() togetherWith fadeOut() },
-                label = "askSakhiPlaceholder",
-            ) { text ->
-                Text(
-                    text = text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = accentColor.copy(alpha = 0.80f),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-    }
-}
-
-/**
- * Same exact copy as iOS's `HomeAskSakhiBar.placeholders(for:isPartnerMode:)` —
- * ported verbatim from `HomeActionBar.swift`, not paraphrased.
- */
-private fun askSakhiPlaceholders(
-    context: Context,
-    phase: CyclePhase,
-    isPartnerMode: Boolean,
-): List<String> {
-    fun listOfStrings(vararg ids: Int): List<String> = ids.map(context::getString)
-    return if (isPartnerMode) {
-        when (phase) {
-            CyclePhase.MENSTRUAL -> listOfStrings(
-                R.string.home_ask_sakhi_partner_menstrual_1,
-                R.string.home_ask_sakhi_partner_menstrual_2,
-                R.string.home_ask_sakhi_partner_menstrual_3,
-                R.string.home_ask_sakhi_partner_menstrual_4,
-            )
-            CyclePhase.FOLLICULAR -> listOfStrings(
-                R.string.home_ask_sakhi_partner_follicular_1,
-                R.string.home_ask_sakhi_partner_follicular_2,
-                R.string.home_ask_sakhi_partner_follicular_3,
-                R.string.home_ask_sakhi_partner_follicular_4,
-            )
-            CyclePhase.OVULATION -> listOfStrings(
-                R.string.home_ask_sakhi_partner_ovulation_1,
-                R.string.home_ask_sakhi_partner_ovulation_2,
-                R.string.home_ask_sakhi_partner_ovulation_3,
-                R.string.home_ask_sakhi_partner_ovulation_4,
-            )
-            CyclePhase.LUTEAL -> listOfStrings(
-                R.string.home_ask_sakhi_partner_luteal_1,
-                R.string.home_ask_sakhi_partner_luteal_2,
-                R.string.home_ask_sakhi_partner_luteal_3,
-                R.string.home_ask_sakhi_partner_luteal_4,
-            )
-            CyclePhase.DELAYED -> listOfStrings(
-                R.string.home_ask_sakhi_partner_delayed_1,
-                R.string.home_ask_sakhi_partner_delayed_2,
-                R.string.home_ask_sakhi_partner_delayed_3,
-                R.string.home_ask_sakhi_partner_delayed_4,
-            )
-            CyclePhase.UNKNOWN -> listOfStrings(
-                R.string.home_ask_sakhi_partner_unknown_1,
-                R.string.home_ask_sakhi_partner_unknown_2,
-                R.string.home_ask_sakhi_partner_unknown_3,
-                R.string.home_ask_sakhi_partner_unknown_4,
-            )
-        }
-    } else {
-        when (phase) {
-            CyclePhase.MENSTRUAL -> listOfStrings(
-                R.string.home_ask_sakhi_self_menstrual_1,
-                R.string.home_ask_sakhi_self_menstrual_2,
-                R.string.home_ask_sakhi_self_menstrual_3,
-                R.string.home_ask_sakhi_self_menstrual_4,
-            )
-            CyclePhase.FOLLICULAR -> listOfStrings(
-                R.string.home_ask_sakhi_self_follicular_1,
-                R.string.home_ask_sakhi_self_follicular_2,
-                R.string.home_ask_sakhi_self_follicular_3,
-                R.string.home_ask_sakhi_self_follicular_4,
-            )
-            CyclePhase.OVULATION -> listOfStrings(
-                R.string.home_ask_sakhi_self_ovulation_1,
-                R.string.home_ask_sakhi_self_ovulation_2,
-                R.string.home_ask_sakhi_self_ovulation_3,
-                R.string.home_ask_sakhi_self_ovulation_4,
-            )
-            CyclePhase.LUTEAL -> listOfStrings(
-                R.string.home_ask_sakhi_self_luteal_1,
-                R.string.home_ask_sakhi_self_luteal_2,
-                R.string.home_ask_sakhi_self_luteal_3,
-                R.string.home_ask_sakhi_self_luteal_4,
-            )
-            CyclePhase.DELAYED -> listOfStrings(
-                R.string.home_ask_sakhi_self_delayed_1,
-                R.string.home_ask_sakhi_self_delayed_2,
-                R.string.home_ask_sakhi_self_delayed_3,
-                R.string.home_ask_sakhi_self_delayed_4,
-            )
-            CyclePhase.UNKNOWN -> listOfStrings(
-                R.string.home_ask_sakhi_self_unknown_1,
-                R.string.home_ask_sakhi_self_unknown_2,
-                R.string.home_ask_sakhi_self_unknown_3,
-                R.string.home_ask_sakhi_self_unknown_4,
             )
         }
     }
@@ -929,7 +722,7 @@ private fun HomeGlassCard(
 ) {
     val refreshLabel = stringResource(R.string.home_refresh_content_description)
     val palette = rememberHomePhasePalette(phase)
-    val isDark = isSystemInDarkTheme()
+    val isDark = LocalSakhiDarkTheme.current
     val isMenstrual = phase == CyclePhase.MENSTRUAL
     val cardFill = when {
         !hasCycleData -> MaterialTheme.colorScheme.surface
@@ -1045,6 +838,8 @@ private fun LoggedDetailsCard(
     val bbtLabel = stringResource(R.string.home_log_category_bbt)
     val symptomLabel = stringResource(R.string.home_log_category_symptoms)
     val moodLabel = stringResource(R.string.home_log_category_mood)
+    val weightFormat = stringResource(R.string.home_log_value_weight_kg)
+    val bbtFormat = stringResource(R.string.home_log_value_bbt_celsius)
     val notes = log?.symptoms?.joinToString(" ").orEmpty()
     val weightKg = LogTokenEncoder.decodeWeight(notes)
     val bbtCelsius = LogTokenEncoder.decodeBbt(notes)
@@ -1091,10 +886,10 @@ private fun LoggedDetailsCard(
                     LogChip(icon = Icons.Filled.WaterDrop, value = flow.displayName, category = flowLabel, accentColor = accentColor)
                 }
                 weightKg?.let {
-                    LogChip(icon = Icons.Filled.MonitorWeight, value = "%.1f kg".format(it), category = weightLabel, accentColor = accentColor)
+                    LogChip(icon = Icons.Filled.MonitorWeight, value = weightFormat.format(it), category = weightLabel, accentColor = accentColor)
                 }
                 bbtCelsius?.let {
-                    LogChip(icon = Icons.Filled.Thermostat, value = "%.1f °C".format(it), category = bbtLabel, accentColor = accentColor)
+                    LogChip(icon = Icons.Filled.Thermostat, value = bbtFormat.format(it), category = bbtLabel, accentColor = accentColor)
                 }
                 symptoms.take(4).forEach { symptom ->
                     LogChip(icon = Icons.Filled.Healing, value = symptom.displayName, category = symptomLabel, accentColor = accentColor)
@@ -1109,6 +904,7 @@ private fun LoggedDetailsCard(
 
 @Composable
 private fun LogChip(icon: ImageVector, value: String, category: String, accentColor: Color) {
+    val contentDescription = stringResource(R.string.home_log_chip_content_description, category, value)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -1119,7 +915,7 @@ private fun LogChip(icon: ImageVector, value: String, category: String, accentCo
             // stops for what's really one logical stat -- the icon stays
             // decorative (contentDescription = null below) since this label
             // already conveys the same meaning.
-            .semantics(mergeDescendants = true) { contentDescription = "$category: $value" },
+            .semantics(mergeDescendants = true) { this.contentDescription = contentDescription },
     ) {
         Icon(icon, contentDescription = null, tint = accentColor)
         Text(
@@ -1164,6 +960,9 @@ private fun CycleDetailsCard(
     cycleLength: Int,
     phase: CyclePhase,
     accentColor: Color,
+    cyclesAnalyzed: Int,
+    shortestCycle: Int,
+    longestCycle: Int,
 ) {
     val context = LocalContext.current
     val today = DateConverter.today()
@@ -1188,11 +987,11 @@ private fun CycleDetailsCard(
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
             ) {
                 Text(
-                    text = "$dayInCycle",
+                    text = stringResource(R.string.home_cycle_day_current_number, dayInCycle),
                     style = MaterialTheme.typography.headlineLarge.copy(fontWeight = FontWeight.Bold),
                 )
                 Text(
-                    text = " / $cycleLength",
+                    text = stringResource(R.string.home_cycle_day_total, cycleLength),
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1261,32 +1060,38 @@ private fun CycleDetailsCard(
 
             HorizontalDivider(modifier = Modifier.padding(horizontal = SakhiSpacing.space5))
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+            Column(
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
             ) {
-                CycleStatTile(
-                    title = stringResource(R.string.home_cycle_length_title),
-                    value = context.resources.getQuantityString(
-                        R.plurals.home_cycle_length_days,
-                        cycleLength,
-                        cycleLength,
-                    ),
-                    icon = Icons.Filled.Autorenew,
-                    modifier = Modifier.weight(1f),
+                CycleStatusTile(
+                    cyclesAnalyzed = cyclesAnalyzed,
+                    shortestCycle = shortestCycle,
+                    longestCycle = longestCycle,
+                    accentColor = accentColor,
                 )
-                CycleStatTile(
-                    title = stringResource(R.string.home_period_length_title),
-                    value = context.resources.getQuantityString(
-                        R.plurals.home_cycle_length_days,
-                        cycle.periodLength ?: 5,
-                        cycle.periodLength ?: 5,
-                    ),
-                    icon = Icons.Filled.WaterDrop,
-                    modifier = Modifier.weight(1f),
-                )
+                Row(horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
+                    CycleStatTile(
+                        title = stringResource(R.string.home_cycle_length_title),
+                        value = context.resources.getQuantityString(
+                            R.plurals.home_cycle_length_days,
+                            cycleLength,
+                            cycleLength,
+                        ),
+                        icon = Icons.Filled.Autorenew,
+                        modifier = Modifier.weight(1f),
+                    )
+                    CycleStatTile(
+                        title = stringResource(R.string.home_period_length_title),
+                        value = context.resources.getQuantityString(
+                            R.plurals.home_cycle_length_days,
+                            cycle.periodLength ?: 5,
+                            cycle.periodLength ?: 5,
+                        ),
+                        icon = Icons.Filled.WaterDrop,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
         }
     }
@@ -1332,13 +1137,31 @@ private fun CyclePill(date: kotlinx.datetime.LocalDate, mark: team.sakhi.cycle.C
         isFuture -> accentColor.copy(alpha = 0.35f)
         else -> Color.Transparent
     }
-    val description = buildString {
-        append(DateConverter.formatShort(date))
-        if (isToday) append(", ${context.getString(R.string.home_cycle_pill_today)}")
-        when {
-            isPeriod -> append(", ${context.getString(R.string.home_cycle_pill_period_day)}")
-            isOvulation -> append(", ${context.getString(R.string.home_cycle_pill_predicted_ovulation)}")
-        }
+    val pillDateLabel = DateConverter.formatShort(date)
+    val todayLabel = context.getString(R.string.home_cycle_pill_today)
+    val statusLabel = when {
+        isPeriod -> context.getString(R.string.home_cycle_pill_period_day)
+        isOvulation -> context.getString(R.string.home_cycle_pill_predicted_ovulation)
+        else -> null
+    }
+    val description = when {
+        isToday && statusLabel != null -> context.getString(
+            R.string.home_cycle_pill_content_description_three_part,
+            pillDateLabel,
+            todayLabel,
+            statusLabel,
+        )
+        isToday -> context.getString(
+            R.string.home_cycle_pill_content_description_two_part,
+            pillDateLabel,
+            todayLabel,
+        )
+        statusLabel != null -> context.getString(
+            R.string.home_cycle_pill_content_description_two_part,
+            pillDateLabel,
+            statusLabel,
+        )
+        else -> pillDateLabel
     }
     Box(
         modifier = Modifier
@@ -1388,7 +1211,10 @@ private fun CycleStatTile(title: String, value: String, icon: ImageVector, modif
         Column(
             modifier = Modifier
                 .padding(SakhiSpacing.space3)
-                .semantics(mergeDescendants = true) { contentDescription = "$title: $value" },
+                .semantics(mergeDescendants = true) {
+                    contentDescription = title
+                    stateDescription = value
+                },
         ) {
             Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
             Text(
@@ -1397,6 +1223,94 @@ private fun CycleStatTile(title: String, value: String, icon: ImageVector, modif
                 modifier = Modifier.padding(top = SakhiSpacing.space2),
             )
             Text(text = title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+// Port of iOS `HomeDayDetailGlassView.cycleStatusTile`: a regularity summary
+// row inside the Current Cycle card. `isRegular` is judged the same way iOS
+// does it -- in this view, not via a shared KMM helper -- since it's a
+// different measurement from `CycleMath.profileHealthStatus` (the
+// delayed-period algorithm behind Profile's own "Cycle Health" badge).
+@Composable
+private fun CycleStatusTile(
+    cyclesAnalyzed: Int,
+    shortestCycle: Int,
+    longestCycle: Int,
+    accentColor: Color,
+) {
+    val context = LocalContext.current
+    val hasMeasuredStats = cyclesAnalyzed > 0
+    val isRegular = (longestCycle - shortestCycle) <= 7
+    val detail = if (hasMeasuredStats) {
+        context.resources.getQuantityString(R.plurals.home_cycle_status_analysed, cyclesAnalyzed, cyclesAnalyzed)
+    } else {
+        stringResource(R.string.home_cycle_status_no_data)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(SakhiRadius.lg),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(SakhiSpacing.space4),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .background(accentColor.copy(alpha = 0.16f), RoundedCornerShape(SakhiRadius.md)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ShowChart,
+                    contentDescription = null,
+                    tint = accentColor,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.home_cycle_status_title),
+                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Text(
+                    text = detail,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                )
+            }
+            if (hasMeasuredStats) {
+                Surface(
+                    shape = RoundedCornerShape(SakhiRadius.full),
+                    color = if (isRegular) accentColor.copy(alpha = 0.14f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = SakhiSpacing.space2, vertical = SakhiSpacing.space1),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+                    ) {
+                        Icon(
+                            imageVector = if (isRegular) Icons.Filled.Check else Icons.Filled.Warning,
+                            contentDescription = null,
+                            tint = if (isRegular) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(12.dp),
+                        )
+                        Text(
+                            text = if (isRegular) {
+                                stringResource(R.string.home_cycle_status_regular)
+                            } else {
+                                stringResource(R.string.home_cycle_status_irregular)
+                            },
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = if (isRegular) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -1477,12 +1391,12 @@ private fun PhaseInfoCard(phase: CyclePhase, isPartnerMode: Boolean, accentColor
  * Port of iOS `partnerChecklistCard`: an AI-generated (Claude, via the real
  * shared `AIRepository.generatePartnerChecklist`) daily list of caring
  * things the partner can do today, with a completed-count badge and
- * per-item toggle. Simplified from iOS's shimmer-box loading skeleton to a
- * plain spinner + label (same loading semantics, simpler visual), and there's
- * no on-device fallback-text list on a generation failure (iOS falls back to
- * local canned text; Android's retry button re-runs the same real generation
- * call instead, since there's no local persistence layer to source a fallback
- * from here) -- both real, documented simplifications, not fake stand-ins.
+ * per-item toggle. Android now matches iOS's 4-row shimmer loading skeleton
+ * more closely too, while still keeping the real documented generation-failure
+ * simplification: no on-device fallback-text list. iOS falls back to local
+ * canned text; Android's retry button re-runs the same real generation call
+ * instead, since there's no local persistence layer to source a fallback from
+ * here.
  */
 @Composable
 private fun PartnerChecklistCard(
@@ -1502,18 +1416,7 @@ private fun PartnerChecklistCard(
         onRefresh = if (state.items.isEmpty()) null else onRetry,
     ) {
         when {
-            state.isGenerating -> Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-                modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp, color = accentColor)
-                Text(
-                    text = stringResource(R.string.home_partner_checklist_loading),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            state.isGenerating -> PartnerChecklistLoadingState(phase = phase, accentColor = accentColor)
             state.failedToGenerate -> Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -1558,9 +1461,45 @@ private fun PartnerChecklistCard(
                         text = item.text,
                         style = MaterialTheme.typography.bodyMedium,
                         color = if (item.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        textDecoration = if (item.isCompleted) TextDecoration.LineThrough else null,
                         modifier = Modifier.weight(1f),
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PartnerChecklistLoadingState(
+    phase: CyclePhase,
+    accentColor: Color,
+) {
+    val rowWidths = listOf(160.dp, 130.dp, 180.dp, 145.dp)
+    val shimmerBase = accentColor.copy(alpha = if (phase == CyclePhase.MENSTRUAL) 0.15f else 0.08f)
+
+    Column {
+        rowWidths.forEachIndexed { index, width ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SakhiSpacing.space5, vertical = 14.dp),
+            ) {
+                LoadingShimmer(
+                    width = 22.dp,
+                    height = 22.dp,
+                    baseColor = shimmerBase,
+                )
+                LoadingShimmer(
+                    width = width,
+                    height = 13.dp,
+                    baseColor = shimmerBase,
+                )
+            }
+            if (index < rowWidths.lastIndex) {
+                LearningDivider()
             }
         }
     }
@@ -1600,7 +1539,7 @@ private fun PartnerNoDataCard() {
 
 /** Port of iOS `partnerHeadsUpCard`. Shown only when [text] resolves non-null. */
 @Composable
-private fun PartnerHeadsUpCard(text: PartnerHeadsUpText, accentColor: Color) {
+private fun PartnerHeadsUpCard(text: PartnerHeadsUpCardText, accentColor: Color) {
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xxl),
         tonalElevation = SakhiSpacing.space1,
@@ -1642,7 +1581,20 @@ private fun PartnerHeadsUpCard(text: PartnerHeadsUpText, accentColor: Color) {
     }
 }
 
-internal data class PartnerHeadsUpText(val label: String, val days: Int?)
+internal data class PartnerHeadsUpCardText(val label: String, val days: Int?)
+
+internal enum class PartnerHeadsUpTextKind {
+    PERIOD_TOMORROW,
+    PERIOD_IN_DAYS,
+    LONG_PERIOD_DAY,
+    PAST_EXPECTED_DATE,
+}
+
+internal data class PartnerHeadsUpText(
+    val kind: PartnerHeadsUpTextKind,
+    val number: Int? = null,
+    val days: Int?,
+)
 
 /**
  * Port of iOS `partnerHeadsUpText`'s full 5-branch switch. iOS reads
@@ -1665,37 +1617,43 @@ internal fun partnerHeadsUpText(
     phase: CyclePhase,
     dayInCycle: Int?,
     daysUntilNextPeriod: Int?,
-): PartnerHeadsUpText? {
+): PartnerHeadsUpCardText? {
     val raw = partnerHeadsUpText(phase, dayInCycle, daysUntilNextPeriod) ?: return null
     return when (phase) {
         CyclePhase.FOLLICULAR, CyclePhase.OVULATION, CyclePhase.LUTEAL -> {
-            val days = raw.days ?: return null
-            val label = if (days == 1) {
-                context.getString(R.string.home_partner_heads_up_tomorrow)
-            } else {
-                context.resources.getQuantityString(
-                    R.plurals.home_partner_heads_up_period_in,
-                    days,
-                    days,
-                )
+            val label = when (raw.kind) {
+                PartnerHeadsUpTextKind.PERIOD_TOMORROW -> context.getString(R.string.home_partner_heads_up_tomorrow)
+                PartnerHeadsUpTextKind.PERIOD_IN_DAYS -> {
+                    val days = raw.number ?: return null
+                    context.resources.getQuantityString(
+                        R.plurals.home_partner_heads_up_period_in,
+                        days,
+                        days,
+                    )
+                }
+                else -> return null
             }
-            raw.copy(label = label)
+            PartnerHeadsUpCardText(label = label, days = raw.days)
         }
         CyclePhase.MENSTRUAL -> {
-            val periodDay = dayInCycle ?: return null
-            raw.copy(label = context.getString(R.string.home_partner_heads_up_long_period, periodDay))
+            val periodDay = raw.number ?: return null
+            PartnerHeadsUpCardText(
+                label = context.getString(R.string.home_partner_heads_up_long_period, periodDay),
+                days = raw.days,
+            )
         }
         CyclePhase.DELAYED -> {
-            val daysDelayed = daysUntilNextPeriod?.let { -it } ?: return null
-            raw.copy(
+            val daysDelayed = raw.number ?: return null
+            PartnerHeadsUpCardText(
                 label = context.resources.getQuantityString(
                     R.plurals.home_partner_heads_up_past_expected,
                     daysDelayed,
                     daysDelayed,
                 ),
+                days = raw.days,
             )
         }
-        CyclePhase.UNKNOWN -> raw
+        CyclePhase.UNKNOWN -> null
     }
 }
 
@@ -1709,19 +1667,21 @@ internal fun partnerHeadsUpText(
             val days = daysUntilNextPeriod ?: return null
             val maxDays = if (phase == CyclePhase.LUTEAL) 5 else 7
             if (days <= 0 || days > maxDays) return null
-            val label = if (days == 1) "Period tomorrow" else "Period in $days days"
-            PartnerHeadsUpText(label, days)
+            if (days == 1) {
+                PartnerHeadsUpText(PartnerHeadsUpTextKind.PERIOD_TOMORROW, days = days)
+            } else {
+                PartnerHeadsUpText(PartnerHeadsUpTextKind.PERIOD_IN_DAYS, number = days, days = days)
+            }
         }
         CyclePhase.MENSTRUAL -> {
             val periodDay = dayInCycle ?: return null
             if (periodDay < 6) return null
-            PartnerHeadsUpText("Long period, day $periodDay", null)
+            PartnerHeadsUpText(PartnerHeadsUpTextKind.LONG_PERIOD_DAY, number = periodDay, days = null)
         }
         CyclePhase.DELAYED -> {
             val daysDelayed = daysUntilNextPeriod?.let { -it } ?: return null
             if (daysDelayed <= 0) return null
-            val label = if (daysDelayed == 1) "1 day past expected date" else "$daysDelayed days past expected date"
-            PartnerHeadsUpText(label, null)
+            PartnerHeadsUpText(PartnerHeadsUpTextKind.PAST_EXPECTED_DATE, number = daysDelayed, days = null)
         }
         CyclePhase.UNKNOWN -> null
     }
@@ -1869,10 +1829,26 @@ private fun LearningPhaseCards() {
 
         LearningCard(title = stringResource(R.string.home_learning_hormones_title), icon = Icons.Filled.MonitorHeart) {
             listOf(
-                Triple("FSH", stringResource(R.string.home_learning_hormone_fsh_name), stringResource(R.string.home_learning_hormone_fsh_desc)),
-                Triple("LH", stringResource(R.string.home_learning_hormone_lh_name), stringResource(R.string.home_learning_hormone_lh_desc)),
-                Triple("E2", stringResource(R.string.home_learning_hormone_e2_name), stringResource(R.string.home_learning_hormone_e2_desc)),
-                Triple("P4", stringResource(R.string.home_learning_hormone_p4_name), stringResource(R.string.home_learning_hormone_p4_desc)),
+                Triple(
+                    stringResource(R.string.home_learning_hormone_fsh_abbr),
+                    stringResource(R.string.home_learning_hormone_fsh_name),
+                    stringResource(R.string.home_learning_hormone_fsh_desc),
+                ),
+                Triple(
+                    stringResource(R.string.home_learning_hormone_lh_abbr),
+                    stringResource(R.string.home_learning_hormone_lh_name),
+                    stringResource(R.string.home_learning_hormone_lh_desc),
+                ),
+                Triple(
+                    stringResource(R.string.home_learning_hormone_e2_abbr),
+                    stringResource(R.string.home_learning_hormone_e2_name),
+                    stringResource(R.string.home_learning_hormone_e2_desc),
+                ),
+                Triple(
+                    stringResource(R.string.home_learning_hormone_p4_abbr),
+                    stringResource(R.string.home_learning_hormone_p4_name),
+                    stringResource(R.string.home_learning_hormone_p4_desc),
+                ),
             ).forEachIndexed { i, (abbr, name, desc) ->
                 if (i > 0) LearningDivider()
                 LearningAbbrRow(abbr = abbr, name = name, description = desc)
@@ -2073,11 +2049,12 @@ private fun LearningDivider() {
 // pipeline, nothing here is placeholder content.
 //
 // Not ported in this pass (documented gaps, not oversights): iOS's horizontal
-// TabView paging (4 foods per page + dot indicator) and shimmer loading state
-// -- here all eat-more foods render in a single vertical list and loading shows
-// nothing until data arrives. The "Avoid" section, phase tips, and condition
-// tips stay on the standalone Recommendations screen only, matching iOS (which
-// doesn't show them in the day-detail card either).
+// TabView paging (4 foods per page + dot indicator) -- Android still renders
+// all eat-more foods in a single vertical list. The initial loading shimmer is
+// aligned now, but the pager/dot treatment remains a larger deferred gap. The
+// "Avoid" section, phase tips, and condition tips stay on the standalone
+// Recommendations screen only, matching iOS (which doesn't show them in the
+// day-detail card either).
 
 @Composable
 private fun NutritionCard(
@@ -2086,8 +2063,6 @@ private fun NutritionCard(
     isLoading: Boolean,
     accentColor: Color,
 ) {
-    if (isLoading && foods.isEmpty()) return
-
     HomeGlassCard(
         title = stringResource(R.string.home_nutrition_title),
         phase = phase,
@@ -2095,42 +2070,101 @@ private fun NutritionCard(
         hasCycleData = true,
         icon = Icons.Filled.Eco,
     ) {
-        if (foods.isEmpty()) {
+        when {
+            isLoading && foods.isEmpty() -> NutritionLoadingState(phase = phase, accentColor = accentColor)
+            foods.isEmpty() -> {
             Text(
                 text = stringResource(R.string.home_nutrition_empty),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
             )
-        } else {
-            foods.forEach { food ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = food.name,
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = food.category,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    food.nutritionLabel?.let { label ->
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = accentColor,
-                        )
+            }
+            else -> {
+                foods.forEach { food ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = food.name,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = food.category,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        food.nutritionLabel?.let { label ->
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = accentColor,
+                            )
+                        }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NutritionLoadingState(
+    phase: CyclePhase,
+    accentColor: Color,
+) {
+    val shimmerBase = accentColor.copy(alpha = if (phase == CyclePhase.MENSTRUAL) 0.15f else 0.08f)
+
+    Column(
+        modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+    ) {
+        repeat(4) { index ->
+            if (index > 0) {
+                HorizontalDivider(
+                    color = shimmerBase.copy(alpha = 0.72f),
+                    modifier = Modifier.padding(start = 46.dp),
+                )
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 7.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                LoadingShimmer(
+                    width = 36.dp,
+                    height = 36.dp,
+                    baseColor = shimmerBase,
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    LoadingShimmer(
+                        width = if (index % 2 == 0) 142.dp else 126.dp,
+                        height = 14.dp,
+                        baseColor = shimmerBase,
+                    )
+                    LoadingShimmer(
+                        width = if (index % 2 == 0) 104.dp else 88.dp,
+                        height = 12.dp,
+                        baseColor = shimmerBase,
+                    )
+                }
+                LoadingShimmer(
+                    width = 16.dp,
+                    height = 16.dp,
+                    baseColor = shimmerBase,
+                )
             }
         }
     }
@@ -2143,8 +2177,13 @@ private fun SakhiInsightCard(
     isLoading: Boolean,
     isPartnerMode: Boolean,
     accentColor: Color,
+    onRefresh: () -> Unit,
+    isRefreshing: Boolean,
 ) {
-    if (insight == null && !isLoading) return
+    // `isRefreshing` must keep the card visible too -- `refreshInsight()` clears
+    // `insight` back to null while it re-fetches, and without this check the
+    // whole card would vanish mid-refresh instead of showing the loading spinner.
+    if (insight == null && !isLoading && !isRefreshing) return
 
     HomeGlassCard(
         title = stringResource(
@@ -2158,6 +2197,13 @@ private fun SakhiInsightCard(
         accentColor = accentColor,
         hasCycleData = true,
         icon = Icons.Filled.AutoAwesome,
+        // Matches iOS's real "Refresh" button on this exact card
+        // (`HomeDayDetailGlassView+Cards.swift`'s `sakhiInsightCard`) -- hidden
+        // only before any insight has ever loaded (the very first spinner-only
+        // render); kept visible (as a spinner) through `isRefreshing` even
+        // though `refreshInsight()` clears `insight` back to null meanwhile.
+        onRefresh = if (insight != null || isRefreshing) onRefresh else null,
+        isRefreshing = isRefreshing,
     ) {
         if (insight == null) {
             Row(modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3)) {
@@ -2193,7 +2239,7 @@ private data class HomePhasePalette(
 
 @Composable
 private fun rememberHomePhasePalette(phase: CyclePhase): HomePhasePalette {
-    val isDark = isSystemInDarkTheme()
+    val isDark = LocalSakhiDarkTheme.current
     return remember(phase, isDark) {
         val resolved = SakhiColors.resolved(isDark).forPhase(
             if (phase == CyclePhase.UNKNOWN) CyclePhase.FOLLICULAR else phase,
@@ -2250,6 +2296,7 @@ private fun HomeTopBar(
     onOpenProfile: () -> Unit,
     onOpenCare: () -> Unit,
     onOpenCalendar: () -> Unit,
+    onResetToToday: () -> Unit,
 ) {
     val context = LocalContext.current
     val hasCycleData = uiState.hasCycleData
@@ -2279,11 +2326,16 @@ private fun HomeTopBar(
             modifier = Modifier.align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            val isToday = uiState.selectedDate == DateConverter.today()
             Text(
-                text = DateConverter.formatForDisplay(DateConverter.today()),
+                text = DateConverter.formatForDisplay(uiState.selectedDate),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = foreground,
-                modifier = Modifier.clickable(onClick = onOpenCalendar),
+                // Matches iOS's real `HomeView.topBar` date label exactly: tapping
+                // it opens Calendar when viewing today, or resets straight back
+                // to today when viewing any other date -- verified there is no
+                // separate day-tap strip in the real iOS source.
+                modifier = Modifier.clickable(onClick = if (isToday) onOpenCalendar else onResetToToday),
             )
             HeroTopBarSubtitle(
                 phaseName = phaseLabel,

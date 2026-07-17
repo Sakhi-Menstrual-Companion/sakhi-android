@@ -8,18 +8,15 @@
     <string name="home_sync_synced">Synced</string>
     <string name="home_sync_stale">Data marked stale</string>
     <string name="home_sync_failed">Sync failed</string>
+    <string name="home_load_cycle_failed">Failed to load cycle data</string>
 
     <string name="home_partner_snapshot_revision">Partner snapshot revision %1$d</string>
     <string name="home_partner_snapshot_refreshed">refreshed %1$s</string>
+    <string name="home_partner_snapshot_revision_with_refreshed">%1$s • %2$s</string>
 
-    <string name="home_calendar_content_description">Calendar</string>
-    <string name="home_log_content_description">Log</string>
     <string name="home_refresh_content_description">Refresh</string>
     <string name="home_open_profile_content_description">Open profile</string>
     <string name="home_open_care_content_description">Open care mode</string>
-
-    <string name="home_other_symptoms">Other symptoms  ›</string>
-    <string name="home_flow_selected">%1$s  ✓</string>
 
     <string name="home_hero_not_started_partner">she hasn\'t started tracking</string>
     <string name="home_hero_not_started_self">start tracking today</string>
@@ -44,18 +41,33 @@
     <string name="home_log_category_bbt">BBT</string>
     <string name="home_log_category_symptoms">Symptoms</string>
     <string name="home_log_category_mood">Mood</string>
+    <string name="home_log_value_weight_kg">%.1f kg</string>
+    <string name="home_log_value_bbt_celsius">%.1f °C</string>
+    <string name="home_log_chip_content_description">%1$s: %2$s</string>
 
     <string name="home_current_cycle_title">Current Cycle</string>
+    <string name="home_cycle_day_current_number">%1$d</string>
     <string name="home_cycle_day_today">today\'s cycle day</string>
     <string name="home_cycle_day_label">cycle day</string>
+    <string name="home_cycle_day_total"> / %1$d</string>
     <string name="home_cycle_started">Started %1$s</string>
     <string name="home_cycle_legend_period">Period</string>
     <string name="home_cycle_legend_ovulation">Ovulation</string>
     <string name="home_cycle_length_title">Cycle Length</string>
     <string name="home_period_length_title">Period Length</string>
+    <string name="home_cycle_status_title">Cycle Status</string>
+    <string name="home_cycle_status_no_data">Log more cycles to see patterns</string>
+    <string name="home_cycle_status_regular">Regular</string>
+    <string name="home_cycle_status_irregular">Irregular</string>
+    <plurals name="home_cycle_status_analysed">
+        <item quantity="one">%1$d cycle analysed</item>
+        <item quantity="other">%1$d cycles analysed</item>
+    </plurals>
     <string name="home_cycle_pill_today">today</string>
     <string name="home_cycle_pill_period_day">period day</string>
     <string name="home_cycle_pill_predicted_ovulation">predicted ovulation day</string>
+    <string name="home_cycle_pill_content_description_two_part">%1$s, %2$s</string>
+    <string name="home_cycle_pill_content_description_three_part">%1$s, %2$s, %3$s</string>
 
     <plurals name="home_cycle_length_days">
         <item quantity="one">%d day</item>
@@ -170,12 +182,16 @@
     <string name="home_learning_log_tip_4">Discharge, colour and texture help pinpoint ovulation</string>
 
     <string name="home_learning_hormones_title">The hormones behind it all</string>
+    <string name="home_learning_hormone_fsh_abbr">FSH</string>
     <string name="home_learning_hormone_fsh_name">Follicle-stimulating hormone</string>
     <string name="home_learning_hormone_fsh_desc">Rises to kick off follicle development at the start of your cycle</string>
+    <string name="home_learning_hormone_lh_abbr">LH</string>
     <string name="home_learning_hormone_lh_name">Luteinizing hormone</string>
     <string name="home_learning_hormone_lh_desc">Surges mid-cycle to trigger ovulation, the key signal Sakhi watches</string>
+    <string name="home_learning_hormone_e2_abbr">E2</string>
     <string name="home_learning_hormone_e2_name">Estrogen</string>
     <string name="home_learning_hormone_e2_desc">Builds through follicular phase, lifts mood, energy, and skin glow</string>
+    <string name="home_learning_hormone_p4_abbr">P4</string>
     <string name="home_learning_hormone_p4_name">Progesterone</string>
     <string name="home_learning_hormone_p4_desc">Rises after ovulation, prepares the uterus, causes PMS if it drops</string>
 
@@ -191,53 +207,4 @@
     <string name="home_learning_tracking_tip_3">Sleep quality and stress both affect your cycle length, log them too</string>
     <string name="home_learning_tracking_tip_4">Cycles vary month to month. Three cycles gives Sakhi a reliable baseline</string>
 
-    <string name="home_ask_sakhi_partner_menstrual_1">How\'s she feeling today?</string>
-    <string name="home_ask_sakhi_partner_menstrual_2">What can I do for her right now?</string>
-    <string name="home_ask_sakhi_partner_menstrual_3">What does she need during her period?</string>
-    <string name="home_ask_sakhi_partner_menstrual_4">How can we help her through this?</string>
-    <string name="home_ask_sakhi_partner_follicular_1">How\'s her energy this week?</string>
-    <string name="home_ask_sakhi_partner_follicular_2">What does she need from me now?</string>
-    <string name="home_ask_sakhi_partner_follicular_3">What\'s good for her this phase?</string>
-    <string name="home_ask_sakhi_partner_follicular_4">How\'s she doing this week?</string>
-    <string name="home_ask_sakhi_partner_ovulation_1">How\'s she feeling right now?</string>
-    <string name="home_ask_sakhi_partner_ovulation_2">What does she need today?</string>
-    <string name="home_ask_sakhi_partner_ovulation_3">What\'s she going through this week?</string>
-    <string name="home_ask_sakhi_partner_ovulation_4">How can I be there for her today?</string>
-    <string name="home_ask_sakhi_partner_luteal_1">Why might she seem off today?</string>
-    <string name="home_ask_sakhi_partner_luteal_2">What does she need right now?</string>
-    <string name="home_ask_sakhi_partner_luteal_3">How can I help her this week?</string>
-    <string name="home_ask_sakhi_partner_luteal_4">What\'s she going through?</string>
-    <string name="home_ask_sakhi_partner_delayed_1">How\'s she doing with the delay?</string>
-    <string name="home_ask_sakhi_partner_delayed_2">What does she need from me?</string>
-    <string name="home_ask_sakhi_partner_delayed_3">Is she okay?</string>
-    <string name="home_ask_sakhi_partner_delayed_4">How can I support her right now?</string>
-    <string name="home_ask_sakhi_partner_unknown_1">How\'s she doing today?</string>
-    <string name="home_ask_sakhi_partner_unknown_2">What does she need?</string>
-    <string name="home_ask_sakhi_partner_unknown_3">What can we figure out for her?</string>
-    <string name="home_ask_sakhi_partner_unknown_4">Ask about her cycle...</string>
-
-    <string name="home_ask_sakhi_self_menstrual_1">How are you managing today?</string>
-    <string name="home_ask_sakhi_self_menstrual_2">Ask about cramp relief...</string>
-    <string name="home_ask_sakhi_self_menstrual_3">What helps with fatigue?</string>
-    <string name="home_ask_sakhi_self_menstrual_4">Talk to Sakhi about your flow...</string>
-    <string name="home_ask_sakhi_self_follicular_1">What should I eat this week?</string>
-    <string name="home_ask_sakhi_self_follicular_2">How\'s your energy level?</string>
-    <string name="home_ask_sakhi_self_follicular_3">Ask about cycle nutrition...</string>
-    <string name="home_ask_sakhi_self_follicular_4">Plan something for your glow-up phase...</string>
-    <string name="home_ask_sakhi_self_ovulation_1">Am I in my fertile window?</string>
-    <string name="home_ask_sakhi_self_ovulation_2">Ask about ovulation signs...</string>
-    <string name="home_ask_sakhi_self_ovulation_3">What\'s my body doing right now?</string>
-    <string name="home_ask_sakhi_self_ovulation_4">Tips for your peak energy day...</string>
-    <string name="home_ask_sakhi_self_luteal_1">Why do I feel this way?</string>
-    <string name="home_ask_sakhi_self_luteal_2">Ask about PMS remedies...</string>
-    <string name="home_ask_sakhi_self_luteal_3">What helps with bloating?</string>
-    <string name="home_ask_sakhi_self_luteal_4">Talk to Sakhi about your mood...</string>
-    <string name="home_ask_sakhi_self_delayed_1">Why is my period late?</string>
-    <string name="home_ask_sakhi_self_delayed_2">Should I be worried?</string>
-    <string name="home_ask_sakhi_self_delayed_3">Ask Sakhi about irregular cycles...</string>
-    <string name="home_ask_sakhi_self_delayed_4">What could cause a delay?</string>
-    <string name="home_ask_sakhi_self_unknown_1">Ask Sakhi anything...</string>
-    <string name="home_ask_sakhi_self_unknown_2">How do I start tracking?</string>
-    <string name="home_ask_sakhi_self_unknown_3">Tell me about my cycle phases...</string>
-    <string name="home_ask_sakhi_self_unknown_4">What should I log today?</string>
 </resources>

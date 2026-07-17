@@ -3,7 +3,7 @@ package team.sakhi.android.feature.home
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
-/** Registered by :app once the root home placeholder is swapped to the real feature. */
+/** Koin module for the home feature. */
 val homeFeatureModule = module {
     viewModel {
         HomeViewModel(
@@ -11,6 +11,7 @@ val homeFeatureModule = module {
             syncStore = get(),
             cycleDataRepository = get(),
             periodLogRepository = get(),
+            appContext = get(),
         )
     }
     viewModel {
