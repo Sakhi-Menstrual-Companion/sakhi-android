@@ -20,6 +20,7 @@ fun SakhiTextField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    textFieldModifier: Modifier = Modifier,
     label: String? = null,
     placeholder: String? = null,
     enabled: Boolean = true,
@@ -49,7 +50,7 @@ fun SakhiTextField(
             label = label?.let { labelText -> { Text(text = labelText) } },
             placeholder = placeholder?.let { placeholderText -> { Text(text = placeholderText) } },
             shape = RoundedCornerShape(SakhiRadius.lg),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().then(textFieldModifier),
         )
 
         if (isError && !errorText.isNullOrBlank()) {
