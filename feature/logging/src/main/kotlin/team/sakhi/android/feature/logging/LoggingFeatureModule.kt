@@ -3,7 +3,7 @@ package team.sakhi.android.feature.logging
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 
-/** Registered by :app once the logging sheet route stops using the placeholder shell. */
+/** Koin module for the logging feature. */
 val loggingFeatureModule = module {
     viewModel {
         LoggingViewModel(

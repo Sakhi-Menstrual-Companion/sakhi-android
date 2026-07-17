@@ -2,6 +2,7 @@ package team.sakhi.android.feature.logging
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import kotlinx.datetime.LocalDate
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,18 +18,26 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -37,6 +46,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -48,11 +58,15 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
+import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.platform.AndroidHapticManager
+import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.ui.HorizontalRulerSlider
 import team.sakhi.android.ui.KeyboardSafeScaffold
-import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.logging.DischargeColor
 import team.sakhi.logging.Symptom
@@ -80,24 +94,105 @@ import kotlin.math.roundToInt
  * `HomeLoggingSheet.swift`), so it's left out here as well — parity means
  * matching what iOS actually shows, not what its data model could support.
  *
- * Weight/BBT use a plain Material `Slider` instead of iOS's custom horizontal
- * ruler-drag control — same underlying value and range, simpler drag gesture.
- * Discharge colour uses a row of selectable chips instead of iOS's dropdown
- * `Menu` — same 4 options + "None", different presentation.
- *
  * Also not ported: the enum-based `Mood` picker (happy/calm/irritated/...)
  * Android's original version showed here — that widget belongs to Home's
  * day-detail view on iOS (`HomeDayDetailGlassView`), not the logging sheet;
  * it never appears in `HomeLoggingSheet.swift`. It stays out until day-detail
  * is built, rather than living on the wrong screen.
+ *
+ * `hasPeriodData` mirrors iOS's `HomeView` -> `HomeLoggingSheet` constructor
+ * pass-down of `viewModel.hasPeriodData` (`HomeViewModel+CyclePhase.swift`):
+ * whether the user has *any* period history ever, not just today's flow.
+ * The full symptom/weight/BBT/discharge/log section below is gated on
+ * `selectedFlow != null || hasPeriodData` so an established user can still log
+ * symptoms on a day with no flow selected, matching iOS's `contentBody`.
  */
 @Composable
 fun LoggingSheet(
     viewModel: LoggingViewModel = koinViewModel(),
+    hasPeriodData: Boolean = false,
+    // Non-null when opened from a specific date elsewhere (e.g. Calendar's "Log"
+    // button, matching iOS's `LoggingViewModel(date: selectedDate.wrappedValue, ...)`
+    // constructor-time date), so the sheet opens showing that date rather than
+    // whatever this fresh ViewModel instance defaults to (today).
+    initialDate: LocalDate? = null,
     onClose: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val hapticManager = koinInject<AndroidHapticManager>()
+    val isPartnerView = uiState.session?.isViewingOwnData == false
+    val isPartnerFlowBlocked = isPartnerView && (!uiState.canLogPeriod || !uiState.canMutateSelectedDate)
+    var activeDialog by remember { mutableStateOf<LoggingDialogState?>(null) }
+
+    LaunchedEffect(initialDate) {
+        if (initialDate != null) viewModel.selectDate(initialDate)
+    }
+    // Identifies the last `saveAttemptId` this composable has already reacted
+    // to as a failure, so a fast failure can't be missed. A naive "was isSaving
+    // true, and is it now false with an error" check is vulnerable to
+    // StateFlow's latest-value-only delivery: an offline save can flip
+    // isSaving true then false+error within a single emission window, and a
+    // collector that never observes the intermediate `true` frame would think
+    // no save was ever attempted. Comparing `saveAttemptId` instead works off
+    // the final state alone, so it can't be skipped this way. -1 is a
+    // sentinel below any real attempt id (`LoggingUiState.saveAttemptId`
+    // starts at 0 and only increases).
+    var lastHandledFailureAttemptId by remember { mutableStateOf(-1) }
+    var showSaveFailure by remember { mutableStateOf(false) }
+    var suppressedInlineError by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(uiState.saveMessage) {
+        if (uiState.saveMessage != null) onClose()
+    }
+
+    LaunchedEffect(uiState.isSaving, uiState.saveMessage, uiState.error, uiState.saveAttemptId) {
+        val finishedWithSaveError = !uiState.isSaving &&
+            uiState.saveMessage == null &&
+            uiState.error != null &&
+            uiState.saveAttemptId != lastHandledFailureAttemptId
+
+        when {
+            uiState.isSaving -> {
+                showSaveFailure = false
+                suppressedInlineError = null
+            }
+
+            uiState.saveMessage != null -> {
+                showSaveFailure = false
+                suppressedInlineError = null
+            }
+
+            finishedWithSaveError -> {
+                showSaveFailure = true
+                suppressedInlineError = uiState.error
+                lastHandledFailureAttemptId = uiState.saveAttemptId
+                delay(3_000)
+                if (!uiState.isSaving && uiState.saveMessage == null && uiState.error == suppressedInlineError) {
+                    showSaveFailure = false
+                }
+            }
+
+            uiState.error == null -> {
+                showSaveFailure = false
+                suppressedInlineError = null
+            }
+        }
+    }
+
+    if (activeDialog != null) {
+        LoggingAlertDialog(
+            dialogState = activeDialog,
+            onDismiss = { activeDialog = null },
+            onConfirm = {
+                val dialogState = activeDialog
+                activeDialog = null
+                if (dialogState == LoggingDialogState.AccessRemoved) {
+                    onClose()
+                }
+            },
+        )
+    }
 
     // iOS's Logging sheet config is the one exception that uses
     // `.presentationDragIndicator(.visible)` (see `HomeView.swift`
@@ -159,21 +254,34 @@ fun LoggingSheet(
                             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            FlowIntensity.entries.forEach { flow ->
-                                FlowCard(
-                                    flow = flow,
-                                    selected = uiState.selectedFlow == flow,
-                                    enabled = uiState.canLogPeriod,
-                                    onClick = {
-                                        viewModel.onFlowSelected(if (uiState.selectedFlow == flow) null else flow)
-                                    },
-                                    modifier = Modifier.weight(1f),
-                                )
-                            }
+                                FlowIntensity.entries.forEach { flow ->
+                                    FlowCard(
+                                        flow = flow,
+                                        selected = uiState.selectedFlow == flow,
+                                        blocked = isPartnerFlowBlocked,
+                                        onClick = {
+                                            if (isPartnerFlowBlocked) {
+                                                hapticManager.error()
+                                                activeDialog = LoggingDialogState.OwnershipLocked
+                                            } else {
+                                                viewModel.onFlowSelected(if (uiState.selectedFlow == flow) null else flow)
+                                            }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                    )
+                                }
                         }
                     }
 
-                    if (uiState.selectedFlow != null) {
+                    // iOS gates this whole section on `hasPeriodData` (any period
+                    // history ever, not just today's flow) -- HomeLoggingSheet.swift's
+                    // `contentBody`, sourced from `HomeViewModel+CyclePhase.swift`'s
+                    // `hasPeriodData`. An established user must still be able to log
+                    // symptoms/weight/BBT on a day where they don't mark a flow.
+                    // `selectedFlow != null` is kept as an additional OR so a brand-new
+                    // user's very first flow selection (before any cycle history exists)
+                    // still reveals the section immediately, matching existing behavior.
+                    if (uiState.selectedFlow != null || hasPeriodData) {
                         HorizontalDivider()
 
                         Text(
@@ -193,173 +301,171 @@ fun LoggingSheet(
                                 .padding(horizontal = SakhiSpacing.space6),
                         ) {
                             Column {
-                                symptomSection(
-                                    title = stringResource(R.string.logging_section_body),
-                                    symptoms = listOf(Symptom.ACNE),
-                                    selected = uiState.selectedSymptoms,
-                                    enabled = uiState.canEditSymptoms,
-                                    onToggle = viewModel::toggleSymptom,
-                                )
-                                HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
-                                ExpandableValueRow(
-                                    label = stringResource(R.string.logging_section_weight),
-                                    value = uiState.weightKg,
-                                    enabled = uiState.canEditSymptoms,
-                                    formatValue = {
-                                        context.getString(R.string.logging_weight_value, it.roundToInt())
-                                    },
-                                    defaultValue = 60.0,
-                                    valueRange = 30f..150f,
-                                    onValueChange = viewModel::onWeightChanged,
-                                )
-                                HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
-                                ExpandableValueRow(
-                                    label = stringResource(R.string.logging_section_bbt),
-                                    value = uiState.bbtCelsius,
-                                    enabled = uiState.canEditSymptoms,
-                                    formatValue = { context.getString(R.string.logging_bbt_value, it) },
-                                    defaultValue = 35.0,
-                                    valueRange = 30f..42f,
-                                    onValueChange = viewModel::onBbtChanged,
-                                )
-                                symptomSection(
-                                    title = stringResource(R.string.logging_section_pain),
-                                    symptoms = listOf(
-                                        Symptom.CRAMPS,
-                                        Symptom.BACK_PAIN,
-                                        Symptom.PELVIS_PAIN,
-                                        Symptom.BREAST_TENDERNESS,
-                                        Symptom.HEADACHE,
-                                    ),
-                                    selected = uiState.selectedSymptoms,
-                                    enabled = uiState.canEditSymptoms,
-                                    onToggle = viewModel::toggleSymptom,
-                                )
-                                symptomSection(
-                                    title = stringResource(R.string.logging_section_digestive),
-                                    symptoms = listOf(Symptom.BLOATING, Symptom.NAUSEA, Symptom.DIARRHEA, Symptom.CONSTIPATION),
-                                    selected = uiState.selectedSymptoms,
-                                    enabled = uiState.canEditSymptoms,
-                                    onToggle = viewModel::toggleSymptom,
-                                )
-                                symptomSection(
-                                    title = stringResource(R.string.logging_section_physical),
-                                    symptoms = listOf(
-                                        Symptom.FATIGUE,
-                                        Symptom.DIZZINESS,
-                                        Symptom.FEVER,
-                                        Symptom.CHILLS,
-                                        Symptom.WATER_RETENTION,
-                                    ),
-                                    selected = uiState.selectedSymptoms,
-                                    enabled = uiState.canEditSymptoms,
-                                    onToggle = viewModel::toggleSymptom,
-                                )
-                                symptomSection(
-                                    title = stringResource(R.string.logging_section_mood),
-                                    symptoms = listOf(
-                                        Symptom.MOOD_SWINGS,
-                                        Symptom.IRRITABILITY,
-                                        Symptom.ANXIETY,
-                                        Symptom.SADNESS_LOW_MOOD,
-                                        Symptom.BRAIN_FOG,
-                                    ),
-                                    selected = uiState.selectedSymptoms,
-                                    enabled = uiState.canEditSymptoms,
-                                    onToggle = viewModel::toggleSymptom,
-                                )
-                                symptomSection(
-                                    title = stringResource(R.string.logging_section_sleep),
-                                    symptoms = listOf(Symptom.INSOMNIA, Symptom.RESTLESS_SLEEP),
-                                    selected = uiState.selectedSymptoms,
-                                    enabled = uiState.canEditSymptoms,
-                                    onToggle = viewModel::toggleSymptom,
-                                )
-                                Text(
-                                    text = stringResource(R.string.logging_section_discharge).uppercase(),
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
-                                )
-                                DischargeColorRow(
-                                    selected = uiState.dischargeColor,
-                                    enabled = uiState.canEditSymptoms,
-                                    onSelect = viewModel::onDischargeColorSelected,
-                                )
-                                HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
-                                SymptomRow(
-                                    label = Symptom.UNUSUAL_DISCHARGE_SMELL.displayName,
-                                    checked = Symptom.UNUSUAL_DISCHARGE_SMELL in uiState.selectedSymptoms,
-                                    enabled = uiState.canEditSymptoms,
-                                    onClick = { viewModel.toggleSymptom(Symptom.UNUSUAL_DISCHARGE_SMELL) },
-                                )
-                                HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
-                                SymptomRow(
-                                    label = Symptom.VAGINAL_ITCHING.displayName,
-                                    checked = Symptom.VAGINAL_ITCHING in uiState.selectedSymptoms,
-                                    enabled = uiState.canEditSymptoms,
-                                    onClick = { viewModel.toggleSymptom(Symptom.VAGINAL_ITCHING) },
-                                )
-                                Text(
-                                    text = stringResource(R.string.logging_section_log).uppercase(),
-                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
-                                )
-                                SymptomRow(
-                                    label = stringResource(R.string.logging_painkiller_taken),
-                                    checked = uiState.painkillerTaken,
-                                    enabled = uiState.canEditSymptoms,
-                                    onClick = viewModel::togglePainkillerTaken,
-                                )
-                                HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
-                                SymptomRow(
-                                    label = stringResource(R.string.logging_doctor_visited),
-                                    checked = uiState.doctorVisited,
-                                    enabled = uiState.canEditSymptoms,
-                                    onClick = viewModel::toggleDoctorVisited,
-                                )
+                                // Each block below is hidden entirely (not merely disabled)
+                                // when the viewer lacks the specific granular permission --
+                                // matches iOS `HomeLoggingSheet`'s per-section
+                                // `Feature(.xxx)` gates, whose default style is `.hide`.
+                                if (uiState.canEditSymptoms) {
+                                    symptomSection(
+                                        title = stringResource(R.string.logging_section_body),
+                                        symptoms = listOf(Symptom.ACNE),
+                                        selected = uiState.selectedSymptoms,
+                                        enabled = uiState.canEditSymptoms,
+                                        onToggle = viewModel::toggleSymptom,
+                                    )
+                                }
+                                if (uiState.canViewWeight) {
+                                    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                    ExpandableValueRow(
+                                        label = stringResource(R.string.logging_section_weight),
+                                        value = uiState.weightKg,
+                                        enabled = uiState.canViewWeight,
+                                        formatValue = {
+                                            context.getString(R.string.logging_weight_value, it.roundToInt())
+                                        },
+                                        defaultValue = 60.0,
+                                        valueRange = 30f..150f,
+                                        rulerStep = 1f,
+                                        onHapticSelection = hapticManager::selection,
+                                        onHapticImpact = { hapticManager.impact(HapticImpact.LIGHT) },
+                                        onValueChange = viewModel::onWeightChanged,
+                                    )
+                                }
+                                if (uiState.canViewTemperature) {
+                                    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                    ExpandableValueRow(
+                                        label = stringResource(R.string.logging_section_bbt),
+                                        value = uiState.bbtCelsius,
+                                        enabled = uiState.canViewTemperature,
+                                        formatValue = { context.getString(R.string.logging_bbt_value, it) },
+                                        defaultValue = 35.0,
+                                        valueRange = 30f..42f,
+                                        rulerStep = 0.1f,
+                                        onHapticSelection = hapticManager::selection,
+                                        onHapticImpact = { hapticManager.impact(HapticImpact.LIGHT) },
+                                        onValueChange = viewModel::onBbtChanged,
+                                    )
+                                }
+                                if (uiState.canEditSymptoms) {
+                                    symptomSection(
+                                        title = stringResource(R.string.logging_section_pain),
+                                        symptoms = listOf(
+                                            Symptom.CRAMPS,
+                                            Symptom.BACK_PAIN,
+                                            Symptom.PELVIS_PAIN,
+                                            Symptom.BREAST_TENDERNESS,
+                                            Symptom.HEADACHE,
+                                        ),
+                                        selected = uiState.selectedSymptoms,
+                                        enabled = uiState.canEditSymptoms,
+                                        onToggle = viewModel::toggleSymptom,
+                                    )
+                                    symptomSection(
+                                        title = stringResource(R.string.logging_section_digestive),
+                                        symptoms = listOf(Symptom.BLOATING, Symptom.NAUSEA, Symptom.DIARRHEA, Symptom.CONSTIPATION),
+                                        selected = uiState.selectedSymptoms,
+                                        enabled = uiState.canEditSymptoms,
+                                        onToggle = viewModel::toggleSymptom,
+                                    )
+                                    symptomSection(
+                                        title = stringResource(R.string.logging_section_physical),
+                                        symptoms = listOf(
+                                            Symptom.FATIGUE,
+                                            Symptom.DIZZINESS,
+                                            Symptom.FEVER,
+                                            Symptom.CHILLS,
+                                            Symptom.WATER_RETENTION,
+                                        ),
+                                        selected = uiState.selectedSymptoms,
+                                        enabled = uiState.canEditSymptoms,
+                                        onToggle = viewModel::toggleSymptom,
+                                    )
+                                }
+                                if (uiState.canEditMoods) {
+                                    symptomSection(
+                                        title = stringResource(R.string.logging_section_mood),
+                                        symptoms = listOf(
+                                            Symptom.MOOD_SWINGS,
+                                            Symptom.IRRITABILITY,
+                                            Symptom.ANXIETY,
+                                            Symptom.SADNESS_LOW_MOOD,
+                                            Symptom.BRAIN_FOG,
+                                        ),
+                                        selected = uiState.selectedSymptoms,
+                                        enabled = uiState.canEditMoods,
+                                        onToggle = viewModel::toggleSymptom,
+                                    )
+                                }
+                                if (uiState.canViewDailyLogs) {
+                                    symptomSection(
+                                        title = stringResource(R.string.logging_section_sleep),
+                                        symptoms = listOf(Symptom.INSOMNIA, Symptom.RESTLESS_SLEEP),
+                                        selected = uiState.selectedSymptoms,
+                                        enabled = uiState.canViewDailyLogs,
+                                        onToggle = viewModel::toggleSymptom,
+                                    )
+                                }
+                                if (uiState.canViewDischarge) {
+                                    Text(
+                                        text = stringResource(R.string.logging_section_discharge).uppercase(),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
+                                    )
+                                    DischargeColorRow(
+                                        selected = uiState.dischargeColor,
+                                        enabled = uiState.canViewDischarge,
+                                        onSelect = viewModel::onDischargeColorSelected,
+                                    )
+                                    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                    SymptomRow(
+                                        label = Symptom.UNUSUAL_DISCHARGE_SMELL.displayName,
+                                        checked = Symptom.UNUSUAL_DISCHARGE_SMELL in uiState.selectedSymptoms,
+                                        enabled = uiState.canViewDischarge,
+                                        onClick = { viewModel.toggleSymptom(Symptom.UNUSUAL_DISCHARGE_SMELL) },
+                                    )
+                                    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                    SymptomRow(
+                                        label = Symptom.VAGINAL_ITCHING.displayName,
+                                        checked = Symptom.VAGINAL_ITCHING in uiState.selectedSymptoms,
+                                        enabled = uiState.canViewDischarge,
+                                        onClick = { viewModel.toggleSymptom(Symptom.VAGINAL_ITCHING) },
+                                    )
+                                }
+                                if (uiState.canViewMedications) {
+                                    Text(
+                                        text = stringResource(R.string.logging_section_log).uppercase(),
+                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
+                                    )
+                                    SymptomRow(
+                                        label = stringResource(R.string.logging_painkiller_taken),
+                                        checked = uiState.painkillerTaken,
+                                        enabled = uiState.canViewMedications,
+                                        onClick = viewModel::togglePainkillerTaken,
+                                    )
+                                    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                    SymptomRow(
+                                        label = stringResource(R.string.logging_doctor_visited),
+                                        checked = uiState.doctorVisited,
+                                        enabled = uiState.canViewMedications,
+                                        onClick = viewModel::toggleDoctorVisited,
+                                    )
+                                }
                             }
                         }
                     }
 
-                    if (uiState.canEditNotes) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
-                            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-                        ) {
+                    uiState.error?.let { error ->
+                        if (error != suppressedInlineError) {
                             Text(
-                                text = stringResource(R.string.logging_notes),
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                            )
-                            OutlinedTextField(
-                                value = uiState.notes,
-                                onValueChange = viewModel::onNotesChanged,
-                                modifier = Modifier.fillMaxWidth(),
-                                minLines = 3,
-                                placeholder = { Text(stringResource(R.string.logging_notes_placeholder)) },
+                                text = error,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
                             )
                         }
-                    }
-
-                    if (!uiState.canMutateSelectedDate && uiState.session?.isViewingOwnData == false) {
-                        Text(
-                            text = stringResource(R.string.logging_partner_lock_message),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.secondary,
-                            modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
-                        )
-                    }
-
-                    uiState.error?.let { error ->
-                        Text(
-                            text = error,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
-                        )
                     }
 
                     Spacer(modifier = Modifier.height(SakhiSpacing.space8))
@@ -370,13 +476,60 @@ fun LoggingSheet(
                 SaveBar(
                     isSaving = uiState.isSaving,
                     isSaved = uiState.saveMessage != null,
-                    hasError = uiState.error != null && !uiState.isSaving,
-                    enabled = uiState.canLogPeriod && uiState.canMutateSelectedDate,
-                    onClick = viewModel::save,
+                    hasError = showSaveFailure,
+                    enabled = true,
+                    onClick = {
+                        when {
+                            isPartnerView && !uiState.canLogPeriod -> {
+                                hapticManager.error()
+                                activeDialog = LoggingDialogState.AccessRemoved
+                            }
+
+                            isPartnerView && !uiState.canMutateSelectedDate -> {
+                                hapticManager.error()
+                                activeDialog = LoggingDialogState.OwnershipLocked
+                            }
+
+                            else -> viewModel.save()
+                        }
+                    },
                 )
             }
         )
     }
+}
+
+private enum class LoggingDialogState {
+    AccessRemoved,
+    OwnershipLocked,
+}
+
+@Composable
+private fun LoggingAlertDialog(
+    dialogState: LoggingDialogState?,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val state = dialogState ?: return
+    val title = when (state) {
+        LoggingDialogState.AccessRemoved -> stringResource(R.string.logging_partner_access_removed_title)
+        LoggingDialogState.OwnershipLocked -> stringResource(R.string.logging_partner_ownership_title)
+    }
+    val message = when (state) {
+        LoggingDialogState.AccessRemoved -> stringResource(R.string.logging_partner_access_removed_message)
+        LoggingDialogState.OwnershipLocked -> stringResource(R.string.logging_partner_lock_message)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = { Text(message) },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(text = stringResource(android.R.string.ok))
+            }
+        },
+    )
 }
 
 @Composable
@@ -462,7 +615,7 @@ private fun LogCheckbox(checked: Boolean) {
 private fun FlowCard(
     flow: FlowIntensity,
     selected: Boolean,
-    enabled: Boolean,
+    blocked: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -491,7 +644,8 @@ private fun FlowCard(
                     context.getString(R.string.logging_not_selected_state, label)
                 }
             }
-            .clickable(enabled = enabled, onClick = onClick),
+            .alpha(if (blocked) 0.55f else 1f)
+            .clickable(onClick = onClick),
     ) {
         Column(
             modifier = Modifier.padding(vertical = SakhiSpacing.space5),
@@ -520,8 +674,7 @@ private fun FlowCard(
 
 /**
  * Ports iOS `weightRow`/`bbtRow`: tap to add (seeds `defaultValue`) or expand
- * an inline slider once a value exists, tap again to collapse. iOS uses a
- * custom drag ruler; this uses a plain Material `Slider` over the same range.
+ * an inline horizontal ruler once a value exists, tap again to collapse.
  */
 @Composable
 private fun ExpandableValueRow(
@@ -531,6 +684,9 @@ private fun ExpandableValueRow(
     formatValue: (Double) -> String,
     defaultValue: Double,
     valueRange: ClosedFloatingPointRange<Float>,
+    rulerStep: Float,
+    onHapticSelection: () -> Unit,
+    onHapticImpact: () -> Unit,
     onValueChange: (Double?) -> Unit,
 ) {
     var expanded by remember(value != null) { mutableStateOf(false) }
@@ -571,11 +727,14 @@ private fun ExpandableValueRow(
             }
         }
         if (expanded && value != null) {
-            Slider(
+            HorizontalRulerSlider(
                 value = value.toFloat(),
+                range = valueRange,
+                step = rulerStep,
+                anchorFraction = 0.9f,
                 onValueChange = { onValueChange(it.toDouble()) },
-                valueRange = valueRange,
-                enabled = enabled,
+                onHapticSelection = onHapticSelection,
+                onHapticImpact = onHapticImpact,
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = SakhiSpacing.space5)
@@ -585,42 +744,76 @@ private fun ExpandableValueRow(
     }
 }
 
-/** Ports iOS `dischargeColorRow`'s options as a chip row instead of a dropdown `Menu`. */
+/** Ports iOS `dischargeColorRow` as a single menu row with trailing value/chevron. */
 @Composable
 private fun DischargeColorRow(
     selected: DischargeColor?,
     enabled: Boolean,
     onSelect: (DischargeColor?) -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-    ) {
-        val context = LocalContext.current
-        DischargeColor.entries.forEach { color ->
-            val isSelected = selected == color
-            Surface(
-                shape = RoundedCornerShape(SakhiRadius.full),
-                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier
-                    .semantics {
-                        this.selected = isSelected
-                        role = Role.RadioButton
-                        stateDescription = if (isSelected) {
-                            context.getString(R.string.logging_selection_state, color.displayName)
-                        } else {
-                            context.getString(R.string.logging_not_selected_state, color.displayName)
-                        }
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = selected?.displayName ?: stringResource(R.string.logging_none)
+
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics {
+                    role = Role.Button
+                    stateDescription = selectedLabel
+                }
+                .clickable(enabled = enabled) { expanded = true }
+                .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = stringResource(R.string.logging_section_discharge),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = selectedLabel,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(modifier = Modifier.size(SakhiSpacing.space1))
+            Icon(
+                imageVector = Icons.Filled.UnfoldMore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.logging_none)) },
+                trailingIcon = {
+                    if (selected == null) {
+                        Icon(imageVector = Icons.Filled.Check, contentDescription = null)
                     }
-                    .clickable(enabled = enabled) { onSelect(color) },
-            ) {
-                Text(
-                    text = color.displayName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = SakhiSpacing.space3, vertical = SakhiSpacing.space2),
+                },
+                onClick = {
+                    expanded = false
+                    onSelect(null)
+                },
+            )
+            DischargeColor.entries.forEach { color ->
+                DropdownMenuItem(
+                    text = { Text(color.displayName) },
+                    trailingIcon = {
+                        if (selected == color) {
+                            Icon(imageVector = Icons.Filled.Check, contentDescription = null)
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onSelect(color)
+                    },
                 )
             }
         }
@@ -642,17 +835,43 @@ private fun SaveBar(
         else -> stringResource(R.string.logging_save)
     }
 
-    // PrimaryButton is text-only (core:ui has no leading-icon variant yet), so
-    // the saved/failed checkmark and error glyphs iOS shows next to the label
-    // aren't rendered here -- the label copy alone already matches each phase.
-    PrimaryButton(
-        text = label,
+    Button(
         onClick = onClick,
         enabled = enabled && !isSaving,
+        shape = RoundedCornerShape(SakhiRadius.full),
+        colors = ButtonDefaults.buttonColors(
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+        ),
         modifier = Modifier
             .fillMaxWidth()
+            .height(52.dp)
             .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
-    )
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            when {
+                isSaving -> CircularProgressIndicator(
+                    modifier = Modifier.size(16.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                )
+                isSaved -> Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+                hasError -> Icon(
+                    imageVector = Icons.Filled.ErrorOutline,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+            Text(label)
+        }
+    }
 }
 
 private fun flowLabelRes(flow: FlowIntensity): Int = when (flow) {
@@ -662,8 +881,12 @@ private fun flowLabelRes(flow: FlowIntensity): Int = when (flow) {
     FlowIntensity.HEAVY -> R.string.logging_flow_heavy
 }
 
+@Composable
 private fun formattedHeaderDate(date: kotlinx.datetime.LocalDate): String {
     val javaDate = java.time.LocalDate.of(date.year, date.monthNumber, date.dayOfMonth)
-    val formatter = java.time.format.DateTimeFormatter.ofPattern("d MMMM", java.util.Locale.getDefault())
+    val formatter = java.time.format.DateTimeFormatter.ofPattern(
+        LocalContext.current.getString(R.string.logging_header_date_format),
+        java.util.Locale.getDefault(),
+    )
     return javaDate.format(formatter)
 }
