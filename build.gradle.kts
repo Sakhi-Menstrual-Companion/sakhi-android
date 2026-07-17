@@ -12,4 +12,6 @@ plugins {
     // Screenshot-test durability lane (2026-07-15) -- applied per-module (currently
     // just feature:auth, the first slice), not project-wide, so it stays opt-in.
     alias(libs.plugins.roborazzi) apply false
+    // Only applied in :app (needs a real google-services.json, git-ignored there).
+    alias(libs.plugins.google.services) apply false
 }

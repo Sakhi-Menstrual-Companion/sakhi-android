@@ -68,9 +68,9 @@ task; append a new entry there after finishing one, per the workflow rules above
 included in "Raw %" (total real coverage, including nice-to-haves). Recompute
 both by hand after ticking or re-tagging any box — do not let this drift.
 
-- **Development — raw: 115 / 123 (93%) · must-ship: 105 / 112 (94%)**
+- **Development — raw: 116 / 123 (94%) · must-ship: 106 / 112 (95%)**
 - **Testing — raw: 24 / 32 (75%) · must-ship: 20 / 28 (71%)**
-- **Overall — raw: 139 / 155 (90%) · must-ship: 125 / 140 (89%)**
+- **Overall — raw: 140 / 155 (90%) · must-ship: 126 / 140 (90%)**
 
 *(2026-07-17 14:38:21 IST +0530: follow-up close-out on Karan's remaining
 non-credential/non-device backlog. One optional UI item closed for real:
@@ -2492,8 +2492,22 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
       this session (before and after the Calendar fixes), on-device confirmation that
       both Room reads (Home/Calendar) and a real Room write (Logging sheet save) survive
       R8 obfuscation with real signed-in data, not just the signed-out path.
-- [ ] `google-services.json` added `(BLOCKED ON KARAN)` — blocks FCM actually working at
-      runtime; needs Karan to register the app in the Firebase console
+- [x] `google-services.json` added — Karan provided the real file 2026-07-17
+      (`app/google-services.json`, git-ignored, never committed). Registered
+      for `com.galgotiasuniversity.rachnasakhi`, not the old
+      `team.sakhi.android` — Android's `applicationId` was renamed to match
+      (iOS's actual bundle id was already `com.galgotiasuniversity.rachnasakhi`
+      since a 2026-07-11 commit; `namespace`/Kotlin package structure stayed
+      `team.sakhi.android`, only the public app identity changed). Wired the
+      `google-services` Gradle plugin (applied only when the file exists, so
+      a clean checkout without it still builds). Verified end-to-end:
+      `:app:processDebugGoogleServices`, a full `:app:assembleDebug`, and a
+      full `:app:assembleRelease` all succeeded, and the built release APK's
+      actual package name was confirmed via `aapt2 dump badging` as
+      `com.galgotiasuniversity.rachnasakhi`. `config/app-links/assetlinks.json.template`'s
+      `package_name` updated to match. FCM real-device verification still
+      needs a physical device (separate Testing-checklist item).
+- [ ] Play Store console: listing copy, screenshots, privacy-policy link, Data Safety form,
 - [ ] Play Store console: listing copy, screenshots, privacy-policy link, Data Safety form,
       internal → closed → production tracks `(BLOCKED ON KARAN)` — account/admin work,
       not Android code work

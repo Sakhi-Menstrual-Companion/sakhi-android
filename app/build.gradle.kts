@@ -8,6 +8,14 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
 }
 
+// google-services.json is git-ignored (Firebase project config, see .gitignore) and
+// the google-services plugin hard-fails the build if applied without it -- apply it
+// imperatively, only when the real file is present, so a clean checkout without it
+// still builds (same fallback pattern as the release signingConfig below).
+if (file("google-services.json").exists()) {
+    apply(plugin = libs.plugins.google.services.get().pluginId)
+}
+
 // Secrets come from secrets.properties (git-ignored, see .gitignore) for local runs,
 // or from the same-named env vars in CI (never committed either way). Falls back to
 // empty strings so a clean checkout still builds — SakhiCore's BuildConfigProvider
@@ -23,11 +31,18 @@ fun secret(key: String, default: String = ""): String =
     (System.getenv(key) ?: secretsProperties.getProperty(key, default))
 
 android {
+    // Kotlin source package namespace -- unrelated to the public app identity below,
+    // intentionally NOT renamed (would mean renaming every package declaration across
+    // the whole Kotlin source tree for no functional benefit).
     namespace = "team.sakhi.android"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "team.sakhi.android"
+        // Renamed 2026-07-17 to match iOS's actual current bundle id
+        // (com.galgotiasuniversity.rachnasakhi, see 01-iOS's project.pbxproj) and the
+        // real google-services.json Karan provided, which is registered under this
+        // package name, not the old team.sakhi.android.
+        applicationId = "com.galgotiasuniversity.rachnasakhi"
         minSdk = 26
         targetSdk = 35
         versionCode = 1

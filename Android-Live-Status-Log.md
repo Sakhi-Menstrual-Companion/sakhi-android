@@ -8,6 +8,29 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-07-17 23:15 IST, Instructor: wired the real google-services.json Karan
+  provided; caught and fixed a real applicationId/package mismatch.**
+  Karan's file was registered for `com.galgotiasuniversity.rachnasakhi`, not
+  Android's then-current `applicationId` (`team.sakhi.android`). Checked
+  iOS's `project.pbxproj` directly: its actual current bundle id is already
+  `com.galgotiasuniversity.rachnasakhi` (a 2026-07-11 rename commit), so
+  Android was the one out of sync, not the new file. Confirmed with Karan
+  before renaming (`applicationId` only — `namespace`/Kotlin package
+  structure deliberately left as `team.sakhi.android`, renaming every
+  package declaration across the source tree for no functional benefit
+  wasn't worth the risk). Wired the `google-services` Gradle plugin
+  (conditionally applied only when `app/google-services.json` exists, so a
+  clean checkout without the real file still builds), added the version to
+  `libs.versions.toml`, git-ignored the real file. Updated
+  `config/app-links/assetlinks.json.template`'s `package_name` to match.
+  Verified end-to-end: `:app:processDebugGoogleServices`, a full
+  `:app:assembleDebug`, and a full `:app:assembleRelease` (signed with
+  today's real keystore) all succeeded; confirmed via `aapt2 dump badging`
+  that the actual built APK's package name is
+  `com.galgotiasuniversity.rachnasakhi`. Progress: Development must-ship
+  106/112 (95%), Overall must-ship 126/140 (90%). FCM still needs a real
+  device to verify tap-routing end to end.
+
 - **2026-07-17 21:56 IST, Instructor: generated the real release keystore
   with Karan's explicit go-ahead, wired it into the build, verified
   end-to-end.** `keystore/sakhi-release.jks` generated via `keytool`

@@ -9,6 +9,7 @@
 kotlin = "2.1.20"
 ksp = "2.1.20-2.0.1"
 agp = "8.6.1"
+googleServices = "4.4.2"
 
 # compose-bom itself has no steep AGP floor; kept at latest. The libraries below
 # (lifecycle/activity/core-ktx) are INTENTIONALLY NOT "latest" — their newest releases
@@ -40,12 +41,10 @@ healthConnect = "1.1.0-alpha12"
 glance = "1.1.1"
 # Messaging transport only (Android has no APNs equivalent -- FCM is the real
 # push transport here, same as iOS keeps Firebase for Crashlytics/Analytics
-# alongside its own raw-APNs push path). No `google-services` Gradle plugin
-# applied -- that needs a real `google-services.json` this repo doesn't have
-# yet (see plan Section 7), so `FirebaseApp` has no default project config
-# until that file is added. The dependency and service class are still real,
-# buildable, and verified-compiling now so the only remaining step later is
-# dropping in the JSON, not writing the integration from scratch.
+# alongside its own raw-APNs push path). `google-services.json` (2026-07-17,
+# app/google-services.json, git-ignored) and the `google-services` Gradle
+# plugin are now both wired in `:app` -- `FirebaseApp` has real default
+# project config.
 firebaseBom = "33.1.2"
 playServicesLocation = "21.3.0"
 # NOT 6.x (current line reviewed 2026-07-17) -- 6.12.0 is published with
@@ -142,3 +141,4 @@ kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", versi
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }
 androidx-baselineprofile = { id = "androidx.baselineprofile", version.ref = "baselineProfile" }
+google-services = { id = "com.google.gms.google-services", version.ref = "googleServices" }

@@ -4,6 +4,9 @@ local.properties
 ## App secrets — never commit (real Supabase/Claude/Maps/Exotel/Sanity/Razorpay/USDA keys)
 secrets.properties
 
+## Firebase project config — never commit (real API key, OAuth client IDs)
+app/google-services.json
+
 ## Build outputs
 *.apk
 *.aab

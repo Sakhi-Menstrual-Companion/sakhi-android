@@ -3,7 +3,7 @@
     "relation": ["delegate_permission/common.handle_all_urls"],
     "target": {
       "namespace": "android_app",
-      "package_name": "team.sakhi.android",
+      "package_name": "com.galgotiasuniversity.rachnasakhi",
       "sha256_cert_fingerprints": [
         "04:B8:FD:D9:BB:38:CB:13:06:EB:FD:E8:42:E4:0A:D4:44:3A:D3:66:E7:3D:BA:E9:07:4E:CC:72:FC:80:11:5D"
       ]
