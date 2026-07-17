@@ -21,6 +21,7 @@ includeBuild("../00-Shared/SakhiCore")
 
 include(
     ":app",
+    ":baseline-profile",
     ":core:common",
     ":core:designsystem",
     ":core:ui",
