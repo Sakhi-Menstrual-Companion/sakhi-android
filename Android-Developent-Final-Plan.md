@@ -68,9 +68,9 @@ task; append a new entry there after finishing one, per the workflow rules above
 included in "Raw %" (total real coverage, including nice-to-haves). Recompute
 both by hand after ticking or re-tagging any box — do not let this drift.
 
-- **Development — raw: 116 / 123 (94%) · must-ship: 106 / 112 (95%)**
+- **Development — raw: 117 / 123 (95%) · must-ship: 107 / 112 (96%)**
 - **Testing — raw: 24 / 32 (75%) · must-ship: 20 / 28 (71%)**
-- **Overall — raw: 140 / 155 (90%) · must-ship: 126 / 140 (90%)**
+- **Overall — raw: 141 / 155 (91%) · must-ship: 127 / 140 (91%)**
 
 *(2026-07-17 14:38:21 IST +0530: follow-up close-out on Karan's remaining
 non-credential/non-device backlog. One optional UI item closed for real:
@@ -459,23 +459,43 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
       re-grepped iOS and KMM: the shared `PhoneCallRepository` and iOS `ExotelManager`
       plumbing still exist, but there is no real UI call path invoking them on either
       platform, so this is dormant infrastructure, not a missing Android feature for v1
-- [ ] Certificate pinning (SPKI) against the Supabase endpoint — real security gap for a
-      health app; **no longer blocked on “needs Karan's hash”** because the live
-      Supabase SPKI chain was computed directly on 2026-07-15 (`CN=supabase.co` leaf
-      `ZcJbApTb7wyllleAjHw2vYAskqdT+DhMY9aPDFwAtf4=`; `WE1` intermediate
-      `kIdp6NNEd8wsugYyyIYFsi1ylMCED3hZbSR8ZFsa/A4=`). However, Android was **not**
-      wired yet because iOS's current auth/AI Supabase path does not actually inherit
-      `SPKIPinningManager`: live sign-in and Edge Function traffic goes through
-      `SupabaseManager.client.auth.*` / `client.functions.invoke`, while only a few
-      direct Swift REST helpers (`upsertRaw`, `upsertRawBatch`, `deleteRaw`,
-      `SakhiRemoteStore.pinnedFetch`) use `pinnedSession`. Shipping Android-only pinning
-      on the live shared Supabase path would diverge from iOS rather than match it.
-      **Karan decision (2026-07-17): defer certificate pinning on both platforms for
-      now and revisit later as a shared hardening task.** This remains unchecked because
-      nothing has shipped here yet, but it is **not** an open decision anymore: do not
-      wire Android-only pinning while iOS's active auth/AI path still bypasses
-      `SPKIPinningManager`. No further secret lookup is needed when this is revisited;
-      the live Android/iOS-reusable SPKI hashes are already known.
+- [x] Certificate pinning (SPKI) against the Supabase endpoint — wired for real on
+      both platforms 2026-07-18, per Karan's explicit go-ahead superseding the
+      earlier 2026-07-17 defer decision. Re-verified all three chain hashes live
+      against the real endpoint via `openssl s_client` immediately before wiring
+      (leaf `ZcJbApTb7wyllleAjHw2vYAskqdT+DhMY9aPDFwAtf4=`, intermediate `WE1`
+      `kIdp6NNEd8wsugYyyIYFsi1ylMCED3hZbSR8ZFsa/A4=`, root `GTS Root R4`
+      `mEflZT5enoR1FuXLgYYGqnVEoZvmf9c2bVBpiOjYQ0c=`) — matched exactly.
+      - **Android**: new `team.sakhi.network.sakhiPinnedHttpEngine` in
+        `SakhiCore` (androidMain actual uses OkHttp's `CertificatePinner`),
+        wired via `httpEngine =` in `SakhiSupabaseClient`. Checks the whole
+        observed chain, not just the leaf, so a routine leaf-cert renewal from
+        the CA doesn't lock every user out until an app update ships a new
+        leaf hash. Compiled clean on the Android and jvm targets; launched
+        the real app on an emulator with no crashes and a clean Supabase
+        client init.
+      - **iOS**: `SPKIPinningManager` upgraded to check the whole chain too
+        (was leaf-only before, a real gap this closed). Wired
+        `pinnedSession` into `SupabaseManager`'s main `SupabaseClient` via
+        `SupabaseClientOptions.global.session`, so the actual live
+        auth/Postgrest/Realtime/Functions path is pinned now, not just the
+        few direct REST helpers (`upsertRaw`, `upsertRawBatch`, `deleteRaw`,
+        `pinnedFetch`) that used `pinnedSession` before. Also found and fixed
+        a stale `SUPABASE_SPKI_HASHES` entry in `Info.plist`
+        (`JxYBCNfhi515HdL0cvKtauDKAZvS/HXZc8eHx6C/1pI=`) that matched none of
+        the real chain hashes — would have broken pinning immediately if
+        shipped as-is.
+      - **Verification gap, honest note:** could not get a full iOS build in
+        this environment (no iOS Development signing certificate/provisioning
+        profile installed, and `PredictionSDK.xcframework` /
+        `SakhiCareMode.xcframework` are missing from this checkout — both
+        pre-existing environment gaps, unrelated to this change). Verified
+        via careful manual review and confirmed API usage
+        (`SupabaseClientOptions.GlobalOptions.session: URLSession`) against
+        the real `supabase-swift` source instead. **Karan should do a real
+        Xcode build + a real sign-in on a device/simulator before this ships**
+        to confirm the iOS side compiles and the pinned session doesn't
+        reject the live cert in practice.
 
 ### `:feature:auth`
 - [x] `PhoneScreen`, `OtpScreen`, `CountryPicker` — all real, validation via shared

@@ -8,6 +8,31 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-07-18 00:52 IST, Instructor: wired real SPKI certificate pinning on
+  both platforms, per Karan's explicit "dono ko kardo" superseding the
+  earlier defer decision.** Re-verified all three chain hashes live against
+  the real Supabase endpoint via `openssl s_client` immediately before
+  wiring anything — matched exactly. Android: new
+  `team.sakhi.network.sakhiPinnedHttpEngine` in SakhiCore (OkHttp
+  `CertificatePinner`, whole-chain check), wired via `httpEngine =` in
+  `SakhiSupabaseClient`; compiled clean, launched the real app on an
+  emulator with no crashes. iOS: `SPKIPinningManager` upgraded to check the
+  whole chain (was leaf-only), wired into `SupabaseManager`'s actual live
+  client via `SupabaseClientOptions.global.session` (previously only a few
+  direct REST helpers were pinned, not the real auth/Edge Function path);
+  found and replaced a stale `SUPABASE_SPKI_HASHES` entry in Info.plist that
+  matched none of the real chain. Committed and pushed to both `sakhi-core`
+  and the iOS repo (`iOS-SDP-Galgotias/GU-C1-T07-Sakhi`, branch
+  `room-migration`) with Karan's explicit confirmation for the iOS push
+  specifically (separate repo/org from Android, not covered by the earlier
+  Android-only push authorization). Full iOS build not possible in this
+  environment (missing signing cert + two missing prebuilt XCFrameworks,
+  both pre-existing) — verified via careful manual review and confirmed API
+  usage against the real supabase-swift source instead. **Karan should do a
+  real Xcode build + real sign-in test before this ships**, same caveat as
+  the Android cold-start item. Progress: Development must-ship 107/112
+  (96%), Overall must-ship 127/140 (91%).
+
 - **2026-07-17 23:15 IST, Instructor: wired the real google-services.json Karan
   provided; caught and fixed a real applicationId/package mismatch.**
   Karan's file was registered for `com.galgotiasuniversity.rachnasakhi`, not
