@@ -2368,6 +2368,45 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
       checklist item stays unchecked, but the structural plumbing/RTL slice of
       the work is now closed.
       ViewModel test entry below.
+      - **Update (2026-07-18) — real investigation of the live Sanity dataset,
+        correcting the "14+ languages" assumption:** connected directly to the
+        real Sanity project (`brodue24`/`sakhi-studio`, dataset `production`)
+        rather than trusting this checklist's own prior framing. The actual
+        `localizedTypes.ts` schema supports exactly **4** languages (English,
+        Hindi, Bengali, Tamil), not 14+ — that figure was simply wrong in this
+        plan and should not be repeated. Queried the live `appContent`
+        collection directly: **all 330 translatable UI-string documents
+        already have all 4 languages fully populated** (verified via a
+        `count(...&&!defined(value.hi))`-style query for each language,
+        all returning 0) — the app-copy translation gap this item originally
+        described does not actually exist.
+      - **The real gap found instead:** `legalPage`, `faqItem`, and
+        `siteSettings` — three document types both Android's
+        `SanityContentViewModel`/`SanityRepository` and iOS's equivalent
+        actively query — had **zero documents** in production. Not a
+        translation gap; the content had never been authored at all, on
+        either platform. Legal/Privacy screens and the FAQ screen were
+        rendering empty.
+      - **Closed with Karan's explicit, staged confirmation** (first for
+        FAQ-only, then separately re-confirmed for legal pages given the
+        "draft legal text in the live production dataset" risk): seeded 13
+        `faqItem` documents (general/account/care categories, based on real
+        shipped features — cycle predictions, AI chat, Care Mode consent
+        model, account/data export/deletion) and 2 `legalPage` documents
+        (`privacy-policy`, `terms-of-service` — the exact slugs
+        `ContentPageScreen.kt`'s `liveSanitySlugs()` expects) via a reusable
+        seed script (`01-iOS/sanity/seed-content.ts`, run with
+        `npx sanity exec seed-content.ts --with-user-token`), committed to
+        the iOS repo.
+      - **Explicitly still open, not fabricated:** the legal page bodies are
+        self-labeled `DRAFT — NOT LEGAL ADVICE — NEEDS REVIEW BY A LAWYER`
+        directly in their content, in English only — Karan or a real lawyer
+        must review and replace before this is treated as a real policy.
+        `hi`/`bn`/`ta` fields for the new FAQ/legal content are deliberately
+        left blank (not machine-translated or fabricated), same boundary as
+        the rest of this session's content work. `siteSettings` (app name,
+        tagline, contact email, social links) remains fully empty — real
+        business decisions only Karan can make, not something to invent.
 
 ### Performance (cross-cutting)
 - [x] Calendar's unstable hot-path collection wrapped in a stable holder (`CalendarMonthCache`)

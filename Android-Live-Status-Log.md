@@ -8,6 +8,26 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-07-18 01:40 IST, Instructor: investigated the real live Sanity dataset
+  for Karan's "localization content" request; found and closed the actual gap,
+  which was not what the plan file described.** Connected directly to the
+  real Sanity project (`brodue24`) instead of trusting the plan's own "14+
+  languages" framing — the real schema supports exactly 4 (en/hi/bn/ta), and
+  all 330 `appContent` UI-string documents already had all 4 languages fully
+  populated (verified via direct GROQ queries). The real gap: `legalPage`,
+  `faqItem`, and `siteSettings` had zero documents, even though both
+  Android's `SanityContentViewModel` and iOS's equivalent actively query
+  them — Legal/FAQ screens were rendering empty on both platforms. With
+  Karan's explicit, staged confirmation (FAQ first, then legal pages
+  separately given the "draft legal text in production" risk), seeded 13
+  FAQ items and 2 legal pages (Privacy Policy, Terms of Service — both
+  self-labeled DRAFT, needs lawyer review, English only) into the live
+  `production` dataset via a new seed script
+  (`01-iOS/sanity/seed-content.ts`). Did not fabricate hi/bn/ta translations
+  for the new content or invent `siteSettings` business details (contact
+  email, etc.) — both left honestly open. Full detail in the plan file under
+  the Localization item.
+
 - **2026-07-18 00:52 IST, Instructor: wired real SPKI certificate pinning on
   both platforms, per Karan's explicit "dono ko kardo" superseding the
   earlier defer decision.** Re-verified all three chain hashes live against
