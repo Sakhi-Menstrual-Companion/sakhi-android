@@ -8,6 +8,5025 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-08-07, Claude (22nd round): drove ALL THREE onboarding paths on real Supabase
+  test accounts (online new-user, online returning, offline, partner). Found and fixed a
+  bug that made Be Her Sakhi unreachable from Home entirely, plus two UI-consistency
+  defects. Also fixed the long-standing `convertAccountToPartnerAndProceed` flake.**
+  **1. Care/Be Her Sakhi could not be opened AT ALL.** Tapping the Care icon on Home
+  opened a sheet that vanished ~280ms later; the `sakhi://care` deep link did the same.
+  Root cause: `OnboardingFlowHost` resolved its view model with
+  `koinViewModel(parameters = { parametersOf(flowId) })` and NO `key`. `koinViewModel`
+  resolves out of the ViewModelStore by TYPE, so the second onboarding flow in a session
+  gets the FIRST flow's instance back and the parameters are silently ignored. After a
+  returning-user login (flow "returningSync", plan = [SetupLoading], already completed),
+  Care asked for "carePartnerInvite" and got that finished view model instead; it
+  immediately re-emitted its completion, and `CareScreen`'s `onFlowCompleted` closed the
+  whole sheet. Fixed with `key = flowId`. This blocked the entire partner feature, not
+  just a screen.
+  **2. Partner code field was the odd one out.** `BeHerSakhiScreen` used a bare
+  `OutlinedTextField` (transparent, thin grey outline) while every other field in
+  onboarding is a filled white `SakhiTextField`. Only reachable on the partner path,
+  which is why earlier field sweeps missed it.
+  **3. Relation cards rendered as flat pink blobs.** `RelationOptionCard` used
+  `Surface(tonalElevation = ...)` with no explicit `color`. In this app
+  `colorScheme.surface` is brand-pink tinted AND tonal elevation tints further with the
+  primary colour, so the rows had no white card, no border and no visible selected
+  state. Rebuilt on the same language as `PrivacyChoiceCard` (the real port of iOS
+  `OnboardingPrivacyCard`): white `sakhiSystemBackground()`, 1dp outline / 2dp primary
+  when selected, no circular icon badge, icon+title take the primary colour.
+  **SYSTEMIC, reported not blanket-fixed:** an audit found **46 `Surface(...)` call sites
+  with `tonalElevation` and no explicit `color`** across home/care/profile/ai/onboarding.
+  Every one renders pink-tinted rather than white. Fixed the 2 in onboarding
+  (`OnboardingContentStepUi` contact-picker card, `OnboardingFlowHost` step-summary card);
+  the other 44 are listed for Karan rather than blanket-edited, because they sit on
+  screens this round did not visually verify and a bulk edit there is exactly the kind of
+  change that has bitten before.
+  **4. Test flake finally diagnosed.** `convertAccountToPartnerAndProceed` failed only in
+  full `./gradlew test` runs (either variant, non-deterministically) and passed in
+  isolation. Not order-dependence: the `awaitCondition` helper's 2s bound was too tight
+  under multi-module parallel load, so it gave up while the view model's real
+  `Dispatchers.IO` coroutine was still running, `tearDown`'s `resetMain()` ran underneath
+  it, and it died on "Dispatchers.Main was accessed ... test dispatcher was unset".
+  Raised the bound to 15s (a bound, not a sleep) and made the test wait on the flow
+  actually advancing rather than just `isConverting` flipping. Verified with
+  `./gradlew test --rerun-tasks` -> BUILD SUCCESSFUL.
+  **VERIFIED ON DEVICE (real accounts, real Supabase):**
+  - Online NEW user (+919971115795): full flow -> Home. Local store after completion:
+    `cycles 1, period_logs 1, profiles 1` under a real UUID, confirming the offline-first
+    write path runs for CLOUD accounts too, not just offline ones. Calendar: Aug 6 solid,
+    Aug 8-10 predicted, Aug 15-21 fertile, "Day 2" correct.
+  - Online RETURNING user (+919990421555): OTP -> straight to Home with real cloud data
+    (Follicular, Aug 2 period, Aug 25 predicted). Correctly skips onboarding.
+  - Offline: unchanged from the 21st round, still correct.
+  - Partner: invite code generated end-to-end from the primary account (CRG-SKC), and
+    the partner path accepted it and advanced through relation -> phone -> OTP.
+  **KNOWN GAP, NOT A REGRESSION:** joining as a partner with an account that ALREADY has
+  its own data signs in to that account's own Home instead of connecting as a partner.
+  This is the documented Android gap already noted in `BeHerSakhiScreen`'s comment -- only
+  the "new user" branch of iOS `BeHerSakhiStep` is ported; the authenticated-user
+  account-conflict / `fetchInvitation` / delete-and-convert branch has no Android/KMM
+  implementation. Needs a product decision plus a `CareRuntimeController.fetchInvitation`
+  equivalent; flagged to Karan rather than faked.
+  **ALSO SPOTTED (Home, not onboarding):** the Home FAB renders near-black on the
+  Follicular phase background while it is pink on Menstrual -- a phase-tint contrast bug
+  in the same family as the existing "bottom bar contrast on saturated phase backgrounds"
+  item. Not fixed this round.
+
+- **2026-08-07, Claude (21st round): found why the calendar had NO marks at all --
+  onboarding never wrote a period log. Plus picker-clipping, the branded loading view,
+  and the segment gap. Full clean offline run verified end-to-end on the emulator.**
+  **1. THE BUG: calendar rendered completely unmarked.** Karan reported no period marks
+  and no other marks. Traced it empirically rather than by reading: pulled the app's
+  shared Room DB off the device and found `cycles: 1, profiles: 1` and **zero
+  `period_logs`** for the offline user. Root cause: `CycleInsightAdapter.calendarMarks()`
+  is driven *only* by logged days and opens with `if (periodLogDates.isEmpty()) return
+  emptyMap()` -- the `cycles` argument is not used for marks at all. Onboarding wrote a
+  `CycleData` and no `PeriodLog`, so every mark type (period, predicted, fertile,
+  ovulation, PMS) was empty by construction. Fixed by writing the confirmed last-period
+  date as a real period log in `handleSetupLoading`. This matches iOS exactly: its
+  `OnboardingViewModel` is documented as writing ONLY `PeriodLogObject` ("this becomes
+  the only current-period anchor used by CycleDetectionEngine") and derives the cycle
+  from the logs -- hence one authoritative user-logged day, not `periodLength` days.
+  Android's extra `CycleData` write was left in place; other consumers read cycles, and
+  ripping it out is a bigger change than this bug warranted. Flagged, not silently done.
+  Note two wrong guesses I made first and discarded on evidence: the offline-first read
+  path (already correct) and `SessionManager.startAsPrimary` throwing offline (it uses
+  Result-returning helpers, so it cannot).
+  **2. Pickers drew outside their own bounds.** The weight dial's +-78 degree sweep is
+  nearly a semicircle whose end ticks fall well outside the 148dp band. iOS has
+  `.clipped()` on both pickers (`OnboardingInputPickers.swift:112` and `:302`); Compose
+  does NOT clip draw content to layout bounds, so those ticks painted over the card as
+  stray dark marks in the lower corners -- what Karan saw as "white spots ... weird se
+  hai". Added `clipToBounds()` to both `WeightWheelPicker` and `HeightRulerPicker`.
+  **3. Branded loading view, not a Material spinner.** `SplashPlaceholder` in
+  `RootNavHost` was a bare `CircularProgressIndicator`, which is what appeared between
+  accepting Terms and Home. Now `SakhiLoadingView(HomeSetup)`. Karan: "sirf sakhi ka
+  loading view use hoga har jagah". Small inline button/row spinners were deliberately
+  left alone -- those are a different component, not blocking full-screen waits.
+  **4. Segment gap + taller picker cards.** `SegmentedToggle` now owns its own bottom
+  gap (12dp) so every container using it gets the spacing automatically instead of each
+  call site remembering; `HealthPickerCardHeight` 340 -> 364.
+  **MY MISTAKE THIS ROUND:** to balance the weight card's leftover space I wrapped the
+  value+dial in a `weight(1f)` column. The card sets only a *minimum* height, so the
+  column's max height is unbounded and the weighted child resolved to zero -- the value
+  text and the entire dial vanished. Caught it on the verification screenshot, not by
+  reasoning; reverted and left a comment at the site so it is not retried. The card's
+  remaining bottom whitespace is a direct consequence of matching the height card's
+  height, which Karan asked for earlier -- raised with him rather than "fixed" silently.
+  **VERIFIED BY ME, full clean run:** wiped app data and drove the entire offline
+  onboarding on the emulator via adb. Onboarding no longer skips; DB after completion
+  shows `cycles: 1, period_logs: 1, profiles: 1`; the Sakhi loading view (not a spinner)
+  shows after Terms; Home renders Day 5 / Menstrual Phase; and the calendar shows Aug 3
+  solid pink (logged period), Aug 12-18 teal (fertile/ovulation), Aug 31 light pink
+  (predicted period). `:app:assembleDebug` and full `./gradlew test` both green.
+  Updated the onboarding test to assert the period log is written (date, periodPresent,
+  `LogSource.USER`) so this cannot silently regress. Two `ChatViewModelTest` failures
+  appeared in one full-suite run and passed in isolation and on re-run -- same
+  test-order/shared-state flake class as the known `OnboardingViewModelTest` one, not
+  caused by this change.
+
+- **2026-08-05, Claude (real-device session cont'd, 20th round): fixed a regression I
+  caused, rebuilt the launcher icon properly, and completed the credential-leak fix
+  across the whole app. The headline finding: SIXTEEN TESTS across NINE modules were
+  asserting leaked backend credentials as correct behaviour.**
+  **1. MY REGRESSION: "Continue Offline" skipped the entire rest of onboarding.** The
+  19th round started the local-only session inside `resolvePrivacy(offline = true)`.
+  `SessionState.LocalOnlyUser` is mapped by `AccountClassifier` straight to
+  `AppRoute.Home`, so the moment "Continue Offline" was tapped the app jumped to Home,
+  skipping offline warning, terms, DOB, height, weight and the cycle questions. Karan
+  caught it on device. Moved the session start to the END of the flow
+  (`handleSetupLoading`), where the id is minted immediately before completion. Bonus:
+  because the repos are now offline-first, that id routes to the shared Room store, so
+  the health answers actually persist on this path -- the gap flagged in the 19th round
+  is now closed for the onboarding save.
+  **2. Launcher icon was zoomed/cropped.** `ic_launcher_foreground.png` was the flattened
+  full-bleed iOS artwork at 432x432, with a comment claiming the symbol "sits well inside
+  the 72dp safe zone". It does not: an adaptive icon's foreground is a 108dp canvas of
+  which only the centre 72dp is guaranteed visible, so a full-bleed source is cropped to
+  its middle ~66% -- exactly the "zoomed" look. Rebuilt as two real layers: background =
+  the iOS pink gradient (sampled from the actual 1024 asset: 247,83,168 -> 238,65,138 ->
+  224,41,95, a 135-degree diagonal, replacing a flat #F61887), foreground = the white
+  brand mark ALONE on transparency, extracted from the iOS artwork at high res and scaled
+  to 0.379 of the canvas (iOS glyph is 0.568 of its canvas; 0.568 * 72/108 = 0.379 makes
+  it look identical after Android's crop). Generated at all five densities. Added a
+  `<monochrome>` layer for themed icons. **VERIFIED BY ME** on the emulator launcher --
+  screenshotted the app drawer and confirmed the full mark renders uncropped.
+  **3. Credential leak fixed app-wide.** New shared `toSafeUserMessage(context,
+  fallbackRes)` + `isOfflineFailure()` in `core:common`, applied to ~30 call sites across
+  16 files (Care, Calendar, Profile, ActivityLog, ManageAccount, EditProfile,
+  AppIntegration, MyData, Chat, Logging, Onboarding, Reports, Auth, Recommendations).
+  Backend exception text -- which embeds the request URL, `Authorization: Bearer …` and
+  the apikey -- can no longer reach the UI; the raw cause is logged only.
+  **THE REASON THIS SHIPPED: the test suite was protecting the bug.** Sixteen tests, most
+  literally named "surfaces a real message", asserted the raw exception string was shown
+  (`assertEquals("network down", state.error)`). Every one rewritten to assert the app's
+  own copy. Anyone touching this later should know the old test names were describing the
+  defect, not a feature.
+  **Two mistakes of my own, caught and corrected before building:**
+  (a) my bulk regex converted `updateGateState.message` in `RootNavHost` -- that is an
+  update-gate model with a server-provided message, NOT a Throwable. Reverted.
+  (b) I updated the wrong Logging test: `save blocked when the session lacks LOG_PERIOD
+  permission` asserts "cannot save", which is legitimate permission-layer app copy, not
+  an exception leak. Reverted. I audited all ~30 sites individually rather than trusting
+  the bulk edit -- worth doing, since two were wrong.
+  Also fixed `ReportsViewModel`, which the regex left half-converted (first branch still
+  leaked), and two XML files where I used `--` inside XML comments (illegal, broke the
+  resource parse).
+  **Verification.** `:app:assembleDebug` SUCCESSFUL. Full `./gradlew test` reduced to a
+  single failure: `convertAccountToPartnerAndProceed is a no-op re-entry guard` --
+  re-ran that class in isolation, SUCCESSFUL, confirming it is the same pre-existing
+  test-order flake (shared mockk state) already logged in earlier rounds, not a
+  regression from this work. Karan's phone disconnected mid-round, so the APK is
+  installed on the emulator; the offline flow and icon still need his own device check.
+
+- **2026-08-05, Claude (real-device session cont'd, 19th round): OFFLINE-FIRST wired
+  into the shared KMM repositories. Also corrects a framing error I had been repeating
+  in this log for several rounds.**
+  **CORRECTION to earlier entries.** Previous rounds described Android as "cloud-direct,
+  not local-first" and logged that as an accepted architectural gap. **That was wrong,
+  and Karan corrected it:** Sakhi is offline-first BY DESIGN, and the shared Room store
+  already exists at `SakhiCore/.../team/sakhi/localdb/` (`SakhiPhaseALocalStore`,
+  `SakhiSharedDatabase`, `SharedLocalRecordDao`) with real Android/iOS/JVM Room
+  factories. Verified iOS already uses it: `LocalDataManager` (Swift) reads and writes
+  through `RoomPhaseALocalWriter.shared.store`, which IS that shared store. So this was
+  never a missing capability -- it was Android's repositories never being wired to an
+  existing shared store. Do not re-introduce the "cloud-direct" framing.
+  **What was actually broken.** `CycleDataRepository`, `UserProfileRepository` and
+  `PeriodLogRepository` (shared KMM) talked straight to Supabase postgrest with zero
+  local-store involvement -- confirmed by grep: nothing outside `localdb/` referenced
+  `SakhiPhaseALocalStore` at all. An offline user's id is `offline_<suffix>` (from
+  `AuthRepository.startLocalOnlySession()`), which is not a Postgres UUID, so every Home
+  query failed with `invalid input syntax for type uuid` and the errors rendered on
+  screen.
+  **Fix (Karan chose: put it in the shared repositories).** All three repos now take an
+  optional `localStore: SakhiPhaseALocalStore? = null`. Writes go local FIRST, then
+  cloud; reads for an offline user come from the local store and never touch the
+  network (`DataMigration.isOfflineUserId()`, the helper that already existed, decides).
+  Registered in shared `AppModule` as `single { XRepository(getOrNull()) }` -- `getOrNull`
+  specifically so **iOS is unchanged**: it does not register the store in its Koin graph
+  (it drives Room via `RoomPhaseALocalWriter`), so it keeps the exact previous
+  cloud-only behaviour. Android registers the store in `AndroidPlatformModule`, so it
+  gets the real offline-first path.
+  **Second, separate defect fixed: Home was leaking credentials into the UI.**
+  `HomeViewModel` set `error = failure.message`, and Supabase/Ktor exception messages
+  embed the full request URL, the `Authorization: Bearer …` header and the apikey --
+  all of it rendering as visible red text on Home (seen on Karan's device screenshot).
+  Now shows the app's own string; the raw cause still goes to the log. **The unit test
+  for this was itself pinning the defect** (`assertEquals("network down", state.error)`),
+  so it was rewritten to assert the app copy AND to assert the raw message is absent.
+  **STILL OPEN -- systemic, deliberately not half-fixed at the end of a long session:**
+  the same `error = throwable.message` leak exists at 12+ other call sites --
+  `CareViewModel` (7), `CalendarViewModel`, `ProfileViewModel`, `ActivityLogScreen`,
+  `RecommendationsViewModel`, `LogPermissionViewModel`. In a health app this deserves one
+  shared "safe user-facing message" helper rather than a dozen ad-hoc edits. Flagged to
+  Karan explicitly rather than silently left.
+  **Verification.** Shared KMM `compileKotlinJvm` SUCCESSFUL (after fixing two real
+  errors of my own: bare `return` inside expression-body functions). Android
+  `:app:assembleDebug` SUCCESSFUL, full `./gradlew test` SUCCESSFUL. iOS target
+  (`compileKotlinIosSimulatorArm64`) compiled to confirm no iOS breakage from the shared
+  change. All build results confirmed by grepping output for `BUILD SUCCESSFUL`/`^e: `,
+  not by trusting the runner's exit code (see 17th round's process failure). Installed.
+  Karan to confirm offline Home now renders without error text.
+
+- **2026-08-05, Claude (real-device session cont'd, 18th round): the ACTUAL blocker for
+  offline onboarding -- `RootNavHost` read the session state exactly once at cold start
+  and never observed it again, so a session started mid-flow could never affect routing.
+  Third attempt at this bug; the first two were both at the wrong layer.**
+  **Why the previous two fixes couldn't work.** 16th round stopped `handleSetupLoading()`
+  erroring (removed the error screen, exposed the hang). 17th round wired up
+  `startLocalOnlySession()` and taught `handleOnboardingCompletion` to read
+  `SessionState.LocalOnlyUser` -- both genuinely necessary and both correct, but still
+  not sufficient, because the state they produced was going into a bridge that nothing
+  was listening to any more. `RootNavHost`'s session wiring was:
+  `LaunchedEffect(Unit) { ... authRepository.currentSessionState() ... }` -- a ONE-SHOT
+  read. `AppStateInputBridge` therefore held whatever value existed at process start
+  (`Unauthenticated`, confirmed in Karan's logcat: "No session found. Setting session
+  status to NotAuthenticated" at app launch, well before he chose offline). Choosing
+  "Continue Offline" later set `SessionState.LocalOnlyUser` on `AuthRepository`, but the
+  bridge never heard about it, so `AccountClassifier`'s existing
+  `LocalOnlyUser -> AppRoute.Home` mapping was never given the input it needed and the
+  app had no reason to leave onboarding. Hence: stuck on the loading view.
+  **Fix.** Keep the one-shot `authRepository.initialize()` (still needed to restore a
+  stored session on cold start), then `collect` `authRepository.sessionState` for the
+  lifetime of the composable instead of sampling it once. One change; also covers every
+  other mid-process session transition (sign-out, session expiry), which had the same
+  latent staleness.
+  **Verification.** `BUILD SUCCESSFUL` and full `./gradlew test` both confirmed by
+  grepping build output directly (not the runner's exit code -- see the 17th round's
+  recorded process failure for why). Installed. Karan to confirm the offline flow now
+  actually lands on Home.
+  **Method note for future rounds:** three attempts on one bug, each fixing something
+  real but at the wrong layer, because I kept starting from where the symptom appeared
+  (the loading screen, then the completion handler) rather than tracing the full chain
+  first: session start -> bridge -> `AccountClassifier` -> route. The bridge was the only
+  link never checked. Trace the whole chain before patching any single hop.
+
+- **2026-08-05, Claude (real-device session cont'd, 17th round): found the REAL root
+  cause of offline onboarding hanging -- the offline path was never wired up on Android
+  at all. Also caught a process failure of my own: I shipped a stale APK because I
+  trusted a build's exit code instead of its output.**
+  **1. The actual bug: Android never started a local-only session.** The 16th round's
+  fix stopped `handleSetupLoading()` erroring, which removed the "Something went wrong"
+  screen -- but Karan then reported it hung on the loading view instead, which meant the
+  fix had been at the wrong layer. Traced one level up to
+  `RootNavHost.handleOnboardingCompletion`: `authRepository.currentUserId ?:
+  fallbackUserId ?: return false`. `currentUserId` only ever reflects a real Supabase
+  session (null offline by design) and `fallbackUserId` comes from a cloud account state
+  (also null offline), so it silently returned `false` and never called
+  `onboardingCompletionBridge.signalCompletion(...)`. Nothing ever told the app to leave
+  onboarding -- hence the permanent loading view. The deeper finding: shared KMM already
+  has the entire offline path -- `AuthRepository.startLocalOnlySession()` (public, mints
+  an offline user id, sets `SessionState.LocalOnlyUser`) and `AccountClassifier` already
+  maps `LocalOnlyUser` straight to `AppRoute.Home`. **Android simply never called into
+  it.** Choosing "Continue Offline" only recorded the choice in the flow plan. Fixed at
+  both ends: `OnboardingViewModel.resolvePrivacy(offline = true)` now calls
+  `startLocalOnlySession()`, and `handleOnboardingCompletion` now falls back to
+  `(currentSessionState() as? SessionState.LocalOnlyUser)?.userId`. This uses the real
+  shared API rather than inventing an Android-side offline identity.
+  **2. Loading logo now theme-tinted** -- pink in light, white in dark, keyed off
+  `LocalSakhiDarkTheme` (the app's own Light/Dark choice) rather than the OS uiMode,
+  matching how the rest of this codebase handles that distinction.
+  **3. PROCESS FAILURE worth recording: I installed a stale APK and told Karan to test
+  it.** An `./gradlew :app:assembleDebug -q ... | tail` run reported exit code 0 while
+  `:app:compileDebugKotlin` had actually FAILED (bad `SessionState` import). Piping
+  through `tail` masks the real exit status, and `-q` hid the error lines -- so the
+  "successful" build silently left the previous APK in place, which I then installed and
+  asked Karan to verify. Two real errors followed from the same blind spot (wrong
+  package `team.sakhi.auth.SessionState` instead of `team.sakhi.state.SessionState`,
+  then a duplicate import of one already present at line 58). Corrected the habit for
+  the rest of the session: builds/tests are now run WITHOUT `-q`, and verified by
+  grepping the output for `BUILD SUCCESSFUL` / `^e: ` explicitly rather than trusting
+  the notification's exit code. Both the final build and the full `./gradlew test` in
+  this round were confirmed that way (`BUILD SUCCESSFUL`, error count 0).
+  **Still true and unchanged:** health data entered on the offline path is not persisted
+  anywhere -- Android has no local-first store (the already-logged "cloud-direct, not
+  local-first" gap). Offline onboarding now *completes* and routes to Home, which is the
+  bug Karan hit; actually saving that data offline remains open.
+
+- **2026-08-05, Claude (real-device session cont'd, 16th round): a real functional bug
+  (offline onboarding dead-ended), a new shared `SakhiLoadingView` component, and two
+  more instances of the session's recurring tinted-fill bug. The offline bug is the
+  important one -- it was a genuine dead-end, not cosmetic.**
+  **1. Offline onboarding dead-ended on "Something went wrong", then hung.** Karan hit
+  it on the Terms ("You're in") -> Continue transition. `handleSetupLoading()` did
+  `authRepository.currentUserId ?: <generic error>` -- but I checked before patching and
+  Karan confirmed he is deliberately testing in **offline mode** (chose "Continue
+  Offline", never created an account). So a null `currentUserId` there is the *expected*
+  state for that path, not a failure: the code simply had no offline branch and treated
+  it as an error. Fixed to `completeOnboarding()` instead -- the same honest interim
+  behaviour the `HealthConditions`-not-in-plan branch directly above it already uses.
+  The entered health data still isn't persisted for this path (Android has no
+  local-first store; iOS threads `isOfflineUser` through to local storage) -- that is
+  the already-logged "Android is cloud-direct, not local-first" architectural gap, and
+  faking a save here would have been worse than completing honestly. **Updated the unit
+  test that had pinned the old behaviour** (`handleSetupLoading with no current user
+  surfaces a real error` -> `...completes onboarding instead of erroring`), with a
+  comment explaining that the old assertion was itself encoding the bug.
+  **2. New shared `SakhiLoadingView` (`core:ui`) -- real port of iOS's
+  `SakhiLoadingView.swift`.** Karan: "first build exact loading view jaisa iOS mai hai,
+  and vo har loading ke samay aayega fully screen mai." Android had no equivalent at all
+  (only a bare Material `CircularProgressIndicator`). Ported faithfully: three
+  concentric dashed pink rings (180/128/82dp at 0.18/0.30/0.52 alpha, 1.5dp stroke,
+  [4,5] dash) around a 44dp brand mark pulsing scale 0.975<->1.025 / alpha 0.78<->1 on
+  iOS's 1.2s ease-in-out autoreverse, plus iOS's `SakhiLoadingContext` enum (AppLaunch /
+  HomeSetup / Authentication / SigningOut / Syncing / Messages / Custom) carrying each
+  case's own title+subtitle and `isMinimal` rule. `Messages` mode cycles lines every
+  700ms exactly like iOS's onboarding setup. Wired into `SetupLoadingScreen`
+  full-bleed -- deliberately NOT inside the padded/centred Column the error branch uses,
+  so it owns the whole window.
+  **3. Back button hidden during loading.** Karan: "jo back button hai vo loading ke
+  samay nahi aayega." `OnboardingFlowHost` now suppresses the entire shell chrome (top
+  gap + `SakhiNavBar` with its back/close button) when `currentStep == SetupLoading`,
+  and **also disables the system `BackHandler` for that step** -- otherwise system back
+  would remain the one way to escape a step the UI deliberately offers no exit from,
+  mid-save.
+  **4. `TermsScreen` ("You're in") colours + checkbox, against a real iOS screenshot.**
+  Karan sent the actual iOS screen. Both the legal-text card and the checkbox row were
+  filling tinted (`tonalElevation` / `sakhiGroupedBackground` at 0.4 alpha) where iOS
+  uses plain `profileCardBackground` (white). The checkbox itself was worse: unchecked
+  state was `Color.Transparent` with no border at all, so it was invisible -- iOS draws
+  a white fill with a 1.5pt separator-grey stroke (pink fill + pink stroke when
+  checked). Agreement label also corrected to iOS's literal 14pt.
+  **5. `PermissionCard` (Partner invite flow) -- same tinted-fill bug, found by
+  surveying rather than waiting for a report.** Karan asked me to check the partner flow
+  for "aise silly UI issues." Grepped the whole onboarding module for the remaining
+  instances of this session's recurring pattern and found exactly one live one:
+  `sakhiGroupedBackground().copy(alpha = 0.32f)` where iOS uses plain white, plus
+  `SakhiRadius.xxl` where iOS uses `onboardingCard` (16 = `xl`), and a pink-at-10%-alpha
+  icon circle where iOS uses `lightPink`. Fixed all three, plus the type sizes
+  (15pt/13pt). `sakhiGroupedBackground` is now fully unused in this file -- import
+  removed.
+  **6. Header-content gap reduced 20%** (`OnboardingHeaderContentGap` 40dp -> 32dp),
+  per "har view mai header and content ke bich mai space kuch jada hi hogaya hai."
+  **Verification.** Full `./gradlew test` green after each of the three builds in this
+  round, including the deliberately-updated offline test. Built and installed. The
+  loading view, the offline completion path, and both colour fixes all still need
+  Karan's own eyes -- none are screenshot-verifiable by me past a tap I can't inject.
+
+- **2026-08-05, Claude (real-device session cont'd, 15th round): a dense burst of live
+  fixes -- Height ruler tuning, a genuinely app-wide `SakhiTextField` rebuild, a global
+  ripple-colour fix, and three separate card-overflow bugs (two self-inflicted by this
+  same round's own earlier edits). The single highest-leverage find was that the
+  *shared* `SakhiTextField` -- not the phone field fixed two rounds ago, a completely
+  different component -- had never had a background at all.**
+  **1. Height ruler: more width, less bold.** Karan, after the tick-anchor fix landed:
+  "ab better hai, but... uska width toh badha do... width increase karo." Root cause
+  turned out deeper than tuning -- `tickLength`/`strokeWidth` in `HeightRulerPicker.kt`
+  were bare pixel counts, never wrapped in `.dp.toPx()` (unlike `WeightWheelPicker`'s
+  equivalent, which does this correctly). On this device's 2.75x density, a raw "52"
+  rendered under 19dp. Fixed the dp-conversion bug, then further tuned length up
+  (52/28/14 -> 68/36/18) and stroke down (3.5/1.5/1 -> 2.5/1.2/0.8) per Karan's
+  immediate follow-up ("stick kafi bold hogaya hai, usko kam karo") -- both logged as
+  deliberate deviations from iOS's literal point values, not the dp-fix itself.
+  **2. `WeightWheelPicker`/`HeightRulerPicker`'s fade gradient was still pink.** Karan
+  sent a live screenshot: two solid pink blocks sitting inside the (already-fixed-white)
+  card, cutting the dial off hard. Both pickers' fade-to-background gradient used
+  `fadeColor = colorScheme.surface` (brand pink) -- the `PinkCard` fix two rounds ago
+  made the card white but never touched these two components, which paint their own
+  independent fade overlay. Fixed both to `sakhiSystemBackground()`. Confirmed via a
+  real device screenshot before fixing, not just reasoning about it.
+  **3. The real, shared `SakhiTextField` had no background at all -- a different bug
+  from the phone field fixed two rounds ago.** Karan: "uske aage ke flow mai bhi,
+  jitni bhi views hai, unke textfield abhi tak thik kyun nahi hue hain, still
+  transparent hai." The phone-field fix only touched `PhoneScreen.kt`'s own hand-rolled
+  field; the actual shared `team.sakhi.android.ui.SakhiTextField` component (used by
+  `CountryPicker`'s search field, profile name edit, chat search, and
+  `PeriodLengthStep`/`CycleLengthStep`) was a bare Material3 `OutlinedTextField` --
+  outlined fields have no container fill by design, which is exactly why every screen
+  using it showed no background. Rebuilt it from scratch as a `BasicTextField` inside a
+  custom-styled `Row`, matching iOS's real `SakhiTextField` spec already read in full
+  two rounds ago: `sakhiSystemBackground()` fill, `SakhiRadius.xl` corners, 56dp height,
+  a border that appears ONLY on `isError` (1dp pink, never a default outline), no
+  floating label. One fix, four call sites corrected at once.
+  **4. App-wide tap ripple was reading as harsh black.** Karan: "jo highlight aa raha
+  hai kisi bhi component pe vo black sa aaraha hai... jo tarika production apps mai use
+  hota hai, use karo." Compose's default ripple derives its colour from
+  `LocalContentColor`, which on this app's white cards resolves to dark body-text
+  black -- not a fixed system tone. Added an explicit `RippleConfiguration(color =
+  brand.pink)` via `LocalRippleConfiguration` at the `SakhiTheme` root, the standard
+  production pattern for a consistent on-brand ripple everywhere instead of one that
+  happens to match whatever text colour is nearby.
+  **5. `DaysInfoSheet` (period/cycle length info) had no background either -- but this
+  one was a bug in code from *this session*, not a legacy gap.** Karan: "background
+  bhi nahi hai uss sheet mai... yeh kahin aur repeat nahi hona chahiye." Traced to
+  `SakhiModalSheet`'s `containerColor = Color.Transparent`, which is deliberate --
+  every sheet's own content is expected to supply its fill, and `CountryPicker` (the
+  only other real sheet content in the app) already does via
+  `.background(colorScheme.background)`. `DaysInfoSheet`, written earlier this session,
+  simply forgot to. Fixed the content, left the shared `SakhiModalSheet` alone since
+  changing its default would risk regressing the sheets that already rely on the
+  transparency. Also swapped its hand-rolled `IconButton`+`Icon(Close)` for the shared
+  `CloseButton` component, and wired its ACOG source link through Chrome Custom Tabs
+  (new `androidx.browser` dependency, added to the version catalog) instead of a plain
+  external-browser `Intent` -- the real Android equivalent of iOS's
+  `SFSafariViewController`, per Karan: "original link open ho jaye web view mai."
+  **6. Three separate card-overflow bugs, two self-inflicted this same round.**
+  (a) `HealthConditionsStepContent`'s card had no height cap at all (iOS: `.frame(
+  maxHeight: 320)` with internal scroll) -- added the same cap + `verticalScroll`.
+  (b) The 14th round's own `HealthPickerCardHeight = 400.dp` (added to match Weight's
+  card height to Height's) turned out tall enough to clip the footer on-device --
+  reduced the ruler's own height (300dp -> 260dp, in both
+  `HeightRulerPicker.kt` and its duplicated `OnboardingHealthStepUi.kt` sibling
+  constant, which must stay in sync across the two Gradle modules) and the shared card
+  height (400dp -> 340dp) together. (c) `LastPeriodStepContent`'s calendar had the
+  *outer* Column's 12dp `spacedBy` applying between every week row, not just between
+  the header/weekday/grid blocks -- across up to 6 rows that is roughly 50dp of pure
+  excess height. Iso spec is `rowSpacing: 2`; gave the day-grid its own tightly-spaced
+  Column and shrank the prev/next `IconButton`s to iOS's literal 32dp (Material's
+  default is 48dp).
+  **Verification.** Full `./gradlew test` clean after the final build in this round (one
+  earlier intermediate build had 2 failures -- confirmed as the same pre-existing
+  `Dispatchers.Main`/coroutine-test-order flakiness already logged in prior rounds, not
+  a real regression, before continuing). Confirmed the new `androidx.browser` Gradle
+  dependency resolves cleanly. Confirmed no Roborazzi baseline needed re-recording --
+  `AuthScreenshotTest` only captures `PhoneScreen`/`OtpScreen`, neither of which uses
+  the rebuilt shared `SakhiTextField`. Built and installed. None of tonight's fixes are
+  pixel-confirmed by me on the physical device past this point -- every one of them is
+  now waiting on Karan's own look.
+
+- **2026-08-05, Claude (real-device session cont'd, 14th round): the 13th round's
+  `fillMaxWidth()` fix widened the ruler's canvas but not the tick marks -- a second,
+  deeper geometry bug in the same component, caught because Karan sent a screenshot
+  after the width fix instead of just re-reporting "still narrow."**
+  Screenshotted the live device myself before touching code (same discipline as the
+  fade-colour bug two rounds ago): the pink needle line now correctly spanned most of
+  the card, but the actual tick marks and numbers were bunched into a narrow vertical
+  band roughly in the middle of the canvas, with visible empty white space both
+  between the value column and the ticks, and between the ticks and the card's right
+  edge. Root cause: every tick/label in `HeightRulerPicker.kt` was positioned relative
+  to `centerX = size.width / 2f` (the canvas's horizontal *centre*), not its right
+  edge. That coordinate choice happened to look plausible while the canvas was
+  accidentally narrow (the 13th round's bug), because a narrow canvas's centre sits
+  close to its right edge anyway -- widening the canvas didn't widen the *ruler*, it
+  just moved the centre-anchor further from both edges, opening a gap on each side.
+  Checked the real iOS tick row for the correct geometry: `HStack(spacing: 0) {
+  Spacer(); label; Rectangle() }` with no trailing padding -- the tick sits flush
+  against the ruler's own right edge, with a `Spacer()` absorbing everything to its
+  left. Re-anchored every tick, label, and the needle's end point to `size.width`
+  (the canvas's actual right edge) instead of `size.width / 2f`, so the tick stack now
+  grows with the canvas instead of floating at a fixed offset from its centre.
+  **Verification.** Full `./gradlew test` green (28-line output, zero failure/error
+  lines). Built and installed; not yet re-confirmed by me -- the app reset to the
+  onboarding start on reinstall (as it does on every install) and I can't tap back to
+  Height myself, so this needs Karan's own look once he's navigated there again.
+
+- **2026-08-05, Claude (real-device session cont'd, 13th round): `HeightRulerPicker`
+  was rendering narrow instead of spanning to the card's right edge. Karan: "jo ruler
+  hai in height kafi kam width ka ho rakha hai... right edge tak touch karein card ke."**
+  Root cause: the `Row` wrapping the value-display column and the ruler
+  (`HeightStepContent`) had no `Modifier.fillMaxWidth()`. A `Row` without it sizes to
+  wrap its content rather than spanning its parent, and `Modifier.weight(1f)` on a
+  child only claims real space when the parent Row is actually filling available
+  width -- without that, the weighted ruler had no extra space to grow into and
+  measured down to a narrow collapsed width instead of the full remaining card width.
+  Added `fillMaxWidth()` to the Row.
+  **Verification.** Full `./gradlew test` green (6-line output, zero failure/error
+  lines). Built and installed; not yet re-screenshotted by me -- past a tap I can't
+  inject, needs Karan's own look.
+
+- **2026-08-05, Claude (real-device session cont'd, 12th round): `WeightWheelPicker`/
+  `HeightRulerPicker` had the exact same stale-color bug as `PinkCard` before it, just
+  one layer deeper -- caught live via a screenshot Karan sent from the real device.**
+  Karan: "tell me your height wala component... inside white container pink color
+  element kyun hai" then, on Weight: "usme bhi pink background aaraha hai, u can take
+  current screenshot." Screenshotted the live device myself to confirm before touching
+  code: two solid pink rectangular blocks sat inside the (now-correctly-white) card,
+  cutting the dial off hard on both edges instead of fading smoothly into the
+  background. Root cause: both pickers' top/bottom (or left/right, for the arc) fade
+  gradient used `fadeColor = MaterialTheme.colorScheme.surface` -- this app's brand
+  `lightPink` -- to blend into what USED to be a pink card. The 10th round's `PinkCard`
+  fix made the card itself white but didn't touch these two components, which draw
+  their own independent fade overlay rather than inheriting the card's colour. Changed
+  both to `sakhiSystemBackground()`, matching the actual card fill. This likely also
+  explains Karan's separate "vertical scale toh pura hona chaiye" (the scale should be
+  complete) -- the hard pink cutoff blocks were very plausibly what read as an
+  incomplete/truncated scale, not a missing-tick-range issue.
+  **Verification.** Pixel-confirmed the bug myself via a live device screenshot before
+  fixing (not just reasoning about it) -- this is the first fix this round I actually
+  saw fail with my own eyes rather than only hearing about it. Full `./gradlew test`
+  green (28-line output, zero failure/error lines) after the fix. Built and installed;
+  the corrected render is not yet re-screenshotted by me since I can't navigate back to
+  Height/Weight without a tap.
+
+- **2026-08-05, Claude (real-device session cont'd, 11th round): three quick live
+  corrections right after the 10th round's health-flow rebuild -- Offline screen
+  spacing, a stray progress bar with no iOS counterpart, and an explicit reversal of
+  the DOB wheel picker in favour of Android's native date picker.**
+  **1. Offline carousel/dots pushed down.** Karan: "offline mai jo content hai thoda
+  niche hoga, and jo page control hai vo bhi thoda niche." Added `OfflineCarouselTopGap`
+  (top padding before the carousel `Box`) and `OfflineIndicatorTop` (dots offset,
+  `PartnerInvitePromptIndicatorTop + space4`) as their own constants rather than
+  editing the shared `PartnerInvitePrompt*` ones the carousel geometry is borrowed from
+  -- so this tunes only Offline, not `PartnerInvitePromptScreen` too.
+  **2. Removed the health-step progress bar.** Karan: "add details myself ke flow mai
+  progress bar hata do." Checked first rather than just deleting on request: iOS's
+  `OnboardingFlowView` only renders a progress affordance when a step sets
+  `progressDots`, and grepped every `Steps/Health/*.swift` file for that property --
+  none of them set it. So the Android `LinearProgressIndicator` in
+  `OnboardingHealthStepScreen` had no iOS counterpart at all; removing it is a real
+  parity fix, not just following an instruction blind.
+  **3. DOB picker reverted from the wheel sheet to Android's native
+  `DatePickerDialog`/`DatePicker`.** Karan, explicitly: "native android ka component
+  use karo, to pick date aur validation sahi rahegi" -- a direct, deliberate call to
+  prioritize correctness (leap years, per-month day counts, the min/max age bound) over
+  iOS-exact visual replication for this one control, made by Karan himself, not a gap
+  found and silently patched. The hand-rolled 3-column wheel from the 10th round is
+  gone; `rememberDatePickerState` + a `SelectableDates` override covering the
+  80-to-12-years-ago range now backs the same row-button entry point (unchanged --
+  iOS's real row styling was already correct). `DaysWheelColumn` (`core:ui`) is now
+  fully orphaned with this reverted -- deleted rather than left as dead code (its only
+  other potential use, `PeriodLengthStep`/`CycleLengthStep`, was already confirmed in
+  the 10th round to use a plain text field on iOS, not a wheel).
+  **Verification.** Full `./gradlew test` green (12-line output, zero failure/error
+  lines). Built and installed. None of the three are visually confirmed by me on
+  device -- spacing amounts and the native date picker's actual look/feel are real-eyes
+  judgments only, past a tap I cannot inject on this device.
+
+- **2026-08-05, Claude (real-device session cont'd, 10th round): the "Add Details
+  Myself" health data-entry flow (DOB/Height/Weight/PeriodLength/CycleLength) rebuilt
+  against real iOS source. Karan: "exact same replica of iOS... abhi ekdum alag hai."
+  Confirmed with him up front this was real component-building, not a tweak, before
+  starting (DOB needed a wheel-picker sheet from scratch, Height/Weight needed wiring
+  up a component that existed but was never used).**
+  **0. Root cause found first, fixed once, and it alone touches every screen in this
+  flow.** `PinkCard` -- the shared card wrapper behind DOB, Height, Weight, and
+  HealthConditions -- filled with `MaterialTheme.colorScheme.surface`, which this app's
+  theme binds to the brand `lightPink`. iOS's real `dsCard(.pink)` fills
+  `DS.Colors.profileCardBackground`, plain white in light mode. Same root-cause bug
+  class as the phone field and OTP cells from earlier rounds. One fix
+  (`sakhiSystemBackground()`), all four cards corrected at once -- likely the single
+  biggest driver of "completely different," fixed before touching any interaction logic.
+  **1. DOB: real wheel-picker sheet, built from scratch.** iOS opens a native
+  `DatePicker(.wheel)` in a 380pt sheet; Android had a plain `DatePickerDialog` (a
+  totally different platform dialog, not a themed sheet at all). No wheel-scroll
+  primitive existed in this codebase, so built one: `DaysWheelColumn` (new,
+  `core:ui`) -- a `LazyColumn` + `rememberSnapFlingBehavior`, center-row highlighted in
+  `primary`, rows further out shrinking/fading by distance the same way iOS's real
+  `DaysWheelScrollView.updateLabelStyles` does it (`alpha`/`scale` falloff, not a flat
+  cutoff). Used 3x (day 1-31, month names via `Month.getDisplayName`, year range) inside
+  a new `DateOfBirthWheelSheet`, opened from the existing (already-correct) DOB row
+  button.
+  **2. Height/Weight: the real custom pickers already existed, just were never wired
+  in.** Found `WeightWheelPicker.kt` and `HeightRulerPicker.kt` already sitting in
+  `core:ui` -- complete, correct ports of iOS's real `OnboardingInputPickers.swift`
+  drag-dial/ruler components (matching drag math, spring-snap on release, per-unit
+  haptics) from an earlier iteration, but never called from
+  `HeightStepContent`/`WeightStepContent`, which still used a placeholder Material
+  `Slider` with a comment admitting as much. Wired both in, added `key(unit) { }`
+  around each (iOS's `.id(weightUnit)` -- forces fresh internal drag state when the
+  unit toggle flips instead of reusing stale scale-relative state), and fixed the
+  surrounding chrome to match iOS exactly: `SegmentedToggle`'s selected pill was
+  filling with the same `colorScheme.surface` bug as `PinkCard` instead of white-with-
+  shadow, and `LargeValueText`/`UnitText` were one shared 28sp token where iOS actually
+  uses two *different* sizes per screen (Height 38pt/17pt, Weight 64pt/22pt) -- split
+  into explicit, required `fontSize` params so no call site can silently share the
+  wrong value again.
+  **3. PeriodLength/CycleLength: checked the real iOS step files before assuming a
+  wheel was needed there too -- it wasn't.** `OnboardingInputPickers.swift` also
+  contains `FiveRowDaysWheelPicker`, which looked like the obvious fit, but reading
+  `PeriodLengthStep.swift`/`CycleLengthStep.swift` directly showed they actually use
+  the same plain `SakhiTextField` + number-pad pattern Android already had -- verifying
+  against the real call site instead of the component file avoided a wrong rebuild
+  here. What was actually wrong: the info button was a `TextButton` with an icon
+  instead of iOS's plain 13pt pink text link, and the info panel was a Material
+  `AlertDialog` instead of a real `.medium`-detent bottom sheet. Rebuilt as
+  `DaysInfoSheet` -- header with title + close button, explanation paragraph, two stat
+  pills on `DS.Colors.lightPink`-equivalent, tappable ACOG source line (opens the
+  system browser via a plain `Intent`; iOS's in-app `SFSafariViewController` has no
+  direct Compose equivalent and a full Custom Tabs integration is its own scoped piece
+  of work, not this pass).
+  **Verification.** Full `./gradlew test` green after two rounds -- first attempt
+  failed on missing `@OptIn(ExperimentalMaterial3Api::class)` on the two new sheet
+  composables (an existing, established pattern already used by `PhoneScreen.kt` for
+  the same `SakhiModalSheet`/`SheetState` surface, just missed on the new functions);
+  fixed, full suite reran clean. Built and installed. Not pixel/interaction-confirmed
+  by me on device -- drag gestures, wheel scrolling, and sheet presentation can only be
+  judged by actually using them, which needs Karan's own taps.
+  **Not done, flagged rather than silently skipped:** `LastPeriodStepContent`'s
+  hand-rolled calendar grid cell sizing (iOS: 34pt cells, 2pt row spacing, 32pt nav
+  buttons) not verified against those exact values; `HealthConditionsStepContent`
+  looked structurally close to iOS already on inspection and was not touched.
+
+- **2026-08-05, Claude (real-device session cont'd, 9th round): `OfflineWarningScreen`
+  rebuilt on iOS's real `OfflineWarningStep`, not the generic layout it was using.**
+  Karan: "offline mai bhi same illustration and design use hoga jo iOS mai hai." The
+  prior Android version rendered the shared `HeroContentStep` (centered icon + title +
+  subtitle + button) -- iOS's real step is a top-anchored title/subtitle over a genuine
+  2-page carousel: slide 0 the actual "offline" illustration (`Conditions/offline`,
+  already a ported drawable, `condition_offline`), slide 1 a 3-item list of what stops
+  working offline (no backup, no care connection, no sync). Reused
+  `PartnerInvitePromptScreen`'s exact carousel geometry (335pt image / 460pt container /
+  307pt indicator offset) since iOS's own comment says this step "matches the
+  care-partner onboarding hero... so the offline image is the same size everywhere it
+  appears" -- literally the same constants, not a coincidence. The 3 loss-list strings
+  (title+description for no-backup/no-care/no-sync) didn't exist in Android yet; added
+  them verbatim from iOS's `ContentSeed.swift`. The loss rows needed their own component
+  (`OfflineFeatureLossRow`), not reused `FeatureBulletRow` -- iOS uses a 52dp icon circle
+  here specifically, not `FeatureBulletRow`'s 44dp, plus different type sizes (16pt/13pt
+  vs 15pt/14pt). `canGoBack`/`onBack` params now unused (iOS's own step-level `onBack`
+  just flips a flag and returns to `PrivacyStep`, which `OnboardingFlowHost`'s shared
+  back handler already does).
+  **Verification.** Full `./gradlew test`: clean, no failures. Built and installed; not
+  pixel-confirmed by me on device -- past a tap I cannot inject.
+  **Now investigating, not yet started:** Karan flagged the "Add Details Myself" health
+  data-entry flow (`OnboardingHealthStepUi.kt` -- DOB, Height, Weight, LastPeriod,
+  PeriodLength, CycleLength, HealthConditions) as needing a full pixel-by-pixel,
+  component-by-component pass against iOS's real `Steps/Health/*.swift` files. This is a
+  7-screen rebuild, not a single-screen fix like the ones above -- reading all 7 iOS
+  sources plus their shared `OnboardingLayoutComponents.swift` pieces now before touching
+  any Android code, so the fixes land as one coherent, iOS-verified pass rather than
+  guessed piecemeal.
+
+- **2026-08-05, Claude (real-device session cont'd, 8th round): backing out of the OTP
+  step was two bugs, not one -- back appeared to do nothing, and separately the
+  keyboard/screen motion "danced." Karan: "jab secret code mai back button daba raha
+  hu, toh keyboard dismiss hoke view dance kr raha hai, and view back bhi nhi ho raha
+  hai."**
+  **1. Back genuinely not working -- a real race, not a feel issue.** A comment already
+  sitting in `OnboardingPhoneOtpScreen` (from an earlier iteration) documented the exact
+  failure mode it was trying to prevent: stepping back from `OtpVerification` to `Phone`
+  needs `AuthViewModel.resetPhoneFlow()` to clear `otpSentTo`, or `PhoneScreen`'s own
+  `otpSentTo != null` auto-advance check re-fires and jumps straight back to
+  `OtpVerification` -- back looks like a no-op. The guard was a `LaunchedEffect(step)`,
+  which dispatches as a coroutine that only runs *after* composition commits. On the
+  frame `step` flips to `Phone`, `PhoneScreen` reads the still-stale `otpSentTo`
+  synchronously, before that coroutine ever gets a turn -- the exact race the comment
+  described, just not actually closed by the fix chosen for it. Switched to
+  `remember(step) { if (step == Phone) resetPhoneFlow() }`: `remember`'s calculation
+  block runs synchronously during composition, before `PhoneScreen` below it sees the
+  state, which actually closes the race.
+  **2. The "dance."** Neither the system back gesture nor the on-screen `SakhiNavBar`
+  back button had any keyboard awareness -- both called `viewModel.goBack()` directly
+  (`OnboardingFlowHost.kt:98` and `:148`), so on OTP the keyboard's own close animation
+  and the screen's slide-out both started in the same instant. Same class of bug as the
+  7th round's Phone -> OTP forward fix, mirrored for backward: added one `handleBack`
+  wrapper in `OnboardingFlowHost` that both the `BackHandler` and the nav-bar's `onBack`
+  now route through. When the current step is `OtpVerification` specifically (the only
+  onboarding step with an always-open keyboard), it hides the keyboard first, waits
+  180ms for the IME's own close animation to actually start collapsing, then calls
+  `goBack()` -- every other step is untouched, straight through to `goBack()` same as
+  before.
+  **Verification.** Full `./gradlew test`: clean, no failures. Neither fix is
+  screenshot-testable -- one is a navigation-correctness bug only visible by actually
+  backing out of OTP and confirming it lands on Phone (not bounces forward again), the
+  other is pure motion feel. Both need Karan's own taps to confirm; installed and ready.
+
+- **2026-08-05, Claude (real-device session cont'd, 7th round): two more bugs on the
+  Phone -> OTP handoff, both live-reported by Karan right after the phone-field fix --
+  the OTP cells were pink instead of white, and the transition into that screen looked
+  "weird" compared to every other onboarding step.**
+  **1. OTP cell background.** Same root cause class as the phone-field regression:
+  `OtpField`'s `resolvedContainerColor` defaulted to `MaterialTheme.colorScheme.surface`,
+  which this app's theme binds to the brand `lightPink`, not a neutral surface. iOS's
+  `OTPStep` fills each cell with `DS.Colors.profileCardBackground` (plain white in light
+  mode) -- confirmed in `OTPStep.swift:222`. Changed the default to
+  `sakhiSystemBackground()`. `OtpField` (`core:ui`) has exactly one call site
+  (`OtpScreen.kt`), so no cross-screen risk.
+  **2. "Weird" transition, traced to two unsynced animations playing at once.**
+  `OtpField`'s `autoFocus` requested keyboard focus the instant the composable entered
+  composition -- which happens at the very start of the outer `SakhiScreenTransition`'s
+  380ms slide-in, not after it settles. That means the IME was animating up while the
+  screen was still physically sliding in from the right: two independent motions layered
+  together, which is what read as "weird" specifically on this transition and not on any
+  other onboarding step (none of the others have an IME opening mid-transition). iOS's
+  `PhoneStep` handles this explicitly: `dismissKeyboardBeforeContinue = true` with a doc
+  comment reading "Dismiss immediately before moving to OTP. The shell does not wait, and
+  the OTP field focuses after its screen lands, avoiding keyboard work mid-push." Android
+  had neither half of that sequencing. Added both: `PhoneScreen.kt` now calls
+  `keyboardController?.hide()` right before firing `onOtpSent(phone)` (same spot the
+  screen already logs the Phone -> OTP handoff), and `OtpField`'s auto-focus effect now
+  waits `OTP_AUTO_FOCUS_DELAY_MS` (380, matching the shared step-transition duration)
+  before requesting focus, so the OTP keyboard only comes up once its screen has actually
+  landed.
+  **Verification.** Full `./gradlew test`: clean, no failures (the prior round's
+  `OnboardingViewModelTest` `Dispatchers.Main` flake did not recur, consistent with it
+  being test-order noise rather than a real regression). Re-recorded the `:feature:auth`
+  Roborazzi baseline for the OTP colour change, reran in compare mode: clean pass. The
+  transition-feel fix cannot be verified by screenshot at all -- it's only judgable by
+  watching the animation play, which needs Karan's own taps (MIUI blocks
+  `adb shell input tap` on this device).
+
+- **2026-08-05, Claude (real-device session cont'd, 6th round): the phone-number field's
+  missing background, called out live against a real iOS screenshot, was a genuine
+  regression from an EARLIER iteration this session, not a re-guess -- corrected it and
+  found a second latent bug in the same spot while there.**
+  **Root cause of the regression.** A prior pass (logged in this file as the phone-field
+  pill removal, part of iteration 78's "replicate iOS exactly" cleanup) concluded iOS's
+  `SakhiTextField` had no background because a literal `.background(` text search over
+  its 466 lines found nothing. That search missed `.dsCard(context)`
+  (`SakhiTextField.swift:231`), a named modifier, not an inline `.background()` call --
+  `DSCardModifier` (`SakhiDesignSystem.swift:538`) applies the fill from inside there.
+  `PhoneStep` uses the default `.pink` context, which fills `DS.Colors.
+  profileCardBackground` (plain white in light mode, already ported as
+  `sakhiSystemBackground()`). Removing Android's fill entirely was therefore a real
+  regression, confirmed by Karan sending an actual iOS screenshot of "Let's Begin"
+  showing the white pill clearly present. Restored it in `PhoneScreen.kt`'s
+  `PhoneEntryField`: `sakhiSystemBackground()` fill, `SakhiRadius.xl` corners, always
+  present (not conditional).
+  **Second bug found while fixing the first.** iOS's `dsErrorBorder`
+  (`SakhiDesignSystem.swift:579`) strokes 1pt `DS.Colors.pink` when `hasError`, not a
+  Material error/red color. Android was drawing a 2dp Material-error-red border for the
+  error state -- also fixed, to 1dp `colorScheme.primary` (pink), matching exactly.
+  **Verification.** Full `./gradlew test`: 41 tests, 1 failure in
+  `OnboardingViewModelTest.updateLastPeriodDate clamps a future date to today` --
+  `IllegalStateException: Dispatchers.Main was accessed when the platform dispatcher was
+  absent`. Re-ran that test class alone: passed clean. Confirmed pre-existing test-order
+  flake (some other test in the suite leaves `Dispatchers.Main` unset), unrelated to this
+  fix -- nothing here touches coroutine dispatcher setup or that test file. Re-recorded
+  the `:feature:auth` Roborazzi baseline (`-Proborazzi.test.record=true`), then reran in
+  compare mode: clean pass. Not pixel-confirmed by me on the physical device (past a tap
+  I can't inject); Karan is checking live.
+
+- **2026-08-05, Claude (real-device session cont'd, 5th round): two more passes on the
+  intro carousel's transition feel, both live-reported by Karan after the 4th round's
+  `HorizontalPager` conversion, exposing `sakhiScreenTransitionSpec` in `core:ui`.**
+  **1. Jitter.** The pager's `animateScrollToPage` was first wired to reuse
+  `screenTransitionEasing` (the app-wide `CubicBezierEasing(0.25, 0.1, 0.25, 1)` every
+  `AnimatedContent` screen transition uses) so the carousel would feel consistent with
+  the rest of the app. Karan: "abhi bhi jitterness hai." That curve is tuned for fading/
+  offsetting a whole screen as a discrete property animation; driving raw continuous
+  scroll position with it over a full screen width is a different motion problem, and
+  the mismatch reads as unevenness at the pixel level. Swapped to
+  `FastOutSlowInEasing` -- Compose's own standard curve specifically for scroll/fling
+  motion -- keeping everything else the same.
+  **2. Speed, after the jitter fix held.** Karan: "transition speed bhaut fast hai,
+  thoda slow karo." The spec had been sharing `SCREEN_TRANSITION_DURATION_MS` (380ms)
+  with every other screen transition, but a full-width continuous pager scroll reads
+  faster at the same duration than an `AnimatedContent` crossfade does. Gave the pager
+  spec its own `PAGER_TRANSITION_DURATION_MS = 550` instead of reusing the shared
+  constant, specifically so this can keep being tuned without touching any other
+  transition in the app.
+  **Verification.** Full `./gradlew test` green after both changes (clean, no failure/
+  error lines in either run). Neither is motion-confirmed by me -- both are feel/timing
+  judgments only visible by actually watching the animation play, which needs Karan's
+  own taps (MIUI blocks `adb shell input tap` on this device). Duration and easing now
+  both live as clearly-named constants in `SakhiScreenTransition.kt`
+  (`PAGER_TRANSITION_DURATION_MS`, `sakhiScreenTransitionSpec`'s `FastOutSlowInEasing`)
+  so the next round of feedback, if any, is a one-line tune rather than another
+  investigation.
+
+- **2026-08-05, Claude (real-device session cont'd, 4th round): `IntroCarouselScreen`
+  ("Log It in One Tap" etc.) converted from an instant content swap to a real animated
+  `HorizontalPager` -- Karan: "abhi pura sudden transition hai."** Previously
+  `pageIndex` was a plain `var` and Continue just incremented it, recomposing the whole
+  slide (image/dots/title/subtitle) with zero motion. Converted to
+  `rememberPagerState(pageCount = { slides.size })` with Continue calling
+  `pagerState.animateScrollToPage(currentPage + 1)` inside a `rememberCoroutineScope`
+  launch -- this app's own established port of iOS's `TabView(.page)` pattern, already
+  used one screen over in `PartnerInvitePromptScreen`. Slide content (image, dots,
+  title, subtitle) now lives inside the pager's per-page content lambda, keyed on
+  `page` instead of a captured `currentSlide`; `OnboardingDots`' `currentIndex` now
+  reads `pagerState.currentPage` so it tracks mid-swipe drag too, not just committed
+  page changes. Bonus over the original bug fix: pages are now also swipeable, matching
+  iOS's real gesture-driven TabView, not just animated on tap.
+  **Verification.** Full `./gradlew test` green (6-line output, zero failures) after the
+  conversion. Built and installed; not pixel/motion-confirmed by me -- animated paging
+  can only be judged by actually swiping/tapping through it live, which needs Karan's
+  own taps (MIUI blocks `adb shell input tap` on this device).
+
+- **2026-08-05, Claude (real-device session cont'd, 3rd round): Karan sent an actual iOS
+  screenshot of "Who Are You Here For?" for direct comparison, which surfaced that
+  Android's mode-selection card had drifted from its real iOS source, plus a separate
+  carousel-image sizing gap. Fixed both at the shared-component level per Karan's
+  explicit instruction ("component level pe thik karna jisse har jagah thik hojae").**
+  **1. `ModeSelectionCard` rebuilt on iOS's real `OnboardingPrivacyCard` spec, and unified
+  with the existing `PrivacyChoiceCard`.** Traced `CareForStep.swift` ("Who Are You Here
+  For?") to the shared `OnboardingPrivacyCard` (`OnboardingPrivacyComponents.swift`), also
+  used by `PrivacyStep` and `DataSourceStep` -- i.e. the exact same component already
+  backing Android's `PrivacyChoiceCard`, so this was one drift, not three. What iOS
+  actually does, none of which Android's old `ModeSelectionCard` matched: card background
+  is always `profileCardBackground` (= plain `systemBackground`/white, never tinted pink
+  on selection); the icon has no circular badge, it's a bare 24pt glyph; icon+title turn
+  pink when selected (title/icon `foregroundColor` is `isSelected ? pink : label`),
+  description stays `secondaryLabel` regardless; the card border is a `dsSelectionBorder`
+  -- 1pt neutral when unselected, 2pt pink when selected (Android's old version filled
+  the WHOLE card pink at 12% alpha and put every icon in a 52dp coloured circle, which is
+  why it read as "wrong" next to the real iOS screenshot). Redesigned `PrivacyChoiceCard`
+  to match exactly (`sakhiSystemBackground()` fill, no icon badge, `contentColor` driving
+  icon+title, 1dp/2dp border switch, 26dp/13dp radio-dot indicator, iOS's literal
+  cardHorizontal=18/iconToTitle=10/trailing-gap=14 spacing spelled out since none are on
+  the 4dp token scale) and pointed `ModeSelectionScreen` at it instead of its own
+  `ModeSelectionCard`, then deleted the now-dead `ModeSelectionCard` composable entirely.
+  One shared component, so `ModeSelectionScreen` + `PrivacyScreen` + `DataSourceScreen`
+  all picked up the correct visual in one change, not three separate edits.
+  **2. `IntroCarouselScreen`'s illustration was a fixed 220dp square; iOS is a 300pt-tall
+  full-width image.** Karan: "jo log it one tap view hai... image ko bada kardo, abhi
+  kafi chota hai." Traced to `IntroCarouselStep.swift`'s `Layout.imageVisualHeight = 300`
+  with `.scaledToFit()` across the full page width -- Android's `Modifier.size(220.dp)`
+  was both notably smaller and force-cropped to a square regardless of the illustration's
+  real aspect ratio. Changed to `fillMaxWidth().height(IntroCarouselImageHeight)` (300.dp,
+  new constant, spelled out same as the other non-token iOS values in this file) with
+  `ContentScale.Fit`.
+  **Verification.** Both fixes built and installed; full `./gradlew test` green after
+  each (6-line output, zero failure/error lines). Neither is pixel-confirmed by me on
+  device -- both sit past a tap I cannot inject on this physical device (MIUI blocks
+  `adb shell input tap`), so Karan is confirming live. The card fix in particular touches
+  a component used on 3 screens at once, so worth a look at Privacy and DataSource too
+  once Mode Selection is confirmed, not just the one screen that prompted it.
+
+- **2026-08-05, Claude (real-device session cont'd, same Redmi Note 10 Pro): four more
+  fixes from live on-device review — step-list description size, title weight, and a
+  real screen-transition bug caught mid-review. Karan is confirming the last one live;
+  I cannot trigger or observe the animation myself (no input-inject on this device).**
+  **1. Step-list description font shrunk to 11sp.** `ModeSelectionCard`, `PermissionCard`,
+  `PrivacyChoiceCard`, `RelationOptionCard` (`OnboardingContentStepUi.kt`) and the health
+  step's condition rows (`OnboardingHealthStepUi.kt`) all used bare `bodySmall` (12sp) for
+  their description line; bumped down to an explicit 11sp on all five, per "thoda sa
+  small" after live review. Pixel-verified via `replace_all` on byte-identical blocks
+  (confirmed identical whitespace across sites before touching them).
+  **2. Onboarding titles bolded via a manual double-draw, not `FontWeight`.** Karan asked
+  for the step title bolder. Tried `FontWeight.ExtraBold`, then `FontWeight.Black` with an
+  explicit `fontSynthesis = FontSynthesis.All` — both produced a **byte-identical**
+  screenshot to plain Bold (confirmed via crop diff, not eyeballing). Root cause: Lato
+  ships only a static Light/Regular/Bold trio, no variable-weight axis, and Android does
+  not synthesize extra weight on top of an already-resolved static Bold glyph. Fixed with
+  the standard workaround for this exact limitation: a new shared `OnboardingStepTitle`
+  composable (`OnboardingContentStepUi.kt`, `internal` so the health-step file can use it
+  too) draws the title twice, one copy offset 0.5dp, producing a genuinely heavier stroke.
+  Rolled out to all 16 title call sites across both onboarding UI files (replacing every
+  raw `Text(...headlineMedium...)` title). Verified empirically: dark-pixel density in the
+  title's screenshot region went from 17.86% (plain Bold) to 19.75% (double-draw) — a real,
+  measured increase, not a placebo change — and a full-image view confirms it reads as
+  clean bolding, not blur/ghosting.
+  **3. Screen-transition "double view" bug, found live.** Karan reported that pressing
+  Continue during onboarding showed two views stacked on top of each other mid-transition
+  — not smooth like iOS. Traced to `SakhiScreenTransition.kt` (`core:ui`), the one shared
+  primitive every screen/view swap in the app funnels through (Home sheets, Profile stack,
+  onboarding steps, all of it). Two compounding bugs: (a) `OUTGOING_TARGET_ALPHA` was
+  `0.98f` — the outgoing screen barely faded, staying ~98% opaque for the whole 380ms
+  while only parallax-shifting a third of the screen width, so for a full-bleed screen
+  swap (not a card revealing a dimmed screen underneath) both screens stayed visibly
+  present and overlapping for most of the animation; (b) `AnimatedContent` does not itself
+  guarantee the incoming layer draws above the outgoing one, so which screen painted on
+  top wasn't even reliably the new one. Fixed both: `OUTGOING_TARGET_ALPHA` now fades
+  fully to `0f`, and the content lambda now wraps each layer in a `Box` with an explicit
+  `Modifier.zIndex()` — `1f` for the layer matching the transition's current `targetState`
+  (incoming), `0f` for the other (outgoing) — so the new screen is always on top and the
+  old one is genuinely gone by the time it's covered, not just repositioned. This is a
+  shared low-level primitive touching every transition in the app, not an onboarding-only
+  fix, so worth re-checking Home/Profile/Care transitions too once confirmed on onboarding.
+  **Verification:** full `./gradlew test` green (30-line output, zero failure/error lines)
+  after touching the shared primitive. The double-draw title fix is pixel-confirmed on
+  `UniversalIntroScreen` (the only screen reachable without tapping — MIUI blocks
+  `adb shell input tap` on this device with `SecurityException: ... INJECT_EVENTS`). The
+  transition fix is code-reasoned and built/installed but **not yet visually confirmed** —
+  it can only be judged by watching a live 380ms animation, which requires Karan's own
+  taps. Roborazzi baselines still not re-recorded for `onboarding` (now stale from this
+  round too) or `calendar`/`home` (pre-existing date-rollover staleness, unrelated).
+
+- **2026-08-05, Claude (real-device session, Karan's own Redmi Note 10 Pro, MIUI/Android 13,
+  serial `1ffefa6d`): four fixes driven live off the physical device rather than the emulator —
+  a launch-blocking crash, system nav bar transparency, onboarding header-to-content spacing
+  across the whole flow, and the back/close button chrome. `adb shell input tap` is blocked on
+  this device (`SecurityException: ... requires INJECT_EVENTS permission`), so only the first
+  onboarding screen could be pixel-verified by me; Karan navigated the rest himself and is
+  confirming live.**
+  **1. Launch-blocking crash on every device below Android 14**, introduced by this session's
+  own earlier work: `MainActivity` had `private val screenCaptureCallback =
+  Activity.ScreenCaptureCallback { ... }` typed directly on the class and annotated
+  `@RequiresApi`, but `@RequiresApi` is lint-only — ART resolves a field's *type* at
+  class-verification time regardless of runtime SDK checks, so every launch below API 34 threw
+  `NoClassDefFoundError: Landroid/app/Activity$ScreenCaptureCallback`. Fixed by extracting the
+  callback into a new `ScreenshotWarningController` wrapper class, instantiated only behind the
+  existing `Build.VERSION.SDK_INT >= UPSIDE_DOWN_CAKE` check, so `MainActivity`'s own
+  verification only needs the wrapper's class descriptor, not its members. Verified via logcat
+  (no more `FATAL EXCEPTION`) and a live screenshot on this Android-13 device.
+  **2. System nav bar (back/home/recents) was not transparent app-wide.** `enableEdgeToEdge`
+  alone was not enough on MIUI — needed three layered fixes: (a) explicit
+  `window.navigationBarColor`/`statusBarColor = TRANSPARENT` plus `isNavigationBarContrastEnforced
+  = false` at runtime, since MIUI re-applies its own opaque scrim over AndroidX's defaults; (b)
+  the same transparency declared in `themes.xml` as belt-and-braces against the OEM override; (c)
+  replacing the inherited white `android:windowBackground` (`@android:color/background_light`)
+  with a new `sakhi_window_background` colour matching KMM `DesignTokens.COLOR_BACKGROUND`
+  (`#F8F2F4` light / `#000000` dark via `values-night`), since that white was showing through as
+  a hard strip once the bar's own scrim was gone. Also added `navigationBarsPadding()` to
+  `HomeScreen`'s `SakhiBottomActionBar` specifically — with the scrim removed its content would
+  otherwise draw under the OS buttons; the calendar sheet's copy of the same bar didn't need this
+  since it already renders inside a modal sheet with its own inset. Verified by Python PIL pixel
+  sampling (not eyeballing — an earlier "it's fixed" claim was wrong and got corrected): the
+  app's pink `(248,242,244)` now runs to the physical bottom edge, confirmed against a real
+  measured `(254,254,254)` white strip beforehand.
+  **3. Onboarding header-to-content spacing, flow-wide.** Karan asked for more breathing room
+  between each step's title/subtitle block and the content below it (list, cards, text field),
+  reviewing live on-device. iOS uses `DS.Spacing.m` (16pt) here — an intentional Android
+  deviation, not a parity gap. Introduced one shared `OnboardingHeaderContentGap` constant
+  (`OnboardingContentStepUi.kt`, package-internal so `OnboardingHealthStepUi.kt` can use it too),
+  raised from an earlier 32dp to 40dp per "bit more space," and applied it to every step with
+  this top-anchored header-then-content shape: `ModeSelectionScreen` and `InvitePermissionsScreen`
+  (restructured from one uniform `spacedBy` covering title+subtitle+content into a distinct
+  header block + gap + content block), `PrivacyScreen`, `TermsScreen`, `UniversalIntroScreen`,
+  `InvitePickContactScreen`, `PartnerRelationScreen`, `BeHerSakhiScreen`, `DataSourceScreen`, and
+  `OnboardingHealthStepScreen` (the shared DOB/Height/Weight/LastPeriod/PeriodLength/CycleLength/
+  HealthConditions screen). Centered/hero-style steps (`HeroContentStep`,
+  `PartnerInvitePromptScreen`'s pinned-height carousel, `InviteWaitingScreen`, etc.) are a
+  different layout shape with iOS-matched fixed geometry and were deliberately left untouched.
+  Pixel-verified on `UniversalIntroScreen` only (the one screen reachable without tapping): gap
+  measured ~37dp via row-scan, up from the previous 16dp — within antialiasing margin of the
+  40dp target. The other 8 sites got the identical structural change but are code-verified only.
+  **4. Back/close nav buttons looked "weird."** `sakhiGlassCircle` (the shared chrome behind
+  every `BackButton`/`CloseButton` app-wide — Calendar, Care, Reports, Profile, Onboarding, the
+  country picker) was a white-pulled-5%-toward-pink fill with a 0.5dp pink hairline border,
+  built as an approximation of iOS 26's `.glassEffect(.regular, in: Circle())`, which Compose has
+  no real equivalent for. Reviewed live on the real device and called out directly as looking
+  wrong. Per Karan's explicit instruction: plain solid white, no border, no shadow — simplified
+  `sakhiGlassCircle` to just `.background(Color.White, CircleShape)`, removed the now-dead pink
+  tint/hairline colours and the unused `androidx.compose.ui.draw.shadow` imports that were never
+  actually wired to a `.shadow()` call in `BackButton.kt`/`CloseButton.kt`. Documented as a
+  deliberate deviation so a future pass doesn't "restore" the glass simulation. Built and
+  installed; only the root onboarding screen (no back button there) was reachable for me to
+  screenshot, so the fix on the 2nd screen (mode selection, where Karan flagged it) is pending
+  his live confirmation, not yet independently pixel-verified by me.
+  **Not yet done, flagged rather than silently skipped:** full `./gradlew test` suite re-run
+  (only `:feature:onboarding` was run this session, and it initially failed on a
+  self-introduced brace mismatch in `OnboardingHealthStepUi.kt` from the restructuring above —
+  fixed, then reconfirmed green); Roborazzi baselines for `onboarding` (stale from all the
+  spacing edits) and `calendar`/`home` (stale from date rollover, a known pre-existing issue)
+  not re-recorded.
+
+- **2026-08-05, Claude (loop iteration 78, parallel session): Karan's standing rule for this
+  project going forward — replicate iOS exactly wherever there is an iOS behaviour to
+  replicate; only stop and ask when a decision goes beyond that. Applied it to close out two
+  items that had been sitting in the "ask Karan" queue but turned out to be plain
+  replication once looked at through that lens.**
+  **1. The phone field container is gone.** iOS's `SakhiTextField` has zero `.background(` in
+  466 lines and no default border -- `dsErrorBorder` only draws a stroke when `hasError` is
+  true. Android was unconditionally filling and outlining the row with
+  `sakhiGroupedBackground().copy(alpha = 0.42f)`, drawing a pill iOS never has. Removed the
+  fill entirely; the border is now conditional on `hasError`, matching iOS's error-only
+  stroke exactly. Verified: `PhoneScreen_light` diff is precisely the pill disappearing --
+  flag, dial code, chevron, separator, placeholder text and Continue button all
+  pixel-identical. All four Roborazzi lanes green after re-recording.
+  **2. The empty-calendar-page divergence is closed, deliberately reverting an earlier
+  "Android is better" call.** iOS's `SakhiReportPDFGenerator` gates the calendar page on
+  `if data.config.sections.contains(.periodCalendar)` with **no emptiness check** -- a report
+  with no calendar data still gets a blank calendar page. Iteration 62 found Android added an
+  `isNotEmpty()` guard iOS lacks and *kept* it, reasoning that omitting the blank page was the
+  better UX. Under the new standing rule that is not Android's call to make unilaterally --
+  removed the guard so an empty range produces the same page iOS produces. Confirmed
+  `ReportPdfExporter` needed no matching change: its `calendarMonths.take(3).forEach` already
+  draws nothing for an empty list, so the exporter was already iOS-shaped: only the page-list
+  builder had the extra gate. Updated the test that had pinned the old divergence
+  (`Android omits an empty calendar page...`) to instead assert parity
+  (`an empty calendar range still produces a Period Calendar page, matching iOS`).
+  **Verification.** `:feature:reports:testDebugUnitTest` force re-run after deleting prior
+  results (not trusting a fast "BUILD SUCCESSFUL") -- 8 tests, 0 failures, XML timestamp
+  checked against `date`. Full Android `test` task green. `:app:assembleDebug` green. All
+  four screenshot lanes green.
+  **What is still genuinely a decision, not a replication gap**, kept in the queue rather than
+  auto-applied, because in each case iOS either has no equivalent to copy or the fix requires
+  touching iOS too: the sync indicator (iOS only shows it in a debug view), the two report
+  toggles that do nothing on *both* platforms, the `encodeDefaults` data-loss risk (a networking
+  bug, not a UI difference), the invite-permissions `{}` payload, the `canLogPeriods` default
+  asymmetry (lives in shared KMM code, not an iOS/Android split), the dead analytics toggle
+  (fixing it means building analytics, not copying a colour), the duplicate Reset/Sign-Out
+  rows (Android's cloud-direct architecture cannot do what iOS's local wipe does), and the
+  screenshot-lane date fragility (a test-infra change to shared `DateConverter`).
+
+- **2026-08-03, Claude (loop iteration 77, parallel session): found and fixed a real
+  contrast defect — the log button's `+` was invisible off a period day, the screen's
+  primary action, for most of the cycle — while signing back into the QA device to attempt
+  the long-blocked symptom round-trip. **The fix is verified on device and via a clean
+  Roborazzi diff. The round-trip itself stayed blocked, this time by the emulator, not by
+  navigation** — logged precisely so the next attempt does not repeat the diagnosis.**
+  **The defect.** Signed back into `sakhi_qa` (session persisted through a cold boot) to
+  unblock the round-trip and Chat check. First screenshot showed the log FAB rendering
+  near-black with a barely-visible white `+`, in an ordinary light-pink follicular state.
+  Traced it to `HomeScreen:506`: `logIconColor = Color.White`, hardcoded, while the fill next
+  to it (`homeCardFill`) is a *light* tint for every non-period phase. iOS
+  (`HomeDayDetailGlassView+ActionBar.swift:42`) is `logIconColor: standardAccent` — the same
+  value already flowing into this call as `accentColor` on line 488, just never used for the
+  glyph. **The surrounding comment already said this** — it names `standardAccent` correctly
+  while explaining two earlier fill fixes — and the code beneath it still hardcoded white.
+  Third instance of the same bug class: the fill was corrected twice (period white-on-white,
+  then dark near-white-on-near-white) and the icon color was never revisited either time.
+  Fixed to `logIconColor = accentColor`.
+  **Verified twice.** Roborazzi: `HomeScreen_follicular_light` diff is **a single red `+`** —
+  nothing else on the screen moved. On-device: force-stopped, reinstalled, relaunched,
+  screenshotted before and after — the glyph went from unreadable to clearly dark maroon on
+  the light circle, matching the calendar button's weight beside it. All four lanes green
+  after re-recording; whole Android suite green.
+  **The round-trip attempt, and why it is still open.** Reached the real logging sheet (flow
+  unset, all symptoms unchecked — clean baseline) via FAB -> menu -> "Other symptoms", same
+  route as iteration 60. First tap missed and landed on BBT's expander instead of Cramps,
+  leaving a stray 35.0°C value on the fixture (harmless to the test, just noise). The next
+  **five** taps — Cramps at three different x-offsets, Acne, and finally the X close button
+  itself — registered nothing at all. Checked `dumpsys window`/`dumpsys input` first: focus
+  was correctly on the app, not stolen by another window, so this was not a focus bug. The X
+  close button failing is what made it conclusive rather than a coordinate problem: if the
+  simplest possible tap does not dismiss a sheet, input dispatch itself is stuck, not my aim.
+  **Rebooted once — the ANR came straight back.** `Process system isn't responding` fired
+  again on the very next cold boot, same as iterations 47/58/62 but back-to-back this time
+  rather than after multiple prior sessions of use. That is enough to call this session's
+  `sakhi_qa` emulator instance persistently unhealthy, not intermittently flaky. Per the
+  iteration-47/48 rule, I am not manufacturing a round-trip result from an environment this
+  unreliable. Dismissed the ANR; the app is confirmed resumed and healthy again, just not
+  through five consecutive taps.
+  **What is actually still needed, precisely, for whoever has a stable device next:** FAB tap
+  -> menu -> "Other symptoms" -> check Cramps -> Save -> force-stop -> reopen -> confirm Cramps
+  is still checked -> uncheck -> Save -> force-stop -> reopen -> confirm it is gone. The client
+  side of this question was already proven in iteration 61 by mock-engine test against the
+  real supabase-kt serializer; only the server round-trip remains unobserved.
+
+- **2026-08-03, Claude (loop iteration 76, parallel session): **MATERIAL LAVENDER IS GONE FROM
+  THE ANDROID CODEBASE.** Cleared the last 8 `surfaceVariant` fills. Final state: **243 sites
+  on Sakhi tokens; 0 `surfaceVariant`, 0 unset-slot fills, and exactly 3 `onSurfaceVariant`/
+  `secondary` references left — all three deliberately parked for Karan.** Whole Android suite
+  green, all four lanes green.**
+  **What the last 8 were**, and they were fills rather than ink: the Home cycle-status card,
+  the phone entry field, `OfflineModeScreen`, `MyDataScreen`'s scope picker, three
+  `OnboardingContentStepUi` surfaces, and `LoadingShimmer`'s base. Fills went to
+  `sakhiGroupedBackground()` (iOS neutral #F2F2F7) at their existing alphas; the shimmer went
+  to `sakhiSystemGray5()`, iOS's inert placeholder grey.
+  **A structural difference I found and deliberately did NOT act on.** iOS's phone field has
+  **no background fill at all** — `SakhiTextField` contains no `.background(`, no
+  `RoundedRectangle`, no `Capsule`, no stroke across its 466 lines, and `PhoneStep` fills only
+  a 1x28 separator. Android draws a filled rounded pill. **The defect I was chasing is the
+  hue, not the existence of the container**, so I neutralised the colour and left the shape
+  alone. Deleting a field container because iOS lacks one is a design decision, not a colour
+  fix, and it belongs to Karan. Flagging it rather than doing it.
+  **Verification.** `PhoneScreen_light` diff is **only the field container** — title,
+  subtitle, flag, "+91", chevron, placeholder, separator and Continue button all
+  pixel-identical. Baselines re-recorded; `auth / calendar / home / onboarding` all green.
+  `./gradlew test` across the whole Android project green. `:app:assembleDebug` green.
+  **The three references that remain, and why each is correct to leave:**
+  1. `HomeScreen:582` `syncTint` **Idle** -> `onSurfaceVariant`
+  2. `HomeScreen:585` `syncTint` **Stale** -> `secondary`
+     Both belong to the sync indicator. iOS renders `partnerFreshness` **only inside
+     `SakhiDebugView`**, so there is no iOS value to copy, and the neutral alternatives are
+     themselves unset Material slots. Picking a colour here would be inventing design. Both
+     resolve for free the moment Karan decides what the indicator should be.
+  3. `RecommendationsScreen:112` `accent` -> `secondary`
+     That screen is **unreachable** — only its ViewModel and DI module are referenced. Its
+     "Condition Tips" section is doubly moot: iOS populates `conditionTips` and no iOS view
+     renders them either. Migrating dead UI would be churn.
+  Everything else matching a `colorScheme.tertiary`/`surfaceVariant` grep is now a **comment**
+  explaining what was fixed and why.
+  **Cumulative result of iterations 65-76:** 243 token uses replacing Material defaults across
+  9 modules, 2 new design tokens (`sakhiSystemGray6`, `sakhiLightPink`) plus `sakhiLabel`, and
+  **7 defects a blanket find-and-replace would have caused or missed** — the four weekday
+  headers/calendar chevron that needed `tertiary`/`label` rather than `secondary`, the Chat
+  send arrow rendering grey-on-grey, the report preview disagreeing with the PDF it previews,
+  and the report legend keying a colour it did not use.
+
+- **2026-08-03, Claude (loop iteration 75, parallel session): **THE INK MIGRATION IS DONE.**
+  `feature:profile` (72) plus the last strays — **230 sites on Sakhi ink tokens, 0 code sites
+  left on Material's purple-tinted greys.** Full Android suite green, SakhiCore 742 green, all
+  four screenshot lanes green. Also found why those lanes go red on their own, and corrected a
+  claim I made twice.**
+  **Final tally, from 3 / 225 eight iterations ago:** auth 6, home 17, core:ui 12,
+  onboarding 35, reports 23, care 21, ai 30, **profile 72**, plus calendar 2, logging 4,
+  recommendations 2 and the parked `SakhiBottomActionBar` site. The only `onSurfaceVariant`
+  left in the codebase is **one comment** and **`HomeScreen:580`'s `syncTint` Idle branch**,
+  which stays deliberately untouched pending Karan's call on the sync indicator.
+  **Profile's 72 split 64 secondary / 8 tertiary**, and the tertiary eight were not guessable:
+  three `KeyboardArrowRight` chevrons, three `ArrowOutward` external-link glyphs, one
+  `chevronTint` default, and `AppearanceScreen`'s `UnfoldMore`.
+  **Where iOS turned out to have no rule at all.** `chevron.up.chevron.down` is **tertiary in
+  `AppearanceSettingsView`, secondary in `FeedbackView`, secondary in `ReportConfigSheet`** —
+  same glyph, three screens, two different inks. So I applied it per screen rather than voting.
+  By contrast `arrow.up.right` is **4-of-4 tertiary**, a real rule. Checking the distribution
+  before deciding is what separated those two cases.
+  **Seventh and best catch: the calendar's month-nav chevron.** The established rule
+  (10-of-13 `chevron.right` are tertiary) would have sent it to tertiary. iOS
+  `SakhiCalendarView:116` renders it **`DS.Colors.label`** — full strength, two steps darker.
+  Calendar navigation chevrons and list disclosure chevrons are different roles that happen to
+  share a glyph. It is now `sakhiLabel()`.
+  **Why the lanes were red, and it was not the migration.** `calendar` (4) and `home` (6) both
+  failed. The **home diff is almost entirely black** — two specks: `2 Aug 2026` -> `4 Aug 2026`
+  and `Started 26 Jul` -> `Started 28 Jul`. The calendar's today-marker moved from the 2nd to
+  the 4th and every band shifted with it. **The date rolled over.** These lanes derive fixtures
+  *and* the rendered "today" from `DateConverter.today()`, so **they go red every calendar day
+  regardless of code**, and a baseline that expires overnight is one people learn to ignore.
+  **I tried to fix it and stopped deliberately.** Two attempts at Robolectric's clock
+  (`ShadowSystemClock.advanceTo`, then `setCurrentTimeMillis`) both failed to resolve on
+  4.16.1. The real fix is not test-side: `HomeUiState.selectedDate` **defaults to
+  `DateConverter.today()`** in production and the header reads it, so pinning this properly
+  needs an injectable clock seam in shared KMM `DateConverter`. That is a production change to
+  cross-platform code to serve a test, which is not a call to make inside a colour migration.
+  Reverted cleanly, re-recorded, all four lanes green. **Recommended fix, for whoever takes
+  it:** give `DateConverter` an injectable clock and have the screenshot lanes pin it.
+  **Correcting myself, twice over.** In iterations 73 and 74 I said a Profile Roborazzi lane
+  was blocked because `ProfileScreen` calls `koinInject<ThemePreferenceStore>()` and would need
+  Koin inside Robolectric. **`HomeScreenshotTest` already does exactly that** — `startKoin` in
+  `@Before`, `stopKoin` in `@After`. The pattern was solved in this repo the whole time and I
+  did not check before calling it a blocker. It did not change the outcome (Profile is migrated
+  and verified by build + full suite), but the stated reason was wrong.
+  **One test failure, investigated rather than waved through.**
+  `OnboardingViewModelTest > updateLastPeriodDate clamps a future date to today` failed with
+  `Dispatchers.Main was accessed ... test dispatcher was unset` — a coroutine ordering issue,
+  not a colour or date one. It **passes in isolation and on a full re-run**, and it lives in
+  `OnboardingViewModel`/`OnboardingViewModelTest`, two files **this session never touched**
+  (my onboarding edits were the three UI files). Flake, in the other session's area.
+  **Verification:** `./gradlew test` across the whole Android project — green. SakhiCore
+  `jvmTest` — **742 tests, 0 failures**. `:app:assembleDebug` green.
+  `auth / calendar / home / onboarding` Roborazzi — all green.
+  **Still not pixel-confirmed** and worth saying plainly: profile's 72, care+ai's 51, and 10
+  `core:ui` sites have no screenshot lane covering them. They are each derived from a named
+  line of Swift, but derived is not seen.
+
+- **2026-08-03, Claude (loop iteration 74, parallel session): migrated `feature:care` (21) and
+  `feature:ai` (30) — **149 sites on Sakhi ink tokens, 83 left**. Found a real contrast bug in
+  Chat while doing it, and ran a self-check that caught nothing, which is itself worth
+  recording.**
+  **The contrast bug, which is not an ink-migration issue at all.** Chat's send button:
+  Android tinted the arrow `if (hasText) White else onSurfaceVariant`. iOS
+  `SakhiAIInputBar` fills the capsule `canSend ? DS.Colors.pink : DS.Colors.gray5` but sets
+  the arrow `.foregroundColor(.white)` **unconditionally**. So with nothing typed, iOS shows a
+  white arrow on grey and Android showed a **grey arrow on the grey capsule** — near-invisible.
+  Fixed to unconditional white. This only surfaced because migrating forces reading every
+  `onSurfaceVariant` in context rather than at a distance.
+  **Sixth catch of the tertiary pattern**, and this one generalises: `CareScreen`'s disclosure
+  chevron. Rather than judge it one-off I counted iOS's convention —
+  **10 of 13 `chevron.right` uses are `DS.Colors.tertiaryLabel`**, plus one more conditionally.
+  That is a rule, not a preference. Tally: auth 4-of-6, core:ui 1-of-11, onboarding 1-of-35,
+  reports 1-of-23, care 1-of-21.
+  **Self-check that came back clean.** Having established the chevron rule at iteration 74, I
+  went back over the five modules already migrated to see whether I had wrongly sent a chevron
+  to `sakhiSecondaryLabel()` earlier. **Zero hits.** Worth recording the negative result: the
+  earlier passes did not introduce that error, so no rework is owed.
+  **Verified**: `:app:assembleDebug` green; all four Roborazzi lanes
+  (`auth / calendar / home / onboarding`) green — no unintended change leaked out of the two
+  migrated modules. Care and AI have no lanes of their own, so their 51 sites are code-verified
+  against iOS (`SakhiAISearchView:140` gives `isUser ? pink : secondaryLabel` for the avatar
+  glyph, which is exactly what the migration produced) but **not pixel-confirmed**.
+  **Device state note for whoever picks this up:** the QA session on `sakhi_qa` is **signed
+  out** — the app now boots to onboarding, not Home. That is why Chat could not be reached to
+  confirm the send-button fix visually, and it blocks the pending log-a-symptom round-trip too.
+  Incidentally it did give a live render of the `UniversalIntro` step migrated in iteration 72:
+  body text neutral, titles dark, matching the Roborazzi baseline exactly.
+  **Progress: 149 / 83.** What is left is essentially **`feature:profile` (72)** plus a
+  handful of strays and the one `SakhiBottomActionBar` site parked for the other session. The
+  Profile blocker is unchanged and specific: `ProfileScreen` calls
+  `koinInject<ThemePreferenceStore>()` in its body, so a lane needs Koin inside Robolectric.
+
+- **2026-08-03, Claude (loop iteration 73, parallel session): investigated the Profile lane
+  I said I would add, found a real reason it is harder than the others, and **changed target
+  rather than pushing through**. Migrated `feature:reports` instead — 23 sites, verified on
+  device on the doctor-facing screen. 98 sites migrated, 135 left.**
+  **Why Profile did not happen, concretely.** The auth/home/calendar/onboarding lanes all work
+  because those screens take their ViewModel as a plain default-arg and need **zero DI**.
+  `ProfileScreen` does too — but its body also calls **`koinInject<ThemePreferenceStore>()`**,
+  so a Profile lane needs Koin actually running inside Robolectric. That is real test
+  infrastructure, not a copy-paste of the auth lane, and it is the honest reason the biggest
+  module (72 sites) is still unmigrated. Recording it so whoever picks this up knows the shape
+  of the work before starting.
+  **Checked before touching anything**: `ProfileScreen.kt` last modified 20:54 against a 22:32
+  clock — 98 minutes cold, so the other session had moved off it. That check is why I was
+  willing to consider Profile at all; iterations 53/65 were both caused by editing a file
+  another agent was mid-change in.
+  **`feature:reports` chosen instead because it is verifiable today.** No Roborazzi lane, but
+  I have driven Profile -> Health Report -> Generate -> swipe on the emulator successfully in
+  iterations 66 and 67, so there is a known-good device path. Better to migrate where the
+  result can be seen than to migrate blind into the larger module.
+  **Fifth catch of the same pattern.** `ReportsScreen` has its **own** `WeekdayHeader`, making
+  three weekday headers in the app. It went to `sakhiTertiaryLabel()` like the other two, not
+  to secondary with the surrounding 22. Tally now: auth 4-of-6, core:ui 1-of-11, onboarding
+  1-of-35, reports 1-of-23. Five modules, five times a blanket replace would have introduced
+  an inconsistency — including twice where it would have *re-broken* something fixed an
+  iteration earlier.
+  **Verified on device, both screens.** Config screen: subtitle, "DATE RANGE"/"INCLUDE IN
+  REPORT" section labels and all three toggle subtitles now render neutral grey; titles
+  unchanged. Calendar page: **the weekday row is visibly lighter than the date numbers**,
+  matching the main calendar. Also confirms the iteration-66 work is still holding — teal
+  ovulation on the 14th, light-teal fertile days, clean unmarked days, and the teal legend dot.
+  `:app:assembleDebug` and `:feature:reports:testDebugUnitTest` green.
+  **Progress: 98 sites on Sakhi ink tokens, 135 left** (was 75 / 158). Remaining: profile 72,
+  ai 31, care 21, plus the skipped `SakhiBottomActionBar` site. **`feature:ai` (31) and
+  `feature:care` (21) are the sensible next two** — neither needs Koin in tests, and Chat is
+  reachable on device from the Home bottom bar.
+
+- **2026-08-02, Claude (loop iteration 72, parallel session): migrated `feature:onboarding` —
+  35 sites, the biggest module so far. Clean attributable diff again, 39 tests green, all four
+  lanes green afterwards. **The ink migration is now past the halfway mark: 75 sites on Sakhi
+  tokens, 158 left** (started at 3 / 225 four iterations ago).**
+  **Fourth module running where a blanket replace would have been wrong.** Buried in
+  `OnboardingHealthStepUi` was **another weekday header** — the S/M/T letters on the health
+  step's mini calendar. Same role as `SakhiCalendar.weekdayRow`, which last iteration I
+  established iOS renders in `tertiaryLabel`. Had this gone to `secondaryLabel` with the other
+  34, the app would have had two weekday headers in two different inks one iteration after I
+  fixed the first — the exact kind of drift this whole exercise exists to remove. Running
+  tally of the tertiary-among-secondaries catches: auth 4-of-6, core:ui 1-of-11, onboarding
+  1-of-35.
+  **One site checked and deliberately left as secondary**: `OnboardingFlowHost`'s
+  `StepPlanRow`. It looked like a progress indicator (`isCurrent ? primary : onSurfaceVariant`)
+  and progress dots are a different role from text — but reading it, it is a **text row** in
+  the step-plan list, so secondary is right. Worth recording that the check was made rather
+  than assumed from the variable name.
+  **Verification.** `verifyRoborazziDebug` failed 6 lanes, and the `UniversalIntro_light` diff
+  is exactly the intended shape: the subtitle and all three feature descriptions highlighted,
+  while **every title, every icon, every icon circle and the Continue button are
+  pixel-identical**. Same quality of proof as `feature:auth`, unlike the contaminated Home diff
+  in iteration 70. Baselines re-recorded; `auth 0 / calendar 0 / home 0 / onboarding 0` after.
+  `:feature:onboarding:testDebugUnitTest` — 39 tests, 0 failures. `:app:assembleDebug` green.
+  **Progress: 75 / 158.** Remaining by module: profile 72, ai 31, reports 23, care 21, plus the
+  one `SakhiBottomActionBar` site still skipped for the other session. **`feature:profile` is
+  the obvious next target at 72 sites — but it is also the one with no Roborazzi lane**, so
+  it will need either a new lane or per-screen device checks. Worth deciding which before
+  starting, rather than migrating 72 sites with no way to see them.
+
+- **2026-08-02, Claude (loop iteration 71, parallel session): did the `core:ui` pass I had
+  deferred twice — 11 of its 12 ink sites. Being shared is what made it worth care, and also
+  what made it verifiable: **all four screenshot lanes at once**. The calendar diff came back
+  surgically clean, which is the attributable proof last iteration's Home diff could not be.**
+  **The one site that proves per-site checking is not pedantry.** `SakhiCalendar`'s weekday
+  header (S M T W T F S) was heading for `sakhiSecondaryLabel()` along with everything else.
+  iOS's `SakhiCalendarView.weekdayRow` uses **`DS.Colors.tertiaryLabel`**, not secondary. That
+  is now the third module in a row where a blanket swap would have been wrong — auth was 4-of-6
+  tertiary, and here it is 1-of-11. The letters render visibly lighter as a result.
+  **Deliberately skipped: `SakhiBottomActionBar`'s `QuickLogSectionHeader`.** That file is the
+  other session's active work — they rebuilt the quick-log menu this session and have been
+  editing it. Touching a file another agent is mid-change in is how the half-written-state
+  collisions from iterations 53 and 65 happen, and one label is not worth causing one.
+  **Verification, and what it does and does not cover.** After the change:
+  `auth 0 / calendar 4 / home 0 / onboarding 0` failing lanes. Only calendar moved, and its
+  diff highlights **only the weekday row** — every date cell, the month header, the
+  period/fertile markers and the bottom bar are pixel-identical. Baselines re-recorded; all
+  four lanes green afterwards.
+  **The honest limit:** the other 10 `core:ui` sites (`DetailSheetScaffold`, `SakhiFooter`,
+  `EmptyState`, `OtpField`, `FeatureAccessGate`, `ForceUpdateScreen`, and the three
+  ruler/wheel pickers) produced **no** pixel change in any lane, which means the captured
+  states do not exercise them. They are code-verified against iOS (`HeightStep` uses
+  `secondaryLabel` for unit labels; sheet subtitles follow the `OnboardingFlowView` rule) but
+  **not visually confirmed**. That is a gap in lane coverage, not a claim that they are right.
+  **Progress: 40 sites on Sakhi ink tokens, 193 still on Material `onSurfaceVariant`**
+  (was 29 / 204). Remaining: profile 72, onboarding 35, ai 31, reports 23, care 21, plus the
+  one skipped `core:ui` site. **`feature:onboarding` is the sensible next module** — 35 sites
+  and it has its own Roborazzi lane, so the same clean before/after is available there.
+
+- **2026-08-02, Claude (loop iteration 70, parallel session): defined the `sakhiLabel()` token
+  I deliberately would not invent last iteration, then migrated `feature:home` — 15
+  `onSurfaceVariant` + 2 `onSurface` sites. 46 home tests green, dark mode checked directly.
+  **The screenshot diff is NOT clean proof this time and I am not going to present it as
+  one** — the other session's Home work landed against the same baseline.**
+  **Why `sakhiLabel()` stopped being "inventing" and became "blocking".** Last iteration I
+  refused to add it mid-migration. What changed is a concrete reason: `HomeScreen`'s card-text
+  ladder reads `neutralPrimary = colorScheme.onSurface` and
+  `neutralSecondary = colorScheme.onSurfaceVariant` **as a pair**. Migrating only the secondary
+  would leave one ladder drawing its two levels from two different colour systems — worse than
+  leaving both. And the value is not a judgement call: `DS.Colors.label` is
+  `Color(UIColor.label)`, exactly the same derivation as the `secondaryLabel`/`tertiaryLabel`
+  tokens already in the file. #000000 light / #FFFFFF dark.
+  **What moved in `feature:home`:** 15 secondary-text/glyph sites → `sakhiSecondaryLabel()`,
+  2 primary sites → `sakhiLabel()` (the ladder's `neutralPrimary`, and the partner checklist
+  row where completed/incomplete is a secondary/primary pair). Prose lines were skipped by the
+  rewrite so no comment text was mangled.
+  **One site deliberately left**: `syncTint`'s `Idle` branch. That function is the same one
+  whose `Stale` branch is an open question for Karan (iOS renders freshness only in
+  `SakhiDebugView`), and I did not want to half-touch it while that decision is outstanding.
+  **The honest bit about verification.** `verifyRoborazziDebug` failed all four lanes, but the
+  diff shows far more than ink: "Follicular phase" → "Follicular Phase", a new "History >"
+  badge, shifted cards, a rebuilt bottom bar. **That is the other session's Home work**, and
+  the baseline predates it, so the four red lanes are the two sessions' changes combined. I
+  cannot attribute that diff to my change and will not claim it as proof the way I legitimately
+  could for `feature:auth` last iteration.
+  **What I did verify directly**, since the lane could not: read `HomeScreen_follicular_dark`
+  as rendered. Dark is where a wrong ink token shows worst (`sakhiLabel` must go **white**, not
+  stay black). It is correct — "21 Days" and the card titles render white, and "until next
+  period", "today's cycle day", "Started 26 Jul", "Log more cycles to see patterns" and the
+  stat-tile labels all render as readable light grey. Nothing invisible, nothing black-on-black.
+  Baselines then re-recorded (both sessions' changes are intentional and the output is healthy)
+  and re-verified green. `:feature:home:testDebugUnitTest` 46 tests, 0 failures.
+  **Progress: 29 sites on Sakhi ink tokens, 204 still on Material `onSurfaceVariant`** (was
+  12 / 219). Remaining: profile 72, onboarding 35, ai 31, reports 23, care 21, core:ui 12.
+  `core:ui` still wants its own pass — it is shared, so its 12 change every screen at once.
+
+- **2026-08-02, Claude (loop iteration 69, parallel session): executed the migration I scoped
+  last iteration on `feature:auth`. All 6 sites moved off Material's purple-tinted ink, each
+  traced to a specific line of Swift. **Proved it with the Roborazzi lane rather than the
+  emulator** — the diff shows exactly the two text elements I intended changing and nothing
+  else. `:feature:auth` is now clean: 0 `colorScheme.onSurfaceVariant` uses left.**
+  **Why this module first.** Smallest at 6 sites, self-contained, and it already had a
+  screenshot lane — so the before/after could be shown pixel-for-pixel without fighting the
+  emulator taps that have cost several iterations.
+  **Not a blanket replace — the 6 split three ways**, which is exactly why the sweep needed
+  reading rather than `sed`:
+  - **Subtitles** (`PhoneScreen`, `OtpScreen`) → `sakhiSecondaryLabel()`. iOS
+    `OnboardingFlowView`'s sticky header is explicit: title `DS.Colors.label`, subtitle
+    **`DS.Colors.secondaryLabel`**.
+  - **Phone field placeholder** (`PhoneScreen`) → `sakhiTertiaryLabel()`. iOS `SakhiTextField`
+    renders placeholders in `DS.Colors.placeholderText` (`UIColor.placeholderText`), the same
+    #3C3C43 @ 30% as `tertiaryLabel`. Android had `onSurfaceVariant.copy(alpha = 0.75f)` — an
+    invented alpha on top of the wrong hue.
+  - **Country picker search + clear icons** → `sakhiTertiaryLabel()`, matching iOS
+    `CountryPickerSheet`'s `magnifyingglass` and `xmark.circle.fill`, both `tertiaryLabel`.
+    **Dial code** → `sakhiSecondaryLabel()`, matching `isSelected ? pink : secondaryLabel`.
+  So of 6 sites, **2 wanted secondaryLabel, 4 wanted tertiaryLabel** — a blanket swap to one
+  token would have been wrong on four of them.
+  **Left alone deliberately.** `CountryPicker`'s `rowColor` uses `colorScheme.onSurface`, which
+  is also unset (Material #1D1B20 vs iOS `label`'s pure black). There is **no `sakhiLabel()`
+  token yet**, and inventing one mid-migration is how the wrong value gets baked in. The 66
+  `onSurface` uses need that token defined first — flagging rather than guessing.
+  **Verification — the good kind.** `verifyRoborazziDebug` first **failed all four** lanes,
+  which is the point: it proves the pixels actually moved. The `PhoneScreen_light` diff panel
+  shows **only** the subtitle and the placeholder highlighted; title, flag, "+91", chevron,
+  field container and Continue button are pixel-identical. Baselines then re-recorded and
+  re-verified green. `:app:assembleDebug` green.
+  **Progress: 12 sites on the Sakhi label tokens, 219 still on Material `onSurfaceVariant`**
+  (was 3 / 225). Remaining by module: profile 72, onboarding 35, ai 31, reports 23, care 21,
+  home 17, core:ui 12. **`core:ui` is the one to weigh carefully** — it is shared, so its 12
+  sites change every screen at once and deserve their own pass rather than being folded into a
+  feature module's migration.
+
+- **2026-08-02, Claude (loop iteration 68, parallel session): finished the unset-slot audit
+  and **I have to correct my own iteration-67 conclusion.** I wrote that the blast radius was
+  "small and now mostly closed". That was wrong. It is small for *fill* slots; the *ink* slots
+  are used **292 times**, all rendering Material's purple-tinted greys. No code changed this
+  iteration — this is the measurement, and the migration is a scoped next step, not something
+  to half-start.**
+  **The numbers.** Uses of colour slots this theme never sets:
+  `onSurfaceVariant` **225**, `onSurface` **66**, `outline` 12, `surfaceVariant` 9, `tertiary`
+  5 (comments), `secondary` 2, `onBackground` 1. **320 total.** iteration 67 counted only the
+  fill slots and stopped, which is how I got the wrong impression.
+  **Why the ink matters.** `onSurfaceVariant` is Material's #49454F — a faintly purple grey —
+  and it is the app's secondary-text colour on 225 sites. iOS uses `DS.Colors.secondaryLabel`,
+  a neutral #3C3C43 @ 60%. So essentially **every piece of secondary text in the Android app
+  is slightly purple where iOS is neutral.** Individually invisible; collectively it is the
+  same "Material lavender" family Karan has now rejected three times, just at low saturation
+  and spread across every screen.
+  **The good news: the fix already exists and someone already built it.**
+  `sakhiSecondaryLabel()` and `sakhiTertiaryLabel()` are in `SakhiTheme`, correct values, with
+  a comment that already names the problem ("faintly purple, so secondary text sat heavier
+  here than on iOS"). So this is not a design question — it is a mechanical migration to a
+  sanctioned token. **Migration status: 3 done, 225 to go**, by module: profile 72,
+  onboarding 35, ai 31, reports 23, care 21, home 17, core:ui 12, auth 6.
+  **Why I did not start it.** It is not a blanket find-and-replace — the other session's own
+  warning about `surfaceVariant` applies here too. Sampling `feature/auth`'s 6: two are **icon
+  tints** (`CountryPicker`), four are text. Those are different roles and each needs its own
+  iOS line checked. Starting a 225-site migration late in an iteration and leaving it
+  half-applied would be worse than not starting. **`feature:auth` is the right first module**
+  when it is picked up: smallest at 6 sites, self-contained, and it already has a Roborazzi
+  lane (`AuthScreenshotTest`) so the before/after can be proven without fighting emulator taps.
+  **Two loose ends closed as dead code, not defects:**
+  - `RecommendationsScreen` is **unreachable**. `:feature:home` imports only
+    `RecommendationFoodUi` + `RecommendationsViewModel` (for Home's "What to Eat"), and `:app`
+    imports only the DI module — the screen composable itself is referenced nowhere. So its
+    `secondary` accent never renders. Its "Condition Tips" section is doubly moot: iOS
+    populates `conditionTips` in `RecommendationViewModel` and **no iOS view consumes it
+    either**. Both platforms compute condition tips and neither shows them.
+  - `HomeScreen`'s `syncTint` Stale → `secondary` **is** live (gated by `isWorthShowing()`,
+    which shows Syncing/Stale/Failed). But iOS renders `partnerFreshness` only inside
+    `SakhiDebugView`; the "subtle updating indicator" its own comment describes was never
+    built. So there is **no iOS value to match**, and the neutral alternatives
+    (`onSurfaceVariant`) are themselves unset Material slots. Changing it would be inventing
+    design, so it is left for Karan — and it resolves for free once the theme slots are set.
+  **One thing I re-checked rather than assumed.** `sakhiWarning()` is `deepRose @ 65%` and its
+  comment says explicitly "NOT an orange". That could look like it contradicts iteration 67's
+  NOTICE fix (`ACT_OTHER`, #EA8C26 orange). It does not: `sakhiWarning` maps iOS's
+  `DS.Colors.warning` (the "Irregular" cycle badge), while the insight severity line is
+  `DS.Colors.activityOther`. Two different iOS tokens for two different things — worth knowing,
+  because they are easy to swap by mistake.
+
+- **2026-08-02, Claude (loop iteration 67, parallel session): ran the `tertiary` sweep I
+  flagged last iteration and it was worse than "one stray slot". **The theme sets only five
+  Material colour slots** — `primary`, `onPrimary`, `background`, `surface`, `error`. Every
+  other slot in the app is Material 3's purple-derived baseline. Fixed three real uses, each
+  against its own iOS line. NOTICE insight verified orange on device.**
+  **The actual shape of the problem.** This is not "someone used the wrong token once". Any
+  code reaching for `secondary`, `tertiary`, `primaryContainer`, `outline`, `inversePrimary`
+  etc. gets Material's default, which in M3's baseline is purple by design. Counted across
+  `feature/`, `core/`, `app/`: `tertiary` 4 real uses, `secondary` 2, and — usefully —
+  `tertiaryContainer`, `secondaryContainer`, `primaryContainer`, `inversePrimary` all **0**.
+  So the blast radius is small and now mostly closed, but the *mechanism* stays open: nothing
+  stops the next slot being reached for.
+  **Three fixed, each traced to real Swift:**
+  - **Chat header "online" indicator** (`ChatScreen`, the 7dp dot **and** the label). iOS
+    `presenceLabel` uses `DS.Colors.permissionSuccess` for both. Android had `tertiary`, so the
+    online badge rendered purple-brown instead of green. Now `SakhiUIColors.PERMISSION_SUCCESS`
+    (#33B770). **Not** `brand.confirm` — `SakhiUIColors` says on the line itself that
+    `PERMISSION_SUCCESS` is "distinct from COLOR_CONFIRM (#34C759)", and the nearer-looking
+    token would have been the wrong green. Strings already matched iOS exactly, including the
+    lowercase "online" and "last seen today at %s".
+  - **Report doctor-note card** (`ReportsScreen`). iOS tints its doctor section
+    `DS.Colors.pdfDoctorTeal.opacity(0.05)`. Android had `tertiary.copy(alpha = 0.08f)`, so the
+    one card addressed to a clinician sat on Material purple. Now `PDF_DOCTOR_TEAL` (#21A399)
+    at iOS's 0.05.
+  - **`InsightSeverity.NOTICE`** (`ReportsScreen`). iOS: `severity == .notice ?
+    DS.Colors.activityOther : DS.Colors.categoryCycles`. Android had `tertiary`; now
+    `ACT_OTHER` (#EA8C26). **Verified on device** — "High cycle variation" now renders orange
+    on an orange-tinted card, visibly distinct from the pink INFO insights above it.
+  **Deliberately not changed, and why.** iOS's severity mapping has only **two** branches;
+  Android has three (INFO pink / NOTICE orange / ALERT error-red). Collapsing Android's to
+  match would fold ALERT into iOS's single `categoryCycles` purple and **lose the alert
+  distinction** on a health report. That reads as a deliberate Android refinement rather than
+  drift, so it is recorded here for Karan rather than "corrected" into a worse state. Only the
+  branch iOS states explicitly (`.notice`) was mapped.
+  **Still unchecked after this:** the 2 `secondary` uses — `HomeScreen` `SyncRuntimeState.Stale`
+  and `RecommendationsScreen`'s accent — plus the 7 alpha-blended `surfaceVariant` sites from
+  iteration 65. Neither is full-strength lavender, so both are lower priority than what is now
+  cleared.
+  **Worth considering (Karan's call):** the durable fix for this whole class is to give the
+  unset slots explicit Sakhi values in `SakhiTheme`, so a future `colorScheme.secondary` cannot
+  silently be Material purple. That is a theme-wide change touching every screen at once, so I
+  have not done it unilaterally — but it would close the mechanism rather than the instances.
+
+- **2026-08-02, Claude (loop iteration 64): rebuilt the Profile screen against Karan's iOS
+  screenshot, then rolled `SakhiNavBar` into every sheet on his instruction. Profile was
+  wrong in six separate ways, all of which came from Material defaults standing in for iOS
+  system colours.**
+
+  **Profile vs the real `ProfileView.swift`**
+  - **Cards were pink, iOS's are white.** `.dsCard(.pink)` is `RoundedRectangle(16).fill(profileCardBackground)`,
+    and `profileCardBackground` is `UIColor.systemBackground` (white) / white@6% in dark.
+    Android let all of them fall through to `colorScheme.surface` = brand `lightPink`, so the
+    screen was pink cards on a pink page and the card edges barely existed.
+  - **Page was `lightPink`, iOS's is `background`.** `.profileStaticPageBackground()` ->
+    `DS.Colors.background` #F8F2F4. Added a `color` param to `SheetSurface` rather than
+    changing its default, since the other sheets genuinely do use `lightPink`. Sampled after:
+    page #F8F2F4, cards #FFFFFF.
+  - **Avatar was a pink circle with the account initial.** iOS's `appIconView` is a 52pt
+    rounded SQUARE (r12) filled `lightPink` with the 30pt brand symbol on it. Generated a
+    tintable `sakhi_symbol` alpha mask at 5 densities from the existing app-icon PNG (the iOS
+    asset is a PDF, no Android equivalent existed) and tinted it pink.
+  - **"Synced & secure" was pink; iOS's is GREEN** (`DS.Colors.confirm`). That line is the one
+    signal telling her the data is off-device, and it was styled identically to every other
+    accent on the screen.
+  - **"Irregular" pill was #F39C48**, a hardcoded orange belonging to no palette. iOS uses
+    `warning` = deepRose@0.65. Delayed uses `danger` = deepRose. Both fixed.
+  - **Row value read "System Default"; iOS's reads "System".** iOS deliberately spells it
+    two ways: "System Default" in the Appearance option list, "System" in the Profile row.
+    Android shared one string. Split.
+  - Section captions and chevrons were `onSurfaceVariant` (#49454F, darker and faintly
+    purple) where iOS uses `tertiaryLabel`; row values likewise vs `secondaryLabel`. Added
+    both tokens. Divider inset corrected 52 -> 62 (iOS uses 34, not the 28 it gives the icon,
+    so deriving it from the icon frame was wrong).
+
+  **Then: "jis tarah header profile view mai hai, vaise he har sheet mai ho, abhi sab mai
+  buttons cut out ho rahe hain"**
+  Rolled `SakhiNavBar` (the component Karan approved on Profile) into every remaining sheet.
+  This was the approval that had been queued since iteration ~55.
+  - `DetailSheetScaffold` (Reports + every Profile subscreen), `ChatSubscreenHeader`, Chat's
+    own header, the logging sheet, and the onboarding shell (which is also the Care intro).
+  - Two of those have a non-string "title" (Chat: logo + name + presence; Logging: date over
+    phase), so `SakhiNavBar` gained a `leading` slot instead of them rebuilding the bar.
+  - **The onboarding shell was the actual "cut out" case, and it was a real parity bug:** it
+    used `padding(horizontal = 8, vertical = 8)`, where iOS's `regularShell` uses
+    `.padding(.horizontal, DS.Spacing.screenHorizontal)` = 24 and `.padding(.top, .ml)` = 20 --
+    exactly what `SakhiNavBar` already encodes. So the Care intro's X sat jammed in the corner.
+    Kept iOS's 44pt reserved row via `heightIn`.
+
+  Verified on the emulator: Care, Chat, Logging and Health Report headers now sit on the same
+  24dp inset with the same 44dp glass circle as Profile, none clipped by the sheet's corner.
+
+  **State:** `:app:assembleDebug` BUILD SUCCESSFUL. `testDebugUnitTest`: **295 tests, 0
+  failures** (XMLs 0s old). One earlier run failed with "Could not write XML test results for
+  ReportsViewModelTest" -- an IO error writing the results file, not an assertion; re-ran that
+  module clean (`--rerun-tasks`) and it passed. Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 66): cleared the last full-opacity `surfaceVariant`
+  site and found the report's calendar **preview disagreed with the PDF it previews** — plain
+  days lavender, ovulation in Material's default purple-brown. Fixed, then the on-device
+  screenshot exposed a second defect the code read had not: the legend key did not match the
+  days it keys. Both verified on device.**
+  **The reference here was Android's own PDF, not just iOS.** `ReportPdfExporter.drawDayCell`
+  is **correct** and already matches `SakhiReportPDFGenerator.dayCell` line for line: pink
+  filled rect for a period day, a **dashed** stroke for predicted, TEAL for ovulation, light
+  teal for fertile, and **no shape at all** behind an ordinary day. Whoever wrote the exporter
+  did it properly. The on-screen `CalendarMonthPreview` in `ReportsScreen` had drifted from
+  both:
+  - ordinary day → filled `surfaceVariant`, i.e. a lavender circle under **every** unmarked
+    date. iOS and the PDF draw nothing. Now `Color.Transparent`.
+  - ovulation → `colorScheme.tertiary`. **This theme never sets `tertiary`**, so it was
+    Material 3's baseline purple-brown, not Sakhi's teal. Now read from
+    `SakhiColors.resolved(isDark).forPhase(OVULATION).ring`, the same single owner of every
+    phase hex that the calendars use (iterations 39/40).
+  - fertile → was `tertiary.copy(alpha = 0.22f)`, now ovulation @ 0.18 to match iOS's
+    `PhaseColorManager.ovulation.opacity(0.18)`.
+  So a user checking her report preview saw purple ovulation days and lavender everywhere else,
+  then got a PDF with teal and clean days. The preview exists to show her what she is about to
+  share with a doctor; it was showing something else.
+  **The second defect, which only the screenshot caught.** With the day cells fixed I looked at
+  the rendered page and the legend's **"fertile / ovulation" dot was still dark grey-brown**
+  while the day it describes was teal. Same `colorScheme.tertiary`, one function higher, in
+  `CalendarLegend`. I had read the day-cell code and stopped there. **A legend whose key does
+  not match the thing it keys is worse than no legend**, and this one ships inside the document
+  handed to a doctor. Fixed from the same phase source; re-verified.
+  **Verified on device, both passes.** Profile → Health Report → Generate PDF → swipe to the
+  Period Calendar page. First pass: plain days clean, day 6/28 pink, day 14 teal, fertile days
+  light teal — but legend dot wrong. Second pass after the legend fix: legend dot teal and
+  matching. `:app:assembleDebug` green; `:feature:reports:testDebugUnitTest` forced to re-run
+  (deleted results first) — 8 tests, 0 failures, XML at 21:04.
+  **Remaining `surfaceVariant` sites: 7**, all alpha-blended rather than full lavender, so
+  lower priority — `HomeScreen:1524` (α.32), `PhoneScreen:263` (α.42), `OfflineModeScreen:150`
+  (α.35), `MyDataScreen:179` (α.55), `OnboardingContentStepUi` ×3 (α.32/.32/.4), and
+  `LoadingShimmer:30`. Each still needs its own iOS line read before it moves.
+  **Worth a separate look:** `colorScheme.tertiary` is unset theme-wide, so **any** other use
+  of it is silently Material's default. Two were found here by accident; a targeted sweep for
+  `tertiary` would be cheap and is not something I have done yet.
+
+- **2026-08-02, Claude (loop iteration 65): picked up the ~13 remaining `surfaceVariant` sites
+  the other session explicitly left, and cleared the three in Chat. Each checked against its
+  own iOS line, as they asked. Found a fourth defect while doing it: a chip that was missing
+  iOS's stroke entirely, which no colour swap would have caught.**
+  **Two new tokens, and one of them is a trap avoided.**
+  - `sakhiSystemGray6()` — #F2F2F7 light / **#1C1C1E** dark. The obvious move was to reuse the
+    existing `sakhiGroupedBackground()`, since both are #F2F2F7 in light. That would have been
+    wrong: `sakhiGroupedBackground` models `systemGroupedBackground`, which goes to **pure
+    black** in dark, while `gray6` goes to #1C1C1E. Reusing it would have turned iOS's small
+    inset circles into black holes on a dark background — a dark-mode-only bug, i.e. exactly
+    the kind that survives a light-mode screenshot pass (see iteration 37).
+  - `sakhiLightPink()` — the brand light pink read off the active `SakhiBrandColors`, so it
+    tracks light/dark. Added because iOS uses `lightPink` as a **fill for small elements**
+    (icon badges, the user-side chat avatar), not only as a page surface, and feature code was
+    approximating those with `primary.copy(alpha = …)`, which is a different colour.
+  **The three sites fixed, each against its own Swift line:**
+  - `ChatSubscreens` report-card dismiss button → iOS `SakhiAIReportCard`:
+    `.frame(width: 26, height: 26).background(Circle().fill(DS.Colors.gray6))`. Was lavender.
+  - `ChatSubscreens` search-result avatar → iOS `SakhiAISearchView`:
+    `Circle().fill(message.isUser ? DS.Colors.lightPink : DS.Colors.gray5)`. Android had
+    `primary.copy(alpha = 0.12f)` for the user side and lavender for Sakhi's — **both** wrong.
+  - `ChatScreen` places radius chips → iOS `SakhiAIPlacesCard.radiusChip`.
+  **The fourth defect, which a colour audit alone would have missed.** iOS's radius chip is
+  `.background(Capsule().fill(isSelected ? pink : DS.Colors.background))` **plus**
+  `.overlay(Capsule().stroke(isSelected ? pink : pink.opacity(0.12), lineWidth: 1))`. Android
+  had no stroke at all. So the fix was not just "lavender → background": the row was rendering
+  as flat grey-purple pills where iOS shows pink-outlined ones. Reading the whole Swift
+  declaration rather than just the fill line is what surfaced it.
+  **Concurrent-session collision, handled the same way as iteration 53.** `:app:assembleDebug`
+  failed on **seven** unresolved references in `ProfileScreen.kt` — `ProfileCardRadius`,
+  `sakhiProfileCardBackground`, `sakhiConfirm`, a missing `painterResource` import — a file I
+  have not touched. The other session was mid-implementation. I did **not** invent those
+  definitions to make the build pass; I verified my own work in isolation
+  (`:core:designsystem:compileDebugKotlin` + `:feature:ai:compileDebugKotlin`, both green),
+  waited, and the app build went green on its own once their edit landed. Note they are already
+  consuming `sakhiLightPink()`, so the token landed usefully for both of us.
+  **Verification, stated precisely.** App builds, installs, launches, Home renders correctly.
+  The three changed surfaces are chat sub-screens, and emulator touch handling has been landing
+  taps on wrong targets for several iterations, so **I did not visually confirm them** — there
+  is no Roborazzi lane for `:feature:ai`, and adding one means mocking a chat ViewModel in a
+  module the other session is actively editing. The changes are token swaps and one added
+  stroke, each derived line-by-line from the Swift with hex values checked (#F2F2F7/#1C1C1E,
+  #E5E5EA/#2C2C2E, #F8E5EC), so the code-level evidence is solid — but that is not the same as
+  having seen them, and I am not going to claim otherwise.
+  **Remaining for the handoff — 8 `surfaceVariant` sites still unchecked**, each still needing
+  its own iOS line: `HomeScreen:1524` (α.32), `PhoneScreen:263` (α.42), `OfflineModeScreen:150`
+  (α.35), `MyDataScreen:179` (α.55), `OnboardingContentStepUi` ×3 (α.32/.32/.4),
+  `ReportsScreen:1005`, and `LoadingShimmer:30`. The alpha'd ones are muted rather than fully
+  lavender, so they are lower priority than the four full-opacity ones now cleared.
+
+- **2026-08-02, Claude (loop iteration 64, parallel session — numbered 64 because another
+  session had already written a 63 while I was working): put the iteration-62 report finding
+  under test. It had no coverage at all, which is exactly why an inert toggle on a
+  doctor-facing document survived unnoticed. 4 new tests, 8 green in the file, re-verified
+  against the other session's changes.**
+  **Why tests rather than a fix.** The defect is shared with iOS, so changing
+  `buildReportPages` here would create the divergence this whole effort exists to remove. What
+  I can do without touching behaviour is make it impossible to miss and force any future fix to
+  be deliberate: the new tests assert the **current** behaviour and say plainly in their names
+  and comments that it is a defect pending a both-platform fix. Same approach as the
+  `ParentChildPermissions` asymmetry in iteration 57.
+  **What `ReportPresentationTest` covered before:** symptoms-page emptiness, calendar week
+  blanks, flow distribution, total period days. **Nothing touched `selectedSections` at all** —
+  that is the gap that let this through.
+  **The four added:**
+  - `switching Cycle Overview off does NOT remove the cycle page - matches iOS, pending a
+    both-platform fix` — pins that `Cover` and `CycleSummary` are seeded *before*
+    `selectedSections` is consulted, so deselecting has no effect.
+  - `selecting only Medications produces no section pages beyond the unconditional two` —
+    the other half: a toggle with no page behind it.
+  - `the four gated sections each drop their page when deselected` — **the one that makes the
+    finding credible.** PeriodCalendar, Symptoms, MoodPatterns and Insights each genuinely
+    disappear when switched off, so this is a specific two-toggle defect, not "section toggles
+    are broken". Without it the other two read as a far wilder claim than they are.
+  - `Android omits an empty calendar page where iOS would emit a blank one` — records the one
+    genuine divergence from iteration 62 so it stays a decision rather than a surprise.
+  **Verification.** 8 tests, 0 failures, 0 errors. XML timestamp checked against `date` twice:
+  the first green run was UP-TO-DATE after the other session's changes landed, so I deleted the
+  results and forced a real re-run (20:36 vs 20:36) rather than trust a 2s "BUILD SUCCESSFUL".
+  `:app:assembleDebug` green, app installs and renders Home correctly.
+  **Cross-session notes.** The other session's iteration 63 independently reached the same
+  conclusion I recorded in iteration 60 about the quick-log menu — iOS wraps the log button in
+  a `Menu`, so tap must open the menu and `onTap` never fires — and rebuilt it to match. It
+  also **closes my open handoff item** about `sakhi_action_bar_flow_*` duplicating
+  `logging_flow_*`: they consolidated both into `core:ui/FlowLabels.kt` and deleted the
+  duplicates. Worth noting their framing is sharper than mine was — the user-visible bug was
+  that one logged value read "Moderate" on one screen and "Medium" on the next.
+  **Round-trip not attempted.** Four consecutive failures on emulator touch handling is enough
+  evidence that repeating it is not how this gets answered. Client half is proven by iteration
+  61's mock-engine tests; the server half needs one manual pass on a device that can hold a
+  five-step flow. Route and baseline are in iterations 60 and 62.
+
+- **2026-08-02, Claude (loop iteration 63): finished the 9-screenshot parity checklist and
+  swept every screen on a rebooted emulator. Found and fixed three defects the screenshots
+  did not cover: back quit the app from Home, the same logged value had two different names,
+  and three more Material-lavender surfaces where iOS is neutral grey.**
+
+  **Checklist items closed**
+  - *Logging header phase subtitle* (item 6) - verified on device: "2 August" over
+    "Menstrual Phase". Wired through the shared `CycleInsightAdapter`, mapping
+    `CyclePhaseInsight.PhaseKind` directly so **PMS survives** as its own label.
+  - *Home top-bar phase name* (item 7) - was `CyclePhase.displayName`, which folds PMS into
+    LUTEAL, and was sentence case ("Menstrual phase"). iOS reads
+    `snapshot.cyclePhase.name` off `SakhiCycleInsightEngine.present(_:)`, which is title case
+    and names PMS separately. Added `home_phase_name_*` keyed on `PhaseKind` and left the
+    sentence-case `home_phase_*` strings alone - **those are not the same set**: iOS's
+    learning cards genuinely say "Menstrual phase" while its top bar says "Menstrual Phase".
+    Merging them would have broken the other screen.
+  - *Quick-log menu* (item 8) - rebuilt to match `quickLogMenuContent` exactly: opens on
+    **tap** (iOS wraps the button in a `Menu`; its `onTap` closure is never called, so
+    Android's tap-opens-the-sheet made the menu unreachable), hexagon icon on
+    "Other symptoms >", both "Select date" section headers, per-level droplet runs
+    (outlined -> filled when selected), semibold + checkmark on the selection, and the
+    disabled "2 Aug, Sunday" row naming the target date.
+  - *Full sweep* (item 9) - Home (hero + all cards, scrolled to the end), Calendar month,
+    Calendar year, Profile, Care intro, Chat, Logging sheet, Health Report, quick-log menu.
+
+  **Defects found during the sweep, not in the screenshots**
+  - **System back quit the app from Home.** `HomeCalendarOverlay` is drawn outside the
+    NavHost with no scrim and no `BackHandler`, so back fell through to the nav graph, popped
+    Home and exited **while the calendar was still on screen**. Since the calendar shows by
+    default on Home (iOS `showCalendarInitially = true`), this was the app's first back press.
+    Added a `BackHandler`: expanded -> compact, compact -> dismiss.
+  - **Tapping the phase name did nothing.** iOS's `onPhaseTap` is `showCalendar = false`
+    *then* scroll. Android only scrolled - behind the calendar sheet, so it looked inert.
+    Added `onCloseCalendar` and called it first.
+  - **One logged value, three names.** iOS names flow from its own `FlowLevel.displayName`
+    ("Slight"/"Moderate"), deliberately not KMM's ("Light"/"Medium"). The logging sheet used
+    the iOS wording; the quick-log menu and Home's "How you feel" chip both fell back to KMM.
+    So the same log read "Moderate" on one screen and "Medium" on the next. Consolidated into
+    one `core:ui` source (`FlowLabels.kt`) and deleted both duplicates.
+
+  **Third round of Material lavender**
+  Same defect class Karan has now rejected three times. Sampled, not eyeballed:
+  - quick-log menu panel `#F3EDF7` (M3 `surfaceContainer`) -> `sakhiSystemBackground()`, now `#FFFFFF`
+  - Health Report date pill `#ECE5EE` (`surfaceVariant`) -> new `sakhiGroupedBackground()`, now `#F2F2F7`
+  - chat send button (idle) -> new `sakhiSystemGray5()`, now `#E5E5EA` (iOS `DS.Colors.gray5`)
+  - chat places chips -> `colorScheme.background` (iOS `Capsule().fill(DS.Colors.background)`)
+  Two new tokens now exist next to `sakhiSystemBackground()`. **Not a blanket replace:** there
+  are ~13 more `surfaceVariant` call sites and each needs its own iOS line checked before it
+  moves. Only the four confirmed against real Swift were changed.
+
+  **Verified, not assumed**
+  - Year view's Monday-first weekday row (`M T W T F S S`) looked wrong next to the month
+    view's Sunday-first row. It is not: iOS hardcodes `["M","T","W","T","F","S","S"]` in
+    `yearContent` and `["S","M","T","W","T","F","S"]` in `SakhiCalendarView`. Android mirrors
+    iOS's own inconsistency. Left alone.
+
+  **Flagged to Karan, not silently "fixed"**
+  iOS's quick-log menu prints the header **"Select date" twice** - once over the flow rows,
+  once over the read-only date row. It looks like a copy-paste in
+  `HomeDayDetailGlassView+ActionBar.swift`. Reproduced it so the two platforms match, rather
+  than diverging unilaterally. Worth fixing on both sides if Karan agrees.
+
+  **State:** `:app:assembleDebug` BUILD SUCCESSFUL. Full `testDebugUnitTest`: **291 tests,
+  0 failures, 0 errors** (result XMLs 9s old, so genuinely re-run, not UP-TO-DATE). Emulator
+  wedged its SystemUI twice and then died outright mid-sweep; restarted `sakhi_qa` from
+  scratch, reinstalled, and re-verified everything after the restart. Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 62): got into the logging sheet at last and confirmed
+  the baseline, then lost the emulator's touch handling again. Pivoted and found **two report
+  toggles that do nothing** - on both platforms. One of them lets a user think she has excluded
+  data from a PDF she is about to hand a doctor.**
+  **Round-trip, attempt four.** The route from iteration 60 worked: FAB -> menu ->
+  "Other symptoms" opened the real sheet, showing 2 August / Menstrual Phase, flow **Moderate**
+  selected, and **every symptom checkbox empty** - baseline confirmed on screen. Then the taps
+  stopped landing: a tap on the Cramps checkbox dismissed the sheet, and the retry ended up on
+  the Health Report screen entirely. Same contaminated-input problem as iterations 47/48, so I
+  stopped rather than trust anything it produced. **Still unverified server-side.** Client side
+  remains fully proven by iteration 61's mock-engine tests.
+  **The pivot, on the screen the stray tap landed on.** Same question as the analytics toggle
+  in iteration 56: does this control do anything? `ReportsScreen:177` renders a toggle for all
+  six `ReportSection` entries, and `ReportsViewModel` threads the selection honestly -
+  `toggleSection` -> `config.sections` -> `selectedSections` -> `buildReportPages`. But
+  `ReportPresentation.buildReportPages` starts with **`Cover` and `CycleSummary` added
+  unconditionally**, then gates only `PeriodCalendar`, `Symptoms`, `MoodPatterns` and
+  `Insights`. So:
+  - **"Cycle Overview" is inert.** Switch it off and the cycle page is still in the PDF. This
+    is the one that matters: the report is a document users hand to a doctor, so a switch that
+    appears to exclude a section and does not is a privacy-shaped failure, not a cosmetic one.
+  - **"Medications" is inert in the other direction.** No page is built for it at all, so
+    turning it on adds nothing.
+  **Both are iOS's behaviour too, verified in the Swift.** `SakhiReportPDFGenerator.generate`
+  opens with `var pages: [AnyView] = [ReportCoverPage, ReportCyclePage]` - both unconditional -
+  and then gates exactly the same four sections; `medications` is gated nowhere in
+  `Features/Reports/`. **Android is at exact parity, so this is a shared product defect and
+  must not be "fixed" on Android alone** - doing so would create the divergence. Fourth time
+  this session (toast `message`, reports legend, week-start headers, now this) that the honest
+  answer was "iOS does it too".
+  **One real difference, minor.** Android gates the calendar page on
+  `report.calendarMonths.isNotEmpty()`; iOS's `if data.config.sections.contains(.periodCalendar)`
+  has **no** emptiness check. So with no calendar data Android omits the page and iOS emits a
+  blank one. Android's behaviour is better; flagging rather than aligning downward.
+  **Correcting an earlier note of mine.** The pending item "3 report fields unused by both
+  platforms" was wrong about the UI: all six sections *do* render toggles - the screenshot only
+  showed three because the list is cut off above the Generate PDF button. The real defect is
+  narrower and different: two of the six toggles have no effect.
+  No production code changed this iteration.
+
+- **2026-08-02, Claude (loop iteration 61): stopped trying to answer the clear-a-symptom
+  question by hand on a flaky emulator and answered it in a test instead - through the **real**
+  supabase-kt stack, not a hand-copied `Json`. Result: clearing every symptom really does send
+  a body with no `symptoms` key, and the client really does ask PostgREST to merge duplicates.
+  742 SakhiCore tests green, app build green.**
+  **Why a different approach.** Three iterations (58, 59, 60) failed the manual round-trip for
+  reasons that had nothing to do with the question - ANRs, a killed process, a changed entry
+  point. The thing actually worth knowing is what goes on the wire, and that does not need a
+  device at all.
+  **What the new test does.** `PeriodLogUpsertBodyTest` builds a client with
+  `createSupabaseClient` + `KotlinXSerializer(Json { coerceInputValues; ignoreUnknownKeys;
+  explicitNulls = false })` + `install(Postgrest)` - **identical to `SakhiSupabaseClient`** -
+  and swaps only `httpEngine` for a `MockEngine` that records the outgoing request. Then it
+  performs the exact call `PeriodLogRepository.upsert` makes:
+  `postgrest["period_logs"].upsert(dto) { onConflict = "user_id,log_date,source_user_id" }`.
+  `PeriodLogRepository` reaches for the `SakhiSupabaseClient` singleton rather than an injected
+  client so it cannot itself be pointed at a mock, but `toDTO()` is a field-for-field
+  pass-through, so reproducing the table call is equivalent.
+  **This is the part iteration 58 could not claim.** That test mirrored the `Json` config by
+  hand and proved what *our config* would do. This one proves what **the library actually
+  does** through the same construction the app uses - which is exactly where a wrong assumption
+  could have hidden. 5 tests, all passing, XML timestamp checked:
+  - a log that still has symptoms puts them on the wire (so the test is sensitive, not
+    vacuously green)
+  - **clearing every symptom sends no `symptoms` key**
+  - deleting a note sends no `notes` key
+  - identity columns (`id`, `user_id`, `log_date`, `period_present`) are always present
+  - the request carries `Prefer: …resolution=merge-duplicates`
+  **Where that leaves the finding.** The client sends an upsert that *cannot* clear a symptom:
+  the column is absent, and the client explicitly asks for `merge-duplicates`, i.e.
+  `ON CONFLICT … DO UPDATE`, whose `SET` list PostgREST builds from the keys present in the
+  payload. **The one step still not observed by me is the server's half** - I have not watched
+  a real row fail to update. That is documented PostgREST behaviour rather than a guess, and
+  the client side is now nailed down, but I am not going to write "confirmed" against something
+  I did not see. A single manual pass still settles it: log a symptom, remove it, force-stop,
+  reopen. Baseline on the QA account is unchanged - today is flow = Moderate, no symptoms.
+  **Verification.** Full `jvmTest` across 76 suites: **742 tests, 0 failures, 0 errors**.
+  `:app:assembleDebug` green, installed, app launches clean. No production code changed this
+  iteration - the whole change is two test files - so there is no behaviour to screenshot
+  beyond confirming the app still runs, which it does.
+
+- **2026-08-02, Claude (loop iteration 60): went back at the round-trip test properly - read
+  the nav graph instead of guessing at taps - and found the exact route. **Still did not get
+  the result**: the app was killed mid-flow by another emulator ANR. Thin iteration, and I am
+  saying so rather than padding it. Two things did get settled.**
+  **The route, for whoever runs this next.** `onLogClick` -> `onQuickLogClick(date)` ->
+  `HomeOverlaySheet.Logging` in `HomeNavHost:169`, i.e. the full sheet. But
+  `SakhiBottomActionBar:185` sets **`onClick` AND `onLongClick` both to open the quick-log
+  menu**, and the sheet is reached from that menu's "Other symptoms" row, which calls
+  `onLogClick()`. That is deliberate and correct: the comment there explains iOS wraps this
+  button in a `Menu`, so a tap opens the menu and `onTap` never fires in that branch
+  (`HomeLogButton.body`). So the route is **FAB tap -> menu -> "Other symptoms"**, and my
+  iteration-59 note that "the FAB no longer opens the full logging sheet" was describing the
+  symptom, not the design - it is parity, not a regression.
+  **Why it still failed.** Logcat during the attempt:
+  `ActivityManager: Killing …rachnasakhi (adj 0): user request after error`. The app was killed
+  out from under the flow. That is the same emulator instability as iterations 47/48/58/59, not
+  a Sakhi fault. **Round-trip remains unverified** - log a symptom, remove it, force-stop,
+  reopen, check whether it returns. Everything needed to run it is now known.
+  **Settled: the "History" badge on the logged card is exact parity.** iOS
+  `HomeDayDetailGlassView+Cards.swift:19` is
+  `glassCard(title: title, badge: isPartnerMode ? nil : L("home.activity.log"))` with
+  `ContentSeed` mapping that key to "History"; Android `HomeScreen.kt:1078` is
+  `badge = if (isPartnerMode) null else stringResource(home_logged_history_badge)`. Same
+  string, same partner-mode suppression, so a partner sees no history affordance on either
+  platform. **Correcting myself:** my first grep looked only at `Features/Home/` top level,
+  hit the calendar sheet's unrelated `selectionHistory`, and I briefly concluded iOS had no
+  History affordance at all. It does - the card lives in `Features/Home/Views/DayDetail/`.
+  Grepping one directory shallower would have produced a false "Android-only element" report.
+  **Incidental confirmation from the one clean screenshot.** Home rendered with the white card-
+  text ladder intact on the period gradient, "How you feel" showing "Medium Flow", and
+  "What to Eat" paging correctly with four distinct emoji (leafy greens, dark chocolate,
+  salmon, ginger tea) - so the iteration-41 ladder and the iteration-44/45 `FoodEmoji` work are
+  both still holding. Also a useful baseline for the pending round-trip: **today's log
+  currently has flow = Moderate and no symptoms.**
+
+- **2026-08-02, Claude (loop iteration 59): the emulator recovered, so I went after the
+  round-trip test iteration 58 was blocked on. **Did not get it** - the logging entry point
+  changed under me. Report that as unfinished, not as a result. Used the rest of the iteration
+  on two things I could finish: sizing the `encodeDefaults` blast radius, and settling the
+  year view against iOS.**
+  **The round-trip is still open.** Tried five routes to the symptom UI: the FAB, the quick-log
+  popup's "Other symptoms >", tapping today on the calendar, the `sakhi://widget/log-today`
+  deep link, and expanding the sheet. None reached it. Two reasons, both worth knowing:
+  the **FAB no longer opens the full logging sheet** - it opens the other agent's in-flight
+  quick-log popup (Heavy/Moderate/Slight/Spotting, with Moderate currently ticked for today),
+  which is why the route that used to work no longer does; and the widget deep link is not a UI
+  route at all, `handleWidgetLogTodayDeepLink` enqueues and drains a log directly.
+  There is also **no live-Supabase integration harness** in the repo - the hits for the QA
+  phone number are fixture data in unit tests, nothing that actually talks to the server - so
+  building one would mean writing to the real QA account. Out of scope for one iteration and
+  not something to do casually. **The test still to run: log a symptom, remove it, force-stop,
+  reopen, see whether it comes back.**
+  **Blast radius, since the fix decision needs it.** Same `encodeDefaults = false` exposure on
+  the other upserted DTOs: `CycleDataDTO` defaults `notes`, `cycleEndDate`, `periodEndDate`,
+  `cycleLength`, `periodLength`, `predictedOvulationDate`, `isComplete`, `hasPartnerLogs` all
+  to null; `UserProfileDTO` defaults `profileImageUrl`, `heightCm`, `weightKg`, `dateOfBirth`,
+  `careRole`, `partnerRole`. **The telling detail**: `UserProfileRepository` does not rely on
+  the whole-object upsert for the fields users actually change - it has explicit
+  `table.update({ set("name", ...) })`, `set("health_conditions", ...)` and
+  `set("profile_image_url", ...)` paths. Someone appears to have hit this and worked around it
+  per field on profile, while period logs and cycle data still go through the defaulted
+  whole-object upsert. That is a strong hint the serialiser config is the real bug rather than
+  each call site.
+  **Priority (2), settled: the year view is correct, including a difference that looks wrong.**
+  Captured it at rest. Months render **uncontained**, so Karan's iteration-38 correction is
+  holding; fertile days show teal, today pink, predicted pale pink. I did spot that the month
+  view's weekday header is `S M T W T F S` while the year view's is `M T W T F S S` - the same
+  sheet using two different week starts. That is **exact parity, not a bug**: verified straight
+  from the Swift, `SakhiCalendarView.swift:187` is `["S","M","T","W","T","F","S"]` with a
+  Sunday-first `lead = cal.component(.weekday, from: start) - 1` at line 499, and
+  `HomeCalendarSheet.swift:604` is `["M","T","W","T","F","S","S"]`. iOS really is inconsistent
+  with itself here and Android reproduces both faithfully. `CalendarScreen` already documents
+  this and re-derives a Sunday-first grid for the compact pager only. **Do not "fix" it on
+  Android** - that would break parity, and it is the third time this session (after the toast
+  `message` field and the reports legend) that something obviously wrong turned out to be
+  deliberate iOS behaviour. Worth Karan deciding whether iOS should be made self-consistent,
+  since a user switching between the two views in one sheet sees the columns shift.
+
+- **2026-08-02, Claude (loop iteration 58): followed iteration 57's lesson into the write
+  paths and found the same serialisation gap on period logs. Proved at the client with 6 new
+  passing tests: clearing a symptom produces a payload byte-identical to never having set one.
+  Could NOT finish the end-to-end check - the emulator's system_server is crash-looping - so
+  the server half is explicitly unverified. Not reporting it as confirmed.**
+  **The sweep.** Every `Json` config in SakhiCore: only two set `encodeDefaults = true`, and
+  both are local-storage codecs (`SharedLocalRecordCodec`, `LocalStoreMigration`). Someone knew
+  about this issue for local persistence. **No network path sets it.** `SakhiSupabaseClient`
+  builds its `KotlinXSerializer` with `Json { coerceInputValues = true; ignoreUnknownKeys =
+  true; explicitNulls = false }`, so `encodeDefaults` is false for every Supabase write.
+  **Why that lands on health data.** `PeriodLogDTO` declares defaults for precisely the fields
+  a user clears: `symptoms`, `moods`, `medications` (`emptyList()`), `notes` (`null`),
+  `sexualActivity` ("none"). `PeriodLogRepository.upsert` sends `log.toDTO()` straight into
+  `table.upsert(...)` and `toDTO()` passes values through unchanged, so a cleared list arrives
+  as `emptyList()`, equals the declared default, and is **omitted from the payload**. `notes`
+  is omitted twice over, since `explicitNulls = false` also strips nulls.
+  **Proven, not argued.** New `PeriodLogDTOSerializationTest` (6 tests, all passing, XML
+  timestamp checked against `date`): a log that still has symptoms sends them; clearing every
+  symptom omits the key; same for moods and notes; **a cleared log and an untouched log
+  serialise to identical strings**; and identity/required columns are always present, which
+  bounds the finding to clearable user content rather than the row failing to save.
+  **Expected consequence, stated as expectation.** The upsert resolves on
+  `onConflict = "user_id,log_date,source_user_id"`, i.e. it updates an existing day's row.
+  PostgREST builds its `DO UPDATE SET` from the keys present in the payload, so a column that
+  is absent is not written and keeps its stored value - meaning removing every symptom from a
+  day you previously logged would not remove them. I checked `PeriodLogRepository` for any
+  compensating clear-path and there is none.
+  **What I did NOT verify, and why.** The actual round-trip. The emulator ANR'd repeatedly
+  (`Process system isn't responding`, then `Pixel Launcher isn't responding`, then
+  `cmd: Can't find service: activity` even after a reboot). Iterations 47/48 established that
+  on-device evidence from a degraded emulator is worthless, so I stopped rather than dress up
+  a guess as a result. **The correct next step is to log a symptom, remove it, reload, and see
+  whether it returns** - one manual pass on a healthy device settles it either way.
+  **Supporting signal that this is an oversight, not a design choice.** `UserProfileRepository`
+  writes the fields that matter with explicit `table.update({ set("name", ...) })` and
+  `set("health_conditions", ...)` - the pattern that *does* clear correctly - while
+  `PeriodLog`, `CycleData` and the AI message/checklist paths all upsert whole defaulted DTOs.
+  **Options if it is confirmed** (Karan's call, all with real trade-offs): set
+  `encodeDefaults = true` on the Supabase serializer, which is the one-line fix but changes
+  every write payload in the app and interacts with `explicitNulls = false` and the DB column
+  defaults; or drop the defaults from DTO fields that represent clearable user content, so
+  "empty" is always transmitted; or use explicit `update({ set(...) })` for clears, as the
+  profile repository already does. I did not pick one - it is a data-layer decision affecting
+  both platforms, and the fix should follow the round-trip confirmation, not precede it.
+
+- **2026-08-02, Claude (loop iteration 57): swept the care permission screen - the most
+  privacy-critical surface in the app. Android is at full parity there, better in one place.
+  Then found something underneath it: the permission set sent when you invite someone
+  serialises to `{}`. Pinned that with a passing test. Build green, 13 SakhiCore tests green.**
+  **The screen.** iOS's `CareModeSettingsView` is the granular sharing control - 12 toggles
+  deciding exactly what a partner can see. Android does not have a file by that name, which is
+  why earlier inventories flagged it missing; it lives inside `CareScreen.kt` instead.
+  **It is complete.** All 12 fields present (`canViewPeriodDates`, `canViewCycleHistory`,
+  `canViewPredictions`, `canViewSymptoms`, `canViewMoods`, `canViewDailyLogs`,
+  `canViewOvulationTests`, `canViewMedications`, `canViewTemperature`, `canViewWeight`,
+  `canViewDischarge`, `canViewNotes`), every label matching iOS **verbatim**, plus
+  `canLogPeriods`. Android additionally has `canGenerateReports` as its own explicit grant,
+  which iOS's toggle list does not show - with a good comment explaining why a report export
+  must not be implied by the granular fields. The line that matters most, **"Sexual activity is
+  always kept private and cannot be shared."**, exists *and* is rendered - checked, not
+  assumed, after iterations 53/54.
+  **The `canLogPeriods` asymmetry is deliberate, not an oversight.** Its constructor default is
+  `true` while `parse()`'s fallback for the same field is `false` - the only field in the class
+  where the two disagree, and the only *write* grant in the set. `ParentChildPermissionsTest`
+  already pins it with a comment calling it "a real asymmetry between the two entry points".
+  So I did not change it. But the comment justifies the `true` as being "for a brand-new local
+  record", and that is not the only place it lands: `CareScreen` seeds the permission sheet
+  from `partnership.enhancedPermissions ?: ParentChildPermissions()`, so a partnership with no
+  stored permissions opens with **"Log Periods" already switched on**, and saving persists a
+  write grant the user never selected. Documented in the model, decision left to Karan.
+  **The finding worth acting on: `ParentChildPermissions.default` serialises to `{}`.**
+  `PartnerCareRepository` builds its invite body with `Json { ignoreUnknownKeys = true }` and
+  nothing else, so `encodeDefaults` stays `false` and kotlinx omits every property still equal
+  to its declared default. `CareViewModel.createInvitation` passes `.default`, where *every*
+  field is at its default - so the entire 15-field permission set collapses to an empty object
+  on the wire. The client believes it is stating a considered set of grants and states nothing;
+  whatever the `invite-partner` edge function does with `{}` is the real policy, and neither
+  client-side default applies. I could not read the edge function from here, so I am not
+  claiming what the server then does - only what the client sends.
+  **Verified, not reasoned.** Added `default permissions serialise to an empty object with the
+  repository's Json config` to `ParentChildPermissionsTest`, asserting `"{}"` for `.default` and
+  `{"canLogPeriods":false}` for a non-default instance. 13 tests, 0 failures, XML timestamp
+  checked against `date` (17:27 vs 17:27) so it genuinely ran.
+  **Correction I made to myself mid-iteration.** I first wrote a code comment saying an invited
+  partner "receives log-write access without the user ever having seen a toggle". Then I
+  checked the Json config and found nothing is transmitted at all, which makes that claim
+  wrong. Rewrote the comment before it landed. The lesson is the serialisation config, not the
+  field default, decides what a permission model actually communicates - worth remembering for
+  any other `@Serializable` model in this repo that relies on defaults.
+  **Not a regression.** Post-install the Home screen first rendered the no-cycle-data state
+  ("Track your first period"); it was mid-load and resolved to "Day 1 of your period" ~20s
+  later. This iteration changed only a comment and a test, so it could not have altered runtime
+  behaviour either way.
+
+- **2026-08-02, Claude (loop iteration 56): applied iteration 55's lesson to the rest of
+  Privacy & Security and found two more toggles that controlled nothing. Implemented the
+  screenshot warning for real (iOS has it, Android only claimed to). Verified both states on
+  device. Build green, tests green.**
+  **Why here.** Iteration 55's bug class is "screen ported from iOS, copy describes iOS
+  behaviour Android doesn't have". Privacy & Security is where that class does the most
+  damage, because every row is a flat factual claim about data handling.
+  **Checked against the manifest first.** Declared permissions are INTERNET,
+  ACCESS_NETWORK_STATE, POST_NOTIFICATIONS, ACCESS_COARSE_LOCATION, VIBRATE, READ_CONTACTS,
+  plus the Health Connect read permissions. No CAMERA, no RECORD_AUDIO anywhere, so
+  **"Camera & Microphone - Never used by Sakhi" is true.** Location/Contacts claims line up
+  with what is declared.
+  **Both toggles were dead.** `PRIVACY_SCREENSHOT_WARNING` and `ANALYTICS_OPT_IN` each had
+  exactly two references: the row that writes them and the constant declaration. **Nothing
+  read either.** A privacy toggle nothing honours is worse than no toggle - the user is told
+  she has a control and she does not.
+  **Fixed: screenshot warning.** iOS genuinely implements this -
+  `SakhiAppShellSnapshot.swift:272` subscribes to `userDidTakeScreenshotNotification`, checks
+  the same preference (default true) and shows a 7.0s warning toast titled "Screenshot taken"
+  with "Your health data may be visible in this screenshot." Ported it to `MainActivity` via
+  `Activity.registerScreenCaptureCallback` (API 34+), registered in `onStart` / unregistered
+  in `onStop`, reading the preference through `PlatformKeyValueStore` and showing the same
+  title/message/type through `ToastManager` at the same 7000ms. Strings copied verbatim from
+  the Swift. Added `DETECT_SCREEN_CAPTURE` to the manifest, which the API requires - a normal
+  permission that grants a callback only, never screenshot content.
+  **Deliberately 34+ only, and the row hides itself below 34.** The only pre-34 way to notice
+  a screenshot is polling MediaStore, which needs `READ_MEDIA_IMAGES`. Handing a period
+  tracker read access to the user's entire photo library in order to warn her about
+  screenshots is a far worse privacy trade than not warning, so it is not done. Below API 34
+  `PrivacySecurityScreen` omits the row rather than showing a toggle that cannot work.
+  **Verified on device, both directions** (emulator is API 34, exactly the floor):
+  toggle ON + real system screenshot (`input keyevent 120`) -> "Screenshot taken" toast fires;
+  toggle OFF + same screenshot -> **no toast**. The preference is load-bearing for the first
+  time. Note `adb exec-out screencap` does *not* trigger the callback - it reads the
+  framebuffer directly - so a real key event is required to test this.
+  **A divergence I nearly introduced.** Android's `ToastCapsule` renders only `title`; the
+  `message` field is carried through `ToastManager` and never drawn, which drops the important
+  half of 5 existing call sites. I had started fixing it, then read iOS: `ToastManager.swift`
+  threads `message` down to its own `ToastCapsule` (line 162, declared line 211) and **also
+  never renders it**. Android already matches iOS exactly. Left `ToastHost` untouched. Same
+  trap as iteration 40 - "obviously broken" on Android turned out to be faithful parity.
+  **For Karan, two things this exposed:**
+  1. The sentence that carries the actual warning - "Your health data may be visible in this
+     screenshot" - is invisible on **both** platforms. Users see only "Screenshot taken". That
+     is a shared product gap in the toast component, not a parity gap, and it affects 5 other
+     toasts too. Worth deciding whether the capsule should render `message`.
+  2. **"Share Anonymous Analytics" controls nothing on Android.** There is no analytics SDK in
+     the Android app at all - no Firebase Analytics, no Amplitude, nothing - while iOS has a
+     real `AnalyticsManager`. Nothing is being sent, so there is no privacy harm, but the row
+     defaults ON and tells the user she is sharing analytics that do not exist. Options: hide
+     the row until Android has analytics, or wire analytics and gate it on this key. I did not
+     guess - either choice is a product call.
+  Android 14 also shows its own "Sakhi detected this screenshot." system notice whenever the
+  callback is registered. That string is the OS's, not ours, and cannot be suppressed.
+
+- **2026-08-02, Claude (loop iteration 55): the "Reset All Data" screen told users it was
+  erasing every period log they'd added. It does not erase anything — it is a sign-out.
+  Rewrote the screen to say what the code actually does. Build green, verified on device.**
+  **Priority (1) is closed**: `:feature:home` is 46 tests, 0 failures, 0 errors
+  (HomeViewModel 16, PartnerChecklistViewModel 14, PartnerHeadsUpText 12, screenshots 4).
+  Also a tooling correction for whoever reads this log: `find -newermt '-3 minutes'` does
+  **not** work here — `find` is `bfs`, which rejects relative timestamps, errors, and returns
+  zero rows. That looks exactly like "no fresh results" and nearly made me call a green run
+  stale. Use an absolute ISO timestamp, or compare against `date`.
+  **The bug.** iOS's `DataResetView` is genuinely destructive: iOS is local-first, so it
+  really does wipe the logs/cycles/predictions held on the phone. Android's equivalent is
+  `resetProfileData()`, which is **one line — `authRepository.signOut()`**. Android is
+  cloud-direct, so nothing is deleted anywhere. The screen had been ported from iOS wholesale
+  and was making iOS's promises:
+  - Menu row: "Reset All Data" / "Remove all logs, cycles and predictions from this device"
+  - Header: "This removes everything stored on this device"
+  - A **WHAT GETS REMOVED** list: "Every period log you've added", "Your cycle history and
+    predictions", "Health conditions and symptoms", "Care mode and Sakhi settings",
+    "Sakhi AI conversations"
+  - Footer: "This cannot be undone."
+  All false. A user who wants her period history gone taps this, reads that it is being
+  removed and cannot be undone, confirms, and gets logged out with every log intact in
+  Supabase. Two strings *already* said the honest thing ("On Android, starting fresh signs
+  you out of this device"), so the screen was contradicting itself before I touched it.
+  **What I verified in code before writing a single word of new copy**, because the new copy
+  makes factual claims about health data:
+  - `signOut()` = `sessionProvider.signOut()` + `clearLocalOnlySession()` + delete
+    `KEY_PIN_HASH` + remove `KEY_PIN_ATTEMPTS`. No data deletion on any path.
+  - `AndroidWidgetSnapshotManager` **does** clear correctly — `session == null` →
+    `clearSnapshot()`. Credit where due; the widget does not leak past a sign-out.
+  - `SakhiPhaseALocalStore.clearAllPhaseAData()` exists and has **zero callers**. Nothing
+    ever clears the Phase-A store. It is also not the canonical store — a comment in
+    `AndroidWidgetSnapshotManager` says so outright.
+  **The fix**, four rows that are each true, replacing five that were each false:
+  "You're signed out on this device" / "Your PIN lock is removed from this device" / "The
+  home screen widget is cleared" / "Nothing is deleted. Log back in and everything is there."
+  Section label **WHAT HAPPENS**, button "Sign out of this device", note "You can log back in
+  any time." `cannot_undo` was checked first and is used only here, not by the delete flow,
+  which keeps its own correct permanence wording.
+  **A mistake worth recording.** My first pass fixed only the menu subtitle and the header,
+  because those were the two strings the scan pointed at. That left a screen whose header said
+  "your data stays safe" directly above a list headed WHAT GETS REMOVED and a footer saying
+  "cannot be undone" — *more* incoherent than before. I only caught it because I opened the
+  screen on the emulator instead of trusting the build. Same lesson as iteration 41: fixing
+  the strings a scan hands you is not the same as fixing the screen.
+  **Still open, for Karan — a product call, not a code one.** The row is still titled "Reset
+  All Data" and Profile already has a separate "Sign Out" row directly beneath Manage Account.
+  As it stands the app has two paths to the same sign-out, one of them called "Reset All Data"
+  and sitting in DANGER ZONE. Options: rename the row, drop it, or keep it and implement a
+  real local reset when local-first lands (which is the existing blocker). I did not rename it
+  unilaterally — it is the iOS-parity entry point and may become correct again later.
+  **Emulator note.** `system_server` ANR'd mid-navigation again (as in iteration 47); rebooted
+  and re-verified. Also re-learned that chained blind taps produce contaminated evidence —
+  after the reboot the same coordinates landed on Privacy & Security. Every tap in the final
+  run was screenshot-verified before the next one.
+
+- **2026-08-02, Claude (loop iteration 54): swept the whole app for the iteration-53 bug
+  class — strings ported with iOS's exact value but never wired. Result: it does not recur.
+  Every unwired string that duplicates iOS copy is unwired *correctly*, and four of them
+  were traps that would have broken parity if someone "fixed" them. Build green, app
+  launches clean.**
+  **The scan.** 1,856 strings, checked against both `R.string.NAME` in Kotlin and
+  `@string/NAME` in XML (the manifest reference is why `app_name` looked dead and is not).
+  40 unreferenced, of which **6** duplicated a value in iOS's `ContentSeed`. Those 6 were the
+  only candidates for a repeat of the phone-placeholder bug, so each got the same
+  is-it-actually-rendered check against the real Swift that separated real gaps from iOS
+  dead code in iterations 24, 26 and 27.
+  **All 5 real ones were dead correctly — and 4 were actively misleading.** Wiring them
+  would have moved Android *away* from iOS, which is worse than leaving them:
+  - `reports_marker_ovulation` + `reports_marker_fertile` — iOS's PDF legend
+    (`SakhiReportPDFGenerator`) has exactly **three** dots: "Period day", "Predicted"
+    (dashed), **"Fertile / Ovulation"**. It merges the two even though `ReportData` tracks
+    `fertileDates` and `ovulationDates` as separate sets. Android's used string is the merged
+    one, so it already matches; the two singles were pre-merge leftovers. Removed. This is the
+    report users hand to a doctor, so a fourth legend dot Android invented on its own would
+    have been a real defect.
+  - `profile_about_section_share` ("SHARE") — iOS's `AboutView` labels only OUR STORY /
+    CONNECT / APP INFO; `shareCard` sits deliberately **bare** between CONNECT and APP INFO
+    with no `sectionCard` label. Android's share row already renders "Share Sakhi", matching
+    iOS's `Text("Share Sakhi")` verbatim. A "SHARE" header would have been Android-only
+    chrome. Removed.
+  - `edit_profile_save` ("Save") — iOS's header toggles `Button(isEditing ? "Done" : "Edit")`,
+    which Android already matches. The only "Save" iOS shows is the discard-changes alert
+    button, which is `edit_profile_discard_save` and *is* wired. Removed as a duplicate.
+  - `care_title_be_her_sakhi` — **kept.** This is iOS's `care.invite.title`, rendered by
+    `AcceptInviteSheet`, which has no Android counterpart yet (still on the open list). It is
+    reserved, not dead. Annotated as such so the next scan does not re-litigate it.
+  Each removal left an XML comment saying what iOS actually does, so the next parity pass
+  finds the reasoning instead of re-deriving it.
+  **Verification.** `:app:assembleDebug` green with `processDebugResources` and
+  `compileDebugKotlin` genuinely re-executing (24 tasks, not UP-TO-DATE) — that is the load-
+  bearing check, since a removed-but-still-referenced string is a hard compile error. Then
+  installed and launched on `sakhi_qa`: no `Resources$NotFoundException`, no crash, Home
+  renders correctly.
+  **Concurrent-edit note — read this before trusting a string count.** Re-running the scan
+  afterwards gave *1,873 total / 56 unreferenced*, i.e. both numbers went **up** despite my
+  removing three. That is not a regression from this change: the other agent's in-flight work
+  added ~20 strings (`sakhi_action_bar_*`, `feature_gate_*`), not all wired yet. Worth
+  flagging for their handoff: `core/ui` now has `sakhi_action_bar_flow_spotting/light/medium/
+  heavy` = "Spotting/Slight/Moderate/Heavy", a **second copy** of `logging_flow_*` in
+  `feature/logging`. If that is a deliberate move to `core:ui` the logging set should be
+  deleted after; if not, it is a third parallel-implementation pair alongside
+  `RecommendationInsightService` and `Symptom.displayName`. I did not touch it — it is their
+  feature mid-flight.
+
+- **2026-08-02, Claude (loop iteration 53): finished the auth lane audit by inspecting the
+  screen I had re-recorded but never looked at. One real fix: the phone field was showing
+  the wrong string, and the right one was already sitting unused in `strings.xml`. Build
+  green, 106 tests.**
+  **Fixed — phone placeholder.** iOS passes `onboarding.phone.placeholder`, the sample
+  number **"7898565431"**, straight into `SakhiTextField`, so the field shows the expected
+  shape and length. Android rendered `auth_phone_field_label` ("Phone number"), restating
+  the label above it. The telling part: `auth_phone_placeholder_number` already existed in
+  Android's strings with iOS's exact value and was **referenced nowhere** — the string was
+  ported correctly and then never wired. Kept the label for the accessibility
+  `contentDescription`, where a sample number would be read aloud as if it were a real value.
+  **Two things checked and found correct**, rather than assumed from the Reports fix:
+  title/subtitle match iOS verbatim, and the country-picker chevron is a single
+  `chevron.down` on both — *not* the `chevron.up.chevron.down` that Reports uses. Consistency
+  across screens was not a safe assumption; iOS genuinely differs between the two.
+  **Concurrent-edit note.** Mid-iteration `:app:assembleDebug` failed on `core:ui` with three
+  unresolved references (`Icons.Outlined.Hexagon`, `QuickLogSectionHeader`,
+  `quickLogFlowLabelRes`) in `SakhiBottomActionBar.kt` — a file I have not touched, which had
+  compiled minutes earlier. It was the other agent's quick-log work landing half-written. I
+  did **not** try to complete their feature by inventing those definitions; I verified my own
+  change compiled in isolation (`:feature:auth:compileDebugKotlin`) and re-checked. Their edit
+  finished between two of my commands (146 insertions) and the build went green on its own.
+  If a future session sees those three symbols unresolved, it is that work mid-flight, not a
+  regression to chase.
+
+- **2026-08-02, Claude (loop iteration 52): audited the last un-checked screenshot lane
+  (`feature:auth`). Its baseline was misrepresenting the screen in two ways at once — but
+  the code was correct, and checking that first stopped me filing two false bugs. All four
+  lanes are now on Pixel 5. 118 tests green.**
+  **The baseline showed a 5-box OTP field.** iOS is unambiguous — `OTPStep.swift` says "the
+  6-digit OTP", filters with `prefix(6)`, and gates on `count == 6`. That looked like a real
+  parity defect. It is not: Android's `AuthViewModel` uses `take(6)` and shared
+  `ValidationRules` requires exactly 6. The sixth box was being squeezed out of Robolectric's
+  320px-wide capture. Re-recorded at Pixel 5: six boxes.
+  **The same baseline also inverted the button order.** At 320px "Didn't get the code?
+  Resend" sat *above* Continue; at Pixel 5 it sits below. iOS declares it as
+  `secondaryLabel`, which `SakhiFooter` renders **below** the primary — so the larger
+  capture is the correct one and the small one had been misleading about layout too.
+  **Two false bugs avoided by reading the source before believing the picture.** Both would
+  have been plausible write-ups. This is the third lane in a row where the capture, not the
+  app, was wrong.
+  **All four lanes now render at Pixel 5** (auth, calendar, home, onboarding) and all four
+  have fixtures that actually populate the screen. That was not true of any of them at the
+  start of this pass: onboarding was raised in iteration 22, home in 49, calendar in 51 (plus
+  a fixture that rendered zero markers), auth here.
+  **Pattern worth keeping:** a screenshot baseline is evidence about the *capture*, not the
+  app. Where the two disagree, the source decides — twice now that has meant no defect
+  existed, and twice (iterations 50, 51) it meant a real one was hiding.
+
+- **2026-08-02, Claude (loop iteration 51): took the matrix idea to Calendar and found the
+  lane was testing nothing — it captured a calendar with ZERO markers. Fixed the fixture,
+  and repaired two test files broken by a concurrent ctor change. 189 tests green across 6
+  modules.**
+  **The calendar screenshot lane was blind.** Its `PeriodLogRepository` fake returned an
+  empty list, and day marks come from the shared engine reading **logged period days** — so
+  the captured image had no period, predicted, fertile or ovulation markers at all. It
+  looked like grid coverage while being unable to detect any marker-colour regression,
+  including the ovulation-ring fix from iterations 39-40. The committed baseline still
+  showed markers only because it predated the engine switch, so nothing looked wrong.
+  **Fixed by expanding the fixture cycle into its own run of period logs** — the same
+  consistency rule `HomeViewModelTest` documents (a cycle only exists because logs produced
+  it). The re-recorded baseline now shows the real marker set, and **Aug 9-15 render in the
+  ovulation teal** — iterations 39-40's fix pinned in a baseline for the first time.
+  **Also raised Calendar to Pixel 5**, matching Home and onboarding; at 320x470 the grid and
+  bottom bar could not both fit.
+  **Repaired concurrent breakage, twice.** `LoggingViewModel` gained a `cycleDataRepository`
+  parameter (for the sheet's new phase line) between iterations — `CalendarScreenshotTest`
+  would not compile, and `HomeScreenshotTest` broke *during* this iteration, having compiled
+  fine an hour earlier. Both fixed. In Calendar I passed a stub returning the same fixture
+  cycle rather than `relaxed = true`, so the sheet's phase line cannot disagree with the
+  grid it sits under. A second failure needed `getAll` stubbed on the logging fake, which
+  the new load path now reaches.
+  **Ran all six feature modules afterwards** rather than only the two I touched, to catch
+  any other call site the same ctor change broke. None left: 189 tests, 0 failures.
+  **Standing note:** another agent is actively editing `feature:logging`. I have not touched
+  those sources — only the test fixtures that its ctor change invalidated.
+
+- **2026-08-02, Claude (loop iteration 50): completed the light/dark x period/non-period
+  matrix and it immediately caught a real bug — the log button was a COMPLETELY BLANK white
+  circle in dark + non-period. Fixed by matching iOS's actual rule. Build green, 45 tests
+  passing, period case regression-checked on device.**
+  **Added the fourth cell.** Period light and dark were device-checked, non-period light
+  came from iteration 49; `HomeScreen_follicular_dark` was the combination nothing had ever
+  rendered. It matters because the non-period branch tints from `phaseText`, which resolves
+  through `SakhiColors.resolved(isDark)` — dark is a different colour there, not the same
+  one on a darker background.
+  **What it caught.** Measured, not eyeballed: **zero non-white pixels inside the button**.
+  My iteration-31 fix special-cased only MENSTRUAL (`if (phase == MENSTRUAL) surface else
+  accentColor`), so every other phase still used `accentColor` — which in dark resolves to
+  the near-white Rose primary (`#FAF4F8`, Group A dark L11/L12). White glyph on a near-white
+  circle. Identical failure to the one I fixed in 31, surviving in the cell I had not
+  rendered.
+  **Root cause was my fix being too narrow, not the original code.** iOS passes
+  `logFill: cardFill` for **every** phase. Extracted `cardFill` into a shared
+  `homeCardFill(phase, hasCycleData)` used by both `HomeGlassCard` and the bottom bar, so
+  the two cannot drift apart again — the drift is what allowed this.
+  **Verified both directions:** dark non-period now renders a white "+" on the dark
+  elevated tile with its rim (12 distinct colours inside the button, up from 1); the
+  period day on device is unchanged at `#C7386A` with the white pencil.
+  **Checked before assuming a second bug:** dark non-period renders almost entirely
+  greyscale. That is not a defect — Group A's dark palette really does resolve L11/L12 to
+  `#FAF4F8`, so phase identity in dark comes from surfaces, not text, and iOS resolves the
+  same tokens.
+  **Note for whoever is next:** `LoggingSheet.kt` and its strings have been edited outside
+  these iterations (BBT relabelled from "Basal Body Temperature", new ruler-slider and
+  keyboard-scaffold imports). I left that file alone to avoid colliding; my earlier logging
+  strings are intact alongside it.
+
+- **2026-08-02, Claude (iteration 50): Karan sent 9 iOS reference screenshots and asked
+  every Android screen to match. Pass 1 of several — the LOGGING SHEET, which he gave two
+  reference shots of. 113 tests passing.**
+  **Four real diffs found by comparing against the iOS source, not the screenshot:**
+  - **Flow chips were the wrong colour.** iOS:
+    `.fill(selected ? DS.Colors.pink : DS.Colors.systemBackground)` — the unselected chip
+    is a plain **white** card. Android used Material's `surfaceVariant`, a lavender-grey.
+  - **The symptom block was pink, not white.** iOS ends it with
+    `.background(DS.Colors.systemBackground)`; Android used `tonalElevation` over a
+    `surface` this app maps to brand `lightPink`, so it tinted pink.
+  - **Checkboxes were invisible.** `LogCheckbox` had no border, so an unchecked box was a
+    fully transparent 22dp square and every symptom row looked like it had no control.
+    iOS strokes it at 1.5pt in `separator` (pink when on). Added.
+  - **"Basal Body Temperature" → "BBT"**, which is what iOS renders.
+  **Needed a token that did not exist.** iOS's `systemBackground` is `UIColor.systemBackground`
+  (white in light, near-black in dark). Neither Material slot matched: this app maps
+  `surface` to brand `lightPink`, and `surfaceVariant` is Material's default lavender.
+  Added `sakhiSystemBackground()` to `core:designsystem` so the two white cards have a
+  real, theme-aware source instead of a hardcoded `Color.White`.
+  **Left undone, deliberately:** the header's phase subtitle ("Follicular Phase" under the
+  date). iOS reads `cyclePhase.name`, and `LoggingUiState` carries no phase at all — that
+  is ViewModel wiring, not a colour fix, so it is called out rather than bodged.
+  **Remaining from Karan's 9 screenshots** (not yet started, listed so nothing is lost):
+  Chat header says "Sakhi AI" where iOS says **"Sakhi"**; Home's quick-log popover
+  ("Select date" + flow list + "Other symptoms ›") has no Android equivalent; Home's
+  "How you feel" card has a **History ›** pill iOS shows and Android does not; What-to-Eat
+  rows carry food **emoji thumbnails** and a pager dot row on iOS; the Care intro places
+  its close button **top-left**, Android top-right.
+
+- **2026-08-02, Claude (loop iteration 49): verified the card-text ladder's non-period
+  branch — the one thing iterations 41-48 built but could never see. Did it by driving
+  state in a screenshot test instead of fighting touch input, as iteration 48 concluded.
+  45 tests green.**
+  **The gap:** every on-device check of Home had been a period day, where all four ladder
+  levels resolve to white. The other live branch tints text with the **phase primary**
+  (1.0 / 0.72 / 0.56 / 0.45) and had never been rendered. Reaching it needs a day-selection
+  tap, and iteration 48 showed my taps were not landing where I computed them — so I stopped
+  trying to reach it through the UI.
+  **`HomeScreen_follicular_light`** drives a real own-data session with a follicular cycle
+  (7 days ago, periodLength 5) plus the matching period logs, so the engine resolves the
+  phase honestly rather than the state being forced. The whole ladder is now visible and
+  correct in one image: card titles in phase primary, `"8"` primary against `"/ 28"`
+  secondary, "today's cycle day" / "Started 26 Jul" / legend labels tertiary, Cycle Status
+  secondary over a tertiary detail, and both stat tiles phase-tinted with an 11pt tertiary
+  title above a 22sp primary value. Everything from iterations 41-44 confirmed on the path
+  I could not otherwise reach.
+  **Kept the fakes honest:** the cycle is expanded into its own period-length run of logs
+  rather than returning a cycle with no logs — the same reasoning `HomeViewModelTest`
+  already documents, since a cycle only exists in production because logs produced it.
+  **Also raised the Home lane to Pixel 5** (it was on Robolectric's 320x470 default, where
+  the cards clip almost immediately and a capture cannot show what it exists to pin). That
+  re-recorded the two existing Home baselines at the larger size; same call, and same
+  reasoning, as the onboarding lane in iteration 22.
+  **Both open questions from 47-48 are now closed:** Android *does* re-derive phase from the
+  selection (code path traced in 48), and the non-period ladder branch *does* render
+  correctly (this iteration). Neither needed a fix.
+
+- **2026-08-02, Claude (iteration 49): Karan's review — bottom gap on EVERY sheet, and the
+  nav buttons reading as foreign white. Both fixed at the shared component, so every sheet
+  screen benefits. 136 tests across 4 modules passing.**
+  **The bottom gap was one line, app-wide.** `SakhiModalSheet` used Material's default
+  `contentWindowInsets`, which applies the navigation-bar inset — so every sheet in the app
+  stopped short of the bottom edge and the Home background showed through as a strip under
+  the content. iOS runs its sheets to the edge (`HomeCalendarSheet` fills its background
+  with `.ignoresSafeArea(edges: .bottom)`). Because it lives in the shared modal container,
+  fixing it there fixed Profile, Chat, Logging, Care and Reports at once.
+  **I over-corrected first, and Karan caught it.** Zeroing every side pulled the sheet under
+  the **status bar**, where the nav bar's close button collided with the system icons. Now
+  only the bottom is dropped (`BottomSheetDefaults.windowInsets.only(WindowInsetsSides.Top)`)
+  — iOS keeps its sheets below the status bar too, which is exactly what he said.
+  **Nav buttons: white was the wrong answer, and so were the two before it.** The full
+  sequence, all recorded in `sakhiGlassCircle`'s KDoc: `#F4E4EA` `buttonFill` vanished into
+  the pale pink page (it is iOS's pre-26 fallback and sits almost on the page colour); a 6dp
+  elevation to compensate gave a heavy dark halo; plain white separated but read as foreign
+  in a pink app. Landed on white carried ~5% toward brand pink with a pink hairline at 16%
+  — light enough to separate, tinted enough to belong. That is what `buttonFill` was
+  reaching for before iOS 26 replaced it with real glass.
+  **Verified on device:** sheet sits below the status bar, runs to the bottom edge with no
+  strip, and the close button reads as a soft pink disc.
+
+- **2026-08-02, Claude (loop iteration 48): answered iteration 47's open question by code
+  inspection — Android DOES re-derive phase from the selected date, so there is no defect
+  there. On-device confirmation was inconclusive and I am NOT dressing it up as verified.
+  No code changed; build green.**
+  **The question was: does Home re-derive phase from the calendar selection, as iOS does?**
+  Traced the whole path and it is correct end to end:
+  - `HomeViewModel.selectDate` re-asks the shared engine —
+    `CycleInsightAdapter.insightFor(date, cachedCycles, cachedPeriodLogDates, cachedStats)` —
+    and updates `phase`, `phaseKind`, `prediction`, `heroTip`, `dayInCycle`. Its own comment
+    records that this replaced an older `CycleMath` recompute that could disagree with the
+    hero.
+  - `CalendarScreen`'s compact grid calls `onDateSelected { viewModel.selectDate(date);
+    onDaySelected(date) }`.
+  - `HomeNavHost:181` wires `onDaySelected = homeViewModel::selectDate`, and line 128/163
+    confirm it is the **same** `HomeViewModel` instance Home renders — not a second one.
+  - The top bar binds to `uiState.selectedDate`, so a successful selection would visibly
+    change the header date.
+  So iteration 47's observation was a missed tap, not a missing behaviour.
+  **What I could not do: confirm it on device.** Repeated taps computed against a
+  pixel-scanned row position (y~1645, verified by locating the date text) left both the
+  header and the calendar's own selection ring unchanged — and one tap demonstrably opened
+  **Profile** instead. That means my input coordinates are not landing where I compute
+  them, so the on-device evidence is contaminated and cannot support a claim in either
+  direction. Recording it as inconclusive rather than filing "day tap is broken" off
+  evidence I know is unreliable.
+  **Still unverified, unchanged from 47:** the text ladder's non-period branch (phase
+  primary at 1.0/0.72/0.56/0.45). Reaching it needs a working day-selection tap, which is
+  exactly what is not reproducible right now. A cleaner route would be an instrumented or
+  screenshot test that sets `selectedDate` directly, rather than fighting touch input.
+
+- **2026-08-02, Claude (iteration 48): Karan's screenshot review of the new nav bar. The
+  port had missed the button *styles* entirely — both nav affordances were bare glyphs
+  where iOS draws floating circles. Fixed, then iterated twice more on his feedback.
+  175 tests across 5 modules passing.**
+  **What I missed when I built it.** I ported `DSCloseButton`/`DSBackButton` by copying
+  the **glyph** and dropped `.buttonStyle(DS.Buttons.Close / .Back)` — and that style is
+  where the entire visual lives. iOS's own doc on it: *"Floating (default): 44x44 glass
+  circle (iOS 26+) or buttonFill circle (iOS 18-)."* So both affordances are floating
+  circles with pink glyphs, and Android was drawing flat `onSurface` icons. Porting a
+  component means porting how it is styled, not only what it renders.
+  **Which branch ships matters.** The `#F4E4EA` `buttonFill` circle is the **iOS-18
+  fallback**. The app targets iOS 26, so real devices — including Karan's screenshot —
+  take `.glassEffect(.regular, in: Circle())`, which reads near-white. Filling with
+  `buttonFill` made the button vanish into the pale pink Profile page, which is what he
+  reported next.
+  **Then I over-corrected.** I compensated with a 6dp elevation, which produced a heavy
+  dark halo — his words, "itni gandi shadow". iOS's glass control has **no drop shadow**;
+  it is a translucent material, not a raised button. What separates it is simply being
+  lighter than the page.
+  **Landed on:** a near-opaque white disc (94%) with a 0.5dp hairline at 4% black for
+  definition on lighter surfaces, and **no elevation**. Extracted as
+  `Modifier.sakhiGlassCircle` in `core:ui` so the two affordances cannot drift and there
+  is one place to swap if Compose ever ships a real glass material. Both wrong turns are
+  recorded in its KDoc so the next person does not retry either.
+  **Also in this pass:** `SakhiNavBar` itself (port of iOS `DSNavBar`, 24/20/8 metrics,
+  17sp bold title, and iOS's rule that the title centres only when a button is present),
+  applied to Profile — which had **no close button at all** despite its own comment saying
+  iOS relies on one. Close now dismisses the whole sheet, matching
+  `AppCoordinator.shared.dismissSheet()`.
+  **Emulator note:** its system process crashed and rebooted mid-verification
+  ("Process system isn't responding"). Unrelated to the app — Home kept rendering
+  underneath. Waited on `sys.boot_completed` and re-verified rather than reporting from
+  the pre-crash screenshot.
+  **Still scoped to Profile**, awaiting Karan's confirmation before rolling out to
+  `DetailSheetScaffold`, `ChatSubscreenHeader`, Chat's header and Care/Reports.
+
+- **2026-08-02, Claude (loop iteration 47): audited my own ladder work to completion rather
+  than assuming it. Own-mode card text is DONE. Emulator needed a reboot (its fault, not
+  the app's). One new question recorded, deliberately unanswered.**
+  **Re-enumerated instead of trusting the last count.** The file has moved a lot since
+  iteration 43, so the old line numbers were stale — one "remaining site" I had logged
+  turned out to be my own KDoc text matching the grep. Current state: **no own-mode card
+  text sites remain**. What is left is `PartnerChecklistCard` (2), `PartnerNoDataCard` (2),
+  `PartnerHeadsUpCard` (1) — all partner-mode, all blocked on a second account.
+  **Verified a claim I had only asserted.** In iteration 43 I said `EmptyStateCard` and the
+  five `Learning*` cards were correctly left on neutral theme colours because they are
+  no-data-only. Checked the gating this time rather than repeating myself: they sit behind
+  `else if (!uiState.hasCycleData)` at `HomeScreen:353`, so the claim holds and converting
+  them would still have broken parity.
+  **Emulator, not app.** Mid-iteration the emulator threw **"Process system isn't
+  responding"** — `system_server`, not Sakhi, and distinct from the app-level ANR I caused
+  myself in iteration 45. It stayed wedged across repeated checks after ~46 iterations of
+  continuous install/screenshot load, so I rebooted it. Session survived, and Home came
+  back with the emoji tiles, paged nutrition card and full text ladder intact — which also
+  confirms none of that depended on warm state.
+  **Could NOT verify, and am not claiming otherwise:** the ladder's third branch. Every
+  on-device check so far has been a period day (white at 1.0/0.75/0.58/0.50). The
+  non-period branch (phase primary at 1.0/0.72/0.56/0.45) is written and compiles but has
+  never been seen rendered.
+  **New question this raised, recorded not guessed:** selecting Aug 15 in the calendar left
+  Home reading "2 Aug 2026 / Menstrual phase / Day 1". On iOS the day-detail cards derive
+  `cyclePhase` from `selectedDate`, so a follicular date should re-tint them. Either the
+  tap missed or Android does not re-derive phase from the selection — those have very
+  different consequences and I did not have a clean run left to tell them apart. Worth
+  starting the next session on, since it gates verifying the non-period branch at all.
+
+- **2026-08-02, Claude (loop iteration 46): covered the `FoodEmoji` resolver I shipped last
+  iteration. 13 tests, and mutation-proven to actually catch the regression they exist for.
+  Build green.**
+  The port went in with no test, and it is exactly the shape that fails silently: a 60-row
+  keyword table whose behaviour depends on **row order**. "sweet potato" only beats
+  "potato", and "dark chocolate" only beats "chocolate", because those rows sit higher in
+  the list. Reorder them and users see different emoji with no compile error and nothing
+  else failing. I introduced that risk, so covering it is my job, not a nice-to-have.
+  **13 tests in SakhiCore** (`FoodEmojiTest`), pinning the overlapping orderings
+  (sweet-potato/potato, dark-chocolate/sweet, pumpkin-seed/nut, leafy-greens/vegetable,
+  specific-fish/fish, olive-oil/oil), name-beats-category precedence, category fallback,
+  case-insensitivity on both, and the contract iOS's own header calls out — never an empty
+  string, never a shared placeholder across a curated set.
+  **Proven load-bearing, not just green.** Moving the generic `"potato"` row above
+  `"sweet potato"` fails `sweet potato resolves before plain potato` and nothing else — so
+  the suite detects precisely the regression it was written for. Source restored
+  byte-identical afterwards (`cmp -s`), verified, and the suite re-run green.
+  This is the check iterations 33-34 established: a passing test proves nothing until you
+  show it can fail for the right reason.
+
+- **2026-08-02, Claude (loop iteration 45): closed the derivable half of the "What to Eat"
+  data gap by porting iOS's `FoodEmoji` to SakhiCore and adding the 36dp emoji tile. Hit an
+  ANR from my own first attempt and fixed the cause. Build green, 62 tests passing.**
+  **Why porting was the right call, not inventing.** iOS's `FoodEmoji.swift` header says it
+  outright: "The curated KMM food data carries no emoji, so without this every curated item
+  rendered with the same placeholder — which the user must never see." iOS built the
+  resolver *because* `FoodItem` has no emoji field. So deriving the emoji is what iOS does;
+  it is parity, not invention. Ported the whole table verbatim — 60 keyword rows and 28
+  category fallbacks, keyword order preserved so "sweet potato" still beats "potato" and
+  "dark chocolate" beats "chocolate".
+  **Placed in SakhiCore**, not the Android UI: it is pure cross-platform derivation with no
+  Compose in it, which is where the shared-first rule puts it. iOS keeps its Swift copy —
+  that duplication is pre-existing and already logged, not newly forked.
+  **Verified on device:** 🥬 leafy greens, 🍫 dark chocolate, 🐟 salmon, 🫚 ginger tea —
+  distinct and correct per item, in 36dp tiles filled `secondary@0.22`, four rows to a page
+  with the indicator below.
+  **I caused an ANR and then fixed it.** The first version called
+  `rememberHomePhasePalette(phase)` **inside** the per-row `forEachIndexed`. `remember` in
+  an unkeyed loop is a recomposition hazard regardless of symptom, and the app hung with
+  "Sakhi isn't responding". Hoisted it to the card level, where the palette is constant
+  anyway; app is responsive and the card renders correctly. Worth recording as a rule:
+  never put `remember` inside a row loop, even for something that looks cheap.
+  **STILL OPEN — the non-derivable half.** iOS shows the item's **`reason`** beneath the
+  name; Android shows `category` because `FoodItem` carries no reason. That is content, not
+  something to derive, so it needs either the field added to `FoodItem` and its Supabase
+  source, or a decision to keep `category`. Unchanged from iteration 44 and still Karan's
+  call.
+  **Also still missing on the row:** iOS has a trailing chevron linking to the food's
+  source URL (`24x28`, `textTertiary@0.55`); Android shows the USDA `nutritionLabel` in
+  that slot instead. Both are defensible, but they are not the same thing.
+
+- **2026-08-02, Claude (loop iteration 44): rebuilt "What to Eat" to iOS's paged layout —
+  Karan's "not even matching the ios side" was structural, not just colour. Build green,
+  62 tests passing. One genuine DATA gap found that I could not close.**
+  **The structure was completely different.** iOS's `nutritionCard` chunks foods **4 per
+  page** into a swipeable pager pinned to a fixed **214pt**, with a capsule page indicator
+  below (active 10x4 at `standardAccent@0.72`, inactive 4x4 at `textTertiary@0.20`) and a
+  0.5pt rule between rows inset 46pt. Android rendered every food in one flat column: no
+  paging, no fixed height, no indicator. Ported all of it.
+  **Row metrics, corrected twice by measurement rather than by eye.** After the first pass
+  the 4th row clipped. iOS's row is `.padding(.horizontal, 14).padding(.vertical, 7)` —
+  Android was using 8dp, and Compose's default 1.4x leading made each row taller still.
+  Set iOS's actual type (`lato(14,.bold)` name over `lato(12)` sub-line) plus explicit
+  17sp/14sp line heights matching lato's ~16.8/~14.4 leading. Four rows now fit with the
+  indicator visible. Two rounds of "looks close" were wrong; the numbers settled it.
+  **Also fixed:** the two remaining own-mode card-text sites — `LoggedDetailsCard`'s empty
+  line now uses `accentColor@0.60` (iOS's `cardInnerPlaceholder` is accent-tinted, *not* a
+  ladder level, which I checked rather than assumed) and the nutrition empty line uses the
+  ladder's secondary.
+  **DATA GAP — needs Karan, cannot be fixed on the Android side alone.** iOS's food row
+  also renders a **36x36 rounded tile containing the food's emoji** and, beneath the name,
+  the item's **`reason`**. Neither exists in the shared model: `FoodItem` is
+  `(name, category, phaseKey)`. Android currently shows `category` where iOS shows
+  `reason`, and has no emoji at all. Closing this needs either those fields added to
+  `FoodItem` and its Supabase source, or a port of iOS's `FoodEmoji.resolve(name:category:)`
+  (derivable) plus a decision about `reason` (content — not derivable).
+  Corroborating detail: Android's own **loading shimmer already draws a circular avatar
+  placeholder** for each row, so the emoji tile was clearly intended and the loaded row is
+  what drifted.
+  **Build note:** hit the stale-incremental failure again, and this time
+  `--rerun-tasks` made it worse ("Incremental compilation failed", phantom unresolved
+  references across modules). `./gradlew --stop` then a normal build cleared it. Prefer
+  stopping the daemon over `--rerun-tasks` for this symptom.
+
+- **2026-08-02, Claude (loop iteration 45): built the shared nav bar Karan asked for, as a
+  PORT not an invention — iOS already had `DSNavBar`. Applied to Profile only, awaiting
+  his confirmation before rolling it out. Build green, 85 tests passing.**
+  **It already existed on iOS.** Before designing anything I checked, and found
+  `DSNavBar` (`SakhiDesignSystem.swift:505`) — three optional slots (`onBack`, `title`,
+  `onClose`) with fixed metrics. `SakhiNavBar` in `core:ui` is a direct port rather than a
+  new Android design, so it cannot drift from iOS by construction.
+  **Ported exactly:** horizontal 24 (`screenHorizontal`), top 20 (`.ml`), bottom 8
+  (`.xs`); title `lato(17, .bold)`; back is `chevron.left`, close is `DSCloseButton`.
+  **Including the subtle alignment rule:** iOS centres the title when *either* button is
+  present and left-aligns it when the title is alone
+  (`alignment: onBack == nil && onClose == nil ? .leading : .center`). That single line is
+  why a bare title page reads as a heading while a modal reads as a nav bar. Reproduced.
+  **Added `onGradient` to `BackButton`** so both affordances flip together for nav bars
+  over a saturated phase background, matching the flag `CloseButton` already had. One flag
+  on the nav bar instead of every caller tinting by hand.
+  **Applied to Profile, and it exposed a real bug.** `ProfileScreen` carried a comment
+  saying iOS presents this sheet with "no drag handle, relying on the in-header close
+  button instead" — and Android had **no close button at all**, just a bare headline
+  `Text`. The only way out was system back. Now `SakhiNavBar(title = "Profile",
+  onClose = …)`, wired through `ProfileOverlaySheet` to dismiss the whole sheet, which is
+  what iOS's `AppCoordinator.shared.dismissSheet()` does — not merely pop to Root.
+  **Verified on device:** centred title, close on the right, tap dismisses to Home.
+  **Deliberately NOT rolled out yet.** Karan asked to confirm on Profile first. The
+  existing headers it should replace once he approves are: `DetailSheetScaffold`'s inline
+  row, `ChatSubscreenHeader`, Chat's own header, and the Care/Reports headers — four
+  hand-rolled variants that are why the affordance drifted per screen in the first place.
+
+- **2026-08-02, Claude (loop iteration 44): Karan's report — no chevron on the top-bar
+  phase label and tapping it did nothing. Both were real: wrong glyph, and the tap was
+  never wired at all. Also fixed the tip truncation iteration 43 introduced. Build green,
+  62 tests passing.**
+  **Wrong glyph.** iOS's `HeroTopBarSubtitle` draws
+  `Image(systemName: "chevron.down").font(.lato(8, .bold))` beside the phase name.
+  Android drew `Icons.Filled.MoreHoriz` — an ellipsis, which reads as "more options"
+  rather than "this expands downward". Swapped to `KeyboardArrowDown`.
+  **The tap was missing entirely.** iOS wraps the label in a `Button` whose action runs
+  a haptic, closes the calendar, and scrolls the day-detail to the phase card
+  (`proxyReader.scrollTo("phaseInfo", anchor: .top)` over
+  `.easeInOut(duration: 0.42)`). Android's Row had no `clickable` at all — the chevron
+  would have been decoration even if it had been the right glyph.
+  **Wiring it needed an anchor Compose does not give you.** `verticalScroll` has no
+  id-based scroll target, so `PhaseInfoCard` now reports its own offset within the scroll
+  content via `onGloballyPositioned` (`positionInRoot().y - scrollColumnTop +
+  scrollState.value`), and the tap animates there with a 420ms tween to match iOS's 0.42s.
+  Both call sites (partner and self) are anchored.
+  **Gated the tap exactly as iOS does:** `.allowsHitTesting(heroScroll.progress < 0.5)`
+  becomes `clickable(enabled = progress < 0.5f)`, so the label stops responding once it
+  has crossfaded into the collapsed "Day 1 · of your period" summary.
+  **Verified on device:** tapping scrolls to "What's Happening to my body?" anchored at
+  the top, and the bar collapses to the summary — the same end state iOS lands on.
+  **Fixed my own regression from iteration 43.** Adding iOS's 24pt horizontal hero inset
+  made the tip pill ellipsize ("…your body is workin…"). iOS truncates identically under
+  the same constraint, so it was faithful — but it reads as broken, and Karan asked for it
+  fixed. Deliberate, documented divergence: keep iOS's single line and 13sp ceiling, but
+  step the size down to a 11sp floor instead of cutting the sentence. The whole tip is now
+  always readable; the padding stays correct.
+
+- **2026-08-02, Claude (loop iteration 43): stopped fixing card text by scrolling and
+  enumerated every remaining theme-colour site in Home instead. Fixed `CycleStatusTile`,
+  including a badge that was near-black-on-grey where iOS is white-on-translucent. Build
+  green, 62 tests passing.**
+  Iterations 41-42 fixed what I could see on screen. That is the same eyeball habit Karan
+  caught in 38, so this pass listed **all 23** remaining `onSurface`/`onSurfaceVariant`
+  uses in `HomeScreen.kt` grouped by enclosing function, and classified each rather than
+  hunting visually.
+  **Deliberately left alone (they are correct):** `EmptyStateCard`, `LearningIntro`,
+  `LearningRows`, `LearningOverviewRow`, `LearningAbbrRow`, `LearningPhaseDetailCard`.
+  These only render on the **no-cycle-data** path, and iOS's ladder explicitly falls back
+  to neutral system colours there — its own comment: "use standard system colors so the
+  view looks like clean dark mode". Converting them would have *broken* parity. Also left
+  `syncTint` (top-bar chrome, not card content).
+  **Fixed — `CycleStatusTile`, four sites plus the badge:** "Cycle Status" → `textSecondary`,
+  "4 cycles analysed" → `textTertiary`, and the Regular/Irregular badge rebuilt to iOS's
+  actual rule: `badgeFg = isRegular ? cycleCardAccent : textSecondary`, `badgeBg =
+  isRegular ? cycleCardAccent@(period ? 0.22 : 0.14) : white@0.10`.
+  Two things were wrong there, not one. `cycleCardAccent` is the phase **secondary**
+  (`warmAccent`), while Android used the primary — which on a period day is the white
+  override, a different colour entirely. And the irregular pill used
+  `onSurface@0.08`, near-black in light theme, so it rendered as a grey chip with dark
+  text where iOS has a translucent light one. Verified on device: it now reads white on a
+  soft translucent pill.
+  **Still outstanding, and only reachable in partner mode:** `LoggedDetailsCard` (1 site),
+  `PartnerChecklistCard` (2), `PartnerNoDataCard` (2), `PartnerHeadsUpCard` (1), plus one
+  each in `NutritionCard` and `SakhiInsightCard`. They are listed here with line numbers
+  so they are not rediscovered by accident; the partner ones need a second account to see
+  rendered, which is the same blocker as the rest of Care.
+
+- **2026-08-02, Claude (loop iteration 43): Karan's report — no spacing above or below the
+  countdown, everything sitting too close. iOS's hero had three outer paddings Android
+  never applied. Build green, 44 home tests passing.**
+  **What was missing.** iOS's `heroSection` (`HomeDayDetailGlassView.swift:394`) ends with
+  `.padding(.horizontal, 24)`, `.padding(.top, DS.Spacing.m)` = 16 and
+  `.padding(.bottom, 32)`. Android's `HeroSection` had **none of them** — the Column
+  carried only its internal `spacedBy`, so "Day 1" sat flush under the top bar and the tip
+  pill ran straight into the first card.
+  **What was already right:** the internal 10dp rhythm. Android's
+  `space2 + space1 / 2` is 10, matching iOS's `VStack(spacing: 10)` exactly. Only the
+  outer padding was absent, which is why the elements looked correctly spaced relative to
+  each other but the whole block looked cramped.
+  **The bottom padding is 12, not 32, and that is deliberate.** iOS's hero lives in a
+  `VStack(spacing: 0)`, so its own 32 is the entire hero-to-first-card gap. Android's hero
+  sits in a Column with `spacedBy(space5)` = 20 applied between every child, which already
+  contributes 20. 12 + 20 lands on the same 32 iOS renders. Copying 32 verbatim would have
+  produced 52 — the arithmetic is written into the code comment so the next person does
+  not "fix" it back. Card-to-card spacing was already correct at 20
+  (iOS `DS.Spacing.ml`).
+  **Also added** the tip capsule's `.padding(.top, 6)`, which iOS applies on top of the
+  stack spacing; `HeroTipPill` now takes a `modifier` so the caller can supply it rather
+  than baking the offset into the component.
+  **Note on the truncated tip:** the pill now reads "…your body is workin…". That is
+  iOS-faithful, not a regression — iOS sets `.lineLimit(1)` on the same text inside the
+  same 24pt horizontal inset, so it truncates identically. Flagging it because it looks
+  like a new bug and is not one.
+
+- **2026-08-02, Claude (loop iteration 42): finished the card-text work by closing the
+  loose end I flagged myself — the Cycle Length / Period Length tiles, then the rest of
+  the Current Cycle card. Build green, 62 tests passing.**
+  Iteration 41 ended by noting those tiles still used a pale fill with dark text and that
+  I had not checked them. They were wrong in three separate ways, not one.
+  **Structure.** iOS's `cycleInfoTile` puts the **icon and title on one row** with the
+  value beneath. Android stacked icon / value / title.
+  **Fill.** iOS tints from the phase: `secondary` at 0.20 on a period day (0.08
+  otherwise), with a 0.5pt `secondary@0.35` stroke. Android used a plain themed `Surface`
+  with `tonalElevation`, which ignores the phase entirely — hence a pale tile sitting on
+  the saturated card.
+  **Type + colour.** iOS: icon 11pt in `secondary`, title 11pt bold in `textTertiary`,
+  value **22pt** bold in `textPrimary`. Android had an untinted 16dp icon, a ~16sp value
+  and an `onSurfaceVariant` title. Rewrote to spec; the radius was already correct
+  (`DS.Radius.systemCard` = 12 = `RADIUS_LG`).
+  **Then the rest of that card, with iOS's exact levels read per-label rather than
+  guessed:** `"/ 28"` → `textSecondary`; `"today's cycle day"`, `"Started 2 Aug"` and both
+  legend labels (`cycleLegendDot`) → `textTertiary`. No theme colours remain anywhere in
+  `CycleDetailsCard`.
+  **Emulator note for future sessions:** a physical device appeared alongside the emulator
+  part-way through, so bare `adb` commands failed with "more than one device" rather than
+  running. Set `ANDROID_SERIAL=emulator-5554`; `adb -s` inside a shell variable does not
+  survive word-splitting here. Nothing was installed on the physical device — the command
+  errored instead of picking one.
+
+- **2026-08-02, Claude (loop iteration 41): Karan's report — black card text on the
+  period-day background, "How you feel" and "What to Eat" not matching iOS. Root cause was
+  a whole missing text-colour system, not a few wrong colours. Ported iOS's four-level
+  ladder. Build green, 62 tests passing.**
+  **What was actually wrong.** iOS's `HomeDayDetailGlassView+GlassCard.swift` defines a
+  four-level ladder used by every card label:
+  `textPrimary` / `textSecondary` / `textSection` / `textTertiary`. On a period day the
+  cards are filled with the saturated phase **surface**, so all four resolve to **white**
+  at 1.0 / 0.75 / 0.58 / 0.50. Off a period day they resolve to the phase primary at
+  1.0 / 0.72 / 0.56 / 0.45. Android had no equivalent at all — card labels used
+  `MaterialTheme.colorScheme.onSurface` / `onSurfaceVariant`, which stay near-black in
+  light theme. Dark text on a dark pink card.
+  **Why iteration 31 missed it.** That pass verified `HomeGlassCard`'s **fills** against
+  iOS's `cardFill`/`cardStroke`/`cardSep` and reported the card correct. It never checked
+  what colour the text on those fills was. Same appearance-vs-behaviour split Karan caught
+  in iteration 38, and the third time this exact shape has bitten: verifying one property
+  of a component and calling the component done.
+  **Ported the ladder** as `HomeCardTextColors` + `rememberHomeCardTextColors`, with the
+  `!hasCycleData` branch falling back to neutral theme colours exactly as iOS does (iOS's
+  comment: "use standard system colors so the view looks like clean dark mode").
+  **Applied two ways.** `HomeGlassCard` now provides `LocalContentColor = textPrimary`, so
+  the card title and every unstyled label inherit it in one place rather than threading a
+  colour through each row. For labels that set their own colour, a `LocalHomeCardText`
+  local carries the full ladder so rows can read the *exact* level instead of an
+  approximation: "What to Eat" food names → primary, category captions → secondary, the
+  "How you feel" chip caption → secondary, phase-snippet body and bullets → secondary,
+  "BODY CHANGES" → section (it was full-strength accent, over-weighting a caption), and
+  the AI tip's "Powered by Sakhi AI" → tertiary.
+  **Verified on device** across the whole Home scroll: "How you feel", "What to Eat" and
+  their rows, the phase-info card body and bullets, and the tip card all now render white
+  on the period background instead of black.
+
+- **2026-08-02, Claude (loop iteration 40): CORRECTS iteration 39. The fertile/ovulation
+  colour defect was NOT limited to the year grid — the compact calendar, the screen users
+  see every session, had it too. Fixed there as well. Build green, 62 calendar+home tests
+  passing.**
+  **What I got wrong yesterday.** Iteration 39 ended with "Scoping verified, not assumed:
+  only the year cell changed. The compact month cell still uses `accentColor` for
+  fertile/ovulation, which matches iOS." That was wrong, and the way it was wrong matters:
+  I based it on the comment sitting on iOS's `accent` **property declaration**
+  (`SakhiCalendarView.swift:33` — "non-period highlights: today, selection, fertile,
+  ovulation") instead of on the rendering code. The actual `dayCell` at line 406 computes
+  `let ovulationColor = PhaseColorManager.ovulation` under a comment that says the
+  opposite in as many words: **"Fixed semantic colors — independent of phase accent."**
+  Trusting a declaration comment over the drawing code is the same mistake as trusting a
+  token name over its resolver, which is what nearly derailed iteration 39. Twice in two
+  iterations, the label lied and the code did not.
+  **Fixed.** All four compact-cell branches — fertile and ovulation, present and future —
+  now use the resolved ovulation ring instead of `accentColor`, matching iOS exactly,
+  including the 0.68 future-day opacity. Predicted-period stays `periodColor` and today
+  stays `accentColor`, both of which do match iOS.
+  **Impact is larger than the year-grid fix it corrects.** On the compact calendar the
+  entire fertile window plus ovulation day rendered in the same pink as today and
+  selection, so a user could not tell a fertile day from the selected one. Verified on
+  device: September 12-18 now read teal against the pink "today" ring, where before the
+  whole row was one colour.
+  **Restored** the calendar to the current month after navigating to September to check.
+
+- **2026-08-02, Claude (loop iteration 39): applied Karan's appearance-vs-behaviour lesson
+  to the year grid's day cells. Found and fixed one real colour defect. Build green, 62
+  calendar+home tests passing.**
+  Iteration 38 showed the blind spot: I had verified the year view's *behaviour* and never
+  its *appearance*. The day cells inside that same grid were the obvious next place, so I
+  diffed iOS's `YearDayCell` fill/label tables against Android's `SakhiMiniMonthDayCell`
+  line by line.
+  **Two things I expected to be defects were not, and checking stopped me "fixing" them:**
+  - Android tints predicted-period days with `periodColor` at 0.16 rather than a separate
+    predicted colour. Correct — iOS's `PhaseColorManager.predictedPeriod` is literally
+    `{ period }`.
+  - Android uses one colour for both fertile and ovulation. Also correct — iOS's
+    `.ovulation` and `.fertileWindow` both resolve to `PhaseColors(.ovulation).ring`.
+  **The real defect: which colour.** iOS labels those days with the ovulation **ring**;
+  Android used `MaterialTheme.colorScheme.primary` (the app pink), so fertile and
+  ovulation days rendered in the same hue as today and selection — collapsing exactly the
+  distinction the year grid exists to show. Now reads
+  `SakhiColors.resolved(isDark).forPhase(OVULATION).ring`, so it adapts to dark as well.
+  **I nearly reverted my own correct fix.** The rendered result came out **teal**, but
+  `DesignTokens.OVULATION_RING` is `#825BC7` (purple), so it looked wrong. The token is
+  legacy and neither platform reads it: iOS's `PhaseColors.swift` header states "Zero hex
+  values live here — all are owned by SakhiColorSystem.kt", and it resolves ring through
+  the same `SakhiColors.resolved(isDark:).forPhase(...)` Android now calls. Teal is what
+  iOS draws. Checking the actual source beat trusting the token name.
+  **Scoping verified, not assumed:** only the year cell changed. The compact month cell
+  still uses `accentColor` for fertile/ovulation, which matches iOS — `SakhiCalendarView`
+  documents its accent as covering "today, selection, fertile, ovulation", while
+  `YearDayCell` alone uses the ring. iOS splits these two deliberately and Android now
+  splits them the same way.
+
+- **2026-08-02, Claude (loop iteration 38): finished the dark-mode sweep and fixed two
+  real defects — an invisible close button in dark, and (Karan's catch) twelve month
+  containers in the year view that iOS does not have. Build green, 62 calendar+home tests
+  passing, theme restored.**
+  **Karan's catch: the year view's months should not be in containers.** He was right and
+  my iteration-32 pass had missed it — I verified the *behaviour* there (chevrons, reset,
+  multi-select, swipe) and never compared the month rendering itself. iOS's
+  `yearMonthsScroll` is a plain `VStack(spacing: 0)` per month: a left-aligned label
+  (`.lato(15, .bold)`, accent when it is the current calendar month,
+  `.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 4)`) with the grid
+  directly beneath. **No card, no fill, no border.** Android wrapped every month in a
+  rounded `surfaceVariant` Surface with a border on the visible month, and added a 16dp
+  gap between them. Removed the Surface, matched iOS's label spec, and set the list
+  spacing to 0 since the label's own top padding is the separator. Four months now fit
+  where three did.
+  **Dark-mode defect: the multi-select close button was invisible.** Measured, not
+  eyeballed — glyph `(235,230,237)` on a circle fill of `(235,230,237)`. `CloseButton`'s
+  `onGradient` variant hardcoded `Color.White`, which is correct on a saturated phase
+  gradient but wrong here: the edit bar is `inverseSurface`, and that token **flips** with
+  the theme, so in dark the bar goes light and white-on-white disappeared. Added an
+  `onGradientColor` parameter (defaulting to white, so the other call sites are untouched)
+  and passed `inverseOnSurface` from the calendar. Verified both ways: dark now draws a
+  `(36,21,28)` glyph on a light circle; light is unchanged, white glyph on the dark bar.
+  Same failure shape as the iteration-31 log button, and only reachable on the axis I had
+  never tested.
+  **Rest of the dark sweep is clean:** logging sheet (including the iteration-24
+  "Flow Intensity" / "Other Symptoms" strings), Chat, Reports (the iteration-28
+  double-chevron capsule reads correctly), and the year view itself. The multi-select bar
+  inverts correctly as a whole — bar, Undo and Save all flip together because they derive
+  from the same token pair, which was worth confirming rather than assuming.
+  **Build note:** a stale incremental-compilation state produced phantom
+  `Unresolved reference 'SakhiTextField'` errors in `:feature:auth` that had nothing to do
+  with the edit; `:core:ui:compileDebugKotlin --rerun-tasks` cleared it. Worth recognising
+  rather than chasing.
+  **Restored** the theme to System Default and verified the app returned to light.
+
+- **2026-08-02, Claude (loop iteration 37): swept DARK MODE, which 36 iterations had never
+  once looked at. Home and Profile are clean, and the known light/dark desync bug is
+  confirmed still fixed under the exact conditions that caused it. No defects found; no
+  code changed; Karan's theme setting restored.**
+  Every screenshot in this log up to now was light mode, yet iOS branches explicitly on
+  `userInterfaceStyle == .dark` (its `cardFill` resolves per-trait) and the ported assets
+  include `drawable-night-*` variants. So dark was a whole untested axis, not a detail.
+  **Regression check that mattered most.** `SakhiTheme.kt` carries a comment about a real
+  bug found on device: Home's food-list text went near-invisible when the **OS was light
+  but the in-app theme was Dark**, because phase colours read the OS setting while
+  `MaterialTheme.colorScheme` honoured the in-app override. I reproduced exactly that
+  state — `cmd uimode night` reported **"Night mode: no"** with the app set to Dark — and
+  "What to Eat" renders correctly: white item names, grey category captions, all legible.
+  Fix holds.
+  **Home in dark:** background, cards, phase-info and tip card all render light-on-dark
+  correctly. The log button from iteration 31 stays visible here too — it takes the raw
+  menstrual primary (`#E85787`) rather than the light-mode surface, with the white glyph
+  on top, so the contrast fix works in both themes rather than only the one I tested it in.
+  **Profile in dark:** section headers, rows, icons and the account card all correct.
+  **Also confirmed in passing:** the Sakhi tip rendered clean prose on a freshly generated
+  response, so the iteration-24 shared-prompt fix is holding rather than having been a
+  one-off cache.
+  **Restored Karan's setting.** Switching themes meant writing a real user preference;
+  put it back to **System Default** and verified the app returned to light. Worth noting
+  the previous iteration's command timed out mid-sweep and left the app on Dark — the
+  restore was owed regardless of whether the loop continued.
+  **Nothing to fix.** No production code changed this iteration.
+
+- **2026-08-02, Claude (loop iteration 36): finished sweeping the Care disconnected screen.
+  Fixed the invite-link ordering. Found the real reason the `care.accept.*` copy is missing
+  from Android — it is a missing FLOW, not a blocked account — and deliberately did not
+  build it. Build + care tests green.**
+  **Fixed: someone who follows an invite link was shown "create an invite" first.** The
+  deep link correctly prefills the code (verified: `ZZ9Q7X` lands in the field), but the
+  invited person then had to scroll past the whole "Pick Your Person / Create invite code"
+  form to reach the already-filled accept field below it. The accept card now leads
+  whenever a code is present; the create card keeps its original position otherwise, so
+  the non-deep-link path is untouched.
+  **The substantive finding — and it revises what I have been reporting for four
+  iterations.** iOS's deep link opens `AcceptInviteSheet(inviteCode:)`, which fetches the
+  invite and runs **intro → otp → describe**: it tells the person who invited them ("She
+  invited you in. That is not a small thing."), asks for the relationship ("How Would You
+  Describe Her?"), and frames the commitment ("By continuing, you're saying you'll be there
+  for her."). Android has **no counterpart to any of that**. Its deep link lands on the
+  shared create/accept screen, and `BeHerAcceptScreen` handles only the *outcome*
+  (success / connection issue / invalid code).
+  So the missing `care.accept.*` strings I logged in iteration 27 are not blocked on a
+  partner test account, as I recorded then — the **screen does not exist**. The account was
+  never the constraint for this part.
+  **I did not build it, on purpose.** That is a three-step flow carrying some of the most
+  carefully-worded copy in the product, on the path where one person agrees to receive
+  another's health data. Adding it unilaterally inside a loop iteration would mean
+  inventing the Android presentation of copy Karan wrote for iOS, and inventing consent
+  framing, with no review. It is a feature decision, and it is his.
+  **Verified:** deep-linked in, accept card now first with the code prefilled, create card
+  below; bullets from iteration 35 still correct. `:app:assembleDebug` and `:feature:care`
+  tests green. Nothing committed.
+  **Care status, corrected again:** `Disconnected` is now fully swept and the deep-link
+  entry is fixed. The accept *flow* is a missing feature, not a blocked one.
+  `PendingInvitation` needs a real invite created on Karan's account. Only
+  `OwnerConnected` / `PartnerConnected` and the log-permission sheet genuinely need a
+  second account.
+
+- **2026-08-02, Claude (loop iteration 35): the Care blocker was over-scoped. Half of Care
+  is reachable without a partner account, and sweeping it found the same defect I fixed in
+  onboarding but deliberately left here. Fixed and verified on device. Build + care tests
+  green.**
+  **I had been wrong that "Care needs a partner account".** That is true for two of its
+  four states (`OwnerConnected`, `PartnerConnected`). The other two — `Disconnected` and
+  `PendingInvitation` — are the owner's own side and need nobody else. Four iterations
+  reported Care as fully blocked on the strength of one earlier attempt; the blocker was
+  never re-examined.
+  **Why it looked unreachable.** `CareScreen`'s `autoLaunchInviteFlow` defaults to
+  `prefillInviteCode.isNullOrBlank()`, i.e. **true** on normal entry, so tapping the care
+  glyph routes straight past the disconnected screen into
+  `OnboardingFlowHost("carePartnerInvite")` — which is exactly what iteration 21 hit and
+  mistook for the Care screen. `InviteCreationContent` only renders on the **deep-link**
+  path, reachable with
+  `adb shell am start -a android.intent.action.VIEW -d "sakhi://invite/<CODE>"`. No second
+  account, no data written.
+  **Fixed: the same bullet defect as iteration 21, in the copy I chose not to touch then.**
+  `CareScreen`'s own private `CarePromptBullet` still rendered titles with **no subtitles**
+  and the same wrong icons — `VisibilityOff` for "They know you're okay" (reads as
+  "hidden" where iOS means "cared for") and `Favorite` for "You Decide. Always" (reads as
+  "favourite" where iOS means "people"). I recorded this in iteration 21 as "a copy
+  decision for Karan, since the screen has no iOS counterpart". Seeing it rendered, that
+  call was too cautious: the screen shows the *same* `care.onboarding.*` CMS copy, and iOS
+  puts those keys through `FeatureBulletRow`, which always carries a subtitle. Titles alone
+  is a truncation, not a design choice — a parity fix, not a judgement call.
+  Added the three subtitle strings verbatim from `ContentSeed`, brought the row to iOS's
+  `FeatureBulletRow` spec (top-aligned, 16 gap, 44dp badge, 20dp glyph, 15sp bold title,
+  14sp subtitle at lineHeight 20), and corrected the icons to
+  `Favorite` / `NotificationsActive` / `Groups`.
+  **Caught in verification, not in review:** with the row's own vertical padding removed
+  the three bullets ran together, because the parent supplied no gap. iOS keeps the spacing
+  at the caller (`pointsSlide` uses `VStack(spacing: .l)` = 24) so different screens can
+  set their own rhythm; added a 24dp `spacedBy` at the call site rather than baking padding
+  back into the row.
+  **Verified:** deep-linked into the screen, all three bullets render with subtitles,
+  correct icons and 24dp rhythm. `:app:assembleDebug` and `:feature:care` tests green.
+  Nothing committed.
+  **Care status is now narrower and more accurate:** `Disconnected` is swept.
+  `PendingInvitation` is reachable solo too, but only by creating a real invite on Karan's
+  account — worth doing with his say-so, not unilaterally. `OwnerConnected` /
+  `PartnerConnected` and the log-permission sheet still genuinely need a second account.
+
+- **2026-08-02, Claude (loop iteration 34): extended the iteration-33 mutation audit from
+  Home to the partner WRITE path in `:feature:logging`. Result: no defect — the protection
+  is real, double-guarded and properly tested. Getting there required correcting my own
+  reading twice. No production code changed; sources verified byte-identical.**
+  Home only *reads* partner data. `LoggingViewModel` is where a care partner could **write**
+  to someone else's health record, so it carries the higher risk and had never been
+  audited. 27 permission gates, 27 tests.
+  **`canLogPeriod` gate: load-bearing.** Removing it fails
+  `save blocked when the session lacks LOG_PERIOD permission surfaces the real message`.
+  Harness valid.
+  **`canMutateSelectedDate` gate: 0 failures — and my first conclusion from that was
+  wrong.** I read it as an uncovered write gate. It is not. There are **two** checks:
+  `LoggingViewModel:300` tests cached UI state, and `:341` re-fetches the day's logs and
+  re-evaluates `PeriodLogPolicy.canCareViewerMutate` immediately before writing. The
+  second is the authoritative one — it closes the window where the owner edits the date
+  between the sheet opening and the partner tapping Save. Removing **either alone** changes
+  nothing because the other still blocks.
+  **Then the downstream check also showed 0 failures, and that was a stale-XML artifact —
+  caught by checking, not assumed.** `BUILD SUCCESSFUL in 5s` with
+  `testDebugUnitTest UP-TO-DATE` means the tests never re-ran; the XML was from the
+  previous invocation. Re-ran with file ages printed. This is the second time in two
+  iterations that a zero-failure result was a measurement artifact rather than a finding.
+  **Decisive experiment: remove BOTH checks.** The test then fails
+  (`save blocked by the real PeriodLogPolicy care-viewer-mutate rule when someone else
+  logged last`). So the partner-write protection is genuinely pinned; the test asserts the
+  message *and* `coVerify(exactly = 0) { upsert }`, which is the assertion that actually
+  matters.
+  **Methodology note worth keeping:** single-point mutation **under-reports** wherever
+  guards are redundant. A zero-failure result means "this line alone is not load-bearing",
+  not "this behaviour is untested". The right unit is the whole protection, not one `if`.
+  That also revises how to read iteration 33's five `targetUserId` zeroes: same shape —
+  redundancy behind `collectLatest` cancellation, not absent coverage.
+  **Outcome: nothing to fix.** Both audited surfaces protect partner data correctly and
+  their tests kill the real mutations. No production code was modified; both files verified
+  byte-identical against pre-audit copies with `cmp -s`.
+  **Verified:** `:app:assembleDebug` green, `:feature:logging` 27/27 and `:feature:home`
+  44/44 passing. Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 33): audited priority (1) by mutation testing
+  instead of re-reading "green". The partner-isolation assertions are load-bearing. The
+  stale-response one was NOT proving what its name claims — and the fix is not what I
+  first assumed. 44 tests, 0 failures; source restored byte-identical.**
+  The standing instruction is "do not loosen assertions covering partner data isolation or
+  stale-response discarding". I edited those tests in iteration 19, so "the suite is
+  green" is not evidence — a test that cannot fail protects nothing. The check is
+  mutation: break the production guard, confirm the test goes red.
+  **Isolation assertions: load-bearing, confirmed.** Forcing `canViewHomeCycle` to return
+  true fails **3** tests (`partner with no granted cycle or log access does not read
+  partner repositories at all`, `partner snapshot fields stay hidden without home cycle
+  permission`, `a partner with only LOG_PERIOD sees log presence for today but not for
+  another date`). Nothing was loosened.
+  **Stale-response: the named test proves something weaker than its name.** All **five**
+  `if (sessionManager.current?.targetUserId != targetUserId) return` guards
+  (lines 244/265/356/465/472) can be deleted individually with the entire suite still
+  green. `a stale cycle response for an already-abandoned target is discarded` hangs the
+  abandoned request on `awaitCancellation()`, so the response never arrives and the guard
+  is never reached — it proves only that a request which never completes cannot corrupt
+  state.
+  **I validated the harness before trusting that.** Five zero-failure results in a row is
+  exactly what a broken harness looks like (a mutation that fails to compile leaves stale
+  XML reading zero). The `canViewHomeCycle` control returning 3 real failures is what
+  makes the five zeroes meaningful.
+  **Then my own first fix was wrong too.** I added a test that lets the stale response
+  actually land via `CompletableDeferred`, and asserted in its KDoc that it "fails if the
+  guard is removed". It does not — it passed with the guard deleted. The real protection
+  is `collectLatest` in `init`: a session change **cancels** the in-flight `refresh`, so
+  the abandoned repository call never resumes. The five explicit checks are defence-in-
+  depth this path cannot reach. Confirmed by a second control: switching `collectLatest`
+  to `collect` fails **both** stale-response tests, old and new.
+  **Kept the new test, corrected its documentation** to say what it actually pins — the
+  cancellation behaviour, not the guards — and to name `collectLatest` as the thing that
+  must not regress. Leaving a comment claiming a mutation-kill that does not happen would
+  have been worse than no comment.
+  **Nothing in production changed.** Every mutation was reverted and verified
+  byte-identical against a pre-audit copy (`cmp -s`). The only edit is one added test plus
+  its KDoc.
+  **For Karan, a judgement call, not a bug:** those five `targetUserId` checks are dead
+  under the current structure. They are cheap and correct as insurance if `collectLatest`
+  ever changes — but nothing today would tell you if someone deleted them. Either keep
+  them documented as deliberate redundancy, or drop them and rely on structured
+  concurrency alone. Silently keeping unreachable guards that look like the protection is
+  the option worth avoiding.
+  **Verified:** `:app:assembleDebug` green, `:feature:home` 44 tests / 0 failures.
+  Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 32): re-verified priority (4). Detent geometry is
+  exact and there is no empty area — but a horizontal swipe in the year view was
+  COLLAPSING the calendar where iOS changes the year. Fixed and verified. Build +
+  calendar tests green.**
+  **Detent geometry measured, not eyeballed.** Sampled the sheet's top edge on device:
+  compact sits at 0.407 of screen height against iOS's `compactY = screenH * 0.20` (which
+  its own comment works out to 40% from the top), and expanded at 153px. This emulator is
+  420dpi, so scale is 2.625, not 3 — 153px is ~58dp, i.e. `safeTop + 10dp`, matching iOS's
+  `expandedTop = safeTop + 10`. No empty area in the expanded detent: the 12 month cards
+  fill it and scroll behind the edit bar.
+  **Checked an assumption the filename invites.** iOS's file is `HomeCalendarYearGrid`,
+  which reads like a multi-column grid — Android renders one month per row. Read
+  `yearMonthsScroll`: it is a `VStack` with `ForEach(0..<12)`, one month per row. Android
+  already matches; porting a "grid" would have been wrong.
+  **The defect.** iOS attaches a `simultaneousGesture` to `yearMonthsScroll` —
+  `changeYear(by: w < 0 ? 1 : -1)` past a 50pt horizontal drag. `CalendarYearView` had no
+  horizontal gesture at all, so the swipe fell through to the sheet's own drag handling
+  and **collapsed the calendar back to the month view**: the same motion that browses
+  years on iOS dismissed the year view on Android. Measured, not inferred — sheet top went
+  153 (expanded) → 414 (collapsed) on the swipe.
+  **My first attempt at this test was invalid and I redid it.** The initial tap missed the
+  month header and landed on a date cell, so the "swipe" was actually paging months in the
+  compact view. Re-ran with the expanded state asserted (`sheet_top == 153`) before
+  swiping. Worth recording: the first run *looked* like a reproduction and was not one.
+  **Fix** adds `onChangeYear` to `CalendarYearView` with a horizontal `draggable` at iOS's
+  50dp threshold, wired to the same handler as the header chevrons so it clears the
+  multi-selection exactly as `changeYear` does. Claiming the horizontal axis is also what
+  stops the collapse, so one change fixes both halves.
+  **Verified:** swipe now takes 2026 → 2027 with the sheet staying expanded (153 → 153)
+  and the reset affordance appearing; reset returns to 2026 and the chevron comes back.
+  Left the calendar on the current year. `:app:assembleDebug` and `:feature:calendar`
+  tests green. Nothing committed.
+  **All four numbered priorities are now re-verified on device rather than trusted from
+  the log, and three of the four (2, 3, 4) turned up real defects that the written
+  "complete" status had hidden.** (5) is complete for every reachable screen; Care remains
+  blocked on a partner test account.
+
+- **2026-08-02, Claude (loop iteration 31): re-verified priority (3). Card fills are a
+  faithful port, but the bottom bar had a real defect — on a period day the log button,
+  the screen's primary action, was rendering as a BLANK WHITE CIRCLE with no icon. Fixed
+  at the shared component. Build + home/calendar tests green.**
+  Same approach that paid off on (2): re-check on device rather than trust the log entry.
+  **Card fills: correct, no change.** `HomeGlassCard` is a line-for-line port of iOS's
+  `cardFill` / `cardStroke` / `cardSep` — `palette.surface` on menstrual, the 0.14
+  light-mode tile tint otherwise, `secondary@0.30` stroke, `primary@0.16` dividers, and
+  the same `!hasCycleData` branches.
+  **The defect.** iOS's action bar takes `logFill` and `logIconColor` as **two
+  independent values** (`logFill: cardFill`, `logIconColor: standardAccent`). Android's
+  `SakhiBottomActionBar` collapsed both onto `accentColor` and hardcoded the glyph to
+  `Color.White`. On a period day `accentColor` is white — Home deliberately overrides the
+  phase primary to white so text reads on the saturated background — so the button was a
+  white circle with a white icon on it. Verified by sampling pixels, not by eye: fill
+  `(255,255,255)`, glyph `(255,255,255)`.
+  **Fixed to iOS's own structure.** Added `logFill` / `logIconColor` / `logStrokeColor` to
+  the shared bar, all defaulting to previous behaviour so other callers are untouched.
+  Home now passes the phase **surface** (`#C7386A`) as the fill — exactly what `cardFill`
+  resolves to on iOS — with the white glyph on top.
+  **Then a second, subtler miss.** With the fill corrected the glyph was visible, but
+  sampling showed the fill `(199,56,106)` was *identical to the page background*: the
+  button had no edge and read as a floating pencil rather than a control. iOS covers this
+  with `logStrokeColor: standardAccent.opacity(0.14)`, a rim Android never rendered at
+  all. Added it. Worth noting the first fix looked right in a screenshot and was still
+  incomplete — the pixel sample is what caught it.
+  **Checked the other call site rather than assuming.** `feature:calendar` passes
+  `phasePrimaryColor(selectedDatePhase)` — the raw KMM primary (`#E85787` pink), not
+  Home's white override — so its log button was always visible. The defect was Home-only,
+  which is also why it survived: the calendar sheet looks fine.
+  **Verified:** log button now renders deep-pink fill, white rim, white pencil, sampled and
+  screenshotted. `:app:assembleDebug`, `:feature:home` and `:feature:calendar` tests green.
+  Nothing committed.
+  **Priorities (1)-(4) now re-verified on device, not just recorded.** (5) is complete for
+  every reachable screen. Care remains the only outstanding parity work, still blocked on
+  a partner test account.
+
+- **2026-08-02, Claude (loop iteration 30): re-verified priority (2), the year view, on
+  the device rather than trusting the log. Behaviour is a faithful port; the multi-select
+  bar's two buttons were themed wrong. Fixed and verified. Build + calendar tests green.**
+  Chose this because the sweep is done for every reachable screen and priority (2) had
+  only ever been recorded as complete, never re-checked. Read `HomeCalendarSheet.swift`
+  `yearContent` / `editControl` / `changeYear` and walked the real flow.
+  **Confirmed correct, on device:** the conditional header affordance — `chevron.down`
+  on the current year (collapses), `arrow.clockwise` on any other year (resets). Stepped
+  to 2027 and watched it swap, exactly as iOS does. `changeYear` clears
+  `yearSelection` + `selectionHistory` and exits multi-select on **every** year change,
+  including the prev/next chevrons, and Android's `onPreviousYear`/`onNextYear`/
+  `onResetToCurrentYear` all call `resetYearSelection()` the same way.
+  **Also correct, and a nice catch by whoever built it:** iOS deliberately changes the
+  bar's wording between states — title-case "Edit Period Dates" to *enter*, lowercase
+  "Edit period dates" once active. Android reproduces both, along with the 50dp / 54dp
+  height change when a selection exists.
+  **Fixed — Undo and Save were themed off the wrong palette.** The bar is
+  `inverseSurface` (iOS's `barDark`), but the buttons were a default `TextButton` and
+  `Button`, so both rendered in theme pink on near-black: Save came out pink-on-dark where
+  iOS has a **solid white capsule with bar-dark text**, and Undo was bare pink text with
+  no capsule. Worse, Undo's disabled state was invisible — iOS encodes it in two places
+  (capsule fill 0.14 → 0.07, text white → white at 0.30), and a dimmed pink reads as
+  neither. Both now derive from `inverseOnSurface`: Undo is a 56x36 translucent capsule
+  with the two-part disabled treatment, Save a solid white capsule with `inverseSurface`
+  text at 14sp bold, spinner tinted to match.
+  **Left the QA account untouched.** Verifying multi-select meant selecting real dates, so
+  I backed them out with the bar's own Undo (twice) and exited through the X rather than
+  tapping Save. Confirmed the bar returned to "Edit Period Dates" with nothing written —
+  saving period dates onto Karan's account to prove a colour fix would not be a fair trade.
+  **Verified:** entry / empty-multi-select / 2-days states all screenshotted;
+  `:app:assembleDebug` and `:feature:calendar` tests green. Nothing committed.
+  **Priorities (1)-(4) re-confirmed complete, (5) complete for every reachable screen.**
+  The only outstanding parity work is Care, and it is blocked on a partner test account —
+  now gating four threads (Care sweep, log-permission sheet, `role_gate.*` /
+  `accept_invite.*` copy, and the `.carePartner` carousel).
+
+- **2026-08-02, Claude (loop iteration 29): Chat sweep. Copy is at full parity. Fixed the
+  info-screen brand mark, and removed a synthetic "User" placeholder from the shared
+  session resolver. Build + 5 test modules green. One finding is a DATA problem Karan
+  needs to decide on, NOT something I fixed — read the last section.**
+  **Copy parity: 8 / 8.** "Sakhi AI", "online", "last seen today at %s", "Your personal
+  health companion", "Starred", "No starred messages", "Long press any message in the chat
+  to star it. It will appear here.", "Clear conversation" — all exact. Header structure
+  matches too: tappable 40dp logo + 17sp bold title + presence → info, and exactly one
+  trailing `CloseButton`, mirroring iOS's `DSCloseButton` (no back arrow; the ArrowBack in
+  this file belongs to the Nearby Places subscreen).
+  **Fixed — the info screen was still showing a stock glyph.** iOS's `SakhiAIInfoView`
+  renders `Image("BrandMedia/AppLogo")` at 80×80. Android drew a Material `AutoAwesome`
+  sparkle. The chat *header* had already been corrected to the real logo in an earlier
+  pass; this screen was missed — so the one screen whose whole job is introducing Sakhi
+  was the one without the brand on it. Now the real 80dp circular mark. Verified.
+  **Fixed — shared `resolveUserName` was inventing a name.** It returned the literal
+  `"User"` when no name was known. That is not a harmless default: Chat branches on an
+  empty name to say "Hey." and follow up with "I don't know your name yet. What should I
+  call you?", so the placeholder stopped Sakhi ever asking. It also made dead code of
+  every caller's guard — `CareViewModel`, `ChatViewModel` (×2) and `ProfileScreen` (×2)
+  all already do `ifBlank { … }` with a fallback that fits their own sentence. Now returns
+  `""`. `PartnerChecklistViewModel` was the one consumer with no guard (it interpolates the
+  name into an AI prompt), so it got one plus a string; its 14 test construction sites and
+  the Koin module were updated for the new `appContext` param.
+  **What I got wrong twice, and how it was caught.** I first concluded the greeting was
+  reading a stale cache, then that the stored name must be fine because Profile displays
+  "You". Both wrong. Profile shows `R.string.profile_you` — a **static label** in self
+  mode (`ProfileScreen:290`), never the stored name. And clearing the conversation through
+  the app's own "Clear conversation" action regenerated the messages, which ruled out
+  caching. Checking beat inferring, again.
+  **OPEN — a data problem, not a code one. Needs Karan.** After the fix the QA account
+  still greets "Hey, User.", and that is now correct behaviour: `resolveUserName` returns
+  the profile row's name, and **that row literally contains "User"**. Onboarding writes
+  `name = ""` (`OnboardingViewModel:304`), so the value was written by something else — an
+  older build, a seed, or the backend. Two questions worth answering before launch:
+  (a) is that one QA row, or does every account get seeded "User"? (b) if a name is
+  genuinely unknown, should Profile keep showing the static "You" while Chat asks for it?
+  I did not touch the row — editing a user's stored profile data is Karan's call.
+  **Verified:** `:app:assembleDebug` green; `:feature:ai`, `:feature:home`,
+  `:feature:care`, `:feature:profile` and SakhiCore `jvmTest` green. Info hero screenshotted.
+  Nothing committed.
+  **Priority-5 sweep is now complete for every reachable screen** — Profile, Reports, Chat,
+  Logging and Onboarding are done. Care alone remains, blocked on a partner test account.
+
+- **2026-08-02, Claude (loop iteration 28): Reports sweep. Copy is at full parity — all
+  22 strings match iOS character for character. One affordance was wrong. Fixed and
+  verified on the emulator.**
+  Picked Reports because every remaining onboarding and care item is behind the partner
+  account, and because **the CMS diff never covered this screen**: Reports has no
+  `ContentSeed` keys at all, so iterations 23-27 could not have seen it. Read
+  `ReportConfig.swift` and `ReportConfigSheet.swift` directly instead.
+  **Copy parity: 22 / 22.** All 6 section titles (Cycle Overview, Period Calendar,
+  Symptoms & Flow, Mood Patterns, Medications & Visits, Health Insights), all 6 subtitles,
+  all 5 short preset labels, and all 5 long row labels ("Last 1 month" … "All time") match
+  iOS exactly. Screen chrome matches too: same doc icon, same "Health Report" title, same
+  "Choose what to include in your PDF report" subtitle, same "Generate PDF" footer, same
+  "DATE RANGE" / "INCLUDE IN REPORT" section labels.
+  **The one real difference — the picker affordance.** iOS uses
+  `chevron.up.chevron.down`; Android used `KeyboardArrowDown`. Not cosmetic: a single
+  down-chevron reads as "this expands downward", while the double arrow is the
+  pick-one-from-a-list affordance — and this control opens a menu, not an expander.
+  Swapped to `Icons.Rounded.UnfoldMore`, the Material twin, sized to 14dp because
+  Material's 24dp default sits far heavier next to 13pt text than iOS's 10pt glyph does.
+  Also set the capsule label to 13sp bold to match iOS's `lato(13, .bold)`; it was
+  inheriting the default ~14sp regular.
+  **Noted, not changed:** iOS tints the chevron `tertiaryLabel`, one step lighter than the
+  label's `secondaryLabel`. Android has no distinct tertiary token in this theme, so both
+  stay `onSurfaceVariant`. Inventing a third grey to chase one shade is not worth the
+  divergence; recording it rather than guessing.
+  **Verified:** date row renders "Last 3 months" with a "3 Months" capsule and the double
+  chevron. `:app:assembleDebug` and `:feature:reports` tests green. Nothing committed.
+  **Reports is now swept.** Remaining in the priority-5 list: Chat. Profile, Logging and
+  Onboarding are swept; Care is blocked.
+
+- **2026-08-02, Claude (loop iteration 27): the remaining onboarding "gaps" were mostly
+  iOS dead code — but chasing them uncovered a real defect: Android was printing raw
+  exception text to a user typing an invite code, and throwing away error detail the
+  server had already sent. Fixed at the root in SakhiCore. Build + 4 test modules green.**
+  **7 more dead-copy keys.** All 8 `onboarding.feature.*` strings (Period Tracking / Safe
+  Spaces / Gentle Reminders / care) come from `OnboardingViewModel.features`, an array
+  **no view ever reads** — `OnboardingFeature` appears only in its own declaration and
+  that one literal. Not gaps. With the setup-loading messages (26) and `todayPhaseCard`
+  (24), that is three dead clusters found by asking "is this rendered?" before "does
+  Android have it?".
+  **Then the real find.** `OnboardingViewModel.acceptBeHerSakhiInvite` set
+  `error = throwable.message ?: generic`. That message is whatever Ktor or kotlinx
+  produced — an HTTP status line, a serialization complaint about a missing field,
+  sometimes a URL — shown to someone who has just typed an invite code. Same anti-pattern
+  as the JWT that leaked into logcat earlier in this project, except user-facing.
+  **A test was pinning the bug in place.** `…surfaces a real message and allows retry`
+  asserted `"invite expired"` reached the UI, using a hand-written
+  `RuntimeException("invite expired")` that merely *reads* like a sentence. I did not
+  assume it was wrong — I checked whether the server actually returns curated text, and
+  `supabase/functions/accept-partner-invitation/index.ts` shows it returns **status codes**:
+  410 "Invitation has expired", 404 "not found or already processed", 403 wrong phone,
+  401 unauthorized. iOS classifies on exactly that (`catch NetworkError.notFound`), never
+  on message text. So the fixture's realistic-looking string was the illusion, and the
+  detail Android needed was on the wire all along.
+  **Root-cause fix, in the shared layer.** `PartnerCareRepository.acceptInvitation` called
+  `.bodyAsText()` on error responses and fed them to `decodeFromString`, so every rejection
+  degraded into a serialization error and the status was lost. It now checks the status and
+  throws a typed `CareInviteException(reason, statusCode)`. Its message carries **only the
+  status code** — the server body names rows and columns and this string reaches logs.
+  Android maps reasons to iOS's own sentences, and drops the retry affordance on
+  `NOT_FOUND`, matching iOS's `canRetry = false`: a wrong or spent code will not start
+  working on retry.
+  **Tests rewritten to assert behaviour, not the leak.** The old test became "an
+  unrecognised failure reads as the generic sentence", plus an explicit assertion that the
+  raw throwable text never reaches the UI. Added three: expired → expired sentence,
+  not-found → check-with-partner + no retry, `IOException` → offline sentence.
+  **Verified:** `:app:assembleDebug` green; `:feature:onboarding`, `:feature:care`,
+  `:feature:home`, `:feature:profile` tests green; app launches and Home renders normally
+  after the SakhiCore change. Nothing committed.
+  **Still open in onboarding:** `role_gate.*` (3) and
+  `accept_invite.delete_alert.*` — both live on iOS, both absent on Android, and both sit
+  in the partner flow behind the missing test account. `care_carousel.*` (6) likewise.
+  Deliberately unchanged: `data_source.no_data` names Apple Health, and Android uses
+  Health Connect.
+
+- **2026-08-02, Claude (loop iteration 26): started the 38 onboarding copy gaps. Real
+  count is far lower than 38. Fixed the intro carousel, which was showing the wrong copy
+  set entirely; proved two other clusters are not gaps at all. Build + tests green,
+  carousel verified by screenshot.**
+  **38 → 30 before looking at anything.** Eight were placeholder-syntax false positives:
+  iOS writes `{name}`, Android writes `%1$s`, so identical strings failed an exact match.
+  Normalising both placeholder forms cleared them. Worth fixing in the tool rather than
+  hand-dismissing eight items.
+  **Fixed — the intro carousel was rendering the wrong copy set.** iOS's
+  `IntroCarouselStep` reads `onboarding.carousel.slide1-3` in .newUser/.universal mode.
+  Android's `myselfIntroSlides` pointed at `onboarding_intro_feature_*`, which is the
+  **UniversalIntro bullet list** on a different screen — so two consecutive onboarding
+  screens showed the same three lines. Slides 1 and 2 genuinely differ
+  ("Log It in One Tap" vs "Logging in One Tap"; "Made for You" vs "Made for You, Not
+  Everyone"); slide 3 is word-for-word identical on iOS too, which is exactly why the
+  diff only flagged four of the six strings and the reuse stayed invisible. Added the six
+  `onboarding_carousel_slide_*` strings and repointed the slides. Third instance of the
+  same defect shape — one string doing two jobs — after the sign-out dialog (23) and the
+  discharge row (24).
+  **Not a gap: the JoinFamily carousel.** Android's `onboarding_join_slide_1/2` match
+  iOS's `onboarding.join1/join2` **character for character**. iOS resolves carousel copy
+  per mode (.newUser → `carousel.*`, .joinFamily → `join1/join2`, .carePartner →
+  `care_carousel.*`), and Android's two carousels map onto the first two correctly. Only
+  the newUser one was wrong.
+  **Not a gap: the four setup-loading messages.** `onboarding.loading.setup.msg1-4`
+  ("Making Sakhi yours…" etc.) looked missing on Android, which shows a single static
+  "Setting up your Sakhi...". They are **never rendered in the iOS flow**. The step the
+  flow constructs, `SakhiSetupLoadingStep()`, sets `runsSetupTask = true`, which selects
+  `setupTaskLayout` — and that branch draws a **plain background**, nothing else. The
+  messages live in the `else` branch used by other configurations. Android currently shows
+  *more* than iOS here; adding a four-message rotation would have invented UI iOS does not
+  have. Second dead-copy trap in two iterations, after `todayPhaseCard` in iteration 24.
+  **Screenshot lane extended** to `MyselfIntroCarousel` and `JoinFamilyIntroCarousel`.
+  Both carousels are now captured, so a future edit that re-collapses them onto one copy
+  set shows up as two identical-reading screenshots instead of passing silently.
+  **Verified:** `MyselfIntroCarousel_light.png` shows "Log It in One Tap" with iOS's
+  carousel body, distinct from the UniversalIntro bullet copy. `:app:assembleDebug` and
+  `:feature:onboarding` tests green. Nothing committed.
+  **Still open in the onboarding set** (~24 candidates, each needs the same
+  is-it-actually-rendered check before trusting): `be_her_sakhi.*` errors,
+  `role_gate.*`, `feature.*` list copy, `accept_invite.*`. One is a genuine
+  platform difference to leave alone: `onboarding.data_source.no_data.message` says
+  "Apple Health doesn't have your data" — Android uses Health Connect, so its wording
+  should differ. Also unimplemented on Android: the `.carePartner` carousel
+  (`care_carousel.slide1-3`, 6 strings), which sits in the partner flow behind the
+  missing test account.
+
+- **2026-08-02, Claude (loop iteration 25): ran the hardcoded-literal pass on the logging
+  sheet that iteration 24 flagged. Symptom coverage is complete (24/24, same order); only
+  2 labels drifted, and the correct fix was NOT the obvious one. Build + tests green,
+  both rows verified on the emulator.**
+  **Coverage first: 24 / 24 symptoms, in iOS's order.** iOS renders 24 `checkRow`s in
+  `HomeLoggingSheet`; Android references exactly the same 24 `Symptom` values. All 8
+  `cardSectionLabel` groups (Body/Pain/Digestive/Physical/Mood/Sleep/Discharge/Log) match
+  too.
+  **Two false alarms I had to clear before that was true.** A first diff said all 24
+  symptom labels were missing from Android — they are not in the logging module's
+  `strings.xml` at all, they come from `SakhiCore Symptom.displayName`. A second pass said
+  Android rendered only 16, because my grep matched one call form (`symptoms = listOf(`)
+  and missed the explicitly-listed discharge rows. Both are the same failure I have now
+  hit four times: a grep scoped to one file or one syntax proves nothing. Counting
+  distinct `Symptom.` references gave the real answer, 24.
+  **The two real drifts, and why the obvious fix would have been wrong:**
+  - `WATER_RETENTION` — iOS sheet "Water Retention / Swelling", Android "Water Retention"
+  - `VAGINAL_ITCHING` — iOS sheet "Vaginal Itching / Irritation", Android "Itching / Irritation"
+
+  The tempting fix is to change `Symptom.displayName` in SakhiCore. **That would have been
+  wrong.** iOS has its own Swift `Symptom` enum (`Features/Logging/Models/LoggingModels.swift:186`)
+  whose `displayName` returns **"Water Retention"** and **"Itching / Irritation"** —
+  character-identical to KMM. Android's shared enum already matches iOS's enum exactly.
+  What actually differs is that iOS's *logging sheet* hardcodes longer labels than its own
+  enum, while iOS's *day-detail chips* render the short `displayName`. So iOS is
+  internally inconsistent, and editing `displayName` would have fixed the sheet while
+  silently breaking chip parity in the other direction.
+  **Fix mirrors iOS's real structure:** a sheet-scoped `Symptom.sheetLabel()` overriding
+  exactly those two rows, with `displayName` untouched for chips. Same split iOS has, just
+  explicit instead of accidental.
+  **Verified on the emulator:** PHYSICAL → "Water Retention / Swelling"; DISCHARGE →
+  "Discharge Color" / "Unusual Smell" / "Vaginal Itching / Irritation".
+  `:app:assembleDebug` and `:feature:logging` tests green. Nothing committed.
+  **Worth knowing:** iOS keeps a full parallel Swift `Symptom` + `SymptomCategory` +
+  `displayName` alongside the KMM ones. Today they agree, and nothing enforces that. This
+  is the second parallel-implementation pair found in two iterations (after
+  `RecommendationInsightService` in iteration 24), and the same class of risk: they drift
+  silently and the drift only shows up as a UI difference nobody is looking for.
+
+- **2026-08-02, Claude (loop iteration 24): closed the 7 `home.*` copy gaps from the
+  iteration-23 diff (6 real, 1 was iOS dead code), and root-caused a raw-markdown bug
+  spotted on Home while verifying them. Build + 3 test modules green.**
+  **Six real copy gaps fixed, all traced to the iOS render site first:**
+  - `logging_flow` "Flow" → **"Flow Intensity"** (iOS `home.log.flow`, HomeLoggingSheet:149)
+  - `logging_symptoms` "Symptoms" → **"Other Symptoms"** (iOS `home.sections.symptoms`).
+    Deliberate on iOS: flow is logged in the section above, so what follows is the rest.
+  - New `logging_discharge_color` = **"Discharge Color"**. iOS has *two* labels here —
+    `cardSectionLabel("Discharge")` heading the group and the picker row reading
+    "Discharge Color". Android used **one string for both**, so the row lost the word it
+    needed. Same defect shape as iteration 23's sign-out dialog: one string doing two jobs.
+  - `home_logged_self_title` "Logged today" → **"How you feel"** (iOS `home.logged.label`).
+  - `home_phase_info_self_title` "What's happening in your body" → **"What's Happening to
+    my body?"** (iOS `home.info.body`). Android's own *partner* variant already ended in
+    "?", so Android was internally inconsistent as well as off from iOS.
+  - `profile_activity_empty_subtitle` → **"Your logs will appear here once you start
+    tracking."** (iOS `home.activity.description`). Says what to do next, not just what
+    will appear.
+  **The seventh was not a gap.** `home.phase.today` ("TODAY'S PHASE") looked missing on
+  Android, but iOS's `todayPhaseCard` is **declared and never referenced** — dead code in
+  `HomeDayDetailGlassView+Cards.swift:510`. Building it would have added a card iOS does
+  not show. Checked `loggedDetailsCard` and `HomeActivitySheet` the same way before
+  trusting them; both are live.
+  **Raw markdown on the Home tip card — found while verifying, root-caused, fixed.**
+  "Sakhi's tip for today" was rendering `# 🌸 Your Tip for Today` and `**Warm your belly…**`
+  literally, asterisks and all. Not a rendering bug: the model was *returning* markdown.
+  `SakhiCore RecommendationInsightService:91`'s system prompt said only "Give specific,
+  warm, practical advice. Simple English." — no format constraints at all. iOS states them
+  explicitly (`SakhiAIManager`: "Plain text only. No bullet points, lists, headers,
+  markdown, or formatting of any kind"; its Swift `RecommendationInsightService`: "No
+  preamble. No disclaimer. No list."). Fixed the **shared prompt**, not the display layer —
+  stripping markdown in the UI would have hidden the cause and left the model free to keep
+  emitting it.
+  **Architectural note worth Karan's attention.** iOS does **not** use the KMM
+  `RecommendationInsightService`; it has its own Swift actor of the same name at
+  `Features/Recommendations/Repositories/RecommendationInsightService.swift`, with its own
+  two system prompts. Two parallel implementations, same name, different prompts — which
+  is exactly why this bug was Android-only and invisible from the iOS side. That is a
+  shared-first violation predating this work; flagging, not unilaterally merging.
+  **Limit of the iteration-23 diff, now confirmed.** It only covers CMS-driven copy.
+  iOS hardcodes plenty outside `ContentSeed` — e.g. the discharge row's neighbour reads
+  "Vaginal Itching / Irritation" on iOS and "Itching / Irritation" on Android. That
+  difference never appears in the diff. Hardcoded-literal parity needs its own pass.
+  **Verified on the emulator:** logging sheet shows "Flow Intensity", "Other Symptoms",
+  and DISCHARGE → "Discharge Color"; Home shows "How you feel" and "What's Happening to
+  my body?"; the tip card now renders clean prose with no markup. 5 of 6 string fixes
+  confirmed visually — `profile_activity_empty_subtitle` needs an empty activity log and
+  the QA account has history, so it is compile-verified only. `:app:assembleDebug` plus
+  `:feature:home`, `:feature:logging`, `:feature:profile` tests green. Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 23): stopped finding copy gaps one screen at a
+  time and diffed iOS's whole copy deck against Android mechanically. 70 real gaps.
+  Fixed the sign-out dialog; found a privacy-policy contradiction in the delete dialog
+  that must NOT be "fixed" toward iOS.**
+  Iterations 21-22 each found missing copy by hand, one screen at a time. `ContentSeed.swift`
+  is the canonical deck, so I diffed all 257 keys against every Android `strings.xml`
+  **and** every Kotlin string literal (Android hardcodes some copy, so an xml-only diff
+  would have over-reported).
+  **I had to fix my own analysis twice before trusting it.** First pass said 143 missing;
+  it counted seed keys iOS never renders. Second pass said 96; its "is it used?" search
+  included `SanityKey.swift` itself, so every constant matched its own declaration. Third
+  pass matched `.constant` anywhere, so `common.loading` matched 84 unrelated `.loading`
+  properties. Only the fourth — matching the real `Enum.constant` call form, plus
+  `L("…")` and `string(for: "…")` literals — is trustworthy: **198 of 257 keys genuinely
+  referenced, 70 with no Android equivalent.** An unverified count would have sent me
+  building screens that already exist.
+  Distribution: onboarding 38, care 17, home 7, common 4, settings 4. The care cluster
+  independently confirms iteration 22's finding — `care.accept.*` ("I'm Here for Her",
+  "She invited you in. That is not a small thing.") is the missing `AcceptInviteSheet`,
+  found twice now by two unrelated methods.
+  **Checked before filing anything alarming.** The `settings.delete.*` / `settings.logout.*`
+  cluster looked like Android might be performing destructive actions with no confirmation.
+  It is not: Android has both dialogs (`ProfileScreen:134`, `ManageAccountScreen:357/393`).
+  The behaviour is right; only the wording differs. Worth stating plainly rather than
+  filing a false safety bug.
+  **Fixed — sign-out dialog structure was inverted.** iOS asks in the title
+  ("Log Out?") and states the consequence in the body ("You will be signed out of
+  Sakhi."). Android did the opposite: a flat title ("Sign Out") that was *the same string
+  as its own confirm button*, with the question pushed into the body. Now title
+  "Sign Out?", body "You will be signed out of Sakhi.", and a new
+  `profile_sign_out_action` for the button so title and action stop sharing one string.
+  **Kept Android's "Sign Out" wording, did not import iOS's "Log Out".** Android uses
+  "Sign Out" consistently across 4 strings including the menu row, and it is the platform
+  convention. Matching iOS's verb would mean rewriting all four. That is a brand-voice
+  call for Karan, not a bug fix — flagged, not done.
+  **Do NOT match iOS on the delete dialog.** The two platforms make contradictory factual
+  claims. iOS: "This action cannot be undone. All your data will be permanently deleted."
+  Android: "This is permanent. All data will be removed within 30 days and you won't be
+  able to recover it." `11-Legal/Privacy-Policy/Privacy-Policy-Draft-v2.md:208` says data
+  is "permanently removed from our database **within 30 days**, unless retention is
+  required under applicable law". **Android is correct and iOS overclaims** — it implies
+  immediate deletion and drops the legal-retention caveat. Blindly applying "match iOS"
+  here would have made Android contradict its own published privacy policy. Left Android
+  alone; iOS needs the fix, which is outside this Android-only scope.
+  **Verified on the emulator:** Profile → Sign Out shows "Sign Out?" / "You will be signed
+  out of Sakhi." / Cancel · Sign Out. Dismissed with Cancel — deliberately did not sign
+  the QA account out. `:app:assembleDebug` and `:feature:profile` tests green. Nothing
+  committed.
+  **Navigation note for future sessions:** Home's top bar is hamburger (left, ~110,228) →
+  Profile, and the care glyph (right, ~968,228) → partner invite. There is no bottom tab
+  bar; the bottom is the ask bar plus a log FAB. Iteration 21 reached the invite prompt by
+  tapping the care glyph, not by any onboarding route.
+
+- **2026-08-02, Claude (loop iteration 22): consolidated the duplicate bullet-row
+  component I introduced in iteration 21, brought it to exact iOS spec, and opened a
+  screenshot lane for onboarding — the one area with no emulator path at all.**
+  **First: I fixed my own mistake from iteration 21.** Chasing the other two iOS
+  `FeatureBulletRow` call sites (`UniversalIntroStep`, `AcceptInviteSheet`) surfaced that
+  `OnboardingContentStepUi.kt` *already had* a `FeatureBulletRow` composable, 40 lines
+  below the `CarePromptBullet` I had just taught to render a subtitle. iOS has exactly
+  **one** such component; Android briefly had two. Deleted `CarePromptBullet`, moved
+  `PartnerInvitePrompt` onto the shared `FeatureBulletRow`. Lesson: before adding a
+  parameter to a component, grep the file for one that already does the job.
+  **Brought the surviving component to iOS spec.** It was close but not right —
+  `CenterVertically` where iOS uses `.top`, 12 spacing where iOS uses `.m` (16), and a
+  16sp `titleMedium` where iOS uses 15pt. Now top-aligned, 16 spacing, 15sp bold title,
+  14sp subtitle at `lineHeight 20`.
+  **Removed its baked-in vertical padding.** On iOS the gap between rows comes from the
+  caller's `VStack(spacing:)`, and the two callers deliberately differ: `.xl` (28) for
+  `UniversalIntroContent`, `.l` (24) for `PartnerInvitePromptContent`. The Android
+  component was hardcoding `vertical = space3`, flattening both to one value. Spacing now
+  lives at each call site. The 4dp token scale skips 28, so `UniversalIntroBulletSpacing`
+  spells it out rather than rounding to 24 or 32.
+  **Checked before assuming:** `UniversalIntro` already had all three subtitle strings,
+  matching `ContentSeed` verbatim, and already rendered them. It was **not** affected by
+  the iteration-21 defect — only `PartnerInvitePrompt` was.
+  **Screenshot lane, fourth slice (`:feature:onboarding`).** Mirrors the `:feature:home`
+  config. The reason this module needs it more than any other: onboarding has **no
+  emulator path**. Reaching any step requires clearing app data, and re-login would kick
+  the QA account off Karan's own device under the single-device rule — so I did not, and
+  will not, clear it without being asked. That constraint is exactly why the iteration-21
+  defect survived a clean coverage sweep. `OnboardingScreenshotTest` covers both
+  `FeatureBulletRow` consumers, light and dark; a silently dropped subtitle now fails a
+  test instead of shipping.
+  **Rendered at Pixel 5, not Robolectric's 320x470 default** (which the three earlier
+  slices use). At the default size the footer clips the second bullet, so a subtitle
+  dropped further down would not appear in the image at all — a screenshot that cannot
+  show the regression it exists to catch is worse than none.
+  **Verified:** `PartnerInvitePrompt` re-checked on the emulator after consolidation
+  (pixel-identical to iteration 21, no regression); `UniversalIntro` verified from the
+  recorded screenshot — all three bullets, subtitles, top-aligned badges, and icons
+  matching iOS's `hand.tap.fill` / `sparkles` / `heart.fill`. `:app:assembleDebug`,
+  `:feature:onboarding` and `:feature:home` tests all green. Nothing committed.
+  **Gap left open deliberately:** iOS's third `FeatureBulletRow` site, `AcceptInviteSheet`
+  ("Know How She's Feeling" / "Care in the Right Way" / "Respect Her Privacy"), has **no
+  Android counterpart at all** — those three strings exist nowhere in the Android tree.
+  That is a missing screen, not a styling gap, and it sits in the partner-accept flow that
+  still needs a second test account. Flagging rather than inventing it.
+
+- **2026-08-02, Claude (loop iteration 21): PartnerInvitePrompt rebuilt as iOS's
+  two-page carousel. Three bullet subtitles were missing entirely, the ported
+  illustration was never wired, and two of three icons were semantically wrong.
+  Build green, both slides verified on the emulator.**
+  Found by walking the one Care-adjacent screen that does *not* need a partner account.
+  This is the gap iteration 20 could not see: that sweep proved every step **has** a
+  render branch, not that each branch renders the **full** content. Coverage checks and
+  fidelity checks are different questions.
+  **1. Missing copy (the real defect).** iOS's `FeatureBulletRow` takes a title *and* a
+  subtitle, and all **nine** iOS call sites pass one. Android's `CarePromptBullet` had no
+  subtitle parameter at all, and `feature/onboarding/.../strings.xml` had no subtitle
+  strings to pass. Three sentences from `ContentSeed.swift` were simply absent from the
+  Android build — this is what produced the large dead gap Android showed under the
+  bullets. Added `..._feature_{1,2,3}_subtitle`, transcribed verbatim from
+  `care.onboarding.featureN.subtitle`.
+  **2. Structure.** iOS `PartnerInvitePromptContent` is a 2-page carousel: slide 0 the
+  `Features/CarePartner/onboarding` illustration, slide 1 the three bullets. Android had
+  flattened both into a single `GlassCard` behind a generic Material `Groups` glyph.
+  Rebuilt with `HorizontalPager` + the existing `OnboardingDots`, using iOS's own
+  constants — `imageHeight 335`, `carouselHeight 460`, and `indicatorTop = -18 + 335 - 10
+  = 307`, which is why the dots deliberately overlap the image's bottom edge.
+  **3. The illustration was ported but never wired.** `care_partner_onboarding` already
+  existed in all density buckets plus `drawable-night-*` from the earlier asset sweep,
+  and was referenced only by `FeatureAccessGate`. This screen drew a Material icon
+  instead. It lives in `core:ui`, so it needs the fully-qualified
+  `team.sakhi.android.ui.R` — the same convention `onboardingSlideIllustration` already
+  uses.
+  **4. Icons corrected to iOS.** iOS uses `heart.circle.fill` / `bell.badge.fill` /
+  `person.2.wave.2.fill`. Android had `VisibilityOff` / `Notifications` / `Favorite` —
+  bullet 1 read as "hidden" where iOS means "cared for", and bullet 3 read as "favourite"
+  where iOS means "people". Now `Favorite` / `NotificationsActive` / `Groups`.
+  **Checked, not assumed:** the illustration renders on a near-white `#F8F2F4` panel that
+  does not match the pink page. I probed the source PDF before touching it —
+  `pdftocairo -transp` still yields an opaque corner, so that panel is **drawn inside the
+  PDF** and iOS shows exactly the same box. Faithful, not a defect. Left alone.
+  **One deliberate deviation.** iOS fills the badge with `DS.Colors.lightPink`. On Android
+  that token is bound to `colorScheme.surface`, which is already this screen's background,
+  so a literal port would render an invisible badge. Kept `primary` at 12%, consistent
+  with every other badge on Android. Noted in the KDoc.
+  **Still open:** `CareScreen.kt` has its own private `CarePromptBullet` with the same
+  missing-subtitle shape, used by the Care disconnected state. That screen has no iOS
+  counterpart, so it is a copy decision for Karan rather than a parity fix.
+
+- **2026-08-02, Claude (loop iteration 20): onboarding sweep — clean. All 32 shared
+  steps have real Android UI, and the 2026-07-19 footer concern is resolved. One latent
+  risk recorded.**
+  Done by code rather than by walking the flow, because reaching onboarding requires
+  clearing app data (which signs the QA account out) and the code check is both cheaper
+  and more complete than a screenshot walk.
+  **Step coverage: 32 / 32.** Enumerated every `data object` on the shared
+  `OnboardingFlowStep` and checked each against Android's onboarding UI. A first pass
+  reported 8 missing (`DateOfBirth`, `Height`, `Weight`, `CycleLength`, `PeriodLength`,
+  `LastPeriod`, `HealthConditions`, `InviteCreating`) — that was my grep looking at
+  `OnboardingContentStepUi.kt` only. They all live in `OnboardingHealthStepUi.kt`.
+  Searching the whole package returns **zero** missing. Same false-negative shape as the
+  iteration-4 Profile inventory: a grep scoped to the wrong file proves nothing.
+  **Footer parity resolved.** The 2026-07-19 entry recorded `SakhiFooter` as wired into
+  `ModeSelection` only, with "~30 onboarding screens still hand-placing buttons". That is
+  no longer true — onboarding now has **19** `SakhiFooter` uses against iOS's **20**
+  across its whole app. The primary-button-never-moves invariant holds.
+  **The 7 remaining `PrimaryButton` uses in onboarding are both accounted for:**
+  - `OnboardingContentStepUi:2582` — the SetupLoading **retry** button, rendered inline
+    beneath an error message rather than in a footer. Correct: it is an inline recovery
+    action, not the step's primary advance.
+  - `OnboardingFlowHost:326-371` — all inside `StepActions`, which sits in the
+    `else ->` fallback branch of the step renderer. Since all 32 steps have real UI, this
+    branch is **unreachable in the live flow**.
+  **Latent risk worth knowing about (not fixed, not urgent).** That fallback renders a
+  developer-looking screen: the raw `flowId` string, a progress bar, a step summary card
+  and generic buttons. It is invisible today, but if a new step is ever added to the
+  shared `OnboardingFlowStep` without a matching Android branch, a real user would land
+  on it mid-signup. Worth either making it a deliberate, presentable "something went
+  wrong" state or failing loudly in debug — a decision, not a bug.
+  No code changed. `:app:assembleDebug` and `testDebugUnitTest` remain green from
+  iteration 19.
+  **Visual sweep now complete except Care**, which needs a second/partner account —
+  along with the log-permission sheet from iteration 13.
+
+- **2026-08-02, Claude (loop iteration 19): Chat sweep — the assistant had no brand
+  identity on Android. Ported the real Sakhi mark into the chat header.**
+  **Capability check first:** iOS's `Features/AI` has Starred / Info / Search / Media
+  sub-views plus Places and Report cards; Android's `ChatSubscreens.kt` covers the same
+  set (confirmed against the BackHandler wiring from 2026-07-19). No missing sub-screen.
+  **The real gap was the avatar.** `SakhiAIChatView.headerBar` renders
+  `Image("BrandMedia/AppLogo").frame(40, 40).clipShape(Circle())` — the actual product
+  mark. Android drew `Icons.Filled.AutoAwesome`, a generic Material sparkle, in a tinted
+  circle. So in the one place the assistant introduces itself, Android showed a stock
+  icon instead of Sakhi.
+  **Why this was missed in iteration 5.** That pass inventoried all 10 iOS imagesets and
+  dismissed `AppLogo` as "already ported as the launcher icon". That was true but
+  incomplete: launcher `mipmap` resources are not reachable as a `drawable` from feature
+  code, so *in-app* uses of the logo had nothing to draw. Porting an asset for one
+  consumer does not mean every consumer is served — worth checking per usage, not per
+  asset.
+  **Ported** `AppLogo.png` (1418×1418 source) into `:core:ui` as `sakhi_app_logo` across
+  all five density buckets, sized for a 40dp target with 2× headroom so the circle clip
+  stays crisp. Chat header now uses it with `ContentScale.Crop` + `clip(CircleShape)`,
+  matching iOS's `scaledToFit` + `clipShape(Circle())` framing.
+  Verified on device: the pink/white person-heart mark renders in the header beside
+  "Sakhi AI" and the "last seen today at …" line, with the shared `CloseButton` opposite.
+  Verified: `:app:assembleDebug` green, full `testDebugUnitTest` green, **0** FATAL
+  exceptions, screenshotted on `sakhi_qa`. Nothing committed.
+  **Remaining unswept visually:** Care screens (need a second/partner account), and
+  onboarding steps past the intro carousel.
+
+- **2026-08-02, Claude (loop iteration 18): visual sweep of Reports. At full parity —
+  and a near-miss worth recording, because I almost filed a bug that did not exist.**
+  **The near-miss.** The first screenshot of the report config showed only 3 sections
+  (Cycle Overview, Period Calendar, Symptoms & Flow) with a divider after the third and
+  the "Generate PDF" button immediately below. iOS's `ReportConfig.swift` defines **6**.
+  That looked exactly like a real defect — a woman unable to include mood, medication or
+  insight data in a report she might take to a doctor.
+  It was not. Reading `ReportsScreen` before writing anything up showed
+  `ReportSection.entries.forEachIndexed` rendering all six inside a scrolling
+  `DetailSheetScaffold` with `bottom = space16` padding to clear the footer. Scrolling
+  the emulator confirmed all six are present.
+  Two screenshots earlier this session (the pill strip behind the calendar sheet, the
+  Save button) trained me to treat "not visible" as "broken". Here that instinct would
+  have produced a false bug report on a health feature. **Read the layout before
+  believing a screenshot.**
+  **Parity confirmed, string for string** against `ReportConfig.swift`:
+  | Section | Subtitle |
+  |---|---|
+  | Cycle Overview | Avg length, regularity score, predictions |
+  | Period Calendar | Monthly calendar with phase markers |
+  | Symptoms & Flow | Frequency, trends, phase correlation |
+  | Mood Patterns | Emotional patterns across your cycle |
+  | Medications & Visits | Painkillers, supplements, doctor visits |
+  | Health Insights | Personalised observations from your data |
+  All six titles and subtitles match iOS verbatim, in the same order, all defaulting to
+  on — matching iOS's `sections: Set(ReportSection.allCases)` default. The back
+  affordance is the new shared chevron and the footer button renders correctly.
+  No code changed. `:app:assembleDebug` and `testDebugUnitTest` remain green from
+  iteration 17.
+  **Still unswept visually:** Care screens (need a partner account), Onboarding steps
+  beyond the carousel, Chat sub-screens.
+
+- **2026-08-02, Claude (loop iteration 17): fixed the logging-sheet Save button. My own
+  filed hypothesis was wrong — it was modifier ordering, not insets.**
+  **Diagnosis first, and it paid off.** Last iteration I filed this as "likely a double
+  bottom inset between `KeyboardSafeScaffold`'s footer and the modal sheet", pointing at
+  the 2026-07-19 onboarding bug. That was wrong. Reading `SaveBar` showed the real cause:
+  ```
+  Modifier.fillMaxWidth()
+      .height(52.dp)                                       // box constrained to 52dp
+      .padding(horizontal = space6, vertical = space4)     // 16dp top + 16dp bottom, INSIDE it
+  ```
+  In Compose, padding after a size constraint eats *into* that size: 52 − 32 = **20dp**
+  of usable height, and Material3's `Button` then applies its own content padding on top,
+  clipping the label out entirely. That is why it rendered as a bare pink bar.
+  Fix is one reorder — padding **before** height, so the margins sit outside a real 52dp
+  button. Verified on device: "Save" now renders as a full-width 52dp pill with its label.
+  Had I acted on the filed hypothesis I would have changed inset handling in
+  `KeyboardSafeScaffold` — code that is currently correct — and left the actual bug in
+  place. Worth keeping in mind for the other items filed from a screenshot.
+  **Swept for the same pattern rather than assuming it was unique.** `grep` found three
+  more `.height(...)` followed by `.padding(...)`:
+  - `PrimaryButton:37` and `ChatScreen:1058` — **horizontal padding only**, so the height
+    is untouched. Not bugs.
+  - `ChatScreen:460` — a `Surface` wrapping `GoogleMap` at 256dp with vertical padding.
+    Real inset, but intentional: the map fills the remaining 232dp and nothing is
+    clipped. **Deliberately left alone.**
+  So exactly one instance was broken, and three that matched the pattern were correct —
+  a good argument for reading each hit instead of bulk-applying the fix.
+  Verified: `:app:assembleDebug` green, full `testDebugUnitTest` green, screenshotted on
+  `sakhi_qa`, **0** FATAL exceptions. Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 16): finished the close-button migration, and
+  found a new visible defect on the logging sheet while verifying it.**
+  **CountryPicker — my caution last iteration was justified.** It has two `Icons.Close`
+  and they are NOT the same control:
+  - the header one is a real dismiss → migrated to `CloseButton`;
+  - the second is `auth_country_picker_clear_search`, a **clear-text affordance inside
+    the search field**. Converting it would have turned "clear what you typed" into a
+    control that looks like "close the picker". Left exactly as it was.
+  **`LoggingSheet` had a screen-level close I missed last iteration.** My earlier sweep
+  only looked at the files I already had open; a proper `grep` for `Icons.*\.Close`
+  across all of `src/main` surfaced it. Now on `CloseButton`, verified on device — the
+  sheet header renders the shared 18dp glyph.
+  **`ChatSubscreens` deliberately NOT migrated.** It is a 26dp in-card dismiss chip on a
+  report card, not a screen-level close, and iOS has no matching `DSCloseButton` variant
+  for it. Forcing it through the shared component would mean inventing a third variant
+  that iOS does not have — the opposite of parity. Left alone, recorded here so it is
+  not mistaken for an oversight.
+  **Remaining hand-rolled `Icons.Close` after this pass: 2**, both intentional
+  (`CountryPicker` clear-search, `ChatSubscreens` card chip).
+  **NEW DEFECT FOUND while verifying — not yet fixed.** In the logging sheet screenshot
+  the primary Save button at the bottom renders as a **solid pink bar with no visible
+  label** — the button appears vertically collapsed/clipped where the sheet meets the
+  bottom edge. The sheet is otherwise correct (date header, close, Flow selector,
+  Symptoms list). This needs its own pass: check whether `KeyboardSafeScaffold`'s footer
+  slot is being squeezed by the modal sheet's own bottom inset, since both apply their
+  own navigation-bar padding (the same double-inset class of bug fixed in onboarding on
+  2026-07-19). Filed rather than rushed at the end of an iteration.
+  Verified: `:app:assembleDebug` green, full `testDebugUnitTest` green, app exercised on
+  `sakhi_qa` with **0** FATAL exceptions. Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 15): navigation-affordance sweep — the "all
+  navigation buttons" part of priority (5). Two real, app-wide mismatches fixed.**
+  Picked this up because every other queued item now needs Karan's decision.
+  **1. The shared `BackButton` was the wrong glyph, everywhere.** iOS's `DSBackButton`
+  is `chevron.left` at `.lato(15, .bold)`; Android's shared component used
+  `Icons.AutoMirrored.Filled.ArrowBack` — a full arrow. So *every* pushed screen in the
+  app (8 files use `BackButton`) showed a heavier affordance than its iOS counterpart.
+  I fixed exactly this mismatch in the calendar month header back on iteration 3, but
+  only at that call site; this is the shared component it should have been fixed in.
+  Worth remembering: fixing a symptom at one call site hides the fact that the shared
+  primitive is wrong.
+  Now `KeyboardArrowLeft` at 24dp. Verified on device — Log History renders `‹`.
+  **2. Android had no shared close button at all.** iOS has one `DSCloseButton` used in
+  3 places; Android hand-rolled `Icons.Filled.Close` in Calendar, CountryPicker, Chat
+  and Chat sub-screens, so the size and tint of "close" drifted per screen while
+  `BackButton` stayed consistent. Added `CloseButton` (`:core:ui`) porting both iOS
+  variants:
+  - default: 18dp glyph, `onSurface` tint;
+  - `onGradient = true`: white glyph in a 30dp circle filled `white @ 20%` — iOS's
+    treatment for a saturated background, where a plain tinted icon disappears.
+  Migrated Chat's header close (default) and Calendar's edit-period-dates cancel
+  (`onGradient = true`, since it sits on the dark edit bar and an `onSurface` tint would
+  have vanished there).
+  **Not migrated yet:** `CountryPicker`'s two closes and `ChatSubscreens`' close. Left
+  deliberately — CountryPicker's sit inside a search field (one is a clear-text affordance,
+  not a dismiss), so swapping them blindly would change a different control's meaning.
+  They need reading before touching.
+  Verified: `:app:assembleDebug` green, full `testDebugUnitTest` green, app exercised on
+  `sakhi_qa` with **0** FATAL exceptions, back chevron photographed on Log History.
+  Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 14): swept Reports, Logging, AI and Onboarding by
+  capability. No real gaps found — four candidates investigated and all four cleared.
+  Recording the negatives so nobody re-derives them.**
+  A sweep that finds nothing is still worth writing down; otherwise the next pass spends
+  its budget on the same four false leads.
+  **Method refinement.** Counting Android callers of shared `fun`s produces false
+  positives two ways: private helpers called internally by their own public entry point,
+  and functions reached through a dispatch/intent indirection. `OnboardingFlowStore`
+  reported 19 "unused" functions purely because everything goes through `dispatch`, and
+  `ReportDataBuilder` reported 5 because they are `private` and called from `build()`.
+  Neither is a gap. The reliable comparison is **rendered output**: which fields of a
+  shared model each platform actually displays.
+  **Candidates investigated, and why each is not a gap:**
+  1. `flowTimeline`, `phaseCorrelations`, `predictionConfidence` — rendered by
+     **neither** platform. Dead fields on the shared `ReportData`, not an Android
+     omission. (Worth a separate cleanup decision, but not parity work.)
+  2. `regularityScore` — looked missing on Android, is not. Android consumes it through
+     `ReportPresentation.regularityPercent()` / `regularityLabel()`; my `.field` grep
+     could not see it because it is reached via extension functions.
+  3. `generatedAt` — Android sets `ReportDocument.generatedOn = DateConverter.today()`
+     instead of reading the shared `ReportData.generatedAt`, which at first looked like a
+     report could be stamped with the wrong date. It cannot: the shared builder itself
+     sets `generatedAt = formatForDisplay(today())` at build time, and Android does not
+     persist or re-open reports, so the two are the same instant. Android keeps a
+     `LocalDate` rather than a pre-formatted string, which is better typed for its own
+     formatting. **Deliberately not "fixed"** — changing it would have been churn.
+  4. `hasClots` — iOS renders a "Clotting · Present" row in `HomeActivitySheet`, and
+     Android renders no clots anywhere, which looked like health data logged on one
+     platform being invisible on the other. It is not reachable: **neither** logging
+     sheet exposes a control to set it (a previous session already confirmed this for
+     `HomeLoggingSheet.swift`, and Android matched that), so `hasClots` is always false
+     and iOS's row is dead code. Android's existing comment on this was right; I only
+     had to extend the check from the logging sheet to the activity sheet.
+  **Also confirmed, not a gap:** Android's `ActivityLogScreen` is a per-field *change
+  ledger* built on the shared `LogDiffer.buildHistoryEntry`, whereas iOS's
+  `HomeActivitySheet` is a *day activity summary*. Different screens with different
+  jobs — the earlier note in `LoggingSheet.kt` documents why Android deliberately builds
+  against the real shared format instead of iOS's non-shared Swift key strings.
+  No code changed this iteration. `:app:assembleDebug` and full `testDebugUnitTest`
+  remain green from iteration 13.
+
+- **2026-08-02, Claude (loop iteration 13): capability-based sweep of Care found a real
+  missing flow — a care partner had no way to ask for logging permission. Built and
+  wired it.**
+  **The new sweep method works.** Instead of translating iOS symbol names (which produced
+  three false positives in iteration 4), this pass enumerated every `suspend fun` on the
+  shared `CareStore` and counted Android callers. Two had **zero**:
+  `requestLogPermission` and `respondLogPermission` — confirmed absent across the whole
+  Android tree, not just `CareViewModel`. `refreshFromRealtime` is also uncalled but is
+  an internal refresh path, not a user-facing capability.
+  **The gap, in user terms.** A care partner who has been granted viewing access but not
+  logging access taps the log button on Home. On Android the button was simply
+  `enabled = false` — nothing happened, no explanation, and no route to ask. iOS opens
+  `LogPermissionSheet`: "You don't have permission / Only she can log her cycle data.
+  You can ask her to grant you logging access.", with "Request to Log" / "Not Now".
+  **Built:** `LogPermissionRequestSheet` + `LogPermissionViewModel` (`:feature:care`),
+  copy transcribed from the Swift source. Design points kept deliberately:
+  - the sheet has **no grant path**. A partner can ask; only the owner approves, from her
+    own device. Nothing in this flow changes a permission.
+  - on failure the state stays un-sent, so she is never told a request went out that did
+    not — the button returns to "Request to Log" and can be retried.
+  - once sent, the secondary "Not Now" is dropped rather than left as a dead control,
+    matching iOS.
+  **Wired, not left orphaned** (the OfflineMode lesson): `SakhiBottomActionBar` gained an
+  optional `onLockedLogClick`. When it is supplied the log button stays tappable for a
+  partner without permission and opens the sheet; when null the old inert behaviour is
+  unchanged for every other caller. **Long-press quick-log is still gated on `canLog`** —
+  a partner without permission must not reach the quick-log shortcut even to preview it.
+  `HomeScreen` only passes the callback in partner mode, and `HomeNavHost` resolves the
+  partnership from `CareRuntimeState.PartnerConnected`, closing the sheet rather than
+  rendering it if there is no partnership to request against.
+  **Owner-side approval is NOT built, and that matches iOS.** iOS's
+  `LogPermissionSheet.swift` header mentions a `PartnerLogApprovalView`, but no such
+  struct exists in the codebase — `respondLogPermission` is only reached from
+  `CareRuntimeController`, i.e. notification/deep-link driven. So the owner-side response
+  is a notification-action flow on both platforms, and building a screen for it would be
+  inventing something iOS does not have. Recorded rather than guessed at.
+  Verified: `:feature:care` compiles, full `testDebugUnitTest` green,
+  `:app:assembleDebug` green, app launches on `sakhi_qa` with **0** FATAL exceptions.
+  The sheet itself needs a real partner account to photograph (the QA account is the
+  owner), so it is compile/wiring-verified rather than screenshotted — noted honestly
+  rather than claimed.
+
+- **2026-08-02, Claude (loop iteration 12): CORRECTION — my iteration-4 "missing Profile
+  screens" inventory was wrong on 3 of 4 items. The method was flawed. Corrected list
+  below; a duplicate screen I started building has been deleted.**
+  **What I got wrong and why.** Iteration 4 diffed iOS's `ProfileView` navigation
+  destinations against Android and grepped each concept by **iOS's route name**
+  (`CarePartnerPermission`, `CarePartnerHistory`, `HealthInsight`). Android implements
+  the same features under different names, so those greps returned zero and I recorded
+  them as missing. Grepping one platform's vocabulary against the other's codebase
+  cannot prove absence — only that the names differ.
+  **Corrected status:**
+  - **`carePartnerPermissions` — ALREADY EXISTS.** `CareScreen.PartnerPermissionsEditContent`
+    (line ~1006), reached via `showPermissionsEdit`, saving through
+    `CareViewModel.updatePermissions`. It covers all 12 view permissions plus
+    `canLogPeriods` **and** `canGenerateReports` — i.e. it is *more* complete than iOS's
+    `PartnerPermissionsEditView`, which omits report generation.
+  - **`carePartnerHistory` — ALREADY EXISTS.** `CareScreen`'s `showHistory` branch.
+  - **`healthInsights` — NOT MISSING, structured differently.** iOS splits
+    `AppIntegrationView` (connect toggles) from `HealthInsightsView` (the sleep /
+    activity / temperature cards). Android merges both into `AppIntegrationScreen`,
+    which already renders `sleepEntries`, activity and temperature. Whether to split it
+    is a design decision for Karan, not a missing feature.
+  - **`offlineMode` — genuinely missing**, and blocked by the local-first gap recorded
+    in iteration 10. That one stands.
+  **What I built and then deleted.** Before finding the existing editor I had written a
+  full `PartnerPermissionsScreen` + `PartnerPermissionsViewModel` and wired them into
+  Koin. Shipping them would have left the app with **two** permission editors that could
+  drift apart — on the screen that decides what another person sees about her body, that
+  is a genuinely dangerous kind of duplication. Deleted: both files, the Koin
+  registration, and the three strings I had added.
+  **One thing worth keeping from the exercise.** Reading iOS's version, I independently
+  concluded that `canGenerateReports` *should* be revocable on Android because Android's
+  invite flow already grants it, and a grant-without-revoke is a one-way privacy door.
+  The existing Android editor already does exactly that. So Android's deliberate
+  divergence from iOS here is correct and should be preserved, not "fixed" toward iOS.
+  **Method note for future sweeps:** compare by *capability* (what the screen lets the
+  user do) and confirm with a UI-level grep of Android's own naming, not by translating
+  iOS symbol names. The earlier inventory should not be trusted where it claims absence.
+  Verified: `:app:assembleDebug` green, full `testDebugUnitTest` green after the
+  deletions. Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 11): finished the engine migration — every live
+  caller of the old `CycleData`-derived path is now on the shared engine. Zero
+  `CycleMath.currentPhase` / `CalendarMarker.buildMarks` call sites remain.**
+  Picked this up because the two items above it in the log both need Karan's decision
+  (local-first architecture, resolver copy) and should not block unrelated work.
+  **1. `AndroidWidgetSnapshotManager`.** Was computing phase, day-in-cycle and countdown
+  from `CycleMath` off a single `getLatest` cycle, while Home used `CyclePhaseInsight`.
+  Two consequences, both user-visible: the home-screen widget could show a *different
+  phase* than the app for the same day, and because `CycleMath.daysUntilNextPeriod`
+  returns null for an in-progress cycle, the widget's countdown was frequently blank
+  when the app's was not. Now reads the full cycle + log history and goes through
+  `CycleInsightAdapter`, mapping `PhaseKind` to `CyclePhase` the same way Home does.
+  Falls back to `listOf(cycle)` if `getAll` comes back empty, so the widget degrades to
+  its previous input rather than to nothing.
+  **2. Home's Current Cycle pill strip (`CycleDetailsCard`).** Was calling
+  `CalendarMarker.buildMarks(start, end, listOf(cycle))`, which cannot mark
+  predicted/fertile/ovulation days for a cycle still in progress — its length is null
+  until it closes. So the strip showed only logged days while the calendar sheet right
+  beside it showed predictions too, from the same data. Now uses
+  `CycleInsightAdapter.calendarMarks`. Required exposing the cached logged days on
+  `HomeUiState` (`periodLogDates`) — the ViewModel already had them from
+  `loadCycleInsight`, so this is a hand-off, not a second fetch.
+  **Sweep result:** `grep` for `CycleMath.currentPhase` / `CycleMath::currentPhase` /
+  `CalendarMarker.buildMarks(` across all `src/main` now returns **only comments** —
+  every remaining hit is a note explaining why that path was abandoned. The
+  Home/Calendar/Recommendations/widget quartet finally answer "what phase is she in"
+  with one engine.
+  Verified: full `testDebugUnitTest` green, `:app:assembleDebug` green, app exercised on
+  `sakhi_qa` with **0** FATAL exceptions. The pill strip itself sits behind the calendar
+  sheet on Home (correct iOS behaviour — the sheet covers the day-detail cards), so its
+  change is compile- and test-verified rather than photographed; it becomes visible when
+  the sheet is dismissed. Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 10): built the "Use Sakhi offline" screen, then
+  DELIBERATELY did not ship it — Android cannot honour what it promises. Major
+  architectural finding below. My iteration-9 premise was wrong.**
+  **What I assumed last iteration and should not have.** I added `pause()`/`resume()` to
+  `SyncEngine` so the screen could honestly claim sync stops. That rested on an
+  unchecked assumption: that `SyncEngine` is what drives Android's sync. It is not.
+  Two facts, both verified by grep this iteration:
+  1. **`SyncEngine` has zero callers.** Nothing in `SakhiCore` or Android constructs or
+     invokes it, and it is not registered in Koin — which is what crashed the screen the
+     first time it opened (`InstanceCreationException` for `OfflineModeViewModel`).
+     My pause is therefore correct code on a class nothing runs.
+  2. **Repositories write straight to Supabase.** `PeriodLogRepository` uses
+     `SakhiSupabaseClient.postgrest[PERIOD_LOGS]` directly — no local write, no queue,
+     no outbox. A Room database exists (`SakhiSharedDatabase`) but the period-log path
+     does not go through it.
+  **Consequence — the screen's promises are false on Android today:**
+  - "STILL WORKS ON THIS PHONE → Logging your periods, symptoms and moods" — it does
+    **not**. A write with no network fails; it is not queued and does not arrive later.
+  - "PAUSES UNTIL YOU'RE ONLINE → Cloud backup updates" — there is nothing to pause;
+    writes are already synchronous cloud calls.
+  Shipping that screen would have told a woman her period logs were being saved offline
+  while they were being dropped. On a health app that is the worst class of bug, so the
+  entry point was removed rather than shipped: no Profile row, no route, no reachable
+  path. `OfflineModeScreen` + `OfflineModeViewModel` remain in the tree as staged work,
+  unwired and harmless.
+  **This is the real gap, and it is much larger than a missing screen.** iOS is
+  local-first (Realm + a durable queue + `DataManager.pauseSync()`); Android is
+  cloud-direct. That difference silently affects far more than offline mode — every
+  logging action on a flaky connection behaves differently on the two platforms.
+  Recorded here as the headline item rather than buried: **Android has no offline write
+  capability at all.**
+  **Kept from iteration 9, because they are correct and cost nothing:** `SyncEngine`'s
+  `pause()`/`resume()` and its common test. When Android does get a local-first path,
+  that is the shape the pause should take, and the test already pins the important part
+  (a write made while paused must be queued, never lost).
+  **Also left in place:** `FeatureAccessGate`'s "Resume online" now calls
+  `syncEngine.resume()` before clearing the paused flag. Harmless today (nothing is
+  paused), and correct the moment sync is real.
+  Verified: full `testDebugUnitTest` green, `SakhiCore:jvmTest` green,
+  `:app:assembleDebug` green, Profile opens on device with **zero** FATAL exceptions
+  after the entry point was removed. Nothing committed.
+  **Decision needed from Karan:** making Android local-first (Room-backed writes +
+  outbox + sync engine wiring) is a substantial architectural piece, not a screen. It
+  gates offline mode, and it is the largest remaining behavioural difference from iOS.
+
+- **2026-08-02, Claude (loop iteration 9): built the missing piece the "Use Sakhi
+  offline" screen depends on — a real sync pause in shared KMM, with a common test.
+  The screen itself is deliberately NOT built yet; reason below.**
+  **Why this came first.** Iteration 4 listed `OfflineModeSheet` as the smallest missing
+  Profile screen "and its state is already wired". That was half right. `FeatureAccessState.
+  isOnlineAccountPaused` exists, but it is only a *flag* — it gates feature access and
+  nothing else. iOS's `ProfileViewModel.goOffline()` does three things:
+  1. disconnect any owned partner (`CareModeSettingsViewModel.removePartner`),
+  2. stop realtime (`CareRuntimeController.stop()`),
+  3. **pause sync** (`DataManager.pauseSync()`), whose contract is "holds the durable
+     queue and suppresses every push and pull".
+  Android/KMM had (1) `CareStore.leavePartnership` and (2) `CareRealtimeCoordinator.stop()`
+  — but **no equivalent of (3) at all**. Building the screen without it would have
+  shipped a UI that promises "Cloud backup updates — PAUSES UNTIL YOU'RE ONLINE" while
+  sync carried on pushing. On a health app that is not a cosmetic gap, it is the UI
+  lying, so the pause was built first.
+  **What was added (`SyncEngine`, commonMain):** `isPaused: StateFlow<Boolean>`,
+  `pause()`, `resume()`, and guards on `pushPending`, `pullDelta`, `fullResync` and
+  `handleRealtimeInvalidation`. `pullDelta`/`fullResync` return a no-op result that
+  leaves the cursor exactly where it was, so resuming does not skip a delta.
+  **`enqueueLocalWrite` is deliberately NOT gated.** Pausing must never lose a write —
+  the queue is durable, so anything logged offline goes out on resume. That is the whole
+  promise of the screen, and it is the part most likely to be broken by a careless
+  "gate everything" implementation.
+  **Common test added** (`SyncEngineTest`, `pausing suppresses push and pull but still
+  queues local writes`): asserts zero push/pull calls reach the remote data source while
+  paused, that a write made offline is still queued, and that resuming releases exactly
+  that write and nothing is lost. `SakhiCore:jvmTest` green.
+  **Deliberately not done in this pass:** the `OfflineModeView` UI itself. Its iOS copy
+  is already transcribed in iteration 5's notes (two capability sections — "STILL WORKS
+  ON THIS PHONE" / "PAUSES UNTIL YOU'RE ONLINE" — the privacy note, and a
+  `SakhiFooter` with "Use Sakhi offline" / "Stay online"), and the three actions it must
+  perform now all exist. Next pass is a screen + small ViewModel that calls
+  `CareStore.leavePartnership` (only for an owned partnership), `CareRealtimeCoordinator.stop()`,
+  `SyncEngine.pause()`, and `FeatureAccessState.setOnlineAccountPaused(true)` — in that
+  order, matching iOS.
+  **Knock-on to fix at the same time:** `FeatureAccessGate`'s "Resume online" button
+  currently only clears the paused flag (iteration 6 note). Once the screen lands it
+  must also call `SyncEngine.resume()` and restart the care runtime, or resuming will
+  leave sync held forever. That is now a real, reachable bug rather than a hypothetical.
+  Verified: `SakhiCore:jvmTest` green, full Android `testDebugUnitTest` green,
+  `:app:assembleDebug` green. Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 8): connectivity detection FIXED and verified in
+  both directions over two cycles. The feature gate now engages for real — blocked
+  state photographed. This closes the open bug from iteration 7.**
+  **Root cause was a race, not a registration failure.** The instrumented run settled
+  the question the previous entry left open: `register() running`, `callback registered
+  OK`, and recompute events all fired — so registration and delivery were both fine.
+  The bug was in what the callback *did*: `recomputeFromActiveNetwork()` re-read
+  `manager.activeNetwork`, and at the moment `onLost` fires that call can still return
+  the network that is going away. The recompute therefore concluded "still online" and
+  the flow never changed. Caught it in the logs: a recompute printing
+  `activeNetwork=120` while the resulting state came out `false` — the same read giving
+  two answers microseconds apart.
+  That race is also why iteration 7 looked like "the callback never fires": it
+  sometimes resolved the other way, so the behaviour appeared intermittent and I
+  wrongly generalised one failed observation into "no delivery at all".
+  **Fix:** trust the callback's own events instead of re-reading state.
+  `onAvailable` → true, `onLost`/`onUnavailable` → false, `onCapabilitiesChanged` →
+  the reported INTERNET capability. This is safe *because* it is
+  `registerDefaultNetworkCallback`: exactly one network is tracked — the one the system
+  would route through — so `onLost` unambiguously means "no default network right now".
+  It is also immune to the original 2026-08-01 multi-network bug, where losing cellular
+  while wifi was still up wrongly marked the whole app offline, since that bug came from
+  per-network events being written into a global flag.
+  **Verified on device, both directions, twice:**
+  `isOnline=true (activeNetwork=126)` → airplane on, wait for `dumpsys` to report 0
+  networks → `isOnline=false (activeNetwork=null)` → airplane off → `isOnline=true
+  (activeNetwork=127)` → airplane on → `isOnline=false`. Waited on the actual network
+  count rather than a fixed sleep, which is what exposed the earlier "flakiness" as a
+  too-short 12s wait rather than real nondeterminism.
+  **Owed visual re-check from iteration 6 is now DONE.** With connectivity genuinely
+  dropping, AI chat renders the gate correctly: opaque background, the ported
+  `condition_join_family` illustration with **no white box** (confirming the `-transp`
+  fix), the exact iOS copy, and "Go back". The offline banner also appears — it never
+  could before, since it reads the same flag.
+  **Wider impact worth noting:** this flag feeds the offline banner,
+  `FeatureAccessState.setCloudAvailable(...)`, and `SyncQueue`'s online observation. All
+  three were silently inert on Android whenever connectivity dropped.
+  Diagnostics trimmed afterwards: the per-callback logging is gone, but registration
+  failure is still logged — if that call ever throws, the app degrades to "always
+  online", which looks identical to working and already cost one full debugging pass.
+  Verified: `SakhiCore:jvmTest` green, full `testDebugUnitTest` green,
+  `:app:assembleDebug` green.
+  **Still open (unchanged):** the shared resolver tells a signed-in user who merely lost
+  wifi to "Sign in to use this" — cross-platform copy/logic question for Karan, now much
+  more visible since the gate actually engages. Missing Profile screens (OfflineMode,
+  carePartnerPermissions, carePartnerHistory, HealthInsights) remain the largest parity
+  gap.
+
+- **2026-08-02, Claude (loop iteration 7): fixed a real correctness bug in my own
+  FeatureAccessGate, and uncovered a bigger one underneath it — Android does not
+  detect total loss of connectivity at all. NOT yet fixed; evidence below.**
+  **Gate bug (fixed).** My iteration-6 gate called `resolver.resolve(feature)` once
+  during composition without observing anything, so the decision was frozen at first
+  composition: a user who went offline kept seeing the feature, and one who came back
+  online would stay blocked. iOS avoids this with
+  `@ObservedObject access = FeatureAccessManager.shared` — its comment says the decision
+  is "re-evaluated automatically whenever FeatureAccessManager publishes a change".
+  `FeatureAccessGate` now collects `isGuest`, `cloudAvailable` and
+  `isOnlineAccountPaused` via `collectAsStateWithLifecycle` and re-resolves through
+  `remember(...)` keyed on them. Added `androidx.lifecycle.runtime.compose` to
+  `:core:ui` for it.
+  **The bigger bug, still OPEN.** After that fix the gate *still* never engaged, and the
+  reason is not the gate: **`isOnline` never becomes false**. Reproduced deterministically
+  on `sakhi_qa`:
+  - `adb shell settings get global airplane_mode_on` → `1`
+  - `dumpsys connectivity` → `0` NetworkAgentInfo, `Active default network: none`
+  - app pid unchanged (no restart), app in foreground
+  - `adb logcat -s SakhiNet` → only the launch line, **no change event at all**
+  Consequences are wider than the gate: the offline banner never appears,
+  `FeatureAccessState.setCloudAvailable(false)` is never called, and anything gated on
+  connectivity silently behaves as if online. On 2026-08-01 the opposite failure was
+  fixed (a stale `false`); this is the mirror image and was missed because that
+  verification only proved the flag stays *true* through a wifi→cellular handover — it
+  never tested the everything-is-gone case. A verification that only exercises the happy
+  transition is not a verification.
+  **Attempted and insufficient:** switched `NetworkStatus` from a capability-filtered
+  `registerNetworkCallback` to `registerDefaultNetworkCallback` (which tracks the network
+  the system would actually route through) and added an `onUnavailable` override. No
+  change in behaviour, so the callback is not being delivered at all.
+  **Leading hypothesis for the next pass, not yet proven:** `NetworkStatus.register()`
+  may never run. `_isOnline` is initialised to `true`, so a never-registered instance is
+  indistinguishable from "online" — and the one `SakhiNet` line seen at launch reads its
+  values from `ConnectivityManager` directly in `RootNavHost`, so it does **not** prove
+  `register()` executed. It is wired as
+  `single { NetworkStatus().apply { register(androidContext()) } }` in SakhiCore's
+  `platformModule()`, resolved via `koinInject<NetworkStatus>()` in `RootNavHost`.
+  Next step: put a log inside `register()` and inside the callback to establish whether
+  it is registration or delivery that is failing, before changing any more code.
+  Do not "fix" this by polling — find out which of the two it is first.
+  Verified this iteration: `:app:assembleDebug` green, `SakhiCore:jvmTest` green, gate
+  reactivity change compiles and is wired. Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 6): built the Android `FeatureAccessGate` —
+  the screen iOS has and Android never did — and fixed a real defect in my own asset
+  conversion.**
+  **Everything it needs was already shared and already in Koin.** `FeatureAccessResolver`,
+  `AppFeature`, `BlockReason` and `AccessDecision` have all been in `SakhiCore` with
+  `single { FeatureAccessResolver(...) }` registered the whole time. Android simply had
+  no UI, so a blocked feature had no honest way to explain itself — it just showed a
+  screen that silently could not work. New `FeatureAccessGate` / `FeatureAccessBlocked`
+  in `:core:ui`, a transcription of `FeatureAccessGate.swift`:
+  - every title, message and button label copied verbatim from the Swift source rather
+    than rewritten, so the two platforms say the same thing to the same person;
+  - reason → illustration mapping exactly as iOS: `.offline` → `condition_offline`,
+    `.notSignedIn` → `condition_join_family`, `.noPermission`/`.unknown` →
+    `care_partner_onboarding`. That places 3 of the 4 assets left over from iteration 5.
+  - image height 250dp, matching iOS's `.frame(height: 250)`.
+  Wired into **AI chat** (`AppFeature.SAKHI_AI_CHAT`) and **Care**
+  (`AppFeature.BE_HER_SAKHI`) in `HomeNavHost` — both are `requiresInternet = true` in
+  the shared enum, which is exactly what iOS gates.
+  **On the "Resume online" action:** iOS calls `DataManager.resumeSync()` and restarts
+  the care runtime. Android has neither yet (the "Use Sakhi Offline" screen is still
+  unbuilt), so the button clears `FeatureAccessState.setOnlineAccountPaused(false)` —
+  the only thing that can set this reason in the first place. Deliberately NOT faking a
+  `resumeSync()` call that does not exist; when OfflineMode lands, this is the one place
+  to update.
+  **Real defect found in my own iteration-5 asset conversion:** `pdftocairo -png`
+  composites onto opaque white by default, so every ported illustration had a **white
+  box baked in** — clearly visible once the gate rendered one over a coloured
+  background. Regenerated all 70 PNGs with `-transp`; verified the output is now
+  `colorType=6` (RGBA with alpha). The onboarding carousel happened to sit on a light
+  background so this went unnoticed there — a good argument for checking an asset on a
+  *coloured* surface, not just where it currently ships.
+  **Second defect, same screenshot:** the blocked view had no background of its own, so
+  it drew straight over Home and the copy was unreadable. iOS applies
+  `.profileStaticPageBackground()`; Android now fills `colorScheme.background`.
+  **Verification status, stated precisely:** the blocked state was captured rendering
+  correctly *before* those two fixes (right illustration, right copy, "Go back"). After
+  the fixes the gate correctly *passed through* to chat, because connectivity had been
+  restored, so the blocked state has not been re-photographed post-fix. Both fixes are
+  compile- and asset-verified (`colorType=6`, `background(...)` present) but the visual
+  re-check is still owed. Full `testDebugUnitTest` green; `:app:assembleDebug` green.
+  **Behaviour worth a decision, not an Android bug:** with a signed-in account and no
+  network, the shared resolver returns `NOT_SIGNED_IN`, so the gate says "Sign in to use
+  this" to someone who *is* signed in. The resolver's own comment assumes
+  `cloudAvailable == false` means "no usable account", but Android feeds it live
+  connectivity, so simply losing wifi hits that branch. iOS shares the resolver, so this
+  is a cross-platform copy/logic question for Karan rather than something to patch on
+  one side.
+  **Also observed:** launching with no network drops a signed-in user to onboarding
+  rather than Home (session restore needs the network). Recorded, not chased.
+
+- **2026-08-02, Claude (loop iteration 5): found and fixed the real cause of "galat
+  colors on all screens", and ported iOS's image assets into Android.**
+  **The colour bug was one line, and it explains the whole menstrual phase.**
+  `PhaseColorManager.swift:94` reads:
+  `let primary: Color = phase == .menstrual ? .white : c.primary`
+  iOS deliberately overrides the phase primary to **white** for menstrual, because that
+  phase's background is a saturated pink (`BG_TOP #D9406F` … `BG_MID #E85787`) and its
+  raw primary token is `#E85787` — the same colour as the background. Android used the
+  raw token unconditionally, so every text, icon and accent drawn with `palette.primary`
+  was pink-on-pink. `rememberHomePhasePalette` now applies the same override.
+  **Second half of that fix:** `accentColor` was `phasePrimaryColor(phase)`, which reads
+  `PhaseVisualStyle.colorHex` directly and therefore *bypassed* the palette override.
+  It now comes from `phasePalette.primary`. Caught because the first build made the hero
+  worse, not better — a reminder to re-screenshot after every colour change rather than
+  trusting the edit.
+  Also removed the local `if (isPeriodMode) Color.White` hardcode I had added to the
+  hero earlier; with the palette correct it was redundant, and leaving it would have
+  hidden the real bug from the next person.
+  **Assets ported (7 illustrations × 5 densities × light/dark = 70 PNGs).** iOS ships 10
+  imagesets; `AppLogo` was already ported as the launcher icon in July, and
+  `sakhiSymbolAccent`/`sakhiSymbolSecondary` are logo variants. The 7 content
+  illustrations are all vector PDFs with separate light/dark artwork, converted with
+  `pdftocairo` at 300/450/600/900/1200px into `drawable-{m,h,xh,xxh,xxxh}dpi` and
+  `drawable-night-*`, so the artwork switches with the theme exactly as iOS's PDF pair
+  does. They live in **`:core:ui`**, not `:app` — a library module cannot reference the
+  app module's resources, and several features need them.
+  | iOS asset | Android drawable | iOS usage (verified in source) |
+  |---|---|---|
+  | `Onboarding/1,2,3` | `onboarding_slide_1..3` | `BundledOnboardingContent.imageAssets` maps `onboarding.carousel.slideN.image` AND `onboarding.care_carousel.slideN.image` to `Onboarding/N` — keyed by slide **index**, same for both carousels |
+  | `Conditions/offline` | `condition_offline` | `FeatureAccessGate.imageName`, reason `.offline` |
+  | `Conditions/join-family` | `condition_join_family` | `FeatureAccessGate`, reason `.notSignedIn` |
+  | `Conditions/upgrade-light` | `condition_upgrade` | Conditions set |
+  | `Features/CarePartner/onboarding` | `care_partner_onboarding` | `FeatureAccessGate`, `.noPermission`/`.unknown` |
+  **Wired and verified on device:** the onboarding carousel now renders the real iOS
+  illustration instead of a generic Material icon — confirmed on a cleared install
+  ("Logging in One Tap" slide). Mapping is by slide index because that is what iOS's own
+  asset map does; the Material icon remains as a fallback past slide 3 rather than
+  crashing.
+  **Not yet wired, and NOT assumed:** `condition_offline`, `condition_join_family`,
+  `condition_upgrade`, `care_partner_onboarding`. On iOS these belong to
+  `FeatureAccessGate`, and **Android has no equivalent gate screen** — `grep` for
+  `FeatureAccessGate|AccessDenied|LockedFeature` finds only a passing mention in
+  `RootNavHost`. So there is no correct place to put them yet; inventing one would be
+  guessing at a screen iOS actually has. Building the Android `FeatureAccessGate` is the
+  next real task, and these four assets drop straight into it.
+  Verified: `:app:assembleDebug` BUILD SUCCESSFUL, exercised on `sakhi_qa`.
+  Nothing committed.
+
+- **2026-08-02, Claude (loop iteration 4): started the screen-by-screen sweep with
+  Profile. Found four genuinely MISSING screens, not styling drift. Inventory below
+  so this can be worked down without re-deriving it.**
+  Method: diffed iOS `ProfileView.swift`'s navigation destinations against Android's
+  `ProfileSheetScreen` enum and the `feature/profile` file set, then grepped the whole
+  Android tree for each concept to avoid calling something missing when it just lives
+  elsewhere.
+  **iOS destinations:** about, activityLog, appIntegration, appearance,
+  careModeSettings, carePartnerHistory, carePartnerPermissions, dataReset,
+  deleteAccount, editProfile, feedback, generateReport, healthInsights, helpSupport,
+  legal, logout, manageData, myData, notificationsSettings, offlineMode,
+  privacySecurity, useOffline.
+  **Present on Android** (verified by grep, not by filename guessing): about,
+  activityLog, appIntegration, appearance, dataReset (inside `ManageAccountScreen`),
+  deleteAccount, editProfile, feedback, generateReport (Reports), helpSupport, legal,
+  logout, manageData, myData, notificationsSettings, privacySecurity,
+  careModeSettings.
+  **MISSING on Android — zero files, confirmed by grep:**
+  1. **`HealthInsightsView.swift` (241 lines)** — "Your Apple Health data at a glance",
+     with sleep / activity / temperature cards. Android has `AppIntegrationScreen` and
+     `AndroidHealthConnectManager`, so the data source exists (Health Connect is the
+     Android counterpart of HealthKit); the *screen* does not.
+  2. **`OfflineModeSheet.swift` (172 lines)** — lets a signed-in online user pause sync
+     and use Sakhi offline. This is already a *known* gap recorded elsewhere in the
+     codebase: `RootNavHost` comments that `isOnlineAccountPaused` "stays false always
+     -- Android has no 'Use Sakhi Offline' toggle yet for a signed-in user to trigger
+     it". `FeatureAccessState` already models the state, so only the screen plus the
+     toggle call are absent.
+  3. **`carePartnerHistory`** — no Android file.
+  4. **`carePartnerPermissions`** — no Android file.
+  These are feature gaps rather than pixel drift, and they are the largest remaining
+  source of "Android doesn't match iOS" on Profile. Suggested order: OfflineMode first
+  (smallest, and its state is already wired), then carePartnerPermissions (privacy
+  relevant — it controls what a partner can see), then carePartnerHistory, then
+  HealthInsights (largest, and depends on Health Connect read permissions that are
+  themselves only partially verified per the Testing checklist).
+  Nothing was changed in this iteration — inventory only, so the next pass starts from
+  facts rather than re-deriving them.
+
+- **2026-08-02, Claude (loop iteration 3): Home now has iOS's actual structure —
+  calendar sheet visible by default, correct detent height, engine-driven day marks.**
+  1. **Calendar sheet shows on Home by DEFAULT.** `HomeView.swift` declares
+     `showCalendarInitially: Bool = true` (false only for the authenticated bootstrap
+     path), which is why every one of Karan's iOS screenshots has the white sheet
+     covering the day-detail area. Android only showed it after tapping the calendar
+     button, so Home was a bare stack of translucent cards on a saturated background —
+     the actual source of the "colors/spacing" complaint. `HomeNavHost` now owns a
+     `showCalendar` state defaulting to true, separate from the modal-sheet enum since
+     it coexists with Home rather than replacing it.
+  2. **Card fills were already correct — do not "fix" them.** Checked before
+     changing anything: Android's `cardFill`/`cardStroke`/divider/badge helpers already
+     reproduce iOS's `HomeDayDetailGlassView+GlassCard.swift` branch for branch
+     (`!hasPeriodData -> systemBackground`, `isPeriodMode -> palette.surface`,
+     dark -> solid `tileFill`, light -> `tileFill @ 14%`). The cards looked muddy
+     because they were exposed at all, not because the fill was wrong.
+  3. **Detent was measured against the wrong height.** iOS computes detents from
+     `UIScreen.main.bounds` (includes status bar + home indicator); Compose's
+     `screenHeightDp` excludes system bars, so 0.40 of a smaller number rested the
+     sheet too low. Now adds `WindowInsets.systemBars` back before applying the
+     fraction. Sheet top measured on device at ~0.40 of full height, matching iOS.
+  4. **Calendar day marks now come from the engine, like iOS.** Android built marks
+     from `CalendarMarker.buildMarks(cycles)` — `CycleData` only — which structurally
+     cannot project predicted-period, fertile, ovulation or PMS days for the cycle you
+     are *currently in*, because that cycle's `cycleLength` is null until it closes.
+     iOS uses `SakhiPredictionEngine.buildCalendarState(logs:)` (`PeriodManager.swift:142`).
+     Added `CycleInsightAdapter.calendarMarks(...)` mapping `CalendarState`'s day sets
+     onto the existing `CalendarMarker.DayMark`, and `CalendarViewModel` now loads the
+     period-log history alongside cycles to feed it. Verified on device: 25 Aug renders
+     a predicted-period mark that previously never appeared at all. This is the same
+     divergence class as the Home hero (Android on a `CycleData`-derived path, iOS on
+     the engine) — worth checking Reports and Care for the same pattern.
+  **Honest limit on (4):** only a few marks render for this account, and that looks
+  like data, not code — it has 21 logged days spread over 18 months with very large
+  gaps (the same sparsity that produced `sd=146` earlier). The mechanism is confirmed
+  working; validating fertile/ovulation density needs a densely-logged account.
+  `filterMarkForSession` was ruled out first — it returns marks untouched for own data.
+  Verified: `:app:assembleDebug` BUILD SUCCESSFUL, exercised on `sakhi_qa`.
+  Nothing committed.
+  **Follow-up in the same iteration — swept for the remaining CycleData-vs-engine
+  divergences and fixed the important one.** `grep` for `CycleMath.currentPhase` /
+  `CalendarMarker.buildMarks` found three live callers left:
+  - `HomeViewModel.selectDate` (line ~408) was **still** on `CycleMath.currentPhase`,
+    so tapping a day in Calendar could report a different phase than the hero above it
+    was showing for that same date. Now caches the engine inputs (`cachedCycles`,
+    `cachedPeriodLogDates`, `cachedStats`) during `loadCycleInsight` and re-asks
+    `CycleInsightAdapter` for the newly selected day, updating phase, prediction, hero
+    tip and countdown together.
+  - `AndroidWidgetSnapshotManager:97` and `HomeScreen:1040` (Current Cycle pill strip)
+    still use the `CycleData`-derived path. **Left deliberately for now** — both are
+    scoped to a single already-loaded cycle rather than answering "what phase am I in
+    today", so they are lower risk. Still worth converting for consistency; recorded
+    here so they are not forgotten.
+  **A real bug I introduced and caught via the existing tests, worth calling out:**
+  moving marks onto logged days meant `cachedPeriodLogDates` was populated *before* the
+  target-staleness check, so switching accounts could render the previous person's
+  period days while the new target was still loading — a genuine cross-account leak.
+  `ensureYearLoaded does not reuse the previous targets cached cycles` caught it. Now
+  cleared first and only adopted inside `onSuccess`, after the staleness guard. This is
+  exactly why those isolation assertions must not be loosened.
+  Also filled in `DayMark.phase` and `cycleDay`, which my first version left at
+  defaults: `phase` still feeds `filterMarkForSession`'s permission logic, so leaving
+  it UNKNOWN would have silently widened what a partner can see. `cycleDay` is counted
+  within the engine's own detected cycle boundaries rather than computed locally.
+  Full `testDebugUnitTest` green across all modules; `:app:assembleDebug` green;
+  re-verified on device.
+
+- **2026-08-02, Claude (loop iteration 2): year view bound to the sheet detent —
+  closes BOTH priority (2) month→year parity and priority (4) the empty expanded
+  detent, because on iOS they were never two problems.** Verified on `sakhi_qa`.
+  **The insight:** iOS does not treat "year view" and "sheet position" as separate
+  state. `HomeCalendarSheet.swift`'s own header says it outright — *"compact = month,
+  expanded = year"* — and it crossfades the two as the sheet rises (`contentProgress`
+  springs in the same `withAnimation` block as `activeOffset`). The month-header
+  chevron calls `snapToExpanded()`; it does not swap content underneath a static
+  sheet. Android had the two fully independent: `CalendarScreen` owned a private
+  `isYearExpanded`, and my new overlay owned the detent, so dragging up just made a
+  taller month grid with a large dead area under it. That dead area was never a
+  layout bug to fix on its own — it was the year view failing to appear.
+  **What changed:**
+  - `CalendarScreen` gained optional `yearExpanded` / `onYearExpandedChange`
+    parameters. Left null it keeps its own `rememberSaveable` state, so the screen
+    still works standalone; when supplied, the host owns the mode.
+  - `HomeCalendarOverlay`'s content lambda now receives `(expanded, setExpanded)`, so
+    the calendar can both read the detent and drive it — which is what makes the
+    month-header chevron expand the *sheet*, matching `snapToExpanded()`.
+  - `HomeNavHost` binds the two together.
+  **Verified on device:** opening the calendar shows the month grid at the compact
+  detent; dragging up crossfades to the year view (2026 header with chevrons and the
+  reset affordance, stacked month cards, today circled in August) and the dark
+  "Edit Period Dates" capsule — which matches iOS's own
+  `Capsule().fill(barDark).shadow(...)` bottom bar. No empty region remains.
+  **Checked rather than assumed:** the shared `M T W T F S S` row above the year's
+  month cards looked at first like a month-view artifact leaking through. It is not —
+  iOS's `yearContent` renders the identical row
+  (`ForEach(["M","T","W","T","F","S","S"])`), so Android is already correct there and
+  it was left alone.
+  Verified: `:app:assembleDebug` BUILD SUCCESSFUL, full `testDebugUnitTest` still
+  green from iteration 1. Nothing committed.
+  **Next:** day-detail card fills + bottom-bar contrast on saturated phase
+  backgrounds (the remaining "colors/spacing" complaint), then the
+  `OnboardingViewModelTest` midnight-boundary flake, then the screen-by-screen sweep.
+
+- **2026-08-02, Claude (loop iteration 1): ALL unit tests green again — full
+  `./gradlew testDebugUnitTest` BUILD SUCCESSFUL across every module, plus
+  `:app:assembleDebug`. App re-verified on `sakhi_qa`. No assertion was loosened.**
+  Finished the migration of `:feature:home` from the old `getLatest`/`CycleMath`
+  contract to `getAll`/`CyclePhaseInsight`. Every failure turned out to be a stub
+  defect, not a production defect — worth recording because each one *looked* like a
+  behaviour regression:
+  1. **Bespoke `PeriodLogRepository` mocks only stubbed `getForDateRange`.** Home now
+     also calls `getAll`, and an unstubbed mockk call *throws* rather than returning a
+     failed Result, which unwound the whole refresh so `selectedLog` was never set.
+     That was the `IllegalArgumentException: Required value was null`.
+  2. **An earlier dedupe pass of mine had deleted the *correct* mirrored stubs** and
+     left `getAll` returning `emptyList()` on the *cycle* repo. Those tests therefore
+     had no cycles and no logs, so the shared engine correctly answered UNKNOWN.
+     Repaired to return the same cycle the sibling `getLatest` stub returns.
+  3. **A success stub sitting after a failure stub for the same call.** mockk lets the
+     later one win, so `getAll` never failed and both `cycle load failure …` tests saw
+     `error == null`. Removed the overriding stubs.
+  4. **The two data-isolation tests used a blanket `getAll(any())` returning empty for
+     both users.** Stubbed per target instead. In `a stale cycle response is
+     discarded` the never-completing call was also moved from `getLatest` to `getAll`,
+     because that is the call Home actually makes now — left on `getLatest` the test
+     would have passed while simulating nothing, quietly losing the coverage.
+  Also: the fake `PeriodLogRepository` now derives its logs from whatever cycles the
+  fake `CycleDataRepository` returns (`periodLogsFor(cycle)`), so the two doubles
+  cannot describe an impossible state. A cycle with no logs cannot occur in
+  production — cycles are built *from* logs.
+  **Knock-on fixes in other modules**, all from `LoggingViewModel`/`HomeViewModel`
+  gaining constructor parameters: `LoggingViewModelTest` and `CalendarScreenshotTest`
+  now build a real `CycleDetectionCoordinator` over their existing mocked
+  repositories (it is a thin orchestrator around the shared detector, so mocking it
+  would only assert against itself).
+  **`RecommendationsViewModel` simplified while fixing its tests.** It now reuses the
+  cycle it already fetches (`cycleResult`) instead of issuing a second `getAll`;
+  `CycleInsightAdapter` only needs the current cycle's start (iOS passes
+  `currentCycles.first` for the same reason) plus the logged period days. That kept
+  the phase-engine unification from iteration 0 while touching no Recommendations
+  test at all.
+  **Flake noticed, not mine:** `OnboardingViewModelTest > updateLastPeriodDate clamps
+  a future date to today` failed once in a full-suite run and passes in isolation.
+  The session crossed local midnight (2026-08-01 → 08-02) mid-run, which is exactly
+  the boundary that test sits on. Worth pinning with an injected clock rather than
+  leaving date-dependent.
+  **Next up (unchanged priority):** month-header click → year view parity with iOS
+  `HomeCalendarSheet.yearContent`; then day-detail card fills + bottom-bar contrast on
+  saturated phase backgrounds; then the expanded-detent empty area; then the
+  screen-by-screen sweep.
+
+- **2026-08-02, Claude: hero tip re-sourced to match iOS, Recommendations moved onto
+  the same engine as Home. App builds and runs; `:feature:home` unit tests are RED
+  and need finishing — details below so this can be picked up cleanly.**
+  **Hero tip was coming from the wrong place.** I first wired it to the engine's
+  `analyzePhase(...).shortTip`, which yields terse copy ("Rest well"). Read iOS's
+  actual `heroTip` (`HomeDayDetailGlassView.swift:352`) — it is
+  `recoVM.phaseTips.first ?? RecommendationRepository.syncTips(for:).first`, with a
+  log nudge taking priority: while she is in her period window but has not logged
+  today it returns "Please remember to log". Android now does the same via
+  `RecommendationRepository.getCuratedRecommendations(phase).tips.first()`, which is
+  where "A heating pad can ease cramps significantly" actually lives. Same engine,
+  same wording, both platforms.
+  **Second divergence found and closed in the same pass.**
+  `RecommendationsViewModel` was still deriving phase from `CycleMath.currentPhase`
+  while Home had moved to `CyclePhaseInsight`. That meant the food list and tips could
+  say "luteal" on a day the hero above them said "Day 1 of your period". It now uses
+  the same `CycleInsightAdapter`. Worth watching for more of these: any remaining
+  `CycleMath.currentPhase` caller is a candidate to disagree with Home.
+  **`:feature:home` unit tests: 7 failing, and this is NOT an app regression.** The
+  app itself builds and was verified on device. The tests encode the old contract,
+  where Home read a single cycle via `cycleDataRepository.getLatest` and derived phase
+  from `CycleMath`. Home now reads the full history via `getAll` plus the period-log
+  history, because the shared engine decides phase from *logged days*.
+  Progress already made on them, so this is not from scratch:
+  - test doubles made internally consistent — the fake `PeriodLogRepository` now
+    derives its logs from whatever cycles the fake `CycleDataRepository` returns, via
+    a new `periodLogsFor(cycle)` helper. A cycle with no logs is an impossible state
+    in production (cycles are built *from* logs), so asserting against it tested
+    behaviour the real app can never reach.
+  - one root cause already fixed that was masquerading as many failures: the test's
+    `appContext` mock did not stub `home_hero_tip_log_reminder`, so `heroTipFor` threw
+    from *inside* `_uiState.update {}`, aborting the entire state write. Every phase
+    assertion then saw UNKNOWN and every error assertion saw null. Stubbing that one
+    string fixed two tests outright and is the reason the remaining failures are now
+    legible.
+  **Now down to 6 failures, and the cause of each is pinned. Next session: start
+  here, it is mechanical from this point.**
+  Two more root causes were found and fixed after the above:
+  - `IllegalArgumentException: Required value was null` in `partner home log is
+    redacted` was NOT a redaction bug. Tests that supply their own
+    `mockk<PeriodLogRepository>` only stubbed `getForDateRange`; Home now also calls
+    `getAll`, and an unstubbed mockk call *throws* rather than returning a failed
+    Result, which killed the whole refresh so `selectedLog` was never set. All six
+    bespoke log-repo mocks now stub `getAll`. That test passes.
+  **The 6 remaining, with the actual reason for each:**
+  1. `switching target user resets derived cycle state`, `refreshSelectedDate
+     re-checks only the selected day`, `selectDate recomputes cycle-derived fields`,
+     `a stale cycle response is discarded` — all assert a phase (MENSTRUAL /
+     FOLLICULAR) but get UNKNOWN. Cause: the `getAll` stub I added to those bespoke
+     mocks returns `emptyList()`, so the shared engine sees **no logged period days**
+     and correctly answers UNKNOWN. Fix: return `periodLogsFor(<that test's cycle>)`
+     instead of `emptyList()` — the helper already exists in this file and the default
+     factory already does exactly this. It is per-test because each test names its own
+     cycle val (`cycle`, `ownCycle`, `partnerCycle`, `follicularCycle(...)`).
+  2. Both `cycle load failure …` cases assert the error is surfaced but see null.
+     `getAll` is now stubbed to fail, and `loadCycleInsight` does set `error` on the
+     failure branch, so this one still needs a real trace — check whether
+     `refreshCycleStatistics` (called right after, with `getCompleted` unstubbed)
+     throws and unwinds `refresh()` before the state is observed.
+  Still do not loosen assertions: these cover partner data isolation and
+  stale-response discarding, both real protections.
+
+- **2026-08-02, Claude: FIXED the phase/countdown divergence at the foundation.
+  Android now calls the same shared engine iOS calls, and produces iOS's exact
+  answer on identical data. Verified on device. Home's visual layout parity is
+  still outstanding.**
+  **Verified result:** logging a period on 2026-08-02 now gives
+  `phase=MENSTRUAL, cycleDay=1, status=IN_PERIOD, periodDay=1` and Home renders
+  **"Day 1 / of your period"** on the deep-pink menstrual background — matching
+  iOS's screenshot exactly. Before logging it read "Luteal phase / 14 Days until
+  next period", also correct for that data.
+  **Root cause (correcting my earlier wrong call).** I previously reported the
+  shared prediction engine was broken and that iOS shared the bug. That was wrong.
+  Karan's iOS screenshots for the same account/date proved iOS was right, and the
+  real cause was that Android called a different engine:
+  - iOS Home → `SakhiCycleInsightEngine` → shared KMM `CyclePhaseInsight`
+    (`predictionSnapshot` / `phaseInsight`), already ported and already tested.
+  - Android Home → `CycleMath.currentPhase` / `daysUntilNextPeriod`, a different
+    algorithm answering a different question. Its own inline comment even admitted
+    it chose these over "the parallel, currently-unused CyclePhaseInsight engine".
+  `CycleMath.daysUntilNextPeriod` also structurally cannot produce a countdown for
+  an in-progress cycle, since it needs a `cycleLength` that only exists once the
+  cycle closes — so that hero could never have worked for anyone.
+  My earlier `forecast()`-based countdown was also the wrong entry point and has
+  been **removed**, not layered over.
+  **What was built:**
+  1. `CycleInsightAdapter` (`:core:common`) — the direct counterpart of iOS's
+     `SakhiCycleInsightEngine.swift`, whose header defines the contract both
+     platforms follow: all phase/prediction decisions live in KMM; the platform only
+     selects which cycle to interpret, normalises lengths, and maps to presentation.
+     Input selection is reproduced exactly (trustworthy-cycle preference,
+     `effectivePeriodLength`, the 14-day believability ceiling, the
+     `CYCLE_MIN/MAX_LENGTH_DAYS` clamps) so the platforms cannot answer differently.
+  2. `HomeViewModel.loadCycleInsight` replaces the `CycleMath` path. Reads the full
+     log history and all cycles, not just the latest cycle — the engine decides "am
+     I inside a period right now" from the logged days themselves, which a
+     single-latest-cycle read cannot see.
+  3. `heroText` rewritten as a direct port of iOS's `heroContent`, switching on the
+     engine's own `PredictionStatusKind`. It can now express in-period, expected,
+     delayed and since-expected — cases the old phase-based version had no way to
+     represent. In-period correctly reads "Day 3", not "3 Days".
+  **A third serializer outage found and fixed at the root.** After the above, cycle
+  reads still failed: `"created_at": null` → "Expected string literal but 'null'".
+  Same class as the earlier `is_complete` failure, and one explicit null kills the
+  decode of the ENTIRE result set, not just that row's field. Rather than patch
+  columns one at a time, set `coerceInputValues = true` (plus `ignoreUnknownKeys`,
+  `explicitNulls = false`) on the shared `SakhiSupabaseClient` serializer — the fix
+  the library's own error message recommends, applied once so every repository
+  inherits it. `SakhiCore jvmTest` green.
+  Also fixed the source of those null rows: the coordinator was writing `""` for
+  `createdAt` on new cycles, which came back as null. It now stamps a real timestamp
+  and preserves the original on update.
+  **Important correction about the "207 days" / sd=146 engine finding.** That
+  analysis was real but it was NOT what was breaking Home, and the conclusion I drew
+  from it ("iOS is broken too") was wrong. It only ever mattered because I was
+  calling `forecast()`, which Home should never have used. No engine change was
+  needed or made.
+  **Diagnostic note worth keeping:** the earlier confusion was compounded by test
+  data — the 1 Aug log had `periodPresent = false` because the automated flow tap
+  never registered, so the engine correctly saw no period that day
+  (`latestPresent=2026-07-14, todayIsPresent=false`). Confirmed by instrumenting the
+  engine inputs rather than guessing.
+  **Still outstanding — Home's visual layout does not match iOS.** The phase-driven
+  background now works (it was always wired; it just needed a correct phase and
+  `hasCycleData`). Missing versus Karan's screenshots:
+  - the tip pill under the hero ("Apply a heating pad to ease cramps"),
+  - the white rounded **inline** calendar sheet, which iOS renders as a ZStack
+    overlay over Home (`HomeView.swift`'s own header: "Layer 2 — HomeCalendarSheet
+    (ZStack overlay, yOffset controls show/hide)"). Android instead opens
+    `CalendarScreen` full-screen in a `SakhiModalSheet`, which is Karan's "calendar
+    full screen kyun hai" report.
+  - Android still shows a scrolling card list (Logged today / What to Eat / Current
+    Cycle) where iOS shows the calendar sheet.
+  - hero contrast on the menstrual background is poor — "Day 1" is barely legible.
+  Verified: `:app:assembleDebug` BUILD SUCCESSFUL, `SakhiCore:jvmTest` BUILD
+  SUCCESSFUL, exercised on `sakhi_qa`. Nothing committed.
+  **Hero visual parity pass (same day, after Karan's "kitna ganda dikh raha hai"
+  screenshot).** Three concrete fixes, all measured against iOS's real source rather
+  than eyeballed:
+  1. **Hero text was invisible.** It used `accentColor` (= the phase primary) for the
+     big number, which on the menstrual background is pink-on-pink. iOS flips the
+     hero to white in period mode (`HomeDayDetailGlassView`, `isHeroPeriodMode`), and
+     Android's own `homeSecondaryTextColor` already did this for the subtitle but not
+     the number. Now white in period mode, phase accent otherwise.
+  2. **Font sizes were Material defaults, not iOS's.** Read the real values from
+     `HomeDayDetailGlassView.swift`: big number `.lato(68, .regular)`, subtitle
+     `.lato(18)`, tip `.lato(13)`. Android was using `displayMedium` (~45sp) and
+     `titleMedium`. Set explicitly to 68/18/13sp.
+  3. **The hero tip pill did not exist.** Ported it: sparkles + one line, 16dp/9dp
+     padding inside a capsule, exactly iOS's geometry. Copy comes from the shared
+     engine's `analyzePhase(...).shortTip` — the same source iOS's `heroTip` uses —
+     so the wording cannot drift between platforms.
+  On-device result: "Day 1" now renders large and white, "of your period" beneath it,
+  and a "Rest well" tip pill. Food recommendations also became phase-correct for
+  menstrual (iron-rich greens, dark chocolate, salmon, ginger tea, bananas).
+  **Still not matching iOS — the remaining layout work, honestly listed:**
+  - Home still renders a scrolling card list (Logged today / What to Eat / Current
+    Cycle) where iOS renders the **white rounded calendar sheet** as its main surface.
+  - The calendar still opens full-screen via `SakhiModalSheet` with a long detent.
+    iOS makes it a ZStack overlay with a `yOffset` (`HomeView.swift`: "Layer 2 —
+    HomeCalendarSheet"). This is Karan's "calendar full screen kyun hai" and the
+    "long detent" complaint, and it is the single biggest remaining structural gap.
+  - Card fills are translucent over the saturated background, so they read muddy
+    rather than as iOS's crisp white sheet.
+  - The bottom bar washes out against the menstrual background.
+  - iOS's tip for a period day reads "Apply a heating pad to ease cramps" vs
+    Android's "Rest well" — both come from the engine, so the two platforms are
+    likely reading different tip fields (`shortTip` vs `fullTip`); needs checking
+    against iOS's `heroTip` before changing.
+  **Calendar rebuilt as an in-tree overlay (the "calendar full screen kyun hai" /
+  "long detent" report). Done and verified on device.**
+  Android had the calendar in a Material3 `ModalBottomSheet` — a separate window with
+  its own scrim that expands to nearly full screen. That is a different *interaction*
+  from iOS, not a styling difference: it hid Home behind a dim layer instead of
+  sliding over it. New `HomeCalendarOverlay` (`:app`) renders it in-tree, ported from
+  `HomeCalendarSheet.swift` with its geometry read from the Swift source rather than
+  eyeballed:
+  - compact detent top = `0.40 × screenH` (iOS's `compactY = screenH * 0.20` giving
+    `actual_top = 2 × compactY`), so 60% of the screen shows the sheet and the hero
+    stays visible above it;
+  - expanded detent top = `safeTop + 10`, iOS's deliberate "long detent, not full
+    screen, so it still feels like a sheet over HomeView";
+  - 24dp top corners, 36×4 handle with 10dp top padding in a 36dp touch row;
+  - drag lives on the handle only, so dragging inside the month grid still scrolls
+    the grid instead of fighting the sheet, and a release always snaps to a real
+    detent (iOS makes the same point explicitly).
+  `HomeOverlaySheet.Calendar` no longer routes through the modal lane at all.
+  Two further parity fixes found by comparing screenshots side by side:
+  - **Sheet was pink, iOS is white.** iOS fills with `DS.Colors.systemBackground`
+    (plain white in light mode), deliberately not the phase-tinted surface. Android
+    used `colorScheme.surface`, which in the Sakhi palette is pink, so the sheet
+    blended into the phase background instead of reading as a separate card.
+  - **Nav glyphs were arrows, iOS uses chevrons.** iOS is
+    `chevron.left/right .lato(15, .bold)` inside a 44pt frame — a small chevron in a
+    large touch target. Android drew a 36dp `ArrowBack`/`ArrowForward` in a 48dp
+    button. Now `KeyboardArrowLeft/Right` at 18dp in 44dp.
+  Verified on device: sheet opens at the compact detent with the hero above it,
+  drag-up snaps to the long detent with the top bar still showing, chevrons and white
+  sheet render correctly.
+  **Still open on Home/Calendar parity:** the day-detail cards behind the sheet still
+  use translucent fills that read muddy on a saturated background; iOS's month header
+  carries a reset/refresh affordance where Android shows a dropdown chevron; the
+  expanded detent leaves a large empty area below the grid where iOS transitions to
+  its year view; and the bottom bar contrast still needs work.
+
+- **2026-08-01, Claude: found why Home never changes after logging. It is not a
+  refresh bug — `CycleDetectionEngine` was never ported to KMM at all, so no
+  `CycleData` is ever created from a period log. Also found and fixed a real
+  connectivity bug in the same pass. AWAITING KARAN'S DECISION on the port.**
+  **Karan's report:** "even though log ho raha hai, homescreen bilkul change nhi ho
+  rahi hai, and nothing is happening on logging, but log wala button change ho raha
+  hai."
+  **Traced live on the emulator with new instrumentation, not guessed.** The save
+  path is completely healthy: `SakhiLogSave: upsert -> date=2026-08-01,
+  existingSameDayLogs=1` then `upsert OK`, and Home really does re-read it:
+  `SakhiHome: read 2026-08-01 -> 1 log(s), hasLogged=true,
+  visibleAfterSanitize=true`. So the write works, the read works, and
+  `refreshSelectedDate()` fires correctly from all three of its call sites.
+  **Root cause:** `hasLoggedForSelectedDate` / `selectedLog` are the *only* things
+  that read-back updates — and those two drive exactly one thing, the log button's
+  pencil-vs-plus icon. That is precisely why "log wala button change ho raha hai"
+  while nothing else moves. Home's actual body (`currentCycle`, `hasCycleData`,
+  `phase`, `dayInCycle`) is driven by `CycleData`, and **nothing anywhere creates a
+  `CycleData` from period logs.** `PeriodLogRepository.upsert` writes only the
+  `period_logs` table. Confirmed by a full app restart (which runs the complete
+  `refresh()`): Home *still* said "Track your first period", so this is not a
+  missing refresh trigger, the cycle genuinely does not exist.
+  **CORRECTION — my first read of this was wrong, Karan was right.** I initially
+  reported that no cycle-detection engine existed in KMM and that iOS's
+  `CycleDetectionEngine.swift` would have to be ported. That was wrong because I
+  only grepped `SakhiCore` and missed the sibling shared module. Karan pushed back
+  with "we have two things, engine and core, if it's working in iOS why not in
+  Android?" — and that is exactly the right model.
+  **What is actually true:** the detector is already shared, already Kotlin, already
+  multiplatform, and already tested:
+  `00-Shared/02-Prediction-Engine/src/commonMain/kotlin/in/getswipe/sakhi/prediction/
+  SakhiPredictionEngine.kt` exposes `detectCycles(logs: List<PeriodLogEntry>):
+  List<DetectedCycle>`, with `DetectionTest.kt` in `commonTest` covering it. The
+  module is a full KMP build with `androidTarget()`, `jvm()`, and all three iOS
+  targets already configured. iOS's Swift `CycleDetectionEngine` is only a thin
+  *orchestrator* around it — its own comment says so: "The Swift layer no longer
+  runs its own block detection — the engine is THE detector."
+  **So the real gap is much smaller than I first said: Android is simply never
+  wired to the engine.** `02-Android/settings.gradle.kts` only does
+  `includeBuild("../00-Shared/SakhiCore")`; there is no `includeBuild` for
+  `../00-Shared/02-Prediction-Engine`, and `SakhiCore` does not depend on it either.
+  Nothing on Android has ever been able to call `detectCycles` at all.
+  **What iOS does around the engine** (`CycleDetectionEngine.processLogChange`,
+  called live from 6+ places including `HomeViewModel.swift:433` right after a log
+  change): fetch raw logs → `SakhiPredictionEngine.detectCycles(logs)` → load
+  existing cycles for ID-reuse matching → build updated `CycleData` (ID reuse +
+  max-wins period length) → delete stale cycles → upsert the fresh set → refresh
+  caches → notify UI → persist recomputed averages to the profile. That
+  orchestration is what Android needs; the detection maths itself is already shared
+  and must not be re-implemented.
+  **FIXED AND VERIFIED ON DEVICE.** Home now updates the moment a period is logged.
+  Before: "Track your first period". After: **"Luteal phase"**, a "Logged today" card
+  showing Medium Flow, and a real "Current Cycle" card reading **19 / 28, today's
+  cycle day, Started 14 Jul**, plus "Cycle Status: 4 cycles analysed, Irregular".
+  Trace: `upsert OK` → `cycle detection OK -> 9 cycle(s)`.
+  **What it took, in order — each step found by actually running it, not predicted:**
+  1. `includeBuild("../00-Shared/02-Prediction-Engine")` in Android's
+     `settings.gradle.kts`, plus `api("com.getswipe.sakhi:PredictionSDK:1.0.0")` in
+     `:core:common`. This is the Gradle equivalent of iOS linking the second
+     framework, and it is the whole reason the feature never worked here.
+  2. Engine AGP 8.3.2 → 8.6.1. Gradle's `AgpVersionCompatibilityRule` hard-refuses to
+     match an Android library variant across different AGP versions ("Could not
+     determine whether value 8.3.2 is compatible with value 8.6.1"). 8.6.1 is what
+     SakhiCore and the app already use, so this aligns all three. Kotlin deliberately
+     left at 2.0.21 — its metadata is readable by the 2.1.20 consumers, and bumping
+     it would change what the shipped `PredictionSDK.xcframework` is built from.
+  3. A git-ignored `local.properties` in the engine module: its `androidTarget` is
+     now genuinely compiled, where before only iOS/jvm ever were.
+  4. Import path gotcha: the engine's sources sit under an `in/` directory but really
+     declare `package com.getswipe.sakhi.prediction`. Follow the declaration.
+  5. New `CycleDetectionCoordinator` (`:core:common`), a step-for-step port of iOS's
+     `processLogChange`: fetch all logs → `SakhiPredictionEngine.detectCycles` →
+     ID-reuse match → delete stale → upsert. **No detection maths is reimplemented**;
+     every boundary comes from the shared engine.
+  6. `LoggingViewModel` awaits the coordinator after a successful upsert, before
+     reporting success — fire-and-forget would race the sheet close and leave Home
+     stale. A detection failure never fails the save: the log row is already written,
+     and losing what she logged is far worse than a briefly stale cycle.
+  7. New `HomeViewModel.refreshAfterLogChange()` (full reload incl. cycle), wired
+     into both logging exit paths in `HomeNavHost`. `refreshSelectedDate()` is
+     correct for a nav pop but wrong after a log save, since it never touches cycle
+     state — that is the second half of why only the log button reacted.
+  **Three further real bugs surfaced by running it, all fixed:**
+  - **`CycleDataDTO` could not decode live data.** `is_complete` was
+    `Boolean = false`, but a Kotlin default only covers an *absent* key — an explicit
+    `"is_complete": null` throws. A real existing row had null, which killed the whole
+    `getAll` decode, so **every cycle read for that user was already failing before
+    any of this work** — very likely a standing cause of the empty Home. Both it and
+    `has_partner_logs` are now nullable and normalised at the domain edge.
+    `SakhiCore jvmTest` green after the change.
+  - **Duplicate ids in one upsert.** Postgres rejected the batch: "ON CONFLICT DO
+    UPDATE command cannot affect row a second time." My first pass copied iOS's
+    per-cycle `first { within 7 days }` match, which lets two nearby detected cycles
+    claim the same existing row. Now each existing row can be claimed once, by the
+    closest match, so ids are unique by construction. **iOS's version has the same
+    latent bug** — worth fixing there too.
+  - **A live session token was being written to logcat.** supabase-kt puts the entire
+    request dump in `throwable.message`, including `Authorization: Bearer <jwt>` and
+    the apikey, and my first error log printed it whole. Now only the exception type
+    and first 160 chars of the first line. Verified: `grep -c "Bearer eyJ"` over a
+    full logcat returns **0**. Logcat captures get pasted into bug reports, so this
+    mattered.
+  **Countdown ("start tracking today" instead of "N days until next period") —
+  wiring FIXED on Android, but blocked by a real bug in the SHARED engine. Needs
+  Karan's call before touching it.**
+  That subtitle is not cosmetic, it is the hero countdown's empty state. Two causes,
+  one fixed here and one not:
+  1. *Fixed.* Home's only countdown source was `CycleMath.daysUntilNextPeriod`, which
+     returns null whenever `cycle.cycleLength` is null — and the CURRENT cycle's
+     length is null by definition, since a cycle's length is only known once the next
+     period closes it. So that path could never produce a countdown, ever, for anyone.
+     Home now derives it from `SakhiPredictionEngine.forecast(...)`, which the
+     engine's own doc calls "the single source for the 9-month calendar forecast, the
+     Home 'period is late' countdown, and irregular-period flagging". Added
+     `CycleDetectionCoordinator.nextPredictedPeriodStart` and a
+     `nextPeriodStartDate` field on `HomeUiState` so the countdown recomputes for any
+     selected date, not just today.
+  2. **RETRACTED — the claim below was wrong. The engine is fine; I called the wrong
+     entry point.** Karan sent iOS screenshots for the *same account and same date*
+     (1 Aug 2026): iOS shows "Day 1 / of your period / Menstrual Phase" while Android
+     showed "Luteal phase / 207 Days". Identical data, correct on iOS — so the shared
+     engine is not broken and iOS does NOT share this bug. My "iOS hits it too"
+     statement was wrong and should not be relied on.
+     **Actual cause:** iOS's Home hero does not use `forecast()` at all. It calls
+     `SakhiCycleInsightEngine.predictionSnapshot(...)`, and that engine **is already
+     ported to KMM** as `SakhiCore/commonMain/team/sakhi/cycle/CyclePhaseInsight.kt`
+     (`predictionSnapshot` + `phaseInsight`, with `CyclePhaseInsightTest` coverage).
+     Its very first rule is "today is a logged period day → IN_PERIOD with periodDay",
+     which is exactly how iOS produces "Day 1 of your period"; `phaseInsight` likewise
+     returns MENSTRUAL for a logged day, which is why iOS says Menstrual Phase.
+     Android's `HomeViewModel` instead uses `CycleMath.currentPhase` /
+     `CycleMath.daysUntilNextPeriod` — and its own inline comment even acknowledges it
+     chose those over "the parallel, currently-unused CyclePhaseInsight engine". That
+     choice is the whole divergence. Nothing in the prediction maths needs changing;
+     Android just has to call the same shared engine iOS calls.
+     My `forecast()`-based countdown was the wrong entry point and should be replaced
+     by `CyclePhaseInsight.predictionSnapshot` rather than kept.
+  2b. *Superseded detail, left only to explain the 207.* The engine now returns a nonsense date for
+     this account: next period **2027-02-24**, when the last period started
+     2026-07-14 with a 25-day average, i.e. it should be 2026-08-08. Traced to the
+     real mechanism with live numbers:
+     `sd=146.1, matchTolerance~219 days, avgCycleLength=25, completeCycles=8,
+     detectedCycleLengths=[51, 30, null, null, 22, 32, null, null, null]`.
+     `MultiPeriodForecaster` derives `sd` from `completeCycles.mapNotNull { cycleLength }`
+     on the detector's internal `CycleInfo`, which still contains physiologically
+     impossible lengths (the 300+ day gaps in this sparse test account), whereas
+     `detectCycles` correctly nulls anything outside 21–60 days. The two disagree.
+     That inflates `sd` to 146, so `matchTolerance = 1.5 * sd = 219 days`, and
+     `computeStatus` then marks every projected period within 219 days of any logged
+     start as `CONFIRMED` — "already happened" — and skips it. Only projections past
+     ~2027-02 escape, which is exactly the 3 periods that came back.
+     **This is in `00-Shared/02-Prediction-Engine`, so iOS hits it identically** — it
+     is not an Android regression, and the same account would misreport there too.
+     Deliberately NOT fixed unilaterally: changing period-prediction maths on a
+     menstrual-health app is a correctness-critical, both-platforms change that needs
+     Karan's decision and proper test coverage, not a quiet patch late in a session.
+     The obvious candidate fix is to filter `rawCycleLengths` to the same
+     physiological 21–60 day window `detectCycles` already applies, and/or cap
+     `matchTolerance`, but that must be done in the engine with its own `commonTest`
+     cases, and re-verified on iOS.
+     Also worth noting the account's data is genuinely sparse test data (20 logged
+     present days spread over 18 months), which is what pushes the engine into this
+     regime; a normally-tracked user would not have 300-day gaps.
+  Diagnostics for this live under `adb logcat -s SakhiCycle`.
+  **Home UI cleanup — removed bring-up debug scaffolding Karan spotted.** Three
+  things were rendering on Home that were never product UI and have no iOS
+  equivalent (verified by reading `HomeView.swift`, which has none of them):
+  1. `"Showing User's cycle"` / `"Waiting for session"` — a session-summary line.
+     Worse, its partner branch printed the raw `targetUserId` on screen.
+  2. `"Sync idle"` — a permanent sync chip. iOS shows sync state only *transiently*,
+     via `topStatusBanner`, and only for `isRefreshingWithStaleData` /
+     `hasStaleFailure`. Android now matches: `SyncRuntimeState.isWorthShowing()`
+     hides Idle and Success, so the chip appears only when it is saying something
+     real (syncing / stale / failed).
+  3. `"Partner snapshot revision N"` — pure debug output.
+  Deleted the now-dead `sessionSummary()` and its six orphaned string resources.
+  **Kept** `partnerSnapshotRevision`/`partnerSnapshotRefreshedAt` on `HomeUiState`
+  even though nothing displays them — checked first, and three
+  `HomeViewModelTest` cases assert on them as part of real partner data-isolation
+  coverage. Removing the fields would have silently deleted that protection.
+  `:feature:home:testDebugUnitTest` → BUILD SUCCESSFUL after updating the two test
+  construction sites for `HomeViewModel`'s new coordinator parameter (given a real
+  coordinator over the same mocked repositories, not a mock of itself).
+  **On-device result:** Home now reads cleanly — date, "Luteal phase", a real hero
+  countdown, "Logged today / Medium Flow", a populated "What to Eat" (which only
+  started working once cycle data existed), and the Current Cycle card. No stray
+  labels. The hero shows **"207 Days until next period"**, which is precisely the
+  shared-engine bug above rendering end-to-end (2027-02-24 is 207 days out) — the
+  wiring is proven correct, the number comes from the engine.
+  **Architecture note for review:** the coordinator sits in Android
+  (`:core:common`), matching iOS, where this orchestration is also platform-side
+  Swift. The detection *rules* stay shared. The two judgement rules it does carry
+  (±7-day id reuse, max-wins period length) are copied verbatim from iOS so the
+  platforms cannot drift, and are the natural candidates to promote into shared code
+  later. Flagging this explicitly since the plan's "no product logic in Android" rule
+  could be read either way here.
+  **Fixed for real in the same pass — a genuine connectivity bug.**
+  `NetworkStatus` (`SakhiCore/androidMain/.../PlatformStorage.android.kt`) wrote a
+  per-network verdict into one global flag: `onLost(anyNetwork)` set the app
+  "offline" even while another network was still connected and validated, and
+  nothing ever set it back. Real phones and the QA emulator both routinely run two
+  networks (cellular + wifi), so this fires in normal use. Caught live with the new
+  `SakhiNet` diagnostic: `isOnline(flow)=false` while the platform simultaneously
+  reported `activeNetwork=101, INTERNET=true, VALIDATED=true`. **This was not
+  cosmetic** — `isOnline` also feeds `FeatureAccessState.setCloudAvailable(...)`, so
+  a stale false quietly degrades the whole cloud path while the network is fine, and
+  it is very likely part of what made logging feel broken. Every callback now
+  recomputes from the current default network instead. Verified by dropping and
+  restoring wifi on the emulator: the flag correctly stayed `true` throughout
+  (cellular carried it) where the old code would have stuck at `false`, and the
+  offline banner no longer appears. `SakhiCore jvmTest` → BUILD SUCCESSFUL, so iOS
+  is unaffected (the change is `androidMain` only).
+  **Also fixed:** `HomeViewModel.refreshSelectedDateLog` had an `.onSuccess` with no
+  `.onFailure`, so a failed read was indistinguishable from "nothing logged" — state
+  silently untouched, nothing reported anywhere. Home still must not invent data on a
+  failed read, so the state is still left alone, but the failure is now logged.
+  **Instrumentation added (Kermit, now also in `:feature:home` and
+  `:feature:logging`):** `adb logcat -s SakhiLogSave` (log writes),
+  `-s SakhiHome` (Home reads), `-s SakhiNet` (connectivity flag vs. platform truth).
+  No health values are logged anywhere — counts, flags, and outcomes only.
+  Verified: `:app:assembleDebug` → BUILD SUCCESSFUL, `SakhiCore:jvmTest` → BUILD
+  SUCCESSFUL, both exercised on `sakhi_qa`. Nothing committed.
+
+- **2026-08-01, Claude: found and fixed the real reason sign-in was hitting
+  `localhost:443`. Supabase was never "pointed at localhost" -- it was not
+  configured at all. Fixed, verified end-to-end on the emulator against the live
+  server, and instrumented so it can never fail this quietly again.**
+  **Karan's report:** `POST /auth/v1/otp failed ... Failed to connect to
+  localhost/127.0.0.1:443`, and the fair question "why are we using localhost, we
+  should directly touch supabase server".
+  **Root cause:** nobody configured localhost anywhere. `secrets.properties` had
+  every value blank (`SUPABASE_URL = 0 chars`, `SUPABASE_ANON_KEY = 0 chars`, and
+  8 more) -- confirmed not just in the file but in the built artifact, where
+  `app/build/.../BuildConfig.java` really did contain `SUPABASE_URL = ""`. With an
+  empty base URL Ktor/OkHttp has no host to resolve, so it falls back to
+  `localhost:443` and the path `/auth/v1/otp` is appended to nothing. The wiring
+  itself was correct the whole way down (`secrets.properties` -> `secret()` in
+  `app/build.gradle.kts` -> `BuildConfig` -> `SakhiApplication` ->
+  `BuildConfigProvider` -> `PlatformConfig.android` -> `SakhiSupabaseClient`); only
+  the values were missing. Note `secret()` reads `System.getenv(key)` first, and
+  neither var was set in this shell either.
+  **Why it was blank:** the 2026-07-15 entry records Karan supplying real
+  production secrets and building a verified APK, so the file was populated once
+  and has since been emptied (reset/cleaned at some point between then and now).
+  **Fix:** recovered the real values from the team's own committed iOS build
+  settings (`01-iOS/sakhi.xcodeproj/project.pbxproj`, which carries
+  `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SANITY_PROJECT_ID`, `SANITY_DATASET`) and
+  restored them into Android's git-ignored `secrets.properties`. Checked the value
+  shapes rather than assuming: the URL is a real `*.supabase.co` project URL, and
+  the 46-char anon key is *not* a truncated JWT -- it is the current
+  `sb_publishable_...` key format, which is short by design.
+  **Verified before trusting it, three ways:** (1) live `GET /auth/v1/health` with
+  the restored key returned `200 {"version":"v2.194.0","name":"GoTrue"...}`;
+  (2) re-computed the live SPKI pin chain with `openssl` and compared it against
+  `PinnedHttpEngine.android.kt`'s hard-coded pins -- all three (leaf `CN=supabase.co`,
+  intermediate `CN=WE1`, root `GTS Root R4`) still match, so certificate pinning
+  would not silently block the first real connection now that one actually happens;
+  (3) drove the real app on the `sakhi_qa` emulator through fresh install ->
+  onboarding -> Phone -> Send OTP and watched it reach the OTP screen.
+  **Real send-OTP trace captured on-device (live server, not localhost):**
+  `[1] tapped, validation=Valid` -> `[2] in flight (+69ms)` -> `[3] OTP sent,
+  leaving PhoneScreen -> OtpScreen (+448ms)` -> `[4] state confirmed (+464ms)`,
+  and the app landed on "Our Secret Code". The whole round trip is ~450ms.
+  **Logging added (Karan's request in the same session): Kermit.** Pinned to
+  **2.0.6**, deliberately not 2.0.8/2.1.0 -- both of those publish against
+  kotlin-stdlib 2.2.0, i.e. class metadata newer than this project's pinned Kotlin
+  2.1.20 compiler can read. Exactly the same trap already documented here for Koin
+  4.2.x, maps-compose 6.x, and Roborazzi 1.61.0; checked the real Maven Central
+  poms before picking rather than taking "latest". Wired into `:feature:auth` and
+  `:app`.
+  `PhoneScreen.kt` now traces the whole send-OTP path under the greppable tag
+  `SakhiAuth/Phone` (`adb logcat -s SakhiAuth/Phone`), covering tap -> in-flight ->
+  outcome -> navigation, with elapsed-ms since the tap on every line so a hang
+  reads differently from a fast failure. It distinguishes a local KMM validation
+  rejection (never reached the network) from a real backend failure, which
+  otherwise surface identically as `uiState.error` -- both branches confirmed live
+  on the emulator, including the empty-number case.
+  **Privacy:** no phone number is ever logged in full, per the repo's no-personal-
+  data-in-logs rule -- only dial code, digit count, and last 2 digits
+  (`+91********55`).
+  **One ordering detail worth knowing when reading these logs:** the navigation
+  line is emitted from the composition body (it has to be -- the `return` there
+  unmounts the screen before any effect could run), so it prints *before* the
+  `otpSentTo` state effect. Numbered `[3]`/`[4]` to match real emission order after
+  seeing it print the other way round on the first run, not guessed.
+  **Also hardened, so this specific confusion cannot recur:**
+  `SakhiApplication.warnOnMissingBackendConfig()` now logs a loud, explicit
+  `SakhiConfig` error at startup naming exactly which keys are blank and stating
+  that the resulting `localhost:443` failures are a symptom of missing config, not
+  a real local endpoint. Kept as a log rather than a hard crash on purpose: the
+  build is deliberately designed to still compile and run on a clean checkout
+  without secrets (see `app/build.gradle.kts`), and that graceful degradation is
+  worth keeping -- it just should not be silent. Confirmed silent on the current
+  configured build, and it is the missing-config path that was never observable
+  before.
+  Verified: `:feature:auth` + `:app` `compileDebugKotlin` clean, then full
+  `clean :app:assembleDebug` -> BUILD SUCCESSFUL (340 tasks, 47s), installed and
+  exercised on `sakhi_qa`.
+  **Still open / honestly not done:** the other 6 secrets are still blank
+  (`CLAUDE_API_KEY`, `GOOGLE_PLACES_API_KEY`, `EXOTEL_SID`, `EXOTEL_TOKEN`,
+  `RAZORPAY_KEY_ID`, `USDA_API_KEY`) -- iOS does not carry those, so only Karan can
+  supply them; AI chat, Nearby Places, and the Exotel/Razorpay paths stay
+  non-functional until he does. OTP *delivery* to a real handset was not confirmed
+  (the send succeeded and the app advanced to the OTP screen; nobody read an actual
+  SMS). Nothing was committed -- no commit was asked for. Also unchanged from
+  2026-07-19: `SakhiFooter` is still wired into ModeSelection + Phone only, iOS's
+  41 image assets are still unported, and Home/Profile/Care/Reports still have had
+  no visual-parity pass.
+
+- **2026-07-19, Claude: BREAKTHROUGH -- set up a fully-controlled emulator, ending
+  the blind-patching cycle. Then found+fixed the real root causes Karan has been
+  hitting, each VERIFIED by actually looking at the screen.**
+  **Root-cause answer to Karan's "what is the main problem":** the Android app was
+  built to compile and function, but (a) its visual fidelity was never once
+  verified against iOS because no device/emulator was ever available -- screens
+  were signed off on "does it compile" -- and (b) iOS's real assets were never
+  ported at all. Confirmed concretely: iOS ships a real AppIcon + 41 image assets;
+  Android had ZERO real images and a 273-byte placeholder "S" launcher icon, with
+  every graphic substituted by a generic Material icon. That is why "every
+  component doesn't match" -- what existed was a functional approximation built
+  from generic parts, never a port of the actual design.
+  **Emulator now set up (the fix for the fix):** installed Google cmdline-tools,
+  arm64 API-34 system image, created + booted AVD `sakhi_qa`, disabled animations,
+  installed the app. I can now install -> launch -> tap -> screenshot -> read the
+  screen autonomously over adb. Karan does NOT have to do screen-by-screen; I
+  drive it. (A physical device `1ffefa6d` is also connected but MIUI blocks adb
+  wake and it has a secure keyguard, so the emulator is the reliable path.)
+  **Real bugs found and fixed this pass, each verified on-screen:**
+  1. **Shared-KMM onboarding flow-order bug (the "why does Myself ask for phone
+     directly" report).** `OnboardingFlowStore.handleModeSelected` appended
+     `myselfFlowSteps()` -- which STARTS at Phone -- so picking "Myself" skipped
+     the intro-carousel and privacy steps entirely. iOS never hit this because it
+     renders from its own Swift flow plan; Android renders from the shared KMM
+     plan. Fixed to append `[MyselfIntroCarousel, Privacy]`, exactly matching
+     iOS's `FlowEntry.myselfTailEntry`, with the Phone/health tail still appended
+     by `handlePrivacyDecided` (matching iOS's `myselfScreens(...).dropFirst(2)`).
+     Wrote `OnboardingFlowStoreTest` (5 cases) locking the myself order to iOS's,
+     incl. back-navigation and that the partner path is unchanged. All pass.
+  2. **No shared footer existed at all** (Karan's "primary button apni place pe
+     rahe"). iOS has one `SakhiFooter` used everywhere whose own header comment is
+     the spec: primary button "never moves, regardless of secondary", with a
+     hard-coded 44pt reserved secondary slot. Android had NO footer component --
+     every screen hand-placed its own button, which is exactly why it shifted.
+     Ported `SakhiFooter` faithfully into `:core:ui` (tokens map 1:1 to iOS:
+     screenHorizontal 24->space6, ml 20->space5, xxl 32->space8). Wired into
+     `ModeSelectionScreen` and verified on-screen.
+  3. **Real app icon ported** from iOS's asset catalog (1024 PNG -> all mipmap
+     densities + adaptive foreground + roundIcon in the manifest), replacing the
+     placeholder. Verified in the emulator's app drawer: real pink/white
+     person-heart mark.
+  4. Shared top bar (back button + insets) confirmed correct on-screen: back
+     button present on step 1+, correctly ABSENT on step 0, and tapping it really
+     navigates ModeSelection -> UniversalIntro.
+  **Still open / honestly not done:** `SakhiFooter` is wired into ModeSelection
+  only (the other ~30 onboarding screens still hand-place buttons); iOS's 41 image
+  assets are still not ported (the Onboarding 1/2/3 slides are PDFs needing
+  conversion) so generic Material icons still stand in; and the rest of the app
+  (Home/Profile/Care/Reports) has had no visual-parity pass. Also noted: the
+  emulator has no network, so the OfflineBanner renders and shifts layout ~129px
+  -- worth remembering when reading screenshots.
+
+- **2026-07-19, Claude: fixed the systemic edge-to-edge insets bug Karan
+  showed with a screenshot ("Who Are You Here For?" -- title jammed under the
+  status bar, Continue button cut off by the nav bar, no top/bottom space
+  anywhere), plus added a real directional slide transition between
+  onboarding steps.**
+  Root cause: `MainActivity.kt` calls `enableEdgeToEdge()`, which makes
+  content draw behind the status bar and navigation bar by design -- but
+  that requires the app to then apply its own insets padding everywhere, and
+  nothing did for onboarding. Confirmed via `RootNavHost.kt` (zero insets
+  handling) and `OnboardingContentStepUi.kt`'s raw step screens (e.g.
+  `ModeSelectionScreen`: `Column(Modifier.fillMaxSize().padding(SakhiSpacing.
+  space6))` -- a small fixed design-token padding, not tied to actual system
+  bar height at all).
+  Checked `HomeScreen.kt` first before picking a fix location: it already has
+  its own real `.statusBarsPadding()` from an earlier session's on-device bug
+  fix ("status-bar touch-interception bug"), so a blanket fix at
+  `RootNavHost`'s shared root would have double-padded Home. Scoped the fix
+  to `OnboardingFlowHost.kt` instead -- every one of the ~31 onboarding step
+  screens renders through this one function, so wrapping it once
+  (`Modifier.windowInsetsPadding(WindowInsets.safeDrawing)`) fixes all of them
+  without touching each step file individually. Had to also add
+  `.consumeWindowInsets(WindowInsets.safeDrawing)` right after: Compose
+  doesn't treat insets as globally consumed just because a parent padded for
+  them, and `PhoneScreen`/`OtpScreen`'s `KeyboardSafeScaffold` footer already
+  calls its own `.navigationBarsPadding()` -- without explicitly consuming,
+  the nav-bar inset would have been applied twice, doubling the footer's
+  bottom padding.
+  **Scope note, not yet extended:** did not touch `SheetSurface`/
+  `SakhiModalSheet` (used by Profile/Chat/Care/Calendar/Logging). Checked
+  `SakhiModalSheet.kt` first: it's a real Material3 `ModalBottomSheet` with
+  no `windowInsets` override, which gets Material3's own sensible default
+  insets handling for a bottom sheet (deliberately never lets a sheet cover
+  the status bar, and applies its own nav-bar protection) -- a fundamentally
+  different situation from onboarding's raw screens, which had zero
+  protection of any kind since they're not behind any Dialog/Sheet window at
+  all. Not claiming those are confirmed fine without a device check, just
+  didn't find concrete evidence they share this specific bug the way
+  onboarding did, so didn't guess at changes there.
+  **Also added, per Karan's "transitions should be perfect" request in the
+  same message:** onboarding step changes were an instant cut with no
+  animation at all. Wrapped the step-rendering `when` in
+  `AnimatedContent(targetState = navState.currentIndex, ...)` with a real
+  directional horizontal slide + fade, keyed off the shared KMM
+  `navState.navWasForward` field (already correctly set by every
+  `OnboardingFlowStore` intent handler -- continue = forward, back =
+  backward) so forward navigation slides new content in from the right and
+  back navigation slides it in from the left, matching the feel of iOS's
+  real `NavigationStack` push/pop instead of reusing local ad-hoc direction
+  tracking.
+  Verified: `:feature:onboarding` and `:app` both `compileDebugKotlin` clean
+  (fixed two real compile errors along the way -- `slideInHorizontally`
+  expects a `(fullWidth: Int) -> Int` lambda, not `(IntSize) -> Int` as first
+  written), full `clean :app:assembleDebug` -> BUILD SUCCESSFUL (340 tasks,
+  27s), `SakhiCore jvmTest` -> BUILD SUCCESSFUL (no KMM file touched, ran as
+  a sanity check).
+  Not yet verified on a real device/emulator -- everything here is
+  compile/build-level only. Given this is now the second high-stakes,
+  every-fresh-install-sees-it fix in as many turns, a real device walkthrough
+  of onboarding specifically (not just Home, which already has one) should be
+  the next priority once a device is available.
+
+- **2026-07-19, Claude: fixed a real, significant architectural bug Karan
+  found by actually looking at the app -- a fresh/signed-out launch was
+  routing to a completely disconnected standalone auth screen instead of
+  onboarding, which is why "Let's Begin" had zero navigation chrome. Confirmed
+  against iOS's real source, fixed, verified with real builds.**
+  Karan's report: the app should start with onboarding on open, matching iOS
+  exactly, but instead landed on a bare "Let's Begin" phone-entry screen with
+  no navigation button at all. Investigated rather than assuming: read iOS's
+  actual `MainFlowView.swift` directly. Its own header comment says it
+  outright -- "New users see OnboardingFlowView directly -- no HomeView
+  underneath" -- and the code confirms it structurally:
+  `case .splash, .signedOut, .home: return .newUser` (only
+  `.onboarding(accountState, flowId)` uses the classified flow; every other
+  case, INCLUDING `.signedOut`, defaults to the new-user onboarding flow).
+  iOS renders `OnboardingFlowView` as a single persistent overlay gated by a
+  boolean that's `true` for both `.signedOut` and `.onboarding`
+  (`KMMAppStateBridge.swift:22`), never a separate standalone auth screen.
+  Android's `RootNavHost.kt` did not match this: `is AppRoute.SignedOut ->
+  SignedOutFlow()` rendered a completely separate, disconnected function
+  (bare `PhoneScreen`/`OtpScreen` from `feature/auth`, zero onboarding chrome,
+  zero back button) instead of routing through `OnboardingFlowHost` like
+  every other onboarding case does.
+  **Fix:** changed `AppRoute.SignedOut` to render
+  `OnboardingFlowHost(flowId = "newUser", ...)`, matching iOS exactly, and
+  deleted the now-dead `SignedOutFlow()` function plus its now-unused
+  `AuthViewModel`/`PhoneScreen`/`OtpScreen`/`BackHandler`/`koinViewModel`
+  imports in `RootNavHost.kt`.
+  Verified this doesn't create a state-continuity gap across the
+  SignedOut-to-Onboarding route flip that happens the instant OTP succeeds
+  (traced `AppStateStore.resolveRoute`: `SessionState.Authenticated` re-routes
+  via `classifier.bootstrapAppEntry`, which returns `AppRoute.Onboarding` for
+  a still-incomplete account): Koin's `koinViewModel()` caches by class within
+  the Activity's `ViewModelStoreOwner`, not by the `parametersOf(flowId)`
+  argument, so both the `AppRoute.SignedOut` and `AppRoute.Onboarding` `when`
+  branches resolve the *same* cached `OnboardingViewModel` instance -- the
+  identical pattern the pre-existing `forcedOnboardingDeepLink` branch in the
+  same file already relies on, not something new or risky.
+  Also verified this doesn't regress a returning user signing back in after a
+  real sign-out (a real concern: does routing ALL of `AppRoute.SignedOut`
+  through the full onboarding intro force a returning user through the whole
+  new-account setup again?): traced `OnboardingFlowStore.handleOtpVerified` --
+  `isReturningUser -> replaceRemaining(stateWithInvite,
+  listOf(OnboardingFlowStep.SetupLoading)).advance()` already short-circuits
+  straight to `SetupLoading` (skipping DOB/height/weight/etc) the instant OTP
+  verification recognizes an existing account. So a returning user still sees
+  the same intro/mode-select screens before Phone entry that iOS also shows
+  them (confirmed this is iOS's real behavior too, not an Android-only
+  regression), but is not forced through new-account setup again.
+  Real NEW_OWNER step plan confirmed by reading `OnboardingFlowStore.kt`
+  directly: `[UniversalIntro, ModeSelection, MyselfIntroCarousel, Privacy,
+  Phone, OtpVerification, DataSource, DateOfBirth, ...]` -- Phone is step
+  index 4, not 0, so the "iOS dismisses the sheet at step 0" boundary from
+  yesterday's `BackHandler` fix does not apply here; back navigation from
+  OtpVerification through Phone through the earlier intro steps now works via
+  that same existing `BackHandler(enabled = navState.currentIndex > 0)`.
+  **A second, related bug found and fixed in the same pass:** with real back
+  navigation now reaching the Phone step, `PhoneScreen`'s own
+  `otpSentTo != null` auto-advance check would otherwise immediately
+  re-trigger forward to OtpVerification the instant the user pressed back,
+  making "back" from OTP appear to silently do nothing. Fixed with
+  `LaunchedEffect(step) { if (step == Phone) authViewModel.resetPhoneFlow() }`
+  inside `OnboardingPhoneOtpScreen` -- reuses the exact `resetPhoneFlow()`
+  function already built and tested for the analogous old top-level bug.
+  **A third fix, addressing Karan's specific "no navigation button" report
+  directly:** neither `PhoneScreen` nor `OtpScreen` render any on-screen back
+  affordance at all (they were built for a standalone flow with no "previous
+  step" concept). Added a real, visible `BackButton` (the same shared
+  `:core:ui` component `DetailSheetScaffold` already uses for Profile)
+  overlaid top-start on `OnboardingPhoneOtpScreen`, shown whenever
+  `canGoBack` is true -- did not modify `PhoneScreen`/`OtpScreen` themselves,
+  since they're still reused as-is by `JOIN_FAMILY`/`CARE_PARTNER_UPGRADE`/
+  other flow kinds that also put these same steps in their own plans.
+  Verified: `:app` and `:feature:onboarding` both `compileDebugKotlin` clean,
+  full `clean :app:assembleDebug` -> BUILD SUCCESSFUL (340 tasks, 3m27s), and
+  `SakhiCore:jvmTest` -> BUILD SUCCESSFUL (no KMM file changed, ran as an
+  extra sanity check given how central this fix is).
+  **This is the single highest-stakes fix made all session** -- it changes
+  what literally every fresh install sees on first launch. Strongly
+  recommend a real device/emulator walkthrough of the complete path (fresh
+  install -> UniversalIntro -> ModeSelection -> ... -> Phone -> back button
+  visible and working -> OTP -> back to Phone works and doesn't loop ->
+  verify -> DOB/height/etc continues seamlessly -> Home) before trusting this
+  in front of a real user, same as every other un-device-tested change
+  tonight.
+
+- **2026-07-19 12:06 IST, Claude: closed a real, previously-untracked
+  platform-navigation gap across the whole app -- system back button/gesture
+  now works correctly everywhere, per Karan's direct request to compare
+  Sakhi's navigation against Google's "Now in Android" sample and bring over
+  what iOS gets for free from its own platform.** Read Now in Android's
+  navigation module (`core/navigation/Navigator.kt`, `NavigationState.kt`,
+  `NiaApp.kt`'s `NavDisplay(onBack = ...)` wiring) to understand the real
+  lesson: every level of navigable state needs its back-press intercepted and
+  mapped to the same action as its on-screen back button. Then audited
+  Sakhi's actual app and found the gap was severe: `grep -rl "BackHandler"`
+  across the entire Android codebase returned **zero matches** before this
+  pass. System back only ever worked by accident, wherever a screen happened
+  to be built on a real platform `ModalBottomSheet`/`AlertDialog`/`Dialog`
+  (which auto-handle back-dismiss natively) -- e.g. Home's outer overlay
+  sheet, the CountryPicker sheet, and every `AlertDialog`-based confirm/error
+  dialog were already fine. But every screen built as "local Compose state
+  nested inside an already-open sheet" (the far more common pattern in this
+  app) silently ignored system back entirely: pressing it either closed the
+  *entire* enclosing sheet (skipping past whatever sub-screen you were
+  actually on) or did nothing.
+  Also confirmed the manifest was missing
+  `android:enableOnBackInvokedCallback="true"`, which is required on Android
+  13+ for the predictive-back preview animation to render at all, even where
+  `BackHandler` is correctly wired -- added it to `AndroidManifest.xml`'s
+  `<application>` tag (one line).
+  Fixed `BackHandler` wiring (each one reusing the exact same lambda/function
+  the screen's own on-screen back button already calls, so no new behavior
+  was invented anywhere) in:
+  1. `RootNavHost.SignedOutFlow` -- system back from `OtpScreen` now returns to
+     `PhoneScreen` via the existing `AuthViewModel.resetPhoneFlow()` (already
+     built for an unrelated post-sign-out stale-state bug; reused here so no
+     stale `otpSentTo` re-triggers the auto-advance-to-OTP check).
+  2. `OnboardingFlowHost` -- system back now steps back one onboarding step via
+     the existing `viewModel::goBack()`, scoped to `navState.currentIndex > 0`.
+     Deliberately did NOT wire step index 0: the shared KMM
+     `OnboardingFlowStore.handleBack` has an explicit comment,
+     `if (s.currentIndex == 0) return s // iOS dismisses the sheet` -- meaning
+     iOS exits the onboarding flow entirely at that boundary, but *what
+     Android should exit to* (sign out? some neutral screen?) is a real
+     product decision nobody has made yet, not something to invent
+     unilaterally. Left that one boundary on Android's existing default
+     back behavior, unchanged from before this fix -- not worse than before,
+     genuinely improved everywhere else.
+  3. `HomeNavHost.ProfileOverlaySheet` -- Profile's Root/EditProfile/Reports/
+     LogHistory/etc. flat sub-screen state now steps back to Root correctly.
+  4. `ManageAccountScreen` -- reused its own existing `handleBack()` (which
+     already had real per-step logic for the account-deletion wizard) instead
+     of writing new logic.
+  5. `EditProfileScreen` -- the Name/Height/Weight sub-editor screens
+     (`EditProfileRoute`) now step back to Root. While in this file, also
+     found and fixed a **second real bug**, a recurrence of the exact
+     non-reactive-session pattern Codex fixed earlier in
+     `NotificationsScreen.kt`: `isPartnerRole` was reading
+     `sessionManager.current` as a one-shot snapshot instead of collecting
+     `sessionManager.session` reactively, so a same-user own-data/partner-view
+     flip while this screen was open wouldn't update which fields render.
+     Fixed to `collectAsStateWithLifecycle()`, matching the established fix
+     pattern exactly.
+  6. `LegalScreen` / `AboutScreen` / `HelpSupportScreen` -- each one's
+     content-page drill-in (`openPage`) now steps back to the parent list.
+  7. `ReportsScreen` -- the Preview phase now steps back to Config via the
+     existing `viewModel.returnToConfig()`.
+  8. `ChatScreen` -- Info/Search/Media/Starred sub-navigation and the Nearby
+     Places detail overlay (`expandedPlaces`) now step back correctly; the two
+     `BackHandler`s are mutually exclusive by their `enabled` conditions so
+     there's no dispatch-order ambiguity between them.
+  Searched systematically for every remaining instance of this pattern
+  (`grep` for `mutableStateOf<...?>(null)` combined with `onBack = { x = ... }`
+  across the whole tree) rather than stopping after finding a few -- confirmed
+  the remaining hits (`AppearanceScreen`'s language-change confirm,
+  `LoggingSheet`'s `LoggingAlertDialog`) are real `AlertDialog`s that already
+  get back-dismiss for free, not additional gaps.
+  Verified: `:app`, `:feature:onboarding`, `:feature:profile`,
+  `:feature:reports`, `:feature:ai` all `compileDebugKotlin` clean (caught and
+  fixed one missing `BackHandler` import in `EditProfileScreen.kt` along the
+  way -- the build genuinely failed until that was added, confirming the
+  verification step isn't theater), then a full `clean :app:assembleDebug` ->
+  BUILD SUCCESSFUL, 340 tasks, 2m46s.
+  Added 2 new Development checklist items (both closed) and 1 new Testing
+  item (open -- needs a real device/emulator walk, not yet done) to
+  `Android-Developent-Final-Plan.md`; updated Progress accordingly. New
+  totals: Development raw 119/125 (95%), must-ship 109/114 (96%); Testing raw
+  24/33 (73%), must-ship 20/29 (69%); Overall raw 143/158 (91%), must-ship
+  129/143 (90%).
+  **Note on dates:** this session picked up from an earlier "2026-07-05"-dated
+  continuation that never re-checked the real system clock across a
+  multi-day gap -- today is actually 2026-07-19. Using the correct real date
+  from here on; not going back to fix already-written historical entries
+  from that stretch, since their content is accurate even if their date
+  labels drifted.
+
 - **2026-07-18 01:40 IST, Instructor: investigated the real live Sanity dataset
   for Karan's "localization content" request; found and closed the actual gap,
   which was not what the plan file described.** Connected directly to the

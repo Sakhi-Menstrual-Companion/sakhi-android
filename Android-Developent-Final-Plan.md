@@ -68,9 +68,44 @@ task; append a new entry there after finishing one, per the workflow rules above
 included in "Raw %" (total real coverage, including nice-to-haves). Recompute
 both by hand after ticking or re-tagging any box — do not let this drift.
 
-- **Development — raw: 117 / 123 (95%) · must-ship: 107 / 112 (96%)**
-- **Testing — raw: 24 / 32 (75%) · must-ship: 20 / 28 (71%)**
-- **Overall — raw: 141 / 155 (91%) · must-ship: 127 / 140 (91%)**
+- **Development — raw: 125 / 132 (95%) · must-ship: 114 / 119 (96%)**
+- **Testing — raw: 24 / 33 (73%) · must-ship: 20 / 28 (71%)**
+- **Overall — raw: 149 / 165 (90%) · must-ship: 134 / 147 (91%)**
+
+*(2026-08-01: Claude added 3 new Development items, all closed — Kermit logging
+wired, the send-OTP path traced in `PhoneScreen.kt`, and blank-backend-config
+made loud at startup. Counted fresh from the file's actual checkbox lines rather
+than adjusting the cached totals. Two things to know about these numbers: the
+`(OPTIONAL)` tag is often on a continuation line rather than the checkbox line,
+so it has to be read per whole item, not per line; and Testing's must-ship
+denominator moves 29 → 28 here purely as a drift correction — Testing really has
+5 `(OPTIONAL)` items, 4 of them closed, so 33 − 5 = 28. No Testing box changed
+this pass and no testing work was gained or lost. Separately, one already-`[x]`
+Development item (`BuildConfigProvider` wired to real secrets) was found to have
+regressed in reality and was re-fixed rather than re-opened — see the correction
+note on that item.)*
+
+*(2026-07-19, later same day: Claude added 1 more Development item (closed) for
+a significant routing bug Karan found by looking at the app -- `AppRoute.
+SignedOut` was rendering a completely disconnected standalone auth screen
+instead of the real onboarding flow, matching iOS's actual `MainFlowView`
+exactly once fixed. Full detail in Android-Live-Status-Log.md. This is
+considered the single highest-stakes fix of the whole session so far since it
+changes the very first thing every fresh install sees.)*
+
+*(2026-07-19 12:06 IST: Claude added 2 new Development items (both closed) and
+1 new Testing item (open) for a real, previously-untracked gap found while
+comparing Sakhi's navigation against Now in Android per Karan's request: zero
+`BackHandler` usage existed anywhere in the app, so system back only worked
+where a real platform `ModalBottomSheet`/`Dialog` happened to own it, and every
+nested "sub-screen via local Compose state" (onboarding steps, Profile's
+sub-screens, the account-deletion wizard, EditProfile's sub-editors, Legal/
+About/HelpSupport content pages, Reports' Preview step, AI Chat's Info/Search/
+Media/Starred + Places overlay) silently ignored it. Fixed all of them plus
+enabled predictive-back system-wide via the manifest; full detail in
+Android-Live-Status-Log.md. This changes the raw/must-ship denominators
+slightly from the last recount below -- not a regression, just 3 new lines
+added to the checklist.)*
 
 *(2026-07-17 14:38:21 IST +0530: follow-up close-out on Karan's remaining
 non-credential/non-device backlog. One optional UI item closed for real:
@@ -200,6 +235,43 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
       crashing (confirmed by this session's own `RecommendationsViewModelTest`
       coverage). So every secret actually load-bearing for a real v1 release path is
       now wired and, for the two most critical (auth, AI), behaviorally verified live.
+      **2026-08-01 correction — this item regressed and was re-fixed.** The file was
+      found completely blank again (every value 0 chars, confirmed in the built
+      `BuildConfig.java`, not just the source file), which is what produced Karan's
+      `Failed to connect to localhost/127.0.0.1:443` on `POST /auth/v1/otp` — an
+      empty base URL leaves Ktor/OkHttp with no host to resolve, so it falls back to
+      localhost. Nothing was ever pointed at localhost deliberately. `SUPABASE_URL`,
+      `SUPABASE_ANON_KEY`, and `SANITY_PROJECT_ID` were restored from the team's own
+      committed iOS build settings (`01-iOS/sakhi.xcodeproj/project.pbxproj`) and
+      re-verified live: `GET /auth/v1/health` → `200 GoTrue v2.194.0`, SPKI pins
+      still match all three chain levels, and a real send-OTP on the `sakhi_qa`
+      emulator reached the OTP screen in ~450ms. **`CLAUDE_API_KEY`,
+      `GOOGLE_PLACES_API_KEY`, `EXOTEL_SID`, `EXOTEL_TOKEN`, `RAZORPAY_KEY_ID`, and
+      `USDA_API_KEY` are still blank** and iOS does not carry them, so AI chat and
+      Nearby Places are non-functional again until Karan re-supplies them — the
+      2026-07-15 narrative above is no longer true for those two.
+- [x] Structured logging library wired (2026-08-01, Karan's request) — Kermit
+      (`co.touchlab:kermit`) in `libs.versions.toml`, consumed by `:feature:auth`
+      and `:app`. Pinned to **2.0.6**, not 2.0.8/2.1.0: both newer releases publish
+      against kotlin-stdlib 2.2.0, i.e. class metadata this project's pinned Kotlin
+      2.1.20 compiler cannot read — the same trap already documented for Koin 4.2.x,
+      maps-compose 6.x, and Roborazzi 1.61.0. Verified against the real Maven Central
+      poms before picking, then by a real compile.
+- [x] Send-OTP path traced end-to-end in `PhoneScreen.kt` under the greppable tag
+      `SakhiAuth/Phone` (`adb logcat -s SakhiAuth/Phone`): tap → in-flight → outcome
+      → navigation, with elapsed-ms since the tap on every line, and a real
+      distinction between a local KMM validation rejection (no network call) and a
+      backend failure, which otherwise look identical as `uiState.error`. Both
+      branches confirmed live on the emulator. No phone number is ever logged in
+      full — dial code, digit count, and last 2 digits only (`+91********55`), per
+      the repo's no-personal-data-in-logs rule.
+- [x] Blank-backend-config failure made loud instead of silent (2026-08-01) —
+      `SakhiApplication.warnOnMissingBackendConfig()` logs an explicit `SakhiConfig`
+      error at startup naming which keys are missing and stating that the resulting
+      `localhost:443` errors are a symptom of missing config, not a real local
+      endpoint. Deliberately a log, not a crash: `app/build.gradle.kts` is designed
+      to keep a clean checkout buildable and runnable without secrets, and that
+      graceful degradation is worth keeping — it just should not be quiet.
 - [x] Thin-shell audit enforced as a real CI gate (`--strict`) `(OPTIONAL)` — workflow now
       runs the audit in strict mode, and the remaining false positives were cleared so the
       gate can fail only on real thin-shell ownership bypasses
@@ -262,6 +334,67 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
       text anywhere in the capture. Not yet reached this pass: AI Chat, Profile's
       sub-screen family, Care, Reports — still open, tracked by the visual-QA and
       flow-parity items below.
+- [x] System back button / gesture correctly steps back one screen through every
+      nested in-sheet flow, not just dismissing the whole sheet — a real,
+      previously-untracked platform-completeness gap: zero `BackHandler` usage
+      existed anywhere in the codebase before this pass, so system back only ever
+      worked where a real `ModalBottomSheet`/`AlertDialog`/`Dialog` happened to own
+      it natively; every nested "sub-screen via local Compose state" silently
+      ignored system back entirely (would close the whole overlay instead of
+      stepping back one level, or do nothing). Found by comparing against Now in
+      Android's navigation architecture per Karan's request. Fixed across: signed-out
+      OTP-to-Phone (`RootNavHost.SignedOutFlow`), onboarding step-back
+      (`OnboardingFlowHost`, scoped to step index > 0 since the shared
+      `OnboardingFlowStore.handleBack` deliberately no-ops at index 0 pending a
+      product decision on what step 0 exits to), Profile's nested screen family
+      (`HomeNavHost.ProfileOverlaySheet`), the account-deletion wizard
+      (`ManageAccountScreen`, reusing its existing `handleBack()`), the
+      Name/Height/Weight sub-editors (`EditProfileScreen`), Legal/About/HelpSupport's
+      content-page drill-in, Reports' Preview-to-Config step, and AI Chat's
+      Info/Search/Media/Starred + Nearby Places detail overlay. Also fixed a
+      recurrence of the exact non-reactive-`sessionManager.current` bug found
+      earlier in `NotificationsScreen.kt` in the newly-rewritten
+      `EditProfileScreen.kt`'s `isPartnerRole` gate. Verified:
+      `:app`/`:feature:onboarding`/`:feature:profile`/`:feature:reports`/`:feature:ai`
+      all compile clean, full `clean :app:assembleDebug` BUILD SUCCESSFUL (340
+      tasks). Not yet walked on a real device/emulator -- tracked as a new item
+      under Testing.
+- [x] Predictive-back enabled system-wide
+      (`android:enableOnBackInvokedCallback="true"` added to
+      `AndroidManifest.xml`'s `<application>` tag) -- without this, Android 13+
+      never shows the predictive-back preview animation even where `BackHandler`
+      is correctly wired.
+- [x] `AppRoute.SignedOut` correctly routes through the real onboarding flow
+      (`OnboardingFlowHost(flowId = "newUser")`), matching iOS's actual
+      `MainFlowView.swift` exactly -- a real, significant bug Karan found by
+      looking at the app: a fresh/signed-out launch previously rendered a
+      completely disconnected standalone `SignedOutFlow()` (bare
+      `PhoneScreen`/`OtpScreen`, zero onboarding chrome, zero back button
+      anywhere), not onboarding at all, which is why "Let's Begin" had no
+      navigation button. iOS's own code comment states plainly: "New users
+      see OnboardingFlowView directly -- no HomeView underneath," and
+      `case .splash, .signedOut, .home: return .newUser` confirms every
+      signed-out entry (not just an explicit onboarding route) uses the
+      new-user onboarding flow. Fixed and deleted the dead `SignedOutFlow()`.
+      Verified the SignedOut-to-Onboarding transition that happens the
+      instant OTP succeeds doesn't lose state (Koin's `koinViewModel()`
+      caches by class, not by the `flowId` parameter, so both routes resolve
+      the same `OnboardingViewModel` instance) and that a returning user
+      signing back in still short-circuits past DOB/height/etc via the
+      existing `OnboardingFlowStore.handleOtpVerified`'s `isReturningUser`
+      branch, not forced through new-account setup again.
+      Added a real, visible `BackButton` (overlaid top-start, same shared
+      `:core:ui` component Profile uses) to the Phone/OTP steps specifically,
+      since neither screen had ever rendered any on-screen back affordance --
+      also fixed a related bug this surfaced: back-navigating from
+      OtpVerification to Phone would otherwise instantly auto-advance forward
+      again due to a stale `otpSentTo`, making "back" appear to do nothing.
+      Verified: `:app`/`:feature:onboarding` compile clean, full
+      `clean :app:assembleDebug` BUILD SUCCESSFUL (340 tasks), `SakhiCore
+      jvmTest` green. **This is the single highest-stakes fix made this
+      session** -- it changes what every fresh install sees on first launch.
+      Not yet walked on a real device/emulator; strongly recommend doing so
+      before trusting this in front of a real user.
 
 ### `:core:designsystem`
 - [x] Material 3 theme built from shared `DesignTokens`/`SakhiColorSystem`/`PhaseVisualStyle`
@@ -581,6 +714,26 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
 - [x] Partner-invite tail, contact-access/pick screens
 - [x] Local-only-account "upgrade to cloud later" flow `(CONFIRMED NOT A GAP)` — grepped
       iOS, this flow doesn't exist on either platform; not product-defined yet
+- [x] Edge-to-edge insets handled correctly across every onboarding step -- a
+      real, systemic bug Karan found with a screenshot (title under the status
+      bar, Continue button cut off by the nav bar, on every screen). Root
+      cause: `enableEdgeToEdge()` is on but nothing padded onboarding content
+      for it. Fixed once in `OnboardingFlowHost.kt` (all ~31 steps render
+      through it), correctly `consumeWindowInsets` after padding so
+      `PhoneScreen`/`OtpScreen`'s own footer nav-bar padding doesn't double up.
+      Deliberately scoped to onboarding only -- `HomeScreen.kt` already has its
+      own correct, on-device-verified insets handling from an earlier session,
+      so a root-level fix would have double-padded it. Sheet-based screens
+      (Profile/Chat/Care/Calendar/Logging via `SakhiModalSheet`) were not
+      touched -- checked first, they're real Material3 `ModalBottomSheet`s
+      with sensible built-in insets defaults, a fundamentally different
+      situation from onboarding's unprotected raw screens; flag to Karan if
+      the same issue shows up there too.
+- [x] Real directional slide transition between onboarding steps (forward
+      slides in from the right, back from the left, matching iOS's
+      `NavigationStack` push/pop feel) -- previously an instant cut with no
+      animation at all. Keyed off the shared KMM `navState.navWasForward`
+      field rather than inventing local direction tracking.
 
 ### `:feature:home`
 - [x] Phase hero, countdown ring, phase/nutrition/AI-insight cards
@@ -4807,6 +4960,15 @@ Same tag key as the Development Checklist above.
       that Android can subscribe to the backend at all.
 
 ### Manual device matrix
+- [ ] System back button / gesture + predictive-back verified on a real device or the
+      existing `sakhi_test` emulator (Pixel 6, API 35) across onboarding step-back,
+      Profile's nested screens, the account-deletion wizard, EditProfile's
+      Name/Height/Weight sub-editors, Legal/About/HelpSupport content pages, Reports'
+      Preview step, and AI Chat's Info/Search/Media/Starred + Places detail — the
+      mechanism compiles and builds clean (see `:app`'s Development checklist entry)
+      but has not yet been driven by hand; this is one of the few remaining items that
+      could close on the emulator already used for the earlier real walkthrough,
+      without needing a physical device
 - [ ] At minimum: one real phone, one Android version, light + dark theme — the actual
       floor for "has this app ever really run," not yet met `(BLOCKED ON KARAN — needs
       a real physical device connected; checked 2026-07-14 via adb devices -l and a
