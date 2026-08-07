@@ -147,6 +147,12 @@ fun CalendarScreen(
     // `HomeCalendarSheet.swift`). Separate from `viewModel::selectDate` below,
     // which only drives this screen's own grid-selection/quick-log state.
     onDaySelected: (LocalDate) -> Unit = {},
+    /**
+     * The user's current cycle phase, used when the selected day has no mark of its own.
+     * Supplied by the host because this screen's own state is per-day marks, not the
+     * cycle-level phase Home already resolves.
+     */
+    currentPhase: CyclePhase = CyclePhase.UNKNOWN,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val logUiState by logViewModel.uiState.collectAsStateWithLifecycle()
@@ -390,11 +396,17 @@ fun CalendarScreen(
         // `!isYearExpanded`/`isYearExpanded` split.
         val canEditPeriodDates = logUiState.session?.isViewingOwnData == true
         if (!isYearExpanded) {
+            // Falls back to the CURRENT cycle phase, not UNKNOWN -- iOS's own
+            // `selectedDatePhase` ends `return phase` for exactly this case
+            // (HomeCalendarSheet.swift). Most days carry no mark, so the old
+            // `?: CyclePhase.UNKNOWN` meant the bar took UNKNOWN's primary (#1F2833) on
+            // nearly every day: the log button rendered as a near-black circle on a pink
+            // sheet, whatever phase the user was actually in.
             val selectedDatePhase = uiState.days
                 .firstOrNull { it.date == uiState.selectedDate }
                 ?.mark
                 ?.phase
-                ?: CyclePhase.UNKNOWN
+                ?: currentPhase
             // Claims the navigation-bar inset, exactly as iOS reserves
             // `.padding(.bottom, max(safeBottom, 16))` for this same bar. Home's copy
             // already did this; the calendar's did not, because it used to live inside a

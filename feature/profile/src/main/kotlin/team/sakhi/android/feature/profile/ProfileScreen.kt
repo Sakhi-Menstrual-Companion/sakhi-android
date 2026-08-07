@@ -181,7 +181,7 @@ fun ProfileScreen(
     // no drag handle, relying on the in-header close button instead.
     // iOS `.profileStaticPageBackground()` -> `DS.Colors.background` (#F8F2F4) in light,
     // not the brand lightPink every other sheet uses.
-    SheetSurface(color = MaterialTheme.colorScheme.background) {
+    SheetSurface {
         Column(modifier = Modifier.fillMaxSize()) {
             // iOS: `DSNavBar(onClose: { dismissSheet() }, title: "Profile")`
             // (`ProfileView.swift:205`). Android had a bare headline Text and **no close

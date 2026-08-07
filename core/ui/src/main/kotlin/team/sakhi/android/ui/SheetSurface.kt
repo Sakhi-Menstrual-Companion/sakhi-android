@@ -43,13 +43,21 @@ fun SheetSurface(
     /**
      * Solid fill, when [backgroundBrush] is not used.
      *
-     * Defaults to `colorScheme.surface` (brand `lightPink`), which is right for the sheets
-     * iOS also fills that way. Profile is not one of them: iOS gives it
-     * `profileStaticPageBackground()` -> `DS.Colors.background` (#F8F2F4), a lighter,
-     * much less saturated page. On `lightPink` its white cards barely separated from the
-     * page, which is the whole look of that screen.
+     * `colorScheme.background` is `#F8F2F4`, the same value every one of these pages
+     * resolves to on iOS in light mode. Both of iOS's page-background modifiers --
+     * `phasePageBackground()` (Logging, Activity, the AI sheets) and
+     * `profileStaticPageBackground()` (Profile, Chat, Care, the onboarding steps) -- fall
+     * back to `DS.Colors.background` in light mode and differ only in dark, where they
+     * paint a phase gradient. See `PhaseBackground.swift`, whose header states exactly
+     * that.
+     *
+     * This defaulted to `colorScheme.surface` (brand `lightPink`, `#F8E5EC`) on the belief
+     * that iOS filled these sheets that way. It does not: the Logging sheet in particular
+     * read visibly pinker than iOS's, and white cards on it barely separated from the
+     * page. Profile had already been given the correct value by hand; making it the
+     * default fixes Logging and Chat too.
      */
-    color: Color = MaterialTheme.colorScheme.surface,
+    color: Color = MaterialTheme.colorScheme.background,
     backgroundBrush: Brush? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {

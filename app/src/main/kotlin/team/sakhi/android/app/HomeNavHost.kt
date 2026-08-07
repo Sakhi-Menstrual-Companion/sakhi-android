@@ -209,6 +209,7 @@ fun HomeNavHost() {
             // large empty area below the month grid.
             yearExpanded = expanded,
             onYearExpandedChange = setExpanded,
+            currentPhase = homeUiState.phase,
         )
     }
 
