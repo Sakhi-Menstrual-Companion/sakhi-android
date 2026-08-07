@@ -62,6 +62,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -728,17 +729,31 @@ private fun PendingInviteContent(
         Spacer(modifier = Modifier.weight(1f))
         PartnerAvatarCloud(partnerName = partnerName)
 
+        // iOS puts `.multilineTextAlignment(.center)` on both of these
+        // (CareModeSettingsView.swift). Without it the Column's
+        // `horizontalAlignment` only centres each Text as a block -- a wrapped line
+        // still starts at the left edge of that block, which is why the second line of
+        // the description sat hard left.
         Text(
             text = stringResource(R.string.care_pending_share_with_name, partnerName),
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = SakhiSpacing.space6),
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = SakhiSpacing.space6),
         )
         Text(
             text = stringResource(R.string.care_pending_waiting_for_name, partnerName),
             style = MaterialTheme.typography.bodyMedium,
             color = sakhiSecondaryLabel(),
-            modifier = Modifier.padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space6),
+            textAlign = TextAlign.Center,
+            // iOS: `.lineSpacing(4)` and `.padding(.horizontal, DS.Spacing.xxl)` (32).
+            lineHeight = CarePendingSubtitleLineHeight,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space8)
+                .padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space6),
         )
 
         Surface(
@@ -1474,3 +1489,6 @@ private fun ConnectionBadge(connectedDate: String) {
         )
     }
 }
+
+/** iOS `.lineSpacing(4)` on the pending description. */
+private val CarePendingSubtitleLineHeight = 22.sp
