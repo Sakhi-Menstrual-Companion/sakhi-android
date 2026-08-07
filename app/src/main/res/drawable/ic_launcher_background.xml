@@ -1,6 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Placeholder launcher background — the real brand icon (per 04-Design/Branding)
-     is a tracked follow-up before Play Store submission (plan Section 7, Phase 8). -->
+<!-- Adaptive-icon background layer: the iOS app icon's own pink gradient, sampled
+     directly from 01-iOS/.../AppIcon.appiconset/1024.png. Top-left (247,83,168)
+     through mid (238,65,138) to bottom-right (224,41,95), i.e. a 135 degree
+     diagonal, which is what iOS actually renders. This was a single flat #F61887,
+     which read noticeably darker and flatter than iOS next to it.
+
+     This layer is genuinely visible now: the foreground is the white brand mark
+     alone on transparency, so the whole icon face is this gradient. -->
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
-    <solid android:color="#F61887" />
+    <gradient
+        android:type="linear"
+        android:angle="315"
+        android:startColor="#F753A8"
+        android:centerColor="#EE418A"
+        android:endColor="#E0295F" />
 </shape>

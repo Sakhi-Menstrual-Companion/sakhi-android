@@ -1,0 +1,7 @@
+<resources>
+    <!-- KMM `SakhiUIColors.BRAND_BG_DARK` (#000000, pure black — Apple Fitness style).
+         Only the window background needs a night variant; every real surface colour is
+         owned by Compose (`SakhiTheme`), which reads the user's own Light/Dark/System
+         choice rather than the OS uiMode this qualifier follows. -->
+    <color name="sakhi_window_background">#000000</color>
+</resources>

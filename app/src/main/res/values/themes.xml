@@ -3,7 +3,17 @@
          themes exist only for the manifest/window setup Compose can't cover:
          the launch theme (pre-Compose splash background) and a plain no-action-bar
          base so MainActivity's Compose content isn't drawn under a system ActionBar. -->
-    <style name="Theme.Sakhi" parent="android:Theme.Material.Light.NoActionBar" />
+    <style name="Theme.Sakhi" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- The parent theme's windowBackground is @android:color/background_light (white),
+             which showed through as a hard white strip in the navigation-bar region once
+             the bar itself was made transparent. -->
+        <item name="android:windowBackground">@color/sakhi_window_background</item>
+        <!-- Belt and braces with MainActivity's runtime calls: MIUI re-applies its own
+             opaque nav bar unless the theme also declares it transparent. -->
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+    </style>
 
     <style name="Theme.Sakhi.Splash" parent="Theme.Sakhi">
         <item name="android:windowBackground">@color/sakhi_splash_background</item>

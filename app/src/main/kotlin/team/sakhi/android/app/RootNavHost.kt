@@ -1,12 +1,14 @@
 package team.sakhi.android.app
 
+import co.touchlab.kermit.Logger
+import android.net.NetworkCapabilities
+import android.net.ConnectivityManager
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -23,20 +25,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.access.FeatureAccessState
 import team.sakhi.android.R
 import team.sakhi.android.designsystem.SakhiSpacing
-import team.sakhi.android.feature.auth.AuthViewModel
-import team.sakhi.android.feature.auth.OtpScreen
-import team.sakhi.android.feature.auth.PhoneScreen
 import team.sakhi.android.platform.AndroidAppVersionProvider
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.ForceUpdateScreen
 import team.sakhi.android.ui.OfflineBanner
+import team.sakhi.android.ui.SakhiLoadingContext
+import team.sakhi.android.ui.SakhiLoadingView
 import team.sakhi.android.ui.ToastHost
 import team.sakhi.android.ui.ToastManager
 import team.sakhi.android.ui.ToastType
@@ -121,8 +121,7 @@ fun RootNavHost() {
     if (updateGateState.forceUpdate) {
         ForceUpdateScreen(
             title = updateGateState.title ?: context.getString(R.string.app_force_update_fallback_title),
-            message = updateGateState.message
-                ?: context.getString(R.string.app_force_update_fallback_message),
+            message = updateGateState.message ?: context.getString(R.string.app_force_update_fallback_message),
             onUpdateClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
                 val packageName = context.packageName
@@ -162,6 +161,19 @@ fun RootNavHost() {
         }
     }
     LaunchedEffect(isOnline) {
+        // Diagnostic (2026-08-01): `isOnline` gates both the offline banner and
+        // `cloudAvailable`, so when it is wrong the whole cloud path degrades with
+        // no visible reason. Log the shared flow's value next to what the platform
+        // actually reports at that same instant, so a stale flag is immediately
+        // distinguishable from genuinely absent connectivity.
+        val connectivityManager = context.getSystemService(ConnectivityManager::class.java)
+        val activeNetwork = connectivityManager?.activeNetwork
+        val capabilities = activeNetwork?.let { connectivityManager.getNetworkCapabilities(it) }
+        Logger.withTag("SakhiNet").i {
+            "isOnline(flow)=$isOnline | activeNetwork=$activeNetwork | " +
+                "INTERNET=${capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)} | " +
+                "VALIDATED=${capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)}"
+        }
         featureAccessState.setCloudAvailable(isOnline)
     }
 
@@ -206,17 +218,27 @@ fun RootNavHost() {
     // permanently. Run the restore itself on a background dispatcher so the
     // signed-out cold-start path is not paying secure-storage/session parsing
     // cost on the main thread before the phone screen can mount.
+    // Restores the stored session once, then KEEPS OBSERVING `authRepository.sessionState`
+    // for the lifetime of this composable. The observe half matters: this used to read
+    // `currentSessionState()` exactly once inside a `LaunchedEffect(Unit)`, so any session
+    // change made LATER in the process never reached `AppStateInputBridge` at all. That is
+    // what left offline onboarding stuck on the setup loading view -- choosing "Continue
+    // Offline" starts a `SessionState.LocalOnlyUser` session mid-flow (see
+    // `OnboardingViewModel.resolvePrivacy`), but the bridge was still holding the
+    // `Unauthenticated` value captured at cold start, so `AccountClassifier` never got the
+    // chance to map `LocalOnlyUser -> AppRoute.Home` and nothing ever routed out of
+    // onboarding. Collecting the flow fixes offline onboarding and every other
+    // mid-session transition (sign-out, session expiry) with the same one change.
     LaunchedEffect(Unit) {
-        val state = withContext(Dispatchers.IO) {
-            authRepository.initialize()
-            authRepository.currentSessionState()
-        }
-        when (state) {
-            is SessionState.Authenticated -> appStateInputBridge.setAuthenticated(state.userId)
-            is SessionState.LocalOnlyUser -> appStateInputBridge.setLocalOnly(state.userId)
-            is SessionState.SessionExpired -> appStateInputBridge.setUnauthenticated()
-            SessionState.Unauthenticated -> appStateInputBridge.setUnauthenticated()
-            is SessionState.Loading -> appStateInputBridge.setLoading(state.hasKnownSession)
+        withContext(Dispatchers.IO) { authRepository.initialize() }
+        authRepository.sessionState.collect { state ->
+            when (state) {
+                is SessionState.Authenticated -> appStateInputBridge.setAuthenticated(state.userId)
+                is SessionState.LocalOnlyUser -> appStateInputBridge.setLocalOnly(state.userId)
+                is SessionState.SessionExpired -> appStateInputBridge.setUnauthenticated()
+                SessionState.Unauthenticated -> appStateInputBridge.setUnauthenticated()
+                is SessionState.Loading -> appStateInputBridge.setLoading(state.hasKnownSession)
+            }
         }
     }
 
@@ -244,7 +266,34 @@ fun RootNavHost() {
             } else {
                 when (val current = route) {
                     is AppRoute.Splash -> SplashPlaceholder()
-                    is AppRoute.SignedOut -> SignedOutFlow()
+                    // Matches iOS's real MainFlowView exactly (confirmed by reading it
+                    // directly): `case .splash, .signedOut, .home: return .newUser` --
+                    // iOS treats a signed-out entry as onboarding's own phone/OTP step
+                    // (flowId "newUser"/NEW_OWNER), not a separate standalone auth
+                    // screen. The instant OTP verification succeeds, the shared
+                    // `AppStateStore` recomputes the route to `AppRoute.Onboarding` for
+                    // the rest of the flow (DOB/height/etc) -- this must stay the *same*
+                    // `OnboardingFlowHost`/`OnboardingViewModel` instance across that
+                    // transition, not a fresh one, or the just-verified session and
+                    // current step would be lost. That continuity comes for free here:
+                    // Koin's `koinViewModel()` caches by class within this Activity's
+                    // ViewModelStoreOwner, not by the `parametersOf(flowId)` value, so
+                    // both branches resolve the same cached `OnboardingViewModel`
+                    // regardless of which one is currently active -- the same pattern
+                    // the `forcedOnboardingDeepLink` branch above already relies on.
+                    // Previously this rendered a completely separate `SignedOutFlow()`
+                    // (bare `PhoneScreen`/`OtpScreen`, no onboarding chrome, no back
+                    // button) -- removed now that this is the correct route for it.
+                    is AppRoute.SignedOut -> OnboardingFlowHost(
+                        flowId = "newUser",
+                        onFlowCompleted = { completion ->
+                            handleOnboardingCompletion(
+                                completion = completion,
+                                authRepository = authRepository,
+                                onboardingCompletionBridge = onboardingCompletionBridge,
+                            )
+                        },
+                    )
                     is AppRoute.Onboarding -> OnboardingFlowHost(
                         flowId = current.flow.flowId,
                         onFlowCompleted = { completion ->
@@ -270,7 +319,18 @@ private fun handleOnboardingCompletion(
     fallbackUserId: String? = null,
 ) : Boolean {
     if (!completion.shouldSignalAppCompletion) return false
-    val userId = authRepository.currentUserId ?: fallbackUserId ?: return false
+    // `currentUserId` only ever reflects a real (cloud) Supabase session, so it is null
+    // for an OFFLINE user by design -- and `fallbackUserId` comes from a cloud account
+    // state, so it is null there too. That made this return false and never signal
+    // completion, leaving the app stuck on onboarding's setup loading view forever
+    // (reported live). An offline user's identity lives in
+    // `SessionState.LocalOnlyUser`, which `OnboardingViewModel.resolvePrivacy` now
+    // starts when "Continue Offline" is chosen -- read it here so offline onboarding
+    // can actually complete.
+    val userId = authRepository.currentUserId
+        ?: (authRepository.currentSessionState() as? SessionState.LocalOnlyUser)?.userId
+        ?: fallbackUserId
+        ?: return false
     onboardingCompletionBridge.signalCompletion(userId, "androidOnboarding")
     return true
 }
@@ -366,42 +426,17 @@ private fun HomeSessionGate(
     }
 }
 
-@Composable
-private fun SplashPlaceholder() {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
-    }
-}
-
 /**
- * Phone -> Otp is a two-step flow within the single `SignedOut` route, sharing one
- * `AuthViewModel` instance (both screens resolve the same Koin-scoped ViewModel).
- * Once verified, `AuthViewModel` itself drives `AppStateInputBridge`, so
- * `AppStateStore.appRoute` moves on to `Onboarding`/`Home` on its own — this local
- * `showOtp` flag only tracks which of the two screens to render meanwhile.
- *
- * `resetPhoneFlow()` runs once per fresh entry into this route, synchronously
- * during composition (via `remember`, not `LaunchedEffect`): `AuthViewModel`
- * is retained for the whole Activity lifetime (a real sign-out then a later
- * sign-in in the same process reuses the same instance), so without this reset
- * a leftover `otpSentTo` from an *earlier* session forces an immediate,
- * incorrect jump straight to `OtpScreen` — this previously left the real
- * sign-out screen blank (see the fix note on `AuthViewModel.resetPhoneFlow`).
- * `LaunchedEffect` was tried first but runs *after* the initial composition
- * commits, so `PhoneScreen`'s own first read of the stale `uiState` in that
- * same first frame still hit the bad state and forced the same wrong jump one
- * cycle later (proven live: it appeared to fix a first sign-out, then
- * reproduced identically on a second sign-in/sign-out cycle in the same
- * process) -- `remember` runs the reset before any child composes.
+ * Karan: "sirf sakhi ka loading view use hoga har jagah" -- a bare Material spinner is
+ * never the right thing for a blocking, full-screen wait. This is the gap between
+ * accepting Terms and Home appearing, which is exactly where iOS shows its own
+ * `SakhiLoadingView`, so it shows the branded one here too.
  */
 @Composable
-private fun SignedOutFlow(viewModel: AuthViewModel = koinViewModel()) {
-    var showOtp by remember { mutableStateOf(false) }
-    remember(viewModel) { viewModel.resetPhoneFlow() }
-
-    if (showOtp) {
-        OtpScreen(onOtpVerified = { /* AppStateStore route re-resolves via AppStateInputBridge */ })
-    } else {
-        PhoneScreen(onOtpSent = { showOtp = true })
-    }
+private fun SplashPlaceholder() {
+    SakhiLoadingView(
+        context = SakhiLoadingContext.HomeSetup,
+        modifier = Modifier.fillMaxSize(),
+    )
 }
+

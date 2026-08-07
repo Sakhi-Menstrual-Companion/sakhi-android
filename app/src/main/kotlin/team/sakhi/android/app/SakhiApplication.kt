@@ -2,6 +2,7 @@ package team.sakhi.android.app
 
 import android.app.Application
 import android.view.Choreographer
+import co.touchlab.kermit.Logger
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,6 +61,8 @@ class SakhiApplication : Application() {
         BuildConfigProvider.RAZORPAY_KEY_ID = BuildConfig.RAZORPAY_KEY_ID
         BuildConfigProvider.USDA_API_KEY = BuildConfig.USDA_API_KEY
 
+        warnOnMissingBackendConfig()
+
         startKoin {
             androidContext(this@SakhiApplication)
             modules(
@@ -99,6 +102,34 @@ class SakhiApplication : Application() {
                 koin.get<AndroidNotificationReminderManager>().start()
                 koin.get<AndroidWidgetSnapshotManager>().start()
             }
+        }
+    }
+
+    /**
+     * Names a blank backend config out loud at startup.
+     *
+     * A missing secret is deliberately a runtime failure here, not a build failure,
+     * so a clean checkout still compiles (see `build.gradle.kts`). The problem was
+     * that it failed *silently and misleadingly*: with `SUPABASE_URL` empty, Ktor
+     * has no host to resolve and every call lands on `localhost:443`, so the real
+     * symptom is `Failed to connect to localhost/127.0.0.1:443` on a POST to
+     * `/auth/v1/otp` — which reads like the app is deliberately pointed at a local
+     * dev server rather than simply unconfigured. That cost real debugging time on
+     * 2026-08-01. Keeping the graceful-degradation behaviour, but no longer keeping
+     * it quiet.
+     */
+    private fun warnOnMissingBackendConfig() {
+        val missing = buildList {
+            if (BuildConfig.SUPABASE_URL.isBlank()) add("SUPABASE_URL")
+            if (BuildConfig.SUPABASE_ANON_KEY.isBlank()) add("SUPABASE_ANON_KEY")
+        }
+        if (missing.isEmpty()) return
+        Logger.withTag("SakhiConfig").e {
+            "BACKEND NOT CONFIGURED — missing ${missing.joinToString()} in secrets.properties " +
+                "(or the same-named CI env vars). Every Supabase call will fail against " +
+                "localhost:443 until these are set; that connection error is a symptom of " +
+                "this, not a real localhost endpoint. Sign-in, OTP, care, and sync are all " +
+                "non-functional in this build."
         }
     }
 }

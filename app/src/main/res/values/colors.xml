@@ -2,4 +2,11 @@
     <!-- Matches KMM DesignTokens.COLOR_BACKGROUND (#F8F2F4) — kept in sync manually
          since this one value must exist before Compose is up (splash window bg). -->
     <color name="sakhi_splash_background">#F8F2F4</color>
+
+    <!-- Window background behind all Compose content. Was inherited white from
+         `android:Theme.Material.Light.NoActionBar` (@android:color/background_light),
+         so any region Compose did not paint showed hard white — measured #FEFEFE in the
+         nav-bar strip on a real device. Dark variant lives in values-night/colors.xml
+         (KMM `SakhiUIColors.BRAND_BG_DARK`, #000000). -->
+    <color name="sakhi_window_background">#F8F2F4</color>
 </resources>

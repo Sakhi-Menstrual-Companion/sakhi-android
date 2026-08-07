@@ -1,5 +1,25 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Real Sakhi brand icon, matching iOS's actual app icon
+  (01-iOS/SakhiApp/Resources/Assets.xcassets/AppIcon.appiconset/1024.png).
+
+  Built as TWO layers, which is the whole point of an adaptive icon:
+    background = the iOS pink gradient (see ic_launcher_background.xml)
+    foreground = the white brand mark ONLY, on transparency, inset to the safe zone
+
+  This previously used the flattened full-bleed iOS artwork directly as the foreground,
+  with a comment claiming the symbol "sits well inside the 72dp safe zone". It does not:
+  an adaptive icon's foreground is a 108dp canvas of which only the centre 72dp is
+  guaranteed visible, so a full-bleed source is effectively cropped to its middle
+  66 percent, which is exactly why the launcher icon looked zoomed in and cut off
+  next to iOS.
+
+  Sizing: the glyph occupies 0.568 of the iOS canvas. To look the same size after
+  Android's crop it must be 0.568 * 72/108 = 0.379 of the 108dp canvas, and that is
+  the ratio the foreground PNGs are generated at.
+-->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
     <background android:drawable="@drawable/ic_launcher_background" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_foreground" />
 </adaptive-icon>
