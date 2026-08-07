@@ -1,7 +1,9 @@
 package team.sakhi.android.feature.reports
 
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,7 +30,7 @@ import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.SentimentSatisfied
 import androidx.compose.material.icons.outlined.Autorenew
 import androidx.compose.material.icons.outlined.CalendarMonth as OutlinedCalendarMonth
-import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.UnfoldMore
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -48,6 +50,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.platform.LocalContext
@@ -64,13 +67,20 @@ import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiGroupedBackground
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.designsystem.toComposeColor
+import team.sakhi.design.SakhiColors
+import team.sakhi.design.SakhiUIColors
+import team.sakhi.models.CyclePhase
 import team.sakhi.android.ui.BackButton
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.EmptyState
 import team.sakhi.android.ui.GlassCard
-import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
+import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.date.DateConverter
 import team.sakhi.report.CalendarMonth
 import team.sakhi.report.InsightSeverity
@@ -101,6 +111,10 @@ fun ReportsScreen(
         )
         viewModel.consumeSharePdf()
     }
+
+    // Same on-screen-back-button-only gap as elsewhere in the app: system back from
+    // Preview used to skip straight past Config and close the whole sheet.
+    BackHandler(enabled = uiState.phase == ReportsPhase.Preview) { viewModel.returnToConfig() }
 
     when (uiState.phase) {
         ReportsPhase.Preview -> ReportsPreviewScreen(
@@ -245,18 +259,33 @@ private fun DateRangeCard(
             Box {
                 Surface(
                     shape = RoundedCornerShape(percent = 50),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                    // iOS: `Capsule().fill(DS.Colors.groupedBackground)`. `surfaceVariant`
+                    // rendered this as a lavender pill on a pink sheet.
+                    color = sakhiGroupedBackground(),
                 ) {
                     TextButton(onClick = { expanded = true }) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(stringResource(config.preset.shortLabelRes))
+                            // iOS: lato(13, .bold) in secondaryLabel.
+                            Text(
+                                text = stringResource(config.preset.shortLabelRes),
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = sakhiSecondaryLabel(),
+                            )
+                            // `UnfoldMore` is the Material twin of iOS's
+                            // `chevron.up.chevron.down`. A single down-chevron reads as
+                            // "expands downward"; the double arrow is the pick-one-from-a-
+                            // list affordance iOS chose here, and this is a menu, not an
+                            // expander. Sized down from Material's 24dp default because
+                            // iOS draws the glyph at 10pt beside 13pt text.
                             Icon(
-                                imageVector = Icons.Rounded.KeyboardArrowDown,
+                                imageVector = Icons.Rounded.UnfoldMore,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = sakhiSecondaryLabel(),
+                                modifier = Modifier.size(14.dp),
                             )
                         }
                     }
@@ -309,7 +338,7 @@ private fun SectionToggleRow(
             Text(
                 text = stringResource(section.subtitleRes),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
         Switch(
@@ -383,7 +412,7 @@ private fun ReportsPreviewScreen(
                         fontSize = 11.sp,
                         lineHeight = 11.sp * 1.4f,
                     ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
 
@@ -425,7 +454,7 @@ private fun ReportsPreviewScreen(
                         text = stringResource(page.titleRes),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                     PageDots(
                         count = pages.size,
@@ -536,7 +565,7 @@ private fun CoverPage(document: ReportDocument) {
         Text(
             text = stringResource(R.string.reports_pdf_disclaimer),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             lineHeight = 18.sp,
             modifier = Modifier.padding(horizontal = SakhiSpacing.space6),
         )
@@ -555,7 +584,7 @@ private fun CoverPage(document: ReportDocument) {
             Text(
                 text = stringResource(R.string.reports_confidential),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
         Box(
@@ -647,7 +676,7 @@ private fun CycleSummaryPage(document: ReportDocument) {
                     Text(
                         text = stringResource(R.string.reports_expected_start_note),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                 }
             }
@@ -716,7 +745,7 @@ private fun PeriodCalendarPage(report: ReportData) {
                 report.calendarMonths.size,
             ),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
         CalendarLegend()
 
@@ -819,7 +848,7 @@ private fun MoodPatternsPage(report: ReportData) {
             Text(
                 text = stringResource(R.string.reports_mood_note),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 modifier = Modifier.padding(SakhiSpacing.space4),
             )
         }
@@ -843,7 +872,7 @@ private fun InsightsPage(report: ReportData) {
         Text(
             text = stringResource(R.string.reports_insights_disclaimer),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
         Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
             report.insights.take(4).forEach { insight ->
@@ -852,7 +881,10 @@ private fun InsightsPage(report: ReportData) {
         }
         Surface(
             shape = RoundedCornerShape(SakhiRadius.lg),
-            color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.08f),
+            // iOS tints its doctor section with `DS.Colors.pdfDoctorTeal.opacity(0.05)`
+            // (`SakhiReportPDFGenerator`). Android used `colorScheme.tertiary`, which this
+            // theme never sets, so the doctor note sat on Material's default purple-brown.
+            color = SakhiUIColors.PDF_DOCTOR_TEAL.toComposeColor().copy(alpha = 0.05f),
         ) {
             Column(
                 modifier = Modifier.padding(SakhiSpacing.space4),
@@ -866,7 +898,7 @@ private fun InsightsPage(report: ReportData) {
                 Text(
                     text = stringResource(R.string.reports_doctor_note),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }
@@ -891,7 +923,7 @@ private fun StatRow(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             modifier = Modifier.weight(1f),
         )
         Column(horizontalAlignment = Alignment.End) {
@@ -905,7 +937,7 @@ private fun StatRow(
                 Text(
                     text = note,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     textAlign = TextAlign.End,
                 )
             }
@@ -929,7 +961,16 @@ private fun CalendarLegend() {
         )
         CalendarLegendItem(
             label = stringResource(R.string.reports_marker_fertile_ovulation),
-            color = MaterialTheme.colorScheme.tertiary,
+            // Must be the same colour as the ovulation cells this legend explains. It was
+            // `colorScheme.tertiary` — a slot this theme never sets, so it rendered as
+            // Material's default purple-brown while the days below it were teal. A legend
+            // whose key does not match the thing it is keying is worse than no legend, and
+            // this one ships inside the report a user hands to a doctor.
+            color = SakhiColors
+                .resolved(isSystemInDarkTheme())
+                .forPhase(CyclePhase.OVULATION)
+                .ring
+                .toComposeColor(),
         )
     }
 }
@@ -952,7 +993,7 @@ private fun CalendarLegendItem(
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
     }
 }
@@ -976,12 +1017,29 @@ private fun CalendarMonthPreview(month: CalendarMonth) {
                             Spacer(modifier = Modifier.size(28.dp))
                         } else {
                             val dayMark = month.dayMark(date)
+                            // This preview is what the user checks before generating the PDF,
+                            // so it has to agree with the PDF. `ReportPdfExporter.drawDayCell`
+                            // and iOS's `SakhiReportPDFGenerator.dayCell` already agree with
+                            // each other: pink for a period day, TEAL/`PhaseColorManager
+                            // .ovulation` for ovulation, a light teal for fertile, and
+                            // **nothing at all** behind an ordinary day.
+                            // The preview disagreed with both: it filled ordinary days with
+                            // `surfaceVariant` (Material's lavender) and drew ovulation in
+                            // `colorScheme.tertiary` — a slot this theme never sets, so it was
+                            // Material's default purple-brown, not Sakhi's teal. Ovulation now
+                            // comes from the same `SakhiColorSystem` phase entry the calendars
+                            // use, which is the single owner of every phase hex.
+                            val ovulationColor = SakhiColors
+                                .resolved(isSystemInDarkTheme())
+                                .forPhase(CyclePhase.OVULATION)
+                                .ring
+                                .toComposeColor()
                             val markerColor = when {
                                 dayMark?.isPeriod == true -> MaterialTheme.colorScheme.primary
                                 dayMark?.isPredictedPeriod == true -> MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
-                                dayMark?.isOvulation == true -> MaterialTheme.colorScheme.tertiary
-                                dayMark?.isFertile == true -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.22f)
-                                else -> MaterialTheme.colorScheme.surfaceVariant
+                                dayMark?.isOvulation == true -> ovulationColor
+                                dayMark?.isFertile == true -> ovulationColor.copy(alpha = 0.18f)
+                                else -> Color.Transparent
                             }
                             Box(
                                 modifier = Modifier
@@ -1024,20 +1082,20 @@ private fun FrequencyTableCard(
             Text(
                 text = headers.first,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 modifier = Modifier.weight(1f),
             )
             if (headers.second.isNotBlank()) {
                 Text(
                     text = headers.second,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
             Text(
                 text = headers.third,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
         rows.forEach { row ->
@@ -1063,7 +1121,7 @@ private fun FrequencyTableCard(
                 Text(
                     text = row.third,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     textAlign = TextAlign.End,
                 )
             }
@@ -1086,7 +1144,7 @@ private fun PreviewInfoRow(
         Text(
             text = label,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
         Text(
             text = value,
@@ -1099,9 +1157,18 @@ private fun PreviewInfoRow(
 
 @Composable
 private fun InsightCard(insight: ReportInsight) {
+    // iOS (`ReportViewModel`) has only two branches:
+    //   `insight.severity == .notice ? DS.Colors.activityOther : DS.Colors.categoryCycles`
+    // The `.notice` branch is mapped exactly here. Android keeps its own three-way split for
+    // INFO/ALERT (pink / error) rather than folding both into iOS's single `categoryCycles`
+    // purple — that reads as a deliberate refinement, and collapsing it would lose the
+    // alert distinction, so it is flagged in the status log rather than changed unilaterally.
+    // What is fixed is NOTICE: it was `colorScheme.tertiary`, a slot this theme never sets,
+    // so it rendered in Material's default purple-brown (#7D5260) instead of iOS's
+    // `ACT_OTHER` (#EA8C26).
     val accent = when (insight.severity) {
         InsightSeverity.INFO -> MaterialTheme.colorScheme.primary
-        InsightSeverity.NOTICE -> MaterialTheme.colorScheme.tertiary
+        InsightSeverity.NOTICE -> SakhiUIColors.ACT_OTHER.toComposeColor()
         InsightSeverity.ALERT -> MaterialTheme.colorScheme.error
     }
     Surface(
@@ -1136,31 +1203,14 @@ private fun FooterBar(
     onButtonClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Surface(
-        tonalElevation = SakhiSpacing.space2,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(SakhiSpacing.space5),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-        ) {
-            PrimaryButton(
-                text = buttonText,
-                onClick = onButtonClick,
-                enabled = buttonEnabled,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            if (!note.isNullOrBlank()) {
-                Text(
-                    text = note,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        }
-    }
+    SakhiFooter(
+        primaryLabel = buttonText,
+        onPrimaryClick = onButtonClick,
+        primaryEnabled = buttonEnabled,
+        note = note?.takeIf { it.isNotBlank() },
+        showSecondarySlot = false,
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -1192,7 +1242,7 @@ private fun FullscreenMessage(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     textAlign = TextAlign.Center,
                 )
             }
@@ -1227,7 +1277,7 @@ private fun ReportsSectionLabel(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = sakhiSecondaryLabel(),
         modifier = Modifier.padding(start = SakhiSpacing.space1),
     )
 }
@@ -1279,7 +1329,10 @@ private fun WeekdayHeader() {
             Text(
                 text = day,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // Weekday letters -- iOS `SakhiCalendarView.weekdayRow`
+                // renders these in `DS.Colors.tertiaryLabel`, matching the
+                // app's other two weekday headers.
+                color = sakhiTertiaryLabel(),
             )
         }
     }

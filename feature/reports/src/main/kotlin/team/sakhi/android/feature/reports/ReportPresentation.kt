@@ -40,7 +40,10 @@ internal fun buildReportPages(
         ReportDocumentPage.CycleSummary,
     )
 
-    if (ReportSection.PeriodCalendar in selectedSections && report.calendarMonths.isNotEmpty()) {
+    // iOS's gate is `if data.config.sections.contains(.periodCalendar)` -- no emptiness
+    // check, so an empty range still gets a (blank) calendar page. Matched exactly rather
+    // than kept as an Android-only improvement, per the standing rule: replicate iOS.
+    if (ReportSection.PeriodCalendar in selectedSections) {
         pages += ReportDocumentPage.PeriodCalendar
     }
     if (ReportSection.Symptoms in selectedSections && report.topSymptoms.isNotEmpty()) {

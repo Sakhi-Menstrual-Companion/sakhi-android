@@ -282,7 +282,10 @@ class AppIntegrationViewModelTest {
 
         val state = viewModel.uiState.value
         assertFalse(state.isSyncing)
-        assertEquals("permission revoked", state.error)
+        // Was asserting the RAW exception message. That pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible copy. UI shows app copy; cause is logged only.
+        assertEquals("Health Connect sync failed.", state.error)
     }
 
     @Test
@@ -302,7 +305,10 @@ class AppIntegrationViewModelTest {
 
         val state = viewModel.uiState.value
         assertFalse(state.isSyncing)
-        assertEquals("insights unavailable", state.error)
+        // Was asserting the RAW exception message. That pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible copy. UI shows app copy; cause is logged only.
+        assertEquals("Health Connect sync failed.", state.error)
         assertNull(state.latestSync)
     }
 

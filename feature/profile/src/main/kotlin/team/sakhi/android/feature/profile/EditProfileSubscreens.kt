@@ -35,6 +35,8 @@ import team.sakhi.android.ui.HeightRulerPicker
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiTextField
 import team.sakhi.android.ui.WeightWheelPicker
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 private const val CM_PER_INCH = 2.54
 private const val HEIGHT_CM_MIN = 50.0
@@ -102,7 +104,7 @@ internal fun NameEditScreen(
         Text(
             text = stringResource(R.string.edit_profile_name_subtitle),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
         SakhiTextField(
             value = draft,
@@ -169,7 +171,7 @@ internal fun HeightEditScreen(
         Text(
             text = stringResource(R.string.edit_profile_height_subtitle),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
 
         UnitPillToggle(
@@ -244,7 +246,7 @@ internal fun WeightEditScreen(
         Text(
             text = stringResource(R.string.edit_profile_weight_subtitle),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
 
         UnitPillToggle(
@@ -303,7 +305,7 @@ private fun PickerValueHeader(value: String, unit: String) {
         Text(
             text = unit,
             style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             modifier = Modifier.padding(start = SakhiSpacing.space1, bottom = 2.dp),
         )
     }
@@ -336,7 +338,7 @@ private fun PillOption(label: String, selected: Boolean, onClick: () -> Unit) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelLarge,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+            color = if (selected) MaterialTheme.colorScheme.onPrimary else sakhiSecondaryLabel(),
             modifier = Modifier.padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space2),
         )
     }

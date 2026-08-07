@@ -60,6 +60,7 @@ import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.sync.DataMigration
 import team.sakhi.sync.OfflineUpgradeDataset
+import team.sakhi.android.common.toSafeUserMessage
 
 data class ChatReportSession(
     val selectedRange: ReportDateRangePreset = ReportDateRangePreset.ThreeMonths,
@@ -421,7 +422,7 @@ class ChatViewModel(
 
         val loadedMessages = historyResult.getOrElse { throwable ->
             _uiState.update {
-                it.copy(error = throwable.message ?: appContext.getString(R.string.chat_error_load_history))
+                it.copy(error = throwable.toSafeUserMessage(appContext, R.string.chat_error_load_history))
             }
             emptyList()
         }
@@ -727,7 +728,7 @@ class ChatViewModel(
                 it.copy(
                     messages = it.messages.replaceMessage(failedUserMessage),
                     isSending = false,
-                    error = throwable.message ?: appContext.getString(R.string.chat_error_send_message),
+                    error = throwable.toSafeUserMessage(appContext, R.string.chat_error_send_message),
                 )
             }
         }

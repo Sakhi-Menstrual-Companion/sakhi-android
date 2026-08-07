@@ -20,6 +20,7 @@ import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
+import team.sakhi.android.common.toSafeUserMessage
 
 data class ProfileUiState(
     val session: SessionContext? = null,
@@ -102,8 +103,7 @@ class ProfileViewModel(
                     _uiState.update {
                         it.copy(
                             isSigningOut = false,
-                            signOutError = throwable.message
-                                ?: appContext.getString(R.string.profile_sign_out_failed),
+                            signOutError = throwable.toSafeUserMessage(appContext, R.string.profile_sign_out_failed),
                         )
                     }
                     hapticManager.error()
@@ -152,8 +152,7 @@ class ProfileViewModel(
                         session = session,
                         profile = null,
                         isLoading = false,
-                        error = throwable.message
-                            ?: appContext.getString(R.string.profile_load_failed),
+                        error = throwable.toSafeUserMessage(appContext, R.string.profile_load_failed),
                     )
                 }
             }

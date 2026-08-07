@@ -57,6 +57,8 @@ import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
 import team.sakhi.android.ui.SecondaryButton
 import team.sakhi.android.ui.DetailSheetScaffold
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 private val AppIntegrationInsightDividerInset = 22.dp + SakhiSpacing.space3
 private val AppIntegrationAppsRowBadgeSize = 36.dp
@@ -129,7 +131,7 @@ fun AppIntegrationScreen(
                 Text(
                     text = stringResource(R.string.profile_app_integration_disabled_note),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
 
@@ -208,7 +210,7 @@ private fun HealthConnectCard(
                 Text(
                     text = healthConnectSecondaryText(uiState),
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = AppIntegrationAppsRowSubtitleSize),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
             if (uiState.isSyncing) {
@@ -229,7 +231,7 @@ private fun HealthConnectCard(
                     latest.importedTemperatureSamples,
                 ),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 modifier = Modifier.padding(top = SakhiSpacing.space2),
             )
         }
@@ -245,7 +247,7 @@ private fun HealthConnectCard(
                     Text(
                         text = stringResource(R.string.profile_app_integration_own_data_only),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                 }
                 uiState.availability == HealthConnectAvailability.NotInstalled -> {
@@ -259,7 +261,7 @@ private fun HealthConnectCard(
                     Text(
                         text = stringResource(R.string.profile_app_integration_not_available),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                 }
                 uiState.isEnabled -> {
@@ -345,7 +347,7 @@ private fun InsightCard(
                     Text(
                         text = row.date.toDisplayLabel(),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                         modifier = Modifier.weight(1f),
                     )
                     Text(
@@ -381,7 +383,7 @@ private fun TemperatureInsightCard(
                     Text(
                         text = row.date.toDisplayLabel(),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                         modifier = Modifier.weight(1f),
                     )
                     Text(

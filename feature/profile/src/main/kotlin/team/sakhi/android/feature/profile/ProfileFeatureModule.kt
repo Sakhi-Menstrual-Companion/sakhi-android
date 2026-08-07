@@ -6,6 +6,15 @@ import org.koin.dsl.module
 /** Koin module for the profile feature. */
 val profileFeatureModule = module {
     viewModel {
+        OfflineModeViewModel(
+            sessionManager = get(),
+            careStore = get(),
+            careRealtimeCoordinator = get(),
+            syncEngine = get(),
+            featureAccessState = get(),
+        )
+    }
+    viewModel {
         ProfileViewModel(
             sessionManager = get(),
             userProfileRepository = get(),

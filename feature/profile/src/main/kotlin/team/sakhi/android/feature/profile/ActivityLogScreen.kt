@@ -65,6 +65,9 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.common.toSafeUserMessage
 
 /**
  * Ports iOS `ActivityLogView.swift`'s real per-field audit-trail ledger: month
@@ -111,7 +114,7 @@ fun ActivityLogScreen(onBack: () -> Unit) {
         }
         periodLogRepository.getAll(userId)
             .onSuccess { logs = it }
-            .onFailure { error = it.message ?: context.getString(R.string.profile_activity_load_failed) }
+            .onFailure { error = it.toSafeUserMessage(context, R.string.profile_activity_load_failed) }
         isLoading = false
     }
 
@@ -226,7 +229,7 @@ private fun MonthHeader(date: KLocalDate) {
                 fontSize = ActivityLogMonthHeaderSize,
                 letterSpacing = ActivityLogMonthHeaderLetterSpacing,
             ),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
         HorizontalDivider(
             modifier = Modifier.weight(1f),
@@ -277,7 +280,7 @@ private fun DayBlock(entry: DayEntry) {
                         Text(
                             text = fullDateLabel(entry.log.logDate),
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = ActivityLogDayMetaSize),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                     }
                 }
@@ -293,7 +296,7 @@ private fun DayBlock(entry: DayEntry) {
                         entry.rows.size,
                     ),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = ActivityLogDayMetaSize),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     modifier = Modifier.padding(
                         horizontal = ActivityLogEntriesPillHorizontalPadding,
                         vertical = ActivityLogEntriesPillVerticalPadding,
@@ -344,14 +347,14 @@ private fun DayBlock(entry: DayEntry) {
                                 color = if (row.isExternal) {
                                     SakhiUIColors.ACT_EXTERNAL.toComposeColor()
                                 } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                    sakhiSecondaryLabel()
                                 },
                             )
                         }
                         Text(
                             text = shortTime(row.timestampIso),
                             style = MaterialTheme.typography.labelSmall.copy(fontSize = ActivityLogRowMetaSize),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                     }
                     if (index != entry.rows.lastIndex) {

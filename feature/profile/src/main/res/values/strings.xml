@@ -1,6 +1,12 @@
 <resources>
-    <string name="profile_sign_out_title">Sign Out</string>
-    <string name="profile_sign_out_confirm">Are you sure you want to sign out?</string>
+    <!-- Dialog title asks; the body states what will happen. Mirrors iOS's
+         settings.logout.title / settings.logout.confirm pair, which Android had
+         inverted (a flat title identical to its own confirm button, with the question
+         pushed down into the body). Terminology stays "Sign Out" rather than iOS's
+         "Log Out" so it matches the other three Android strings and platform convention. -->
+    <string name="profile_sign_out_title">Sign Out?</string>
+    <string name="profile_sign_out_confirm">You will be signed out of Sakhi.</string>
+    <string name="profile_sign_out_action">Sign Out</string>
     <string name="profile_cancel">Cancel</string>
     <string name="profile_title">Profile</string>
     <string name="profile_loading">Loading profile</string>
@@ -325,7 +331,10 @@
     <string name="edit_profile_not_set">Not set</string>
     <string name="edit_profile_phone">Phone</string>
     <string name="edit_profile_saved">Saved</string>
-    <string name="edit_profile_save">Save</string>
+    <!-- No standalone "Save" label here on purpose. iOS's EditProfileView header toggles
+         `Button(isEditing ? "Done" : "Edit")`, which edit_profile_done / edit_profile_edit
+         already match; the only "Save" iOS shows is the discard-changes alert button, which
+         is edit_profile_discard_save. -->
     <string name="edit_profile_load_failed">Failed to load your profile</string>
     <string name="edit_profile_save_failed">Couldn\'t save. Please try again.</string>
 
@@ -398,7 +407,12 @@
     <string name="profile_appearance_change_language_confirm">Change to %1$s %2$s</string>
     <string name="profile_appearance_cancel">Cancel</string>
     <string name="profile_appearance_section_theme">THEME</string>
+    <!-- iOS spells this differently in the two places it appears: the Appearance screen's
+         option list says "System Default" (AppearanceSettingsView.swift), while the Profile
+         row's trailing value says just "System" (ProfileView+Sections.appearanceModeLabel).
+         Android shared one string, so the Profile row read "System Default". -->
     <string name="profile_appearance_theme_system">System Default</string>
+    <string name="profile_appearance_row_value_system">System</string>
     <string name="profile_appearance_theme_light">Light</string>
     <string name="profile_appearance_theme_dark">Dark</string>
     <string name="profile_appearance_section_interaction">INTERACTION</string>
@@ -495,7 +509,9 @@
     <string name="profile_about_instagram">Instagram</string>
     <string name="profile_about_send_feedback">Send Feedback</string>
     <string name="profile_about_rate_play_store">Rate on Play Store</string>
-    <string name="profile_about_section_share">SHARE</string>
+    <!-- No section header above the share row on purpose. iOS's AboutView labels only
+         OUR STORY / CONNECT / APP INFO; `shareCard` sits bare between CONNECT and APP INFO
+         with no sectionCard label, so a "SHARE" header would be Android-only chrome. -->
     <string name="profile_about_share_action">Share Sakhi</string>
     <string name="profile_about_share_body">Check out Sakhi, a women\'s health app. %1$s</string>
     <string name="profile_about_section_app_info">APP INFO</string>
@@ -528,7 +544,8 @@
 
     <string name="profile_activity_load_failed">Failed to load your log history</string>
     <string name="profile_activity_empty_title">Nothing logged yet</string>
-    <string name="profile_activity_empty_subtitle">Your tracking history will appear here.</string>
+    <!-- iOS home.activity.description. Says what to do next, not just what will appear. -->
+    <string name="profile_activity_empty_subtitle">Your logs will appear here once you start tracking.</string>
     <plurals name="profile_activity_entries_count">
         <item quantity="one">%d entry</item>
         <item quantity="other">%d entries</item>
@@ -572,21 +589,32 @@
     <string name="profile_manage_account_menu_show_all_my_data">Show All My Data</string>
     <string name="profile_manage_account_menu_show_all_my_data_subtitle">See everything Sakhi stores about you, on device and in the cloud</string>
     <string name="profile_manage_account_menu_reset_all_data">Reset All Data</string>
-    <string name="profile_manage_account_menu_reset_all_data_subtitle">Remove all logs, cycles and predictions from this device</string>
+    <!-- Deliberately NOT iOS's wording. iOS is local-first, so its DataResetView genuinely
+         erases the logs/cycles/predictions held on the phone. Android is cloud-direct and
+         `resetProfileData()` is `authRepository.signOut()`, which deletes no health data, so
+         promising removal here would be false on a destructive-sounding action. -->
+    <string name="profile_manage_account_menu_reset_all_data_subtitle">Sign out of this device. Your logs and cycles stay safe in your account.</string>
     <string name="profile_manage_account_menu_delete_account">Delete Account</string>
     <string name="profile_manage_account_menu_delete_account_subtitle">Permanently delete your account and all data</string>
     <string name="profile_manage_account_start_fresh_subtitle">See what gets removed from this device before you reset</string>
     <string name="profile_manage_account_delete_account_subtitle">Review what you\'ll lose before deleting your account</string>
-    <string name="profile_manage_account_reset_header_subtitle">This removes everything stored on this device. Your account stays active, log back in any time.</string>
-    <string name="profile_manage_account_what_gets_removed">WHAT GETS REMOVED</string>
-    <string name="profile_manage_account_loss_period_logs">Every period log you\'ve added</string>
-    <string name="profile_manage_account_loss_cycle_history">Your cycle history and predictions</string>
-    <string name="profile_manage_account_loss_conditions">Health conditions and symptoms</string>
-    <string name="profile_manage_account_loss_care_settings">Care mode and Sakhi settings</string>
-    <string name="profile_manage_account_loss_ai_conversations">Sakhi AI conversations</string>
+    <string name="profile_manage_account_reset_header_subtitle">This signs you out of this device. Your account and cloud data stay safe, log back in any time.</string>
+    <!-- iOS's DataResetView lists what gets destroyed, because on iOS this genuinely wipes
+         the local store. Android's reset is `authRepository.signOut()` and deletes nothing,
+         so a "WHAT GETS REMOVED" list here would be false on health data. Each row below is
+         checked against the real sign-out path: signOut() calls sessionProvider.signOut(),
+         clears KEY_PIN_HASH + KEY_PIN_ATTEMPTS, and AndroidWidgetSnapshotManager clears its
+         snapshot when the session goes null. Nothing deletes logs, cycles or conversations. -->
+    <string name="profile_manage_account_what_happens">WHAT HAPPENS</string>
+    <string name="profile_manage_account_reset_signs_out">You\'re signed out on this device</string>
+    <string name="profile_manage_account_reset_pin_cleared">Your PIN lock is removed from this device</string>
+    <string name="profile_manage_account_reset_widget_cleared">The home screen widget is cleared</string>
+    <string name="profile_manage_account_reset_nothing_deleted">Nothing is deleted. Log back in and everything is there.</string>
     <string name="profile_manage_account_reset_note">Your account and cloud data stay safe. On Android, starting fresh signs you out of this device so you can log back in cleanly any time.</string>
-    <string name="profile_manage_account_reset_all_data">Reset all data</string>
-    <string name="profile_manage_account_cannot_undo">This cannot be undone.</string>
+    <string name="profile_manage_account_reset_all_data">Sign out of this device</string>
+    <!-- Not "This cannot be undone" - signing out is fully reversible, which is the whole
+         point of the note above. That wording belongs to the delete-account flow. -->
+    <string name="profile_manage_account_reset_can_log_back_in">You can log back in any time.</string>
     <string name="profile_manage_account_before_you_go">Before you go</string>
     <string name="profile_manage_account_before_you_go_subtitle">Deleting your account is permanent. Here\'s what you\'ll lose.</string>
     <plurals name="profile_manage_account_period_data_count">
@@ -849,4 +877,21 @@
     <string name="profile_content_item_body_open_source_licenses_user_interface_libraries_used_in_sakhi" formatted="false">User Interface Libraries Used in Sakhi:\n\n• Jetpack Navigation Compose: Type-safe in-app navigation\n• Material3: Google\'s design system components\n• Coil: Image loading for Compose\n• Ktor Client: Networking layer shared across platforms via KMM</string>
     <string name="profile_content_item_body_open_source_licenses_development_tools" formatted="false">Development Tools:\n\n• JUnit / Kotlin Test: Testing frameworks ensuring Sakhi\'s reliability and quality\n• Gradle: Build automation for the whole multi-module project\n\nThese tools help us maintain high code quality, catch issues early, and deliver a reliable experience to all Sakhi users.</string>
     <string name="profile_content_item_body_open_source_licenses_gratitude_and_compliance" formatted="false">We acknowledge and thank all open source contributors. The full text of all applicable licenses is available upon request.\n\nIf you believe we have inadvertently missed attribution for any library or if you have any licensing questions, please contact us at hello@getswipe.in.\n\nThe open source community makes software development better for everyone, and we are proud to be part of this ecosystem.</string>
+    <!-- Use Sakhi offline. Copy transcribed from iOS OfflineModeSheet.swift. -->
+    <string name="profile_item_use_offline">Use Sakhi offline</string>
+    <string name="offline_mode_title">Use Sakhi offline</string>
+    <string name="offline_mode_subtitle">Keep Sakhi with you without the internet. You can resume sync anytime.</string>
+    <string name="offline_mode_stays_label">STILL WORKS ON THIS PHONE</string>
+    <string name="offline_mode_stays_logging">Logging your periods, symptoms and moods</string>
+    <string name="offline_mode_stays_calendar">Your calendar and day history</string>
+    <string name="offline_mode_stays_predictions">Predictions, fertile window and cycle insights</string>
+    <string name="offline_mode_stays_reports">Health reports created right on your phone</string>
+    <string name="offline_mode_pauses_label">PAUSES UNTIL YOU\'RE ONLINE</string>
+    <string name="offline_mode_pauses_backup">Cloud backup updates</string>
+    <string name="offline_mode_pauses_devices">Syncing across your other devices</string>
+    <string name="offline_mode_pauses_care">Be Her Sakhi sharing</string>
+    <string name="offline_mode_pauses_chat">Sakhi AI chat</string>
+    <string name="offline_mode_privacy_note">Nothing is deleted. Your existing cloud backup stays safe, but it will not update until you choose to resume online sync.</string>
+    <string name="offline_mode_primary">Use Sakhi offline</string>
+    <string name="offline_mode_secondary">Stay online</string>
 </resources>

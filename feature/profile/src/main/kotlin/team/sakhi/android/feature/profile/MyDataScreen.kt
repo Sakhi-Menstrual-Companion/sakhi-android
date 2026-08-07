@@ -72,6 +72,10 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.designsystem.sakhiGroupedBackground
+import team.sakhi.android.designsystem.sakhiSystemGray5
 
 private enum class MyDataScope(
     @StringRes val labelRes: Int,
@@ -176,7 +180,7 @@ private fun ScopePicker(
 ) {
     Surface(
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        color = sakhiGroupedBackground().copy(alpha = 0.55f),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -203,7 +207,7 @@ private fun ScopePicker(
                         tint = if (selected) {
                             MaterialTheme.colorScheme.onPrimary
                         } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                            sakhiSecondaryLabel()
                         },
                         modifier = Modifier.size(16.dp),
                     )
@@ -213,7 +217,7 @@ private fun ScopePicker(
                         color = if (selected) {
                             MaterialTheme.colorScheme.onPrimary
                         } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
+                            sakhiSecondaryLabel()
                         },
                         modifier = Modifier.padding(start = SakhiSpacing.space2),
                     )
@@ -249,7 +253,7 @@ private fun SnapshotContent(
                     Text(
                         text = stringResource(R.string.profile_my_data_loading),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                 }
             }
@@ -376,7 +380,7 @@ private fun LocalSnapshotSections(
             snapshot.periodLogs.take(40).forEach { log ->
                 DataRow(
                     icon = Icons.Filled.WaterDrop,
-                    tint = if (log.periodPresent) Color(0xFFDD5B6A) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (log.periodPresent) Color(0xFFDD5B6A) else sakhiSecondaryLabel(),
                     label = log.logDate.formatDateLabel(),
                     value = buildLocalLogValue(log, context),
                 )
@@ -525,7 +529,7 @@ private fun CloudSnapshotSections(
             snapshot.periodLogs.take(40).forEach { log ->
                 DataRow(
                     icon = Icons.Filled.WaterDrop,
-                    tint = if (log.flowIntensity != null) Color(0xFFDD5B6A) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (log.flowIntensity != null) Color(0xFFDD5B6A) else sakhiSecondaryLabel(),
                     label = log.logDate.formatDateLabel(),
                     value = buildCloudLogValue(log, context),
                 )
@@ -639,7 +643,7 @@ private fun DataRow(
         Text(
             text = value,
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             textAlign = TextAlign.End,
             modifier = Modifier.weight(1f),
         )
@@ -658,7 +662,7 @@ private fun OverflowRow(
     Text(
         text = stringResource(R.string.profile_my_data_more_count, remaining),
         style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = sakhiSecondaryLabel(),
         modifier = Modifier
             .fillMaxWidth()
             .padding(
@@ -675,7 +679,7 @@ private fun FooterNote(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = sakhiSecondaryLabel(),
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth(),
     )

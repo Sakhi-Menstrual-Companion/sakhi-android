@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Shield
@@ -77,6 +78,7 @@ import team.sakhi.android.feature.onboarding.OnboardingFlowHost
 import team.sakhi.android.ui.BackButton
 import team.sakhi.android.ui.GlassCard
 import team.sakhi.android.ui.PrimaryButton
+import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.android.ui.ToastManager
 import team.sakhi.android.ui.ToastType
@@ -85,6 +87,9 @@ import team.sakhi.date.DateConverter
 import team.sakhi.models.CarePartnership
 import team.sakhi.models.ParentChildPermissions
 import team.sakhi.models.PartnerInvitation
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.common.toSafeUserMessage
 
 /**
  * "Be Her Sakhi" care hub — mirrors iOS's `CareModeSettingsView` routing: one
@@ -145,6 +150,9 @@ fun CareScreen(
         if (showInviteFlowRoute) {
             OnboardingFlowHost(
                 flowId = "carePartnerInvite",
+                // Modal flow: iOS shows a close button on the root step. Closes the whole
+                // care sheet, matching `requestDismiss(route:)`.
+                onDismiss = onClose,
                 onFlowCompleted = {
                     showOwnerInviteFlow = false
                     autoLaunchInviteFlow = false
@@ -295,7 +303,7 @@ private fun PartnerDetailContent(
                 Text(
                     text = stringResource(R.string.care_subtitle_trusted_sakhi),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     modifier = Modifier.padding(top = SakhiSpacing.space1),
                 )
             }
@@ -570,7 +578,7 @@ private fun SectionHeader(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = sakhiSecondaryLabel(),
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
@@ -602,7 +610,7 @@ private fun InfoRow(icon: @Composable () -> Unit, label: String, value: String) 
         Text(
             text = value,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
     }
 }
@@ -633,7 +641,10 @@ private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, lab
         Icon(
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            // Disclosure chevron. iOS tints `chevron.right` with
+            // `DS.Colors.tertiaryLabel` in 10 of its 13 uses -- it is the
+            // convention, not a one-off.
+            tint = sakhiTertiaryLabel(),
         )
     }
 }
@@ -703,9 +714,10 @@ private fun PendingInviteContent(
     }
     val shareMessage = context.getString(R.string.care_pending_share_message, invitation.inviteCode)
 
+    Column(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
             .padding(SakhiSpacing.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -721,7 +733,7 @@ private fun PendingInviteContent(
         Text(
             text = stringResource(R.string.care_pending_waiting_for_name, partnerName),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             modifier = Modifier.padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space6),
         )
 
@@ -779,28 +791,21 @@ private fun PendingInviteContent(
         }
 
         Spacer(modifier = Modifier.weight(1f))
-
-        PrimaryButton(
-            text = stringResource(R.string.care_share),
-            onClick = {
+    }
+        SakhiFooter(
+            primaryLabel = stringResource(R.string.care_share),
+            onPrimaryClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
                 sharePendingInvite(context, shareMessage)
             },
-            modifier = Modifier.fillMaxWidth(),
+            secondaryLabel = if (isCancelling) {
+                stringResource(R.string.care_cancelling)
+            } else {
+                stringResource(R.string.care_cancel_request)
+            },
+            onSecondaryClick = onCancel,
+            secondaryEnabled = !isCancelling,
         )
-        TextButton(
-            onClick = onCancel,
-            enabled = !isCancelling,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                if (isCancelling) {
-                    stringResource(R.string.care_cancelling)
-                } else {
-                    stringResource(R.string.care_cancel_request)
-                }
-            )
-        }
     }
 }
 
@@ -838,7 +843,7 @@ private fun InviteCreationContent(
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
 
         GlassCard(
@@ -867,99 +872,130 @@ private fun InviteCreationContent(
                 }
             }
 
-            CarePromptBullet(
-                icon = Icons.Filled.VisibilityOff,
-                text = feature1,
-            )
-            CarePromptBullet(
-                icon = Icons.Filled.Notifications,
-                text = feature2,
-            )
+            // Row gap comes from here, not from the row itself — iOS's `pointsSlide`
+            // uses VStack(spacing: DS.Spacing.l) = 24 and the component carries no
+            // padding of its own, so callers stay free to set their own rhythm.
+            Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space6)) {
+            // iOS maps these three to heart.circle.fill / bell.badge.fill /
+            // person.2.wave.2.fill. Android had VisibilityOff on the first, which reads as
+            // "hidden" where iOS means "cared for", and Favorite on the third, which reads
+            // as "favourite" where iOS means "people".
             CarePromptBullet(
                 icon = Icons.Filled.Favorite,
-                text = feature3,
+                text = feature1,
+                subtitle = stringResource(R.string.care_disconnected_feature_1_subtitle),
             )
-        }
-
-        Surface(
-            shape = RoundedCornerShape(SakhiRadius.xxl),
-            tonalElevation = SakhiSpacing.space1,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier.padding(SakhiSpacing.space5),
-                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-            ) {
-                Text(text = stringResource(R.string.care_invite_someone_you_trust), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = stringResource(R.string.care_invite_prepare_code),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-
-                OutlinedTextField(
-                    value = uiState.inviteeName,
-                    onValueChange = onInviteeNameChanged,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.care_label_name_optional)) },
-                    placeholder = { Text(stringResource(R.string.care_placeholder_optional)) },
-                )
-                OutlinedTextField(
-                    value = uiState.partnerRelation,
-                    onValueChange = onPartnerRelationChanged,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.care_label_relationship)) },
-                    placeholder = { Text(stringResource(R.string.care_placeholder_relationship)) },
-                    singleLine = true,
-                )
-
-                PrimaryButton(
-                    text = if (uiState.isCreatingInvite) {
-                        stringResource(R.string.care_preparing_invite)
-                    } else {
-                        stringResource(R.string.care_create_invite_code)
-                    },
-                    onClick = onCreateInvitation,
-                    enabled = !uiState.isCreatingInvite,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+            CarePromptBullet(
+                icon = Icons.Filled.NotificationsActive,
+                text = feature2,
+                subtitle = stringResource(R.string.care_disconnected_feature_2_subtitle),
+            )
+            CarePromptBullet(
+                icon = Icons.Filled.Groups,
+                text = feature3,
+                subtitle = stringResource(R.string.care_disconnected_feature_3_subtitle),
+            )
             }
         }
 
-        Surface(
-            shape = RoundedCornerShape(SakhiRadius.xxl),
-            tonalElevation = SakhiSpacing.space1,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(
-                modifier = Modifier.padding(SakhiSpacing.space5),
-                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+        // Someone who arrived through an invite link is here to ACCEPT, not to
+        // invite. iOS sends that person straight into `AcceptInviteSheet`; Android
+        // shares one screen for both, so at minimum the accept card leads when a code
+        // is already in hand. Otherwise the invited person has to scroll past a
+        // full "Pick Your Person / Create invite code" form to reach the field that
+        // is already filled in for them.
+        val arrivedWithCode = uiState.acceptInviteCode.isNotBlank()
+        val createInviteCard: @Composable () -> Unit = {
+            Surface(
+                shape = RoundedCornerShape(SakhiRadius.xxl),
+                tonalElevation = SakhiSpacing.space1,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(text = stringResource(R.string.care_i_have_a_code), style = MaterialTheme.typography.titleMedium)
-                Text(
-                    text = stringResource(R.string.care_enter_shared_code),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                OutlinedTextField(
-                    value = uiState.acceptInviteCode,
-                    onValueChange = onAcceptInviteCodeChanged,
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.care_label_invite_code)) },
-                    placeholder = { Text(stringResource(R.string.care_placeholder_invite_code)) },
-                    singleLine = true,
-                )
-                PrimaryButton(
-                    text = if (uiState.isAcceptingInvite) {
-                        stringResource(R.string.care_joining)
-                    } else {
-                        stringResource(R.string.care_accept_invite)
-                    },
-                    onClick = onAcceptInvitation,
-                    enabled = !uiState.isAcceptingInvite,
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                Column(
+                    modifier = Modifier.padding(SakhiSpacing.space5),
+                    verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                ) {
+                    Text(text = stringResource(R.string.care_invite_someone_you_trust), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = stringResource(R.string.care_invite_prepare_code),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = sakhiSecondaryLabel(),
+                    )
+
+                    OutlinedTextField(
+                        value = uiState.inviteeName,
+                        onValueChange = onInviteeNameChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.care_label_name_optional)) },
+                        placeholder = { Text(stringResource(R.string.care_placeholder_optional)) },
+                    )
+                    OutlinedTextField(
+                        value = uiState.partnerRelation,
+                        onValueChange = onPartnerRelationChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.care_label_relationship)) },
+                        placeholder = { Text(stringResource(R.string.care_placeholder_relationship)) },
+                        singleLine = true,
+                    )
+
+                    PrimaryButton(
+                        text = if (uiState.isCreatingInvite) {
+                            stringResource(R.string.care_preparing_invite)
+                        } else {
+                            stringResource(R.string.care_create_invite_code)
+                        },
+                        onClick = onCreateInvitation,
+                        enabled = !uiState.isCreatingInvite,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
+        }
+        val acceptCodeCard: @Composable () -> Unit = {
+            Surface(
+                shape = RoundedCornerShape(SakhiRadius.xxl),
+                tonalElevation = SakhiSpacing.space1,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(SakhiSpacing.space5),
+                    verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                ) {
+                    Text(text = stringResource(R.string.care_i_have_a_code), style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = stringResource(R.string.care_enter_shared_code),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = sakhiSecondaryLabel(),
+                    )
+                    OutlinedTextField(
+                        value = uiState.acceptInviteCode,
+                        onValueChange = onAcceptInviteCodeChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text(stringResource(R.string.care_label_invite_code)) },
+                        placeholder = { Text(stringResource(R.string.care_placeholder_invite_code)) },
+                        singleLine = true,
+                    )
+                    PrimaryButton(
+                        text = if (uiState.isAcceptingInvite) {
+                            stringResource(R.string.care_joining)
+                        } else {
+                            stringResource(R.string.care_accept_invite)
+                        },
+                        onClick = onAcceptInvitation,
+                        enabled = !uiState.isAcceptingInvite,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+        if (arrivedWithCode) {
+            acceptCodeCard()
+            Spacer(modifier = Modifier.height(SakhiSpacing.space4))
+            createInviteCard()
+        } else {
+            createInviteCard()
+            Spacer(modifier = Modifier.height(SakhiSpacing.space4))
+            acceptCodeCard()
         }
 
         uiState.error?.let { error ->
@@ -971,21 +1007,29 @@ private fun InviteCreationContent(
     }
 }
 
+/**
+ * Port of iOS's `FeatureBulletRow` for the Care disconnected screen.
+ *
+ * Matches the onboarding copy of this row (`OnboardingContentStepUi`), which was brought
+ * to iOS spec earlier: `HStack(alignment: .top, spacing: .m)` (16), 44pt circle, 20pt
+ * glyph, 15pt bold title over a 14pt secondary subtitle. This screen renders the same
+ * `care.onboarding.*` CMS copy iOS puts through `FeatureBulletRow`, so it gets the same
+ * treatment rather than a title-only variant.
+ */
 @Composable
 private fun CarePromptBullet(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     text: String,
+    subtitle: String,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = SakhiSpacing.space2),
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+        verticalAlignment = Alignment.Top,
     ) {
         Box(
             modifier = Modifier
-                .size(36.dp)
+                .size(44.dp)
                 .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
@@ -993,15 +1037,27 @@ private fun CarePromptBullet(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(20.dp),
             )
         }
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
+        Column(
             modifier = Modifier.weight(1f),
-        )
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+        ) {
+            Text(
+                text = text,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = subtitle,
+                fontSize = 14.sp,
+                // iOS default 14pt line height (~16.8) plus its explicit lineSpacing(3).
+                lineHeight = 20.sp,
+                color = sakhiSecondaryLabel(),
+            )
+        }
     }
 }
 
@@ -1053,7 +1109,7 @@ private fun PartnerPermissionsEditContent(
                 Text(
                     text = stringResource(R.string.care_permissions_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     modifier = Modifier.padding(top = SakhiSpacing.space2),
                 )
             }
@@ -1113,7 +1169,7 @@ private fun PartnerPermissionsEditContent(
             Text(
                 text = stringResource(R.string.care_permission_sexual_activity_private),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
             )
 
@@ -1121,10 +1177,10 @@ private fun PartnerPermissionsEditContent(
         }
 
         HorizontalDivider()
-        PrimaryButton(
-            text = if (isSaving) stringResource(R.string.care_saving) else stringResource(R.string.care_save),
-            enabled = !isSaving,
-            onClick = {
+        SakhiFooter(
+            primaryLabel = if (isSaving) stringResource(R.string.care_saving) else stringResource(R.string.care_save),
+            primaryEnabled = !isSaving,
+            onPrimaryClick = {
                 onSave(
                     ParentChildPermissions(
                         canViewPeriodDates = sharePeriodDates,
@@ -1145,9 +1201,7 @@ private fun PartnerPermissionsEditContent(
                     )
                 )
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
+            showSecondarySlot = false,
         )
     }
 }
@@ -1201,7 +1255,7 @@ private fun PartnerHistoryContent(
                     .sortedByDescending { it.logDate.toString() }
             }
             .onFailure { throwable ->
-                loadError = throwable.message ?: context.getString(R.string.care_error_load_activity_right_now)
+                loadError = throwable.toSafeUserMessage(context, R.string.care_error_load_activity_right_now)
             }
         isLoaded = true
     }
@@ -1239,7 +1293,7 @@ private fun PartnerHistoryContent(
                 Icon(
                     Icons.Filled.History,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = sakhiSecondaryLabel(),
                     modifier = Modifier.size(32.dp),
                 )
                 Text(
@@ -1250,7 +1304,7 @@ private fun PartnerHistoryContent(
                 Text(
                     text = loadError.orEmpty(),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     modifier = Modifier.padding(top = SakhiSpacing.space2),
                 )
             }
@@ -1268,13 +1322,13 @@ private fun PartnerHistoryContent(
                 Icon(
                     Icons.Filled.History,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = sakhiSecondaryLabel(),
                     modifier = Modifier.size(32.dp),
                 )
                 Text(
                     text = stringResource(R.string.care_empty_no_activity_yet),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
                 Text(
                     text = stringResource(
@@ -1282,7 +1336,7 @@ private fun PartnerHistoryContent(
                         partnership.partnerName.ifBlank { fallbackLabel },
                     ),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
                 Spacer(modifier = Modifier.weight(1f))
                 ConnectionBadge(connectedDate = connectedDate)
@@ -1330,7 +1384,7 @@ private fun PartnerHistoryContent(
                                 Text(
                                     text = formatConnectedSince(log.logDate, context),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = sakhiSecondaryLabel(),
                                 )
                             }
                             Text(
@@ -1339,7 +1393,7 @@ private fun PartnerHistoryContent(
                                     partnership.partnerName.ifBlank { fallbackLabel },
                                 ),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = sakhiSecondaryLabel(),
                             )
                         }
                         if (index != logs.lastIndex) RowDivider()
@@ -1382,7 +1436,7 @@ private fun PartnerHistoryContent(
                         Text(
                             text = connectedDate,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                     }
                 }
@@ -1406,7 +1460,7 @@ private fun ConnectionBadge(connectedDate: String) {
         Text(
             text = stringResource(R.string.care_connected_badge, connectedDate),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
     }
 }

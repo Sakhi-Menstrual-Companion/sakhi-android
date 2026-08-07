@@ -86,8 +86,12 @@
     <string name="reports_table_days">DAYS</string>
     <string name="reports_table_percent_tracked">% OF TRACKED</string>
     <string name="reports_table_percent_logged">% OF LOGGED</string>
-    <string name="reports_marker_ovulation">ovulation day</string>
-    <string name="reports_marker_fertile">fertile window</string>
+    <!-- iOS's PDF legend has exactly three dots (SakhiReportPDFGenerator, "Legend"):
+         "Period day", "Predicted" (dashed), "Fertile / Ovulation". It merges fertile and
+         ovulation into one entry even though ReportData tracks them as separate sets, so
+         the merged string below is the parity-correct one. Separate ovulation/fertile
+         legend strings were removed - wiring them would give Android a four-dot legend
+         iOS does not have. -->
     <string name="reports_marker_fertile_ovulation">fertile / ovulation</string>
     <string name="reports_marker_predicted">predicted period</string>
     <string name="reports_marker_pms">PMS day</string>

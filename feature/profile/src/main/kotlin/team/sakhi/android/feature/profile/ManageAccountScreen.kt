@@ -17,10 +17,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.Widgets
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Favorite
@@ -43,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -77,16 +81,19 @@ import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.DetailSheetScaffold
-import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
+import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.appstate.AppStateInputBridge
 import team.sakhi.auth.AuthRepository
 import team.sakhi.repositories.AccountRepository
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.session.SessionManager
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.common.toSafeUserMessage
 
 private enum class ManageAccountRoute {
     Menu,
@@ -231,6 +238,11 @@ fun ManageAccountScreen(onBack: () -> Unit) {
         }
     }
 
+    // System back now does exactly what the on-screen back arrow already does at
+    // every step of this wizard, including unwinding the delete-account flow one
+    // step at a time instead of closing the whole sheet from underneath it.
+    BackHandler(onBack = ::handleBack)
+
     DetailSheetScaffold(
         title = when (route) {
             ManageAccountRoute.Menu -> stringResource(R.string.profile_manage_account_title)
@@ -366,7 +378,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                                     appStateInputBridge.setUnauthenticated()
                                 }
                                 .onFailure {
-                                    error = it.message ?: context.getString(R.string.profile_manage_account_reset_failed)
+                                    error = it.toSafeUserMessage(context, R.string.profile_manage_account_reset_failed)
                                 }
                             isBusy = false
                         }
@@ -402,8 +414,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                                     appStateInputBridge.setUnauthenticated()
                                 }
                                 .onFailure {
-                                    error = it.message
-                                        ?: context.getString(R.string.profile_manage_account_delete_failed)
+                                    error = it.toSafeUserMessage(context, R.string.profile_manage_account_delete_failed)
                                     isBusy = false
                                 }
                         }
@@ -487,7 +498,7 @@ private fun MenuContent(
                     fontSize = ManageDataMenuFootnoteSize,
                     lineHeight = ManageDataMenuFootnoteLineHeight,
                 ),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 modifier = Modifier.padding(
                     start = SakhiSpacing.space5,
                     top = SakhiSpacing.space1,
@@ -532,22 +543,23 @@ private fun ResetContent(
             )
 
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
-                ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_what_gets_removed))
+                ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_what_happens))
                 Surface(
                     shape = RoundedCornerShape(SakhiRadius.xl),
                     tonalElevation = SakhiSpacing.space1,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
+                    // Each row is what `resetProfileData()` -> `authRepository.signOut()`
+                    // actually does. Do not restore iOS's loss list here unless Android gains
+                    // a real local store for this to clear.
                     Column {
-                        LossRow(Icons.Filled.WaterDrop, Color(0xFFDD5B6A), stringResource(R.string.profile_manage_account_loss_period_logs))
+                        LossRow(Icons.AutoMirrored.Filled.Logout, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_reset_signs_out))
                         IndentedDivider()
-                        LossRow(Icons.Filled.CalendarMonth, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_loss_cycle_history))
+                        LossRow(Icons.Filled.Lock, Color(0xFF6B7CE3), stringResource(R.string.profile_manage_account_reset_pin_cleared))
                         IndentedDivider()
-                        LossRow(Icons.Filled.MonitorHeart, Color(0xFF6B7CE3), stringResource(R.string.profile_manage_account_loss_conditions))
+                        LossRow(Icons.Filled.Widgets, Color(0xFFF0A144), stringResource(R.string.profile_manage_account_reset_widget_cleared))
                         IndentedDivider()
-                        LossRow(Icons.Filled.People, Color(0xFF2E9E7E), stringResource(R.string.profile_manage_account_loss_care_settings))
-                        IndentedDivider()
-                        LossRow(Icons.Filled.AutoAwesome, Color(0xFFF0A144), stringResource(R.string.profile_manage_account_loss_ai_conversations))
+                        LossRow(Icons.Filled.CloudDone, Color(0xFF2E9E7E), stringResource(R.string.profile_manage_account_reset_nothing_deleted))
                     }
                 }
             }
@@ -571,7 +583,7 @@ private fun ResetContent(
                     Text(
                         text = stringResource(R.string.profile_manage_account_reset_note),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                 }
             }
@@ -585,10 +597,11 @@ private fun ResetContent(
             }
         }
 
-        FooterAction(
+        SakhiFooter(
             primaryLabel = stringResource(R.string.profile_manage_account_reset_all_data),
-            primaryAction = onResetClick,
-            note = stringResource(R.string.profile_manage_account_cannot_undo),
+            onPrimaryClick = onResetClick,
+            note = stringResource(R.string.profile_manage_account_reset_can_log_back_in),
+            showSecondarySlot = false,
         )
     }
 }
@@ -800,85 +813,25 @@ private fun DeleteContent(
 }
 
 @Composable
-private fun FooterAction(
-    primaryLabel: String,
-    primaryAction: () -> Unit,
-    note: String,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                horizontal = SakhiSpacing.space5,
-                vertical = SakhiSpacing.space4,
-            ),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        PrimaryButton(
-            text = primaryLabel,
-            onClick = primaryAction,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            text = note,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
 private fun DeleteFooter(
     step: Int,
     isBusy: Boolean,
     onContinue: () -> Unit,
     onSkip: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                horizontal = SakhiSpacing.space5,
-                vertical = SakhiSpacing.space4,
-            ),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        PrimaryButton(
-            text = if (step < 2) {
-                stringResource(R.string.profile_manage_account_continue)
-            } else {
-                stringResource(R.string.profile_manage_account_delete_confirm_button)
-            },
-            onClick = onContinue,
-            enabled = !isBusy,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        when (step) {
-            1 -> {
-                TextButton(onClick = onSkip, enabled = !isBusy) {
-                    Text(stringResource(R.string.profile_manage_account_skip))
-                }
-            }
-
-            2 -> {
-                Text(
-                    text = stringResource(R.string.profile_manage_account_permanent_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            else -> {
-                Text(
-                    text = " ",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.Transparent,
-                )
-            }
-        }
-    }
+    SakhiFooter(
+        primaryLabel = if (step < 2) {
+            stringResource(R.string.profile_manage_account_continue)
+        } else {
+            stringResource(R.string.profile_manage_account_delete_confirm_button)
+        },
+        onPrimaryClick = onContinue,
+        primaryEnabled = !isBusy,
+        secondaryLabel = if (step == 1) stringResource(R.string.profile_manage_account_skip) else null,
+        onSecondaryClick = if (step == 1) onSkip else null,
+        secondaryEnabled = !isBusy,
+        note = if (step == 2) stringResource(R.string.profile_manage_account_permanent_note) else null,
+    )
 }
 
 @Composable
@@ -911,7 +864,7 @@ private fun StepHeader(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
     }
@@ -953,7 +906,7 @@ private fun BigLossCard(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }
@@ -1054,7 +1007,7 @@ private fun StatPill(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }
@@ -1125,7 +1078,7 @@ private fun DangerRow(
     subtitle: String,
     onClick: () -> Unit,
     titleColor: Color = MaterialTheme.colorScheme.onSurface,
-    chevronTint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    chevronTint: Color = sakhiTertiaryLabel(),
 ) {
     Row(
         modifier = Modifier
@@ -1158,7 +1111,7 @@ private fun DangerRow(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
         Icon(

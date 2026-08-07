@@ -94,6 +94,8 @@ import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.repositories.SanityFaq
 import team.sakhi.repositories.SanityLegalPage
 import team.sakhi.repositories.SanityPortableTextBlock
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 /**
  * Generic renderer for any [ContentPageId]. Legal/About/Help sub-pages first try
@@ -293,7 +295,7 @@ private fun LiveSanityPageContent(page: SanityLegalPage, languageCode: String) {
         Text(
             text = stringResource(R.string.profile_content_last_updated, formattedDate),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
     }
     PortableTextContent(blocks = page.body?.blocks(languageCode).orEmpty())
@@ -361,14 +363,14 @@ private fun PortableTextBlockView(block: SanityPortableTextBlock) {
                 Text(
                     text = block.plainText,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }
         else -> Text(
             text = block.asAnnotatedString(),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
     }
 }
@@ -394,7 +396,7 @@ private fun BulletList(blocks: List<SanityPortableTextBlock>) {
                 Text(
                     text = block.plainText,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }
@@ -433,7 +435,7 @@ private fun LiveFaqContent(faqs: List<SanityFaq>, languageCode: String) {
                             tint = if (expandedId == faqId) {
                                 MaterialTheme.colorScheme.primary
                             } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                                sakhiSecondaryLabel()
                             },
                             modifier = Modifier.padding(start = SakhiSpacing.space3),
                         )
@@ -443,7 +445,7 @@ private fun LiveFaqContent(faqs: List<SanityFaq>, languageCode: String) {
                         Text(
                             text = faq.answer.localized(languageCode),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                             modifier = Modifier.padding(SakhiSpacing.space4),
                         )
                     }
@@ -503,7 +505,7 @@ private fun ContentCard(
                 Text(
                     text = itemBody,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = badgeStyle.bodySize.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }
@@ -593,7 +595,7 @@ private fun TextContentCard(item: ContentItem) {
                 Text(
                     text = itemBody,
                     style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }

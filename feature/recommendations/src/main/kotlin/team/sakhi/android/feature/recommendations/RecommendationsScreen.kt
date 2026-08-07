@@ -35,6 +35,8 @@ import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.phasePrimaryColor
 import team.sakhi.android.ui.PhaseBadge
 import team.sakhi.models.CyclePhase
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
 
 /**
  * Phase 1 recommendations shell: shared curated recommendations, USDA enrichment,
@@ -66,7 +68,7 @@ fun RecommendationsScreen(
         Text(
             text = recommendationsSummary(uiState),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
         if (uiState.phase != CyclePhase.UNKNOWN) {
             PhaseBadge(
@@ -144,7 +146,7 @@ fun RecommendationsScreen(
                         Text(
                             text = stringResource(R.string.recommendations_powered_by_ai),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                         Spacer(modifier = Modifier.weight(1f))
                         if (uiState.isRefreshingInsight) {

@@ -55,6 +55,8 @@ import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.design.DesignTokens
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 private const val FEEDBACK_EMAIL = "hello@getswipe.in"
 private const val MAX_CHARS = 500
@@ -208,7 +210,7 @@ private fun FeedbackTypeMenuCard(
                 Icon(
                     imageVector = Icons.Filled.UnfoldMore,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = sakhiSecondaryLabel(),
                     modifier = Modifier.size(FeedbackTypeChevronSize),
                 )
             }
@@ -266,7 +268,7 @@ private fun FeedbackInputCard(
                     Text(
                         text = stringResource(selectedType.placeholderRes),
                         style = MaterialTheme.typography.bodyMedium.copy(fontSize = FeedbackInputTextSize),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        color = sakhiSecondaryLabel().copy(alpha = 0.7f),
                         modifier = Modifier.padding(top = SakhiSpacing.space1, start = 4.dp),
                     )
                 }
@@ -290,7 +292,7 @@ private fun FeedbackInputCard(
                 color = if (nearingLimit) {
                     MaterialTheme.colorScheme.primary
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                    sakhiSecondaryLabel()
                 },
             )
         }
@@ -347,7 +349,7 @@ private fun FeedbackSubmittedState() {
             Text(
                 text = stringResource(R.string.profile_feedback_success_body),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space8),
             )

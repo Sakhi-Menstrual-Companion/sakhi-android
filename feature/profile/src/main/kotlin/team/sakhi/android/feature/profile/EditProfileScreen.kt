@@ -1,6 +1,7 @@
 package team.sakhi.android.feature.profile
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -34,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -43,6 +45,9 @@ import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.models.UserProfile
 import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.SessionManager
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.common.toSafeUserMessage
 
 private enum class EditProfileRoute {
     Root, Name, Height, Weight
@@ -66,8 +71,6 @@ fun EditProfileScreen(onBack: () -> Unit) {
     val userProfileRepository = koinInject<UserProfileRepository>()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    val loadFailedText = stringResource(R.string.edit_profile_load_failed)
-    val saveFailedText = stringResource(R.string.edit_profile_save_failed)
 
     var profile by remember { mutableStateOf<UserProfile?>(null) }
     var route by remember { mutableStateOf(EditProfileRoute.Root) }
@@ -87,7 +90,15 @@ fun EditProfileScreen(onBack: () -> Unit) {
     var useMetricHeight by remember { mutableStateOf(true) }
     var useMetricWeight by remember { mutableStateOf(true) }
 
-    val isPartnerRole = sessionManager.current?.isViewingOwnData == false
+    // Reactive, not a one-shot `sessionManager.current` snapshot -- same fix as
+    // `NotificationsScreen.kt` earlier tonight: a same-user own-data/partner-view
+    // session flip while this screen is open must actually update which fields show.
+    val currentSession by sessionManager.session.collectAsStateWithLifecycle()
+    val isPartnerRole = currentSession?.isViewingOwnData == false
+
+    // Same gap as elsewhere in the app: system back from the Name/Height/Weight
+    // sub-editors used to skip straight past Root and close the whole sheet.
+    BackHandler(enabled = route != EditProfileRoute.Root) { route = EditProfileRoute.Root }
 
     LaunchedEffect(Unit) {
         val userId = sessionManager.current?.userId
@@ -102,7 +113,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
                 heightCm = it?.heightCm?.takeIf { h -> h > 0 } ?: 0.0
                 weightKg = it?.weightKg?.takeIf { w -> w > 0 } ?: 0.0
             }
-            .onFailure { error = it.message ?: loadFailedText }
+            .onFailure { error = it.toSafeUserMessage(context, R.string.edit_profile_load_failed) }
         isLoading = false
     }
 
@@ -117,7 +128,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
             )
             userProfileRepository.upsert(updated)
                 .onSuccess { profile = updated }
-                .onFailure { error = it.message ?: saveFailedText }
+                .onFailure { error = it.toSafeUserMessage(context, R.string.edit_profile_save_failed) }
         }
     }
 
@@ -195,7 +206,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                 ) {
                                     Text(text = stringResource(R.string.edit_profile_phone), style = MaterialTheme.typography.bodyLarge)
-                                    Text(text = phone, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text(text = phone, style = MaterialTheme.typography.bodyMedium, color = sakhiSecondaryLabel())
                                 }
                             }
                         }
@@ -274,14 +285,14 @@ private fun EditProfileRow(
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodyMedium,
-                color = if (isEditing) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isEditing) MaterialTheme.colorScheme.primary else sakhiSecondaryLabel(),
                 maxLines = 1,
             )
             if (isEditing) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = sakhiTertiaryLabel(),
                     modifier = Modifier.height(SakhiSpacing.space5),
                 )
             }

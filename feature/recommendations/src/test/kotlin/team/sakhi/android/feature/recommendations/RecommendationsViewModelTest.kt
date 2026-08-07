@@ -156,7 +156,10 @@ class RecommendationsViewModelTest {
                 Result.success(DailyInsight("key", "default partner insight"))
             every { clearCache() } just Runs
         },
-        appContext: Context = mockk(),
+        appContext: Context = mockk {
+            every { getString(R.string.recommendations_load_failed) } returns
+                "Recommendations could not be loaded right now."
+        },
     ) = RecommendationsViewModel(
         sessionManager,
         cycleDataRepository,
@@ -417,7 +420,10 @@ class RecommendationsViewModelTest {
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals("network down", state.error)
+        // Was asserting the RAW exception message. That pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible copy. UI shows app copy; cause is logged only.
+        assertEquals("Recommendations could not be loaded right now.", state.error)
         assertEquals(CyclePhase.UNKNOWN, state.phase)
         assertFalse(state.isLoading)
     }

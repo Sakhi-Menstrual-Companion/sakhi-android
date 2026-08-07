@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.profile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.Shield
@@ -17,6 +18,8 @@ import androidx.compose.ui.unit.sp
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.ui.DetailSheetScaffold
+import team.sakhi.android.ui.SakhiNavDirection
+import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.design.SakhiUIColors
 
 /** Ports iOS `HelpSupportView.swift`: FAQ + Safety Guidelines navigation rows. */
@@ -24,9 +27,20 @@ import team.sakhi.design.SakhiUIColors
 fun HelpSupportScreen(onBack: () -> Unit) {
     var openPage by remember { mutableStateOf<ContentPageId?>(null) }
 
-    openPage?.let { id ->
-        ContentPageScreen(pageId = id, onBack = { openPage = null })
-        return
+    BackHandler(enabled = openPage != null) { openPage = null }
+
+    // Opening a content page pushes it in from the right; closing pops it back --
+    // the same app-wide slide every other screen swap uses, instead of an instant cut.
+    SakhiScreenTransition(
+        targetState = openPage,
+        directionFor = { _, target ->
+            if (target != null) SakhiNavDirection.Forward else SakhiNavDirection.Backward
+        },
+        label = "help_support_page_transition",
+    ) { page ->
+    if (page != null) {
+        ContentPageScreen(pageId = page, onBack = { openPage = null })
+        return@SakhiScreenTransition
     }
 
     DetailSheetScaffold(
@@ -66,5 +80,6 @@ fun HelpSupportScreen(onBack: () -> Unit) {
                 ),
             )
         }
+    }
     }
 }

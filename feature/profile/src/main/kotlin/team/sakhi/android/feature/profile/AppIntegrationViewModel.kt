@@ -20,6 +20,7 @@ import team.sakhi.android.platform.HealthConnectAvailability
 import team.sakhi.android.platform.HealthConnectSyncResult
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
+import team.sakhi.android.common.toSafeUserMessage
 
 data class AppIntegrationUiState(
     val session: SessionContext? = null,
@@ -111,7 +112,7 @@ class AppIntegrationViewModel(
                         it.copy(
                             isSyncing = false,
                             isLoading = false,
-                            error = throwable.message ?: appContext.getString(R.string.profile_app_integration_sync_failed),
+                            error = throwable.toSafeUserMessage(appContext, R.string.profile_app_integration_sync_failed),
                         )
                     }
                 }

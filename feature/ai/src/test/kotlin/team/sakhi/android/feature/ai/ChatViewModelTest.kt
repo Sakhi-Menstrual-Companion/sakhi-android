@@ -458,7 +458,12 @@ class ChatViewModelTest {
         viewModel.onInputChanged("hello there")
         viewModel.sendCurrentMessage()
         runCurrent()
-        assertEquals("network down", viewModel.uiState.value.error)
+        // Was asserting the RAW exception message. That assertion pinned a real
+        // defect: Supabase/Ktor messages embed the request URL, the
+        // `Authorization: Bearer ...` header and the apikey, and they rendered
+        // verbatim as user-visible error text (seen on a real device). The UI must
+        // show app copy; the raw cause is logged only.
+        assertEquals("Unable to send that message right now.", viewModel.uiState.value.error)
 
         advanceUntilIdle()
 
@@ -644,7 +649,12 @@ class ChatViewModelTest {
 
         val state = viewModel.uiState.value
         assertFalse(state.isSending)
-        assertEquals("bad request", state.error)
+        // Was asserting the RAW exception message. That assertion pinned a real
+        // defect: Supabase/Ktor messages embed the request URL, the
+        // `Authorization: Bearer ...` header and the apikey, and they rendered
+        // verbatim as user-visible error text (seen on a real device). The UI must
+        // show app copy; the raw cause is logged only.
+        assertEquals("Unable to send that message right now.", state.error)
         assertTrue(state.messages.first { it.isUser }.isFailed)
         advanceUntilIdle()
     }

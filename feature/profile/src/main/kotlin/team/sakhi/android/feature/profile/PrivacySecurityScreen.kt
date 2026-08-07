@@ -2,6 +2,7 @@ package team.sakhi.android.feature.profile
 
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -59,6 +60,8 @@ import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.SessionManager
 import java.io.File
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 private val PrivacySecurityDividerInset = SakhiSpacing.space4 + 24.dp + SakhiSpacing.space3
 private val PrivacySecurityRowIconSize = 15.dp
@@ -108,15 +111,21 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column {
-                        PrivacyToggleRow(
-                            title = stringResource(R.string.profile_privacy_screenshot_warning),
-                            subtitle = stringResource(R.string.profile_privacy_screenshot_warning_subtitle),
-                            icon = Icons.Filled.PhotoCamera,
-                            kvStore = kvStore,
-                            key = UserPreferenceKeys.PRIVACY_SCREENSHOT_WARNING,
-                            default = UserPreferenceDefaults.PRIVACY_SCREENSHOT_WARNING,
-                        )
-                        HorizontalDivider(modifier = Modifier.padding(start = PrivacySecurityDividerInset))
+                        // MainActivity can only detect screenshots on API 34+
+                        // (`registerScreenCaptureCallback`); the pre-34 alternative needs
+                        // READ_MEDIA_IMAGES, which this app will not ask for. Below 34 the
+                        // row is hidden rather than shown as a toggle that does nothing.
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                            PrivacyToggleRow(
+                                title = stringResource(R.string.profile_privacy_screenshot_warning),
+                                subtitle = stringResource(R.string.profile_privacy_screenshot_warning_subtitle),
+                                icon = Icons.Filled.PhotoCamera,
+                                kvStore = kvStore,
+                                key = UserPreferenceKeys.PRIVACY_SCREENSHOT_WARNING,
+                                default = UserPreferenceDefaults.PRIVACY_SCREENSHOT_WARNING,
+                            )
+                            HorizontalDivider(modifier = Modifier.padding(start = PrivacySecurityDividerInset))
+                        }
                         PrivacyToggleRow(
                             title = stringResource(R.string.profile_privacy_analytics),
                             subtitle = stringResource(R.string.profile_privacy_analytics_subtitle),
@@ -187,7 +196,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                             Text(
                                 text = stringResource(R.string.profile_privacy_download_data_subtitle),
                                 style = MaterialTheme.typography.bodySmall.copy(fontSize = PrivacySecurityRowSubtitleSize),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = sakhiSecondaryLabel(),
                             )
                         }
                         if (isExporting) {
@@ -196,7 +205,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = sakhiTertiaryLabel(),
                                 modifier = Modifier.size(PrivacySecurityChevronSize),
                             )
                         }
@@ -208,7 +217,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                         fontSize = PrivacySecurityFootnoteSize,
                         lineHeight = PrivacySecurityFootnoteLineHeight,
                     ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     textAlign = TextAlign.Start,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -269,13 +278,13 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                                     Text(
                                         text = stringResource(row.subtitleRes),
                                         style = MaterialTheme.typography.bodySmall.copy(fontSize = PrivacySecurityRowSubtitleSize),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = sakhiSecondaryLabel(),
                                     )
                                 }
                                 Icon(
                                     imageVector = Icons.Filled.ArrowOutward,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    tint = sakhiTertiaryLabel(),
                                     modifier = Modifier.size(PrivacySecurityTrailingArrowSize),
                                 )
                             }
@@ -291,7 +300,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                         fontSize = PrivacySecurityFootnoteSize,
                         lineHeight = PrivacySecurityFootnoteLineHeight,
                     ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     textAlign = TextAlign.Start,
                     modifier = Modifier
                         .fillMaxWidth()
@@ -339,7 +348,7 @@ private fun PrivacyToggleRow(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = PrivacySecurityRowSubtitleSize),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
         androidx.compose.material3.Switch(

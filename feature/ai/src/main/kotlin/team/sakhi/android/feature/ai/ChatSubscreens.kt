@@ -67,13 +67,22 @@ import androidx.compose.ui.unit.dp
 import androidx.annotation.StringRes
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiLightPink
+import team.sakhi.android.designsystem.sakhiSystemGray5
+import team.sakhi.android.designsystem.sakhiSystemGray6
 import team.sakhi.android.ui.BackButton
 import team.sakhi.android.feature.reports.ReportDateRangePreset
 import team.sakhi.android.ui.EmptyState
 import team.sakhi.android.ui.GlassCard
+import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SakhiTextField
 import team.sakhi.models.AICardType
 import team.sakhi.models.ConversationMessage
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clip
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
 
 internal enum class ChatDestination {
     Thread,
@@ -138,19 +147,19 @@ internal fun ChatInfoScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
                 ) {
-                    Box(
+                    // iOS `SakhiAIInfoView` shows the real brand mark here:
+                    // `Image("BrandMedia/AppLogo").frame(width: 80, height: 80)`.
+                    // The chat header was corrected to use the logo earlier; this screen
+                    // kept the generic Material sparkle, so the one screen that exists to
+                    // introduce Sakhi was the one still showing a stock glyph.
+                    Image(
+                        painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_app_logo),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .size(80.dp)
-                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.AutoAwesome,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(36.dp),
-                        )
-                    }
+                            .clip(CircleShape),
+                    )
                     Text(
                         text = stringResource(R.string.chat_title),
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
@@ -158,7 +167,7 @@ internal fun ChatInfoScreen(
                     Text(
                         text = stringResource(R.string.chat_info_subtitle),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                 }
             }
@@ -276,7 +285,7 @@ internal fun ChatReportCard(
                 Text(
                     text = stringResource(R.string.chat_report_card_subtitle),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
 
@@ -290,8 +299,11 @@ internal fun ChatReportCard(
                     Box(
                         modifier = Modifier
                             .size(26.dp)
+                            // iOS `SakhiAIReportCard`: `.frame(width: 26, height: 26)
+                            // .background(Circle().fill(DS.Colors.gray6))`. `surfaceVariant`
+                            // rendered this lavender.
                             .background(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                color = sakhiSystemGray6(),
                                 shape = CircleShape,
                             ),
                         contentAlignment = Alignment.Center,
@@ -299,7 +311,7 @@ internal fun ChatReportCard(
                         Icon(
                             imageVector = Icons.Filled.Close,
                             contentDescription = stringResource(R.string.chat_report_card_close),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = sakhiSecondaryLabel(),
                             modifier = Modifier.size(11.dp),
                         )
                     }
@@ -327,7 +339,7 @@ internal fun ChatReportCard(
                 Text(
                     text = stringResource(R.string.chat_report_card_building),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
             return@GlassCard
@@ -443,7 +455,7 @@ internal fun ChatSearchScreen(
                         Icon(
                             imageVector = Icons.Filled.Search,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = sakhiSecondaryLabel(),
                             modifier = Modifier.size(36.dp),
                         )
                     },
@@ -458,7 +470,7 @@ internal fun ChatSearchScreen(
                         Icon(
                             imageVector = Icons.Filled.Search,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = sakhiSecondaryLabel(),
                             modifier = Modifier.size(36.dp),
                         )
                     },
@@ -524,7 +536,7 @@ internal fun ChatMediaScreen(
                     style = MaterialTheme.typography.bodyMedium.copy(
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                     ),
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else sakhiSecondaryLabel(),
                     modifier = Modifier
                         .weight(1f)
                         .semantics {
@@ -668,19 +680,9 @@ private fun ChatSubscreenHeader(
     onBack: () -> Unit,
 ) {
     Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BackButton(onClick = onBack)
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.padding(start = SakhiSpacing.space1),
-            )
-        }
+        // Shared nav bar, same as every other sheet -- this used to be a bespoke row with
+        // its own paddings and its own title size.
+        SakhiNavBar(onBack = onBack, title = title)
         HorizontalDivider()
     }
 }
@@ -699,7 +701,7 @@ private fun ChatStatTile(
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
     }
 }
@@ -746,7 +748,7 @@ private fun ChatActionRow(
             Text(
                 text = badge,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
         // iOS's `dangerCard` row (`SakhiAIInfoView.swift`) has no trailing chevron --
@@ -755,7 +757,7 @@ private fun ChatActionRow(
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = sakhiSecondaryLabel(),
                 modifier = Modifier
                     .size(14.dp)
                     .width(14.dp),
@@ -779,8 +781,13 @@ private fun SearchResultRow(
             Box(
                 modifier = Modifier
                     .size(36.dp)
+                    // iOS `SakhiAISearchView`: `Circle().fill(message.isUser ?
+                    // DS.Colors.lightPink : DS.Colors.gray5).frame(width: 36, height: 36)`.
+                    // Android had `primary.copy(alpha = 0.12f)` for the user side, which is a
+                    // different colour from lightPink, and `surfaceVariant` for Sakhi's side,
+                    // which is the lavender.
                     .background(
-                        if (message.isUser) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f) else MaterialTheme.colorScheme.surfaceVariant,
+                        if (message.isUser) sakhiLightPink() else sakhiSystemGray5(),
                         CircleShape,
                     ),
                 contentAlignment = Alignment.Center,
@@ -788,7 +795,7 @@ private fun SearchResultRow(
                 Icon(
                     imageVector = if (message.isUser) Icons.Filled.Person else Icons.Filled.AutoAwesome,
                     contentDescription = null,
-                    tint = if (message.isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (message.isUser) MaterialTheme.colorScheme.primary else sakhiSecondaryLabel(),
                     modifier = Modifier.size(16.dp),
                 )
             }
@@ -807,13 +814,13 @@ private fun SearchResultRow(
                     Text(
                         text = timestampText,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                 }
                 Text(
                     text = message.content,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     maxLines = contentMaxLines,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -852,7 +859,7 @@ private fun MediaMessageRow(message: ConversationMessage) {
                 Text(
                     text = message.content,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -860,7 +867,7 @@ private fun MediaMessageRow(message: ConversationMessage) {
             Text(
                 text = formattedDate(message.timestamp),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
     }
@@ -895,7 +902,7 @@ private fun DocMessageRow(message: ConversationMessage) {
                 Text(
                     text = formattedDate(message.timestamp),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }
@@ -938,7 +945,7 @@ private fun LinkItemRow(item: LinkItem) {
                 Text(
                     text = item.snippet,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -946,7 +953,7 @@ private fun LinkItemRow(item: LinkItem) {
             Text(
                 text = formattedTime(item.timestamp),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
     }
@@ -966,7 +973,7 @@ private fun ChatEmptyState(
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = sakhiSecondaryLabel(),
                 modifier = Modifier.size(36.dp),
             )
         },

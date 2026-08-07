@@ -215,7 +215,12 @@ class CareViewModelTest {
 
         val state = viewModel.uiState.value
         assertFalse(state.isRefreshing)
-        assertEquals("network down", state.error)
+        // Was asserting the RAW exception message. That assertion pinned a real
+        // defect: Supabase/Ktor messages embed the request URL, the
+        // `Authorization: Bearer ...` header and the apikey, and they rendered
+        // verbatim as user-visible error text (seen on a real device). The UI must
+        // show app copy; the raw cause is logged only.
+        assertEquals("Unable to load care status right now.", state.error)
     }
 
     @Test
@@ -382,7 +387,12 @@ class CareViewModelTest {
 
         val state = viewModel.uiState.value
         assertFalse(state.isCreatingInvite)
-        assertEquals("server error", state.error)
+        // Was asserting the RAW exception message. That assertion pinned a real
+        // defect: Supabase/Ktor messages embed the request URL, the
+        // `Authorization: Bearer ...` header and the apikey, and they rendered
+        // verbatim as user-visible error text (seen on a real device). The UI must
+        // show app copy; the raw cause is logged only.
+        assertEquals("Unable to create an invite right now.", state.error)
     }
 
     @Test
@@ -436,7 +446,12 @@ class CareViewModelTest {
         viewModel.acceptInvitation()
         advanceUntilIdle()
 
-        assertEquals("invalid code", viewModel.uiState.value.error)
+        // Was asserting the RAW exception message. That assertion pinned a real
+        // defect: Supabase/Ktor messages embed the request URL, the
+        // `Authorization: Bearer ...` header and the apikey, and they rendered
+        // verbatim as user-visible error text (seen on a real device). The UI must
+        // show app copy; the raw cause is logged only.
+        assertEquals("Unable to accept this invite right now.", viewModel.uiState.value.error)
         verify(exactly = 1) { hapticManager.error() }
     }
 

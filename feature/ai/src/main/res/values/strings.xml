@@ -3,7 +3,9 @@
     <string name="chat_back">Back</string>
     <string name="chat_close">Close</string>
     <string name="chat_send">Send</string>
-    <string name="chat_title">Sakhi AI</string>
+    <!-- iOS `ai.chat.title` is "Sakhi", not "Sakhi AI". The assistant introduces
+         herself by name in the chat header. -->
+    <string name="chat_title">Sakhi</string>
     <string name="chat_online">online</string>
     <string name="chat_open_nearby_places">Open nearby places</string>
     <string name="chat_header_accessibility_label">Sakhi AI chat</string>

@@ -59,6 +59,8 @@ import team.sakhi.preferences.ThemeMode
 import team.sakhi.preferences.ThemePreferenceStore
 import team.sakhi.preferences.UserPreferenceDefaults
 import team.sakhi.preferences.UserPreferenceKeys
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 private val AppearanceRowDividerInset = SakhiSpacing.space4 + 24.dp + SakhiSpacing.space3
 private val AppearanceThemeIconSize = 15.dp
@@ -129,7 +131,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
                                     tint = if (currentMode == option.mode) {
                                         MaterialTheme.colorScheme.primary
                                     } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                        sakhiSecondaryLabel()
                                     },
                                     modifier = Modifier.size(AppearanceThemeIconSize),
                                 )
@@ -243,13 +245,13 @@ private fun LanguageCard(currentLanguage: AppLanguage, onLanguageChosen: (AppLan
                                 currentDisplayName,
                             ),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                     }
                     Icon(
                         imageVector = Icons.Filled.UnfoldMore,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = sakhiTertiaryLabel(),
                         modifier = Modifier.size(18.dp),
                     )
                 }
@@ -355,7 +357,7 @@ internal fun PreferenceToggleRow(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
         Switch(

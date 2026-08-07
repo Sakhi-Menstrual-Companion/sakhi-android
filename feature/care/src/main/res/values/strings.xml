@@ -38,12 +38,20 @@
     <string name="care_pending_share_message">Hey! I use Sakhi to track my health. Open Sakhi → My Sakhi → \"I have a code\" → enter: %1$s 💕</string>
     <string name="care_cancelling">Cancelling...</string>
     <string name="care_cancel_request">Cancel Request</string>
+    <!-- Reserved, not dead: this is iOS's `care.invite.title`, shown by AcceptInviteSheet,
+         which has no Android counterpart yet. Keep it for when that sheet is built. -->
     <string name="care_title_be_her_sakhi">Be Her Sakhi</string>
     <string name="care_disconnected_title">Let Someone Stay Close, Always</string>
     <string name="care_intro_optional_share">Pick one person who\'ll always know you\'re okay, and be the first to know if you\'re not.</string>
     <string name="care_disconnected_feature_1">They know you\'re okay. Even from far.</string>
     <string name="care_disconnected_feature_2">One Tap. They\'re There.</string>
     <string name="care_disconnected_feature_3">You Decide. Always.</string>
+    <!-- iOS care.onboarding.featureN.subtitle. iOS renders these three features through
+         FeatureBulletRow, which always carries a subtitle; Android was showing the titles
+         alone, which truncates the copy rather than restyling it. -->
+    <string name="care_disconnected_feature_1_subtitle">A quiet update, before worry even starts.</string>
+    <string name="care_disconnected_feature_2_subtitle">The moment you need them, they\'ll know. No missed calls. No delay.</string>
+    <string name="care_disconnected_feature_3_subtitle">Only you choose what they see. Your health, your story. Shared only when you want.</string>
     <string name="care_invite_someone_you_trust">Pick Your Person</string>
     <string name="care_invite_prepare_code">Someone who shows up, every single time.</string>
     <string name="care_label_name_optional">Name, if you want to add one</string>
@@ -103,4 +111,12 @@
     <string name="care_error_cancel_invite">Unable to cancel this invite right now.</string>
     <string name="care_error_complete_action">Unable to complete this right now.</string>
     <string name="care_error_permission_change_not_saved">The latest permission change was not saved. Please try again.</string>
+    <!-- Partner requesting logging access. Copy from iOS LogPermissionSheet.swift. -->
+    <string name="care_log_permission_title">You don\'t have permission</string>
+    <string name="care_log_permission_subtitle">Only she can log her cycle data.\nYou can ask her to grant you logging access.</string>
+    <string name="care_log_permission_request">Request to Log</string>
+    <string name="care_log_permission_request_sent">Request Sent</string>
+    <string name="care_log_permission_not_now">Not Now</string>
+    <string name="care_log_permission_request_failed">Your request could not be sent. Please try again.</string>
+    <string name="care_log_permission_sent_note">Request sent, she\'ll be notified.</string>
 </resources>

@@ -25,6 +25,7 @@ import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
+import team.sakhi.android.common.toSafeUserMessage
 
 enum class ReportsPhase {
     Config,
@@ -249,8 +250,8 @@ class ReportsViewModel(
 
             if (cycles == null || logs == null) {
                 if (discardStaleGeneration(activeSession)) return@launch
-                val errorMessage = cyclesResult.exceptionOrNull()?.message
-                    ?: logsResult.exceptionOrNull()?.message
+                val errorMessage = (cyclesResult.exceptionOrNull() ?: logsResult.exceptionOrNull())
+                    ?.toSafeUserMessage(appContext, R.string.reports_load_failed)
                     ?: appContext.getString(R.string.reports_load_failed)
                 _uiState.value = _uiState.value.copy(
                     phase = ReportsPhase.Error,
@@ -295,8 +296,7 @@ class ReportsViewModel(
                 if (discardStaleGeneration(activeSession)) return@launch
                 _uiState.value = _uiState.value.copy(
                     phase = ReportsPhase.Error,
-                    errorMessage = throwable.message
-                        ?: appContext.getString(R.string.reports_export_failed),
+                    errorMessage = throwable.toSafeUserMessage(appContext, R.string.reports_export_failed),
                 )
                 return@launch
             }

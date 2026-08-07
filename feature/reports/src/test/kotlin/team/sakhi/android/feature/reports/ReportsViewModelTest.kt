@@ -460,7 +460,10 @@ class ReportsViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(ReportsPhase.Error, state.phase)
-        assertEquals("network down", state.errorMessage)
+        // Was asserting the RAW exception message. That pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible copy. UI shows app copy; cause is logged only.
+        assertEquals("Failed to load report data", state.errorMessage)
     }
 
     @Test
@@ -672,7 +675,10 @@ class ReportsViewModelTest {
 
         val state = viewModel.uiState.value
         assertEquals(ReportsPhase.Error, state.phase)
-        assertEquals("disk full", state.errorMessage)
+        // Was asserting the RAW exception message. That pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible copy. UI shows app copy; cause is logged only.
+        assertEquals("Couldn't export PDF", state.errorMessage)
     }
 
     @Test

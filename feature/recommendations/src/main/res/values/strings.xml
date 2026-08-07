@@ -1,5 +1,6 @@
 <resources>
     <string name="recommendations_title">Recommendations</string>
+    <string name="recommendations_load_failed">Recommendations could not be loaded right now.</string>
     <string name="recommendations_shared_title">Shared recommendations</string>
     <string name="recommendations_loading_summary">Loading shared recommendations</string>
     <string name="recommendations_phase_unresolved_summary">Recommendations are available, but the current phase could not be resolved right now.</string>

@@ -60,6 +60,8 @@ import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.preferences.UserPreferenceDefaults
 import team.sakhi.preferences.UserPreferenceKeys
 import team.sakhi.session.SessionManager
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 /**
  * Ports iOS `NotificationsSettingsView.swift`'s toggle rows, persisted through
@@ -310,7 +312,7 @@ private fun ToggleSection(
             Text(
                 text = stringResource(note),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
     }
@@ -350,7 +352,7 @@ private fun ToggleRow(
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = NotificationRowSubtitleSize),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
         Switch(
@@ -408,13 +410,13 @@ private fun NotificationSettingsCard(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodySmall.copy(fontSize = NotificationRowSubtitleSize),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
             Icon(
                 imageVector = Icons.Filled.ArrowOutward,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = sakhiTertiaryLabel(),
                 modifier = Modifier
                     .width(NotificationSettingsTrailingIconSize)
                     .height(NotificationSettingsTrailingIconSize),

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.Shield
@@ -48,6 +49,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
@@ -63,11 +65,19 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiConfirm
+import team.sakhi.android.designsystem.sakhiDeepRose
+import team.sakhi.android.designsystem.sakhiLightPink
+import team.sakhi.android.designsystem.sakhiProfileCardBackground
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.designsystem.sakhiWarning
 import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.models.CycleHealthStatus
 import team.sakhi.preferences.ThemeMode
 import team.sakhi.preferences.ThemePreferenceStore
+import team.sakhi.android.ui.SakhiNavBar
 
 /**
  * Real port of iOS `ProfileView.swift`'s grouped settings list: same section
@@ -102,6 +112,7 @@ fun ProfileScreen(
     onAboutClick: () -> Unit = {},
     onFeedbackClick: () -> Unit = {},
     onManageAccountClick: () -> Unit = {},
+    onClose: (() -> Unit)? = null,
     viewModel: ProfileViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -152,7 +163,7 @@ fun ProfileScreen(
                         CircularProgressIndicator(modifier = Modifier.size(16.dp))
                     } else {
                         Text(
-                            text = stringResource(R.string.profile_sign_out_title),
+                            text = stringResource(R.string.profile_sign_out_action),
                             color = MaterialTheme.colorScheme.error,
                         )
                     }
@@ -168,7 +179,17 @@ fun ProfileScreen(
 
     // iOS presents this as `.sheet(...).presentationDragIndicator(.hidden)` --
     // no drag handle, relying on the in-header close button instead.
-    SheetSurface {
+    // iOS `.profileStaticPageBackground()` -> `DS.Colors.background` (#F8F2F4) in light,
+    // not the brand lightPink every other sheet uses.
+    SheetSurface(color = MaterialTheme.colorScheme.background) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            // iOS: `DSNavBar(onClose: { dismissSheet() }, title: "Profile")`
+            // (`ProfileView.swift:205`). Android had a bare headline Text and **no close
+            // button at all**, despite the comment above stating iOS relies on one.
+            SakhiNavBar(
+                title = stringResource(R.string.profile_title),
+                onClose = onClose,
+            )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -176,14 +197,6 @@ fun ProfileScreen(
                 .padding(SakhiSpacing.space4),
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
         ) {
-            Text(
-                text = stringResource(R.string.profile_title),
-                style = MaterialTheme.typography.headlineMedium,
-                modifier = Modifier.padding(
-                    horizontal = SakhiSpacing.space2,
-                    vertical = SakhiSpacing.space2,
-                ),
-            )
 
             ProfileCard(
                 uiState = uiState,
@@ -214,8 +227,8 @@ fun ProfileScreen(
                     modifier = Modifier.padding(top = SakhiSpacing.space3),
                 )
                 Surface(
-                    shape = RoundedCornerShape(SakhiRadius.xxl),
-                    tonalElevation = SakhiSpacing.space1,
+                    shape = RoundedCornerShape(ProfileCardRadius),
+                    color = sakhiProfileCardBackground(),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column {
@@ -231,6 +244,7 @@ fun ProfileScreen(
 
             ProfileFooter(onConnectClick = { uriHandler.openUri("https://sakhi.rachna.co") })
         }
+        }
     }
 }
 
@@ -242,8 +256,10 @@ private fun ProfileCard(
     onClick: () -> Unit,
 ) {
     Surface(
-        shape = RoundedCornerShape(SakhiRadius.xxl),
-        tonalElevation = SakhiSpacing.space1,
+        shape = RoundedCornerShape(ProfileCardRadius),
+        // iOS `.dsCard(.pink)` = r16 filled with `profileCardBackground` (white). Letting
+        // this fall through to `colorScheme.surface` drew a pink card on the pink page.
+        color = sakhiProfileCardBackground(),
         modifier = Modifier
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {}
@@ -255,33 +271,24 @@ private fun ProfileCard(
                     .fillMaxWidth()
                     .padding(SakhiSpacing.space4),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
             ) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(52.dp),
+                // iOS `appIconView`: a 52pt rounded SQUARE (r12) filled `lightPink` with
+                // the 30pt brand symbol on it -- not an initials avatar. Android drew a
+                // pink circle with the first letter of the account name, which is a
+                // different element entirely.
+                Box(
+                    modifier = Modifier
+                        .size(52.dp)
+                        .background(sakhiLightPink(), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val initials = avatarInitials(uiState)
-                        if (initials != null) {
-                            Text(
-                                text = initials,
-                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.onPrimary,
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.Person,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                            )
-                        }
-                    }
+                    Icon(
+                        painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_symbol),
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(30.dp),
+                    )
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
@@ -293,10 +300,20 @@ private fun ProfileCard(
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // iOS: `.foregroundColor(isAccountSecureOnline ? DS.Colors.confirm
+                        // : DS.Colors.secondaryLabel)` -- the secure state is GREEN, and it
+                        // is the one signal on this screen telling her the data is off the
+                        // device. Android was drawing it in brand pink, indistinguishable
+                        // from every other accent here.
+                        val statusColor = if (uiState.isOfflineUser) {
+                            sakhiSecondaryLabel()
+                        } else {
+                            sakhiConfirm()
+                        }
                         Icon(
                             imageVector = if (uiState.isOfflineUser) Icons.Filled.PhoneAndroid else Icons.Filled.VerifiedUser,
                             contentDescription = null,
-                            tint = if (uiState.isOfflineUser) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                            tint = statusColor,
                             modifier = Modifier.size(12.dp),
                         )
                         Text(
@@ -306,7 +323,7 @@ private fun ProfileCard(
                                 stringResource(R.string.profile_synced_secure)
                             },
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (uiState.isOfflineUser) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
+                            color = statusColor,
                         )
                     }
                 }
@@ -314,7 +331,8 @@ private fun ProfileCard(
                 Icon(
                     imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // iOS: chevron.right in `tertiaryLabel`, the lightest of the three inks.
+                    tint = sakhiTertiaryLabel(),
                 )
             }
 
@@ -329,7 +347,7 @@ private fun ProfileCard(
                     Text(
                         text = stringResource(R.string.profile_cycle_health),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                     uiState.cycleHealthStatus?.let { status ->
                         CycleHealthBadge(status = status)
@@ -372,7 +390,8 @@ private fun ProfileSettingRow(item: ProfileSettingItem) {
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodySmall.copy(fontSize = ProfileSettingValueSize),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // iOS: lato(13) in `secondaryLabel`.
+                color = sakhiSecondaryLabel(),
             )
         }
         Icon(
@@ -381,7 +400,7 @@ private fun ProfileSettingRow(item: ProfileSettingItem) {
             tint = if (item.isDestructive) {
                 MaterialTheme.colorScheme.error.copy(alpha = 0.45f)
             } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
+                sakhiTertiaryLabel()
             },
             modifier = Modifier.size(ProfileSettingChevronSize),
         )
@@ -389,7 +408,7 @@ private fun ProfileSettingRow(item: ProfileSettingItem) {
 }
 
 private fun appearanceModeLabel(context: Context, themeMode: ThemeMode): String = when (themeMode) {
-    ThemeMode.SYSTEM -> context.getString(R.string.profile_appearance_theme_system)
+    ThemeMode.SYSTEM -> context.getString(R.string.profile_appearance_row_value_system)
     ThemeMode.LIGHT -> context.getString(R.string.profile_appearance_theme_light)
     ThemeMode.DARK -> context.getString(R.string.profile_appearance_theme_dark)
 }
@@ -412,7 +431,18 @@ private val ProfileSettingLeadingIconSize = 18.dp
 private val ProfileSettingTitleSize = 15.sp
 private val ProfileSettingValueSize = 13.sp
 private val ProfileSettingChevronSize = 11.dp
-private val ProfileSettingDividerInset = SakhiSpacing.space4 + ProfileSettingLeadingIconWidth + SakhiSpacing.space2
+
+/** iOS `.dsCard(.pink)` -> `DS.Radius.onboardingCard` = 16. */
+private val ProfileCardRadius = SakhiRadius.xl
+
+/**
+ * iOS: `.padding(.leading, DS.Spacing.m + 34 + DS.Spacing.s)` = 16 + 34 + 12 = 62.
+ *
+ * Written out rather than derived from the 28pt icon frame above: iOS uses 34 here, not
+ * the 28 it gives the icon, so deriving it produced a 52pt inset and the dividers started
+ * 10pt further left than iOS's.
+ */
+private val ProfileSettingDividerInset = 62.dp
 
 /** Same group labels, order, and item titles as iOS `ProfileView.groups`/`partnerGroups`. */
 private fun profileSettingGroups(
@@ -479,6 +509,11 @@ private fun profileSettingGroups(
         label = context.getString(R.string.profile_group_account),
         items = listOf(
             ProfileSettingItem(Icons.Filled.Storage, context.getString(R.string.profile_item_manage_account), onManageAccountClick),
+            // "Use Sakhi offline" is deliberately NOT listed yet. The screen exists
+            // (OfflineModeScreen) but Android cannot honour what it promises: every
+            // repository writes straight to Supabase, so logging does not work offline
+            // and there is no queued sync to pause. Re-add this row only once Android
+            // has a local-first write path. See Android-Live-Status-Log.md.
             ProfileSettingItem(Icons.AutoMirrored.Filled.Logout, context.getString(R.string.profile_item_sign_out), onSignOutClick, isDestructive = true),
         ),
     )
@@ -495,10 +530,14 @@ private fun profileName(context: android.content.Context, uiState: ProfileUiStat
 
 @Composable
 private fun CycleHealthBadge(status: CycleHealthStatus) {
+    // iOS `cycleRegularityDisplay` picks from DS.Colors: confirm / warning / danger, where
+    // `warning` is deepRose at 65% and `danger` is deepRose. Android had two hardcoded hexes
+    // that belong to neither palette -- #F39C48 in particular rendered the "Irregular" pill
+    // orange, the only non-brand colour on the screen.
     val color = when (status) {
-        CycleHealthStatus.REGULAR -> Color(0xFF34C759)
-        CycleHealthStatus.IRREGULAR -> Color(0xFFF39C48)
-        CycleHealthStatus.DELAYED -> MaterialTheme.colorScheme.error
+        CycleHealthStatus.REGULAR -> sakhiConfirm()
+        CycleHealthStatus.IRREGULAR -> sakhiWarning()
+        CycleHealthStatus.DELAYED -> sakhiDeepRose()
     }
     Row(
         horizontalArrangement = Arrangement.spacedBy(5.dp),
@@ -548,7 +587,7 @@ private fun ProfileFooter(onConnectClick: () -> Unit) {
         Text(
             text = stringResource(R.string.profile_footer_body),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )

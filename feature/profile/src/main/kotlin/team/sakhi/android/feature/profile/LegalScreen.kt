@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.profile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -45,7 +46,11 @@ import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.ProfileSectionLabel
+import team.sakhi.android.ui.SakhiNavDirection
+import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.design.DesignTokens
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 /** Ports iOS `LegalView.swift`: documents list + data-rights list + a privacy note. */
 @Composable
@@ -53,9 +58,20 @@ fun LegalScreen(onBack: () -> Unit) {
     var openPage by remember { mutableStateOf<ContentPageId?>(null) }
     val legalIconBackground = DesignTokens.COLOR_LIGHT_PINK.toComposeColor()
 
-    openPage?.let { id ->
-        ContentPageScreen(pageId = id, onBack = { openPage = null })
-        return
+    BackHandler(enabled = openPage != null) { openPage = null }
+
+    // Opening a content page pushes it in from the right; closing pops it back --
+    // the same app-wide slide every other screen swap uses, instead of an instant cut.
+    SakhiScreenTransition(
+        targetState = openPage,
+        directionFor = { _, target ->
+            if (target != null) SakhiNavDirection.Forward else SakhiNavDirection.Backward
+        },
+        label = "legal_page_transition",
+    ) { page ->
+    if (page != null) {
+        ContentPageScreen(pageId = page, onBack = { openPage = null })
+        return@SakhiScreenTransition
     }
 
     DetailSheetScaffold(
@@ -179,12 +195,13 @@ fun LegalScreen(onBack: () -> Unit) {
                         Text(
                             text = stringResource(R.string.profile_legal_privacy_note_body),
                             style = MaterialTheme.typography.bodySmall.copy(fontSize = LegalPrivacyNoteBodySize),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                     }
                 }
             }
         }
+    }
     }
 }
 
@@ -280,14 +297,14 @@ internal fun SettingsSectionCard(label: String?, rows: List<SettingsSectionRow>)
                                 Text(
                                     text = subtitle,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = sakhiSecondaryLabel(),
                                 )
                             }
                         }
                         Icon(
                             Icons.AutoMirrored.Filled.KeyboardArrowRight,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = sakhiTertiaryLabel(),
                             modifier = Modifier.size(row.trailingIconSize),
                         )
                     }

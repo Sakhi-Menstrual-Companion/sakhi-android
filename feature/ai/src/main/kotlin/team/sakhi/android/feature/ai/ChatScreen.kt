@@ -1,6 +1,12 @@
 package team.sakhi.android.feature.ai
 
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.foundation.Image
+import team.sakhi.android.ui.CloseButton
 import android.content.Intent
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -14,6 +20,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -118,17 +125,21 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSystemGray5
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.KeyboardSafeScaffold
+import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.design.SakhiColors
+import team.sakhi.design.SakhiUIColors
 import team.sakhi.models.ConversationMessage
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
 
 /**
  * Sakhi AI chat — ports iOS `SakhiAIChatView.swift` (370 lines) plus
@@ -166,6 +177,19 @@ fun ChatScreen(
     LaunchedEffect(activeSessionKey) {
         destination = ChatDestination.Thread
         expandedPlaces = null
+    }
+
+    // Same gap as elsewhere in the app: without this, system back from Info/Search/
+    // Media/Starred (or the Nearby Places detail overlay) skipped straight past this
+    // sub-navigation and closed the whole Chat sheet. Mirrors each screen's own
+    // on-screen `onBack` exactly. The two handlers are mutually exclusive by their
+    // `enabled` conditions, so there's no ordering ambiguity between them.
+    BackHandler(enabled = expandedPlaces != null) { expandedPlaces = null }
+    BackHandler(enabled = expandedPlaces == null && destination != ChatDestination.Thread) {
+        destination = when (destination) {
+            ChatDestination.Search, ChatDestination.Media, ChatDestination.Starred -> ChatDestination.Info
+            ChatDestination.Info, ChatDestination.Thread -> ChatDestination.Thread
+        }
     }
 
     DisposableEffect(lifecycleOwner, activeSessionKey) {
@@ -432,7 +456,7 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
                             formatNearbyRadius(maxDistanceKm),
                         ),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                 }
             }
@@ -487,9 +511,28 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
             ) {
                 nearbyPlacesDistanceStopsKm.forEach { stop ->
                     val selected = maxDistanceKm == stop
+                    // iOS `SakhiAIPlacesCard.radiusChip`:
+                    //   .background(Capsule().fill(isSelected ? DS.Colors.pink : DS.Colors.background))
+                    //   .overlay(Capsule().stroke(isSelected ? DS.Colors.pink
+                    //                                        : DS.Colors.pink.opacity(0.12), lineWidth: 1))
+                    // Android filled the unselected chip with `surfaceVariant` (lavender) and
+                    // had no stroke at all, so the row read as grey-purple pills instead of
+                    // pink-outlined ones.
                     Surface(
                         shape = RoundedCornerShape(SakhiRadius.full),
-                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.background
+                        },
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                            },
+                        ),
                         modifier = Modifier.clickable {
                             maxDistanceKm = stop
                             selectedPlaceId = null
@@ -508,7 +551,7 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
             Text(
                 text = stringResource(R.string.chat_search_radius),
                 style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space1),
             )
 
@@ -524,7 +567,7 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
                     Text(
                         text = stringResource(R.string.chat_no_places_within, formatNearbyRadius(maxDistanceKm)),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                 }
             } else {
@@ -578,13 +621,13 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
                                         Text(
                                             text = stringResource(R.string.chat_place_distance_away, place.formattedDistance),
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            color = sakhiSecondaryLabel(),
                                         )
                                         place.rating?.let { rating ->
                                             Text(
                                                 text = stringResource(R.string.chat_place_rating, rating),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                color = sakhiSecondaryLabel(),
                                             )
                                         }
                                     }
@@ -662,18 +705,12 @@ private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: (
         stringResource(R.string.chat_header_accessibility_last_seen_today_at, chatHeaderLastSeenTime())
     }
     Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = SakhiSpacing.space6,
-                    top = SakhiSpacing.space5,
-                    end = SakhiSpacing.space6,
-                    bottom = SakhiSpacing.space4,
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-        ) {
+        // Same nav bar as every other sheet; Chat's identity block goes in its `leading`
+        // slot rather than the bar being rebuilt around it, which is what left this close
+        // button sized and inset differently from Profile's.
+        SakhiNavBar(
+            onClose = onClose,
+            leading = {
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -685,18 +722,19 @@ private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: (
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
             ) {
-                Box(
+                // The real Sakhi mark, matching iOS's
+                // `Image("BrandMedia/AppLogo").frame(40, 40).clipShape(Circle())`.
+                // Android was drawing a generic Material `AutoAwesome` sparkle here, so
+                // the assistant Karan's users see had no brand identity at all — the one
+                // place in Chat where the product actually introduces itself.
+                Image(
+                    painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_app_logo),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
                         .size(40.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.AutoAwesome,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                        .clip(CircleShape),
+                )
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -708,32 +746,39 @@ private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: (
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     if (isOnline) {
+                        // iOS `presenceLabel`: `Circle().fill(DS.Colors.permissionSuccess)
+                        // .frame(width: 7, height: 7)` and the same colour on the label.
+                        // Android used `colorScheme.tertiary`, a slot this theme never sets,
+                        // so the "online" indicator rendered in Material's default
+                        // purple-brown instead of green.
+                        // `PERMISSION_SUCCESS` (#33B770) deliberately differs from
+                        // `COLOR_CONFIRM` (#34C759) — SakhiUIColors says so on the line
+                        // itself — so the nearer-looking `brand.confirm` is not a substitute.
+                        val onlineColor = SakhiUIColors.PERMISSION_SUCCESS.toComposeColor()
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                             Box(
                                 modifier = Modifier
                                     .size(7.dp)
-                                    .background(MaterialTheme.colorScheme.tertiary, CircleShape),
+                                    .background(onlineColor, CircleShape),
                             )
                             Text(
                                 text = stringResource(R.string.chat_online),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.tertiary,
+                                color = onlineColor,
                             )
                         }
                     } else {
                         Text(
                             text = stringResource(R.string.chat_last_seen_today_at, chatHeaderLastSeenTime()),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                     }
                 }
             }
 
-            IconButton(onClick = onClose) {
-                Icon(imageVector = Icons.Filled.Close, contentDescription = stringResource(R.string.chat_close))
-            }
-        }
+            },
+        )
         HorizontalDivider()
     }
 }
@@ -897,7 +942,7 @@ private fun MessageBubble(
                     Text(
                         text = formattedTime(message.timestamp),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                     if (message.isUser) {
                         Spacer(modifier = Modifier.width(SakhiSpacing.space1))
@@ -975,7 +1020,8 @@ private fun PlacesCard(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .background(
-                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                // iOS `SakhiAIPlacesCard`: `Capsule().fill(DS.Colors.background)`.
+                                color = MaterialTheme.colorScheme.background,
                                 shape = RoundedCornerShape(SakhiRadius.full),
                             )
                             .border(
@@ -1008,7 +1054,9 @@ private fun PlacesCard(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .background(
-                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            // iOS `SakhiAIPlacesCard`: `Capsule().fill(DS.Colors.background)`,
+                            // the brand background -- not Material's lavender surfaceVariant.
+                            color = MaterialTheme.colorScheme.background,
                             shape = RoundedCornerShape(SakhiRadius.full),
                         )
                         .border(
@@ -1102,7 +1150,7 @@ private fun PlacesCard(
                                 Text(
                                     text = place.name,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = sakhiSecondaryLabel(),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
                                 )
@@ -1138,7 +1186,7 @@ private fun PlacesCard(
                         Text(
                             text = place.formattedDistance,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                     }
                 }
@@ -1159,9 +1207,9 @@ private fun PlacesCard(
 private fun MessageTick(message: ConversationMessage, showRead: Boolean) {
     val (icon, tint) = when {
         message.isFailed -> Icons.Filled.ErrorOutline to MaterialTheme.colorScheme.error
-        !message.isSynced -> Icons.Filled.AccessTime to MaterialTheme.colorScheme.onSurfaceVariant
+        !message.isSynced -> Icons.Filled.AccessTime to sakhiSecondaryLabel()
         showRead -> Icons.Filled.DoneAll to MaterialTheme.colorScheme.primary
-        else -> Icons.Filled.Done to MaterialTheme.colorScheme.onSurfaceVariant
+        else -> Icons.Filled.Done to sakhiSecondaryLabel()
     }
     Icon(imageVector = icon, contentDescription = null, tint = tint, modifier = Modifier.size(12.dp))
 }
@@ -1335,7 +1383,9 @@ private fun ChatInputBar(
         val hasText = text.isNotBlank()
         Surface(
             shape = CircleShape,
-            color = if (hasText && !isSending && !isLocked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+            // iOS `SakhiAIInputBar`: `Circle().fill(canSend ? DS.Colors.pink : DS.Colors.gray5)`.
+            // `surfaceVariant` made the idle send button read lavender.
+            color = if (hasText && !isSending && !isLocked) MaterialTheme.colorScheme.primary else sakhiSystemGray5(),
             modifier = Modifier
                 .minimumInteractiveComponentSize()
                 .size(36.dp)
@@ -1348,7 +1398,12 @@ private fun ChatInputBar(
                     Icon(
                         imageVector = Icons.Filled.ArrowUpward,
                         contentDescription = stringResource(R.string.chat_send),
-                        tint = if (hasText) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                        // iOS `SakhiAIInputBar`: the capsule is
+                        // `canSend ? DS.Colors.pink : DS.Colors.gray5`, but the arrow itself
+                        // is `.foregroundColor(.white)` **unconditionally** -- white on both
+                        // fills. Android tinted it grey when there was nothing to send, which
+                        // put a grey glyph on the grey idle capsule.
+                        tint = Color.White,
                         modifier = Modifier.size(16.dp),
                     )
                 }

@@ -30,6 +30,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -54,6 +55,10 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.ProfileSectionLabel
+import team.sakhi.android.ui.SakhiNavDirection
+import team.sakhi.android.ui.SakhiScreenTransition
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 private const val WEBSITE_URL = "https://sakhi.rachna.co"
 private const val INSTAGRAM_URL = "https://instagram.com/sakhi.app"
@@ -75,9 +80,20 @@ fun AboutScreen(
     val shareBody = stringResource(R.string.profile_about_share_body, playStoreWebUrl)
     val shareChooserTitle = stringResource(R.string.profile_about_share_action)
 
-    openPage?.let { id ->
-        ContentPageScreen(pageId = id, onBack = { openPage = null })
-        return
+    BackHandler(enabled = openPage != null) { openPage = null }
+
+    // Opening a content page pushes it in from the right; closing pops it back --
+    // the same app-wide slide every other screen swap uses, instead of an instant cut.
+    SakhiScreenTransition(
+        targetState = openPage,
+        directionFor = { _, target ->
+            if (target != null) SakhiNavDirection.Forward else SakhiNavDirection.Backward
+        },
+        label = "about_page_transition",
+    ) { page ->
+    if (page != null) {
+        ContentPageScreen(pageId = page, onBack = { openPage = null })
+        return@SakhiScreenTransition
     }
 
     DetailSheetScaffold(
@@ -176,6 +192,7 @@ fun AboutScreen(
                 ),
             )
         }
+    }
     }
 }
 
@@ -292,7 +309,7 @@ private fun AboutActionRowContent(
         Icon(
             imageVector = if (row.isExternal) Icons.Filled.ArrowOutward else Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            tint = sakhiTertiaryLabel(),
             modifier = Modifier.size(AboutTrailingIconSize),
         )
     }
@@ -331,7 +348,7 @@ private fun AboutInfoSectionCard(
                         Text(
                             text = row.value,
                             style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                     }
                     if (index != rows.lastIndex) {

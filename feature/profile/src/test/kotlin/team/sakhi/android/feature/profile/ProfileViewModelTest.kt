@@ -171,7 +171,10 @@ class ProfileViewModelTest {
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals("network down", state.error)
+        // Was asserting the RAW exception message. That pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible copy. UI shows app copy; cause is logged only.
+        assertEquals("Failed to load profile", state.error)
         assertNull(state.profile)
         assertFalse(state.isLoading)
     }
@@ -324,7 +327,10 @@ class ProfileViewModelTest {
 
         val state = viewModel.uiState.value
         assertFalse(state.isSigningOut)
-        assertEquals("sign out failed", state.signOutError)
+        // Was asserting the RAW exception message. That pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible copy. UI shows app copy; cause is logged only.
+        assertEquals("Couldn't sign out. Please try again.", state.signOutError)
         verify(exactly = 1) { hapticManager.error() }
     }
 

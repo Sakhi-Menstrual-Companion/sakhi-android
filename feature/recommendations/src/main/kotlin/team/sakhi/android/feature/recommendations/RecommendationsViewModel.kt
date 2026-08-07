@@ -1,5 +1,7 @@
 package team.sakhi.android.feature.recommendations
 
+import team.sakhi.cycle.CyclePhaseInsight
+import team.sakhi.android.common.CycleInsightAdapter
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -25,6 +27,7 @@ import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
+import team.sakhi.android.common.toSafeUserMessage
 
 data class RecommendationFoodUi(
     val name: String,
@@ -174,7 +177,35 @@ class RecommendationsViewModel(
         } else {
             Result.success(null)
         }
-        val phase = cycleResult.getOrNull()?.let(CycleMath::currentPhase) ?: CyclePhase.UNKNOWN
+        // Same shared engine Home's hero uses (`CycleInsightAdapter` ->
+        // `CyclePhaseInsight`), NOT `CycleMath.currentPhase`. Home was moved onto the
+        // engine on 2026-08-02; leaving Recommendations on CycleMath would let the two
+        // disagree on the same day — the food list and tips could say "luteal" while
+        // the hero above them says "Day 1 of your period".
+        // Reuse the cycle already fetched above rather than issuing a second read --
+        // `CycleInsightAdapter` only needs the current cycle's start (iOS passes
+        // `currentCycles.first` for the same reason) plus the logged period days.
+        val allCycles = listOfNotNull(cycleResult.getOrNull())
+        val periodLogDates = runCatching {
+            periodLogRepository.getAll(requestedTargetUserId).getOrDefault(emptyList())
+        }.getOrDefault(emptyList())
+            .filter { it.periodPresent }
+            .mapTo(mutableSetOf()) { it.logDate }
+        val phase = CycleInsightAdapter.insightFor(
+            date = DateConverter.today(),
+            cycles = allCycles,
+            periodLogDates = periodLogDates,
+            stats = CycleMath.computeStatistics(allCycles.filter { it.isComplete }),
+        ).phase.kind.let { kind ->
+            when (kind) {
+                CyclePhaseInsight.PhaseKind.MENSTRUAL -> CyclePhase.MENSTRUAL
+                CyclePhaseInsight.PhaseKind.FOLLICULAR -> CyclePhase.FOLLICULAR
+                CyclePhaseInsight.PhaseKind.OVULATION -> CyclePhase.OVULATION
+                CyclePhaseInsight.PhaseKind.LUTEAL, CyclePhaseInsight.PhaseKind.PMS -> CyclePhase.LUTEAL
+                CyclePhaseInsight.PhaseKind.DELAYED -> CyclePhase.DELAYED
+                CyclePhaseInsight.PhaseKind.UNKNOWN -> CyclePhase.UNKNOWN
+            }
+        }
 
         val curated = if (canViewPhaseRecommendations) {
             recommendationRepository.getCuratedRecommendations(phase)
@@ -218,7 +249,8 @@ class RecommendationsViewModel(
             canViewPhaseRecommendations = canViewPhaseRecommendations,
             canViewConditionRecommendations = canViewConditionRecommendations,
             isLoading = false,
-            error = cycleResult.exceptionOrNull()?.message,
+            error = cycleResult.exceptionOrNull()
+                ?.toSafeUserMessage(appContext, R.string.recommendations_load_failed),
         )
     }
 

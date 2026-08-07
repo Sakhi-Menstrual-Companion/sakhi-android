@@ -19,6 +19,7 @@ import team.sakhi.models.PartnerInvitation
 import team.sakhi.models.RelationType
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
+import team.sakhi.android.common.toSafeUserMessage
 
 data class CareUiState(
     val session: SessionContext? = null,
@@ -89,7 +90,7 @@ class CareViewModel(
                         _uiState.update { state ->
                             state.copy(
                                 isRefreshing = false,
-                                error = throwable.message ?: appContext.getString(R.string.care_error_load_status),
+                                error = throwable.toSafeUserMessage(appContext, R.string.care_error_load_status),
                             )
                         }
                     }
@@ -159,7 +160,7 @@ class CareViewModel(
                     _uiState.update {
                         it.copy(
                             isRefreshing = false,
-                            error = throwable.message ?: appContext.getString(R.string.care_error_refresh_status),
+                            error = throwable.toSafeUserMessage(appContext, R.string.care_error_refresh_status),
                         )
                     }
                 }
@@ -208,7 +209,7 @@ class CareViewModel(
                 _uiState.update {
                     it.copy(
                         isCreatingInvite = false,
-                        error = throwable.message ?: appContext.getString(R.string.care_error_create_invite),
+                        error = throwable.toSafeUserMessage(appContext, R.string.care_error_create_invite),
                     )
                 }
             }
@@ -255,7 +256,7 @@ class CareViewModel(
                 _uiState.update {
                     it.copy(
                         isAcceptingInvite = false,
-                        error = throwable.message ?: appContext.getString(R.string.care_error_accept_invite),
+                        error = throwable.toSafeUserMessage(appContext, R.string.care_error_accept_invite),
                     )
                 }
             }
@@ -291,7 +292,7 @@ class CareViewModel(
                     _uiState.update {
                         it.copy(
                             isCancellingInvite = false,
-                            error = throwable.message ?: appContext.getString(R.string.care_error_cancel_invite),
+                            error = throwable.toSafeUserMessage(appContext, R.string.care_error_cancel_invite),
                         )
                     }
                 }
@@ -322,7 +323,7 @@ class CareViewModel(
                     _uiState.update {
                         it.copy(
                             isRemovingPartnership = false,
-                            error = throwable.message ?: appContext.getString(R.string.care_error_complete_action),
+                            error = throwable.toSafeUserMessage(appContext, R.string.care_error_complete_action),
                         )
                     }
                 }
@@ -360,7 +361,7 @@ class CareViewModel(
                 _uiState.update {
                     it.copy(
                         isSavingPermissions = false,
-                        error = throwable.message ?: appContext.getString(R.string.care_error_permission_change_not_saved),
+                        error = throwable.toSafeUserMessage(appContext, R.string.care_error_permission_change_not_saved),
                     )
                 }
                 onComplete(false)

@@ -28,6 +28,93 @@ class ReportPresentationTest {
         assertFalse(ReportDocumentPage.SymptomsFlow in pages)
     }
 
+    /**
+     * DEFECT PINNED, NOT ENDORSED — and it is **shared with iOS**, so do not "fix" it here
+     * alone or Android will diverge.
+     *
+     * `buildReportPages` seeds the list with `Cover` and `CycleSummary` *unconditionally* and
+     * only then consults `selectedSections`. So switching "Cycle Overview" off in the UI does
+     * not remove the cycle page from the generated PDF. That matters more than a normal dead
+     * control: the report is a document users hand to a doctor, so a switch that looks like it
+     * excludes a section and does not is a privacy-shaped failure.
+     *
+     * iOS does exactly the same thing — `SakhiReportPDFGenerator.generate` opens with
+     * `var pages: [AnyView] = [ReportCoverPage, ReportCyclePage]` and gates only the same four
+     * later sections. When this is fixed it has to be fixed on both platforms together, and
+     * this test should then flip to asserting the page is absent.
+     */
+    @Test
+    fun `switching Cycle Overview off does NOT remove the cycle page - matches iOS, pending a both-platform fix`() {
+        val withoutCycleOverview = ReportSection.entries.toSet() - ReportSection.CycleOverview
+
+        val pages = buildReportPages(sampleReport(), selectedSections = withoutCycleOverview)
+
+        assertTrue(
+            "CycleSummary is seeded unconditionally, so deselecting Cycle Overview has no effect",
+            ReportDocumentPage.CycleSummary in pages,
+        )
+        assertTrue("Cover is likewise unconditional", ReportDocumentPage.Cover in pages)
+    }
+
+    /**
+     * The other half of the same finding: `ReportSection.Medications` renders a toggle in
+     * `ReportsScreen` but `buildReportPages` builds no page for it, so turning it on adds
+     * nothing. iOS gates `medications` nowhere in `Features/Reports/` either.
+     */
+    @Test
+    fun `selecting only Medications produces no section pages beyond the unconditional two`() {
+        val pages = buildReportPages(sampleReport(), selectedSections = setOf(ReportSection.Medications))
+
+        assertEquals(listOf(ReportDocumentPage.Cover, ReportDocumentPage.CycleSummary), pages)
+    }
+
+    /**
+     * The controls that *do* work, so the two tests above read as a specific defect rather
+     * than "section toggles are broken". Deselecting each of these really does drop its page.
+     */
+    @Test
+    fun `the four gated sections each drop their page when deselected`() {
+        val report = sampleReport(
+            calendarMonths = listOf(
+                CalendarMonth(
+                    year = 2026,
+                    month = 7,
+                    days = mapOf(LocalDate(2026, 7, 1) to CalendarMarker.DayMark(LocalDate(2026, 7, 1))),
+                ),
+            ),
+        )
+        val all = ReportSection.entries.toSet()
+
+        assertTrue(ReportDocumentPage.PeriodCalendar in buildReportPages(report, all))
+        assertFalse(ReportDocumentPage.PeriodCalendar in buildReportPages(report, all - ReportSection.PeriodCalendar))
+
+        assertTrue(ReportDocumentPage.SymptomsFlow in buildReportPages(report, all))
+        assertFalse(ReportDocumentPage.SymptomsFlow in buildReportPages(report, all - ReportSection.Symptoms))
+
+        assertTrue(ReportDocumentPage.MoodPatterns in buildReportPages(report, all))
+        assertFalse(ReportDocumentPage.MoodPatterns in buildReportPages(report, all - ReportSection.MoodPatterns))
+
+        assertTrue(ReportDocumentPage.Insights in buildReportPages(report, all))
+        assertFalse(ReportDocumentPage.Insights in buildReportPages(report, all - ReportSection.Insights))
+    }
+
+    /**
+     * Matches iOS exactly: `if data.config.sections.contains(.periodCalendar)` has no
+     * emptiness check, so a report with no calendar data still gets a (blank) calendar page
+     * when the section is selected. Previously Android added an `isNotEmpty()` guard iOS
+     * does not have; removed per the standing rule that Android replicates iOS rather than
+     * quietly improving on it.
+     */
+    @Test
+    fun `an empty calendar range still produces a Period Calendar page, matching iOS`() {
+        val pages = buildReportPages(
+            sampleReport(calendarMonths = emptyList()),
+            selectedSections = ReportSection.entries.toSet(),
+        )
+
+        assertTrue(ReportDocumentPage.PeriodCalendar in pages)
+    }
+
     @Test
     fun `calendar weeks preserve leading blanks for real month layout`() {
         val month = CalendarMonth(

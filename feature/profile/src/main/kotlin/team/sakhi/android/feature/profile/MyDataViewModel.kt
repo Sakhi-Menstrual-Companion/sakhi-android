@@ -27,6 +27,7 @@ import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.sync.OfflineUpgradeDataset
+import team.sakhi.android.common.toSafeUserMessage
 
 data class MyDataLocalSnapshot(
     val profile: UserProfile? = null,
@@ -140,8 +141,7 @@ class MyDataViewModel(
                     _uiState.update {
                         it.copy(
                             isLoadingLocal = false,
-                            localError = throwable.message
-                                ?: appContext.getString(R.string.profile_my_data_local_load_failed),
+                            localError = throwable.toSafeUserMessage(appContext, R.string.profile_my_data_local_load_failed),
                         )
                     }
                 }
@@ -164,8 +164,7 @@ class MyDataViewModel(
                         it.copy(
                             isLoadingCloud = false,
                             isRefreshing = false,
-                            cloudError = throwable.message
-                                ?: appContext.getString(R.string.profile_my_data_cloud_load_failed),
+                            cloudError = throwable.toSafeUserMessage(appContext, R.string.profile_my_data_cloud_load_failed),
                         )
                     }
                 }
