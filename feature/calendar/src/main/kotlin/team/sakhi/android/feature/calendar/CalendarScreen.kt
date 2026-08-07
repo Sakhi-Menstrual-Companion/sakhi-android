@@ -403,7 +403,13 @@ fun CalendarScreen(
             // comment on Home's copy still claimed otherwise. Invisible on gesture
             // navigation, but on 3-button navigation (Karan's Xiaomi) the OS
             // back/home/recents buttons sat right on top of the Ask Sakhi bar.
-            Box(modifier = Modifier.navigationBarsPadding()) {
+            Box(
+                modifier = Modifier
+                    // Separates the bar from the last row of dates. The gap that used
+                    // to sit above the month bar belongs here instead.
+                    .padding(top = SakhiSpacing.space5)
+                    .navigationBarsPadding(),
+            ) {
             SakhiBottomActionBar(
                 phase = selectedDatePhase,
                 accentColor = phasePrimaryColor(selectedDatePhase),

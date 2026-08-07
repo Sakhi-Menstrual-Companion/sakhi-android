@@ -182,7 +182,11 @@ fun HomeCalendarOverlay(
 private const val COMPACT_TOP_FRACTION = 0.40f
 private val EXPANDED_TOP_GAP = 10.dp
 private val SHEET_CORNER = 24.dp
-private val HANDLE_ROW_HEIGHT = 36.dp
+// iOS uses a 36pt row (capsule + 10/4 padding), but that left a visibly wide gap
+// between the grabber and the month bar on device. Tightened so the calendar sits
+// higher in the sheet; the space it frees is spent between the grid and the bottom
+// action bar instead.
+private val HANDLE_ROW_HEIGHT = 22.dp
 private val HANDLE_TOP_PADDING = 10.dp
 private val HANDLE_WIDTH = 36.dp
 private val HANDLE_HEIGHT = 4.dp

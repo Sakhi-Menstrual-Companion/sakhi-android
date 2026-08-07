@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.datetime.LocalDate
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -320,7 +321,11 @@ private fun SakhiCalendarDayCell(
         ) {
             Text(
                 text = day.date.dayOfMonth.toString(),
+                // bodySmall is 12sp, which read as small for the primary content of the
+                // month grid. 15sp matches the size iOS uses across the calendar chrome
+                // and sits comfortably inside the day circle.
                 style = MaterialTheme.typography.bodySmall.copy(
+                    fontSize = CalendarDayFontSize,
                     fontWeight = if (day.isSelected || day.isToday || day.markerType == SakhiCalendarMarkerType.PERIOD) {
                         FontWeight.Bold
                     } else {
@@ -339,6 +344,7 @@ private data class SakhiCalendarWeekRows(
 )
 
 private val calendarCellHeight = SakhiSpacing.space10 + SakhiSpacing.space1 * 2
+private val CalendarDayFontSize = 15.sp
 private val calendarDotSize = SakhiSpacing.space8 + SakhiSpacing.space1 / 2
 private val calendarRingSize = SakhiSpacing.space10 + SakhiSpacing.space1 / 2
 private val calendarRingStroke = SakhiSpacing.space1 / 2 + SakhiSpacing.space1 / 8
