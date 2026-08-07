@@ -461,7 +461,7 @@ private val QuickLogRowInset = SakhiSpacing.space3
 private val QuickLogMenuContentPadding = SakhiSpacing.space2
 // Room for the soft glow to fall outside the surface without the popup clipping it.
 private val QuickLogMenuShadowInset = SakhiSpacing.space1
-private val QuickLogMenuShadowElevation = 18.dp
+private val QuickLogMenuShadowElevation = 26.dp
 
 /**
  * Sakhi's own quick-log menu.
@@ -519,15 +519,17 @@ private fun SakhiQuickLogMenu(
                     elevation = QuickLogMenuShadowElevation,
                     shape = shape,
                     clip = false,
-                    ambientColor = brand.copy(alpha = 0.18f),
-                    spotColor = brand.copy(alpha = 0.28f),
+                    // Soft and diffuse: a wide elevation with LOW alpha spreads the falloff out
+                    // instead of drawing a tight dark edge under the panel.
+                    ambientColor = brand.copy(alpha = 0.10f),
+                    spotColor = brand.copy(alpha = 0.16f),
                 )
                 .background(sakhiSystemBackground(), shape),
         ) {
             Column(modifier = Modifier.padding(QuickLogMenuContentPadding)) {
                 // Date first, top down -- the date you are about to log against should be
                 // the first thing read, not a footnote after the choice. iOS puts it last.
-                QuickLogDateHeader(selectedDate = selectedDate, brand = brand)
+                QuickLogDateHeader(selectedDate = selectedDate)
 
                 Spacer(modifier = Modifier.height(SakhiSpacing.space2))
 
@@ -561,27 +563,28 @@ private fun SakhiQuickLogMenu(
 
 /** The date these flow taps write to. First thing in the menu, as a soft brand chip. */
 @Composable
-private fun QuickLogDateHeader(selectedDate: LocalDate, brand: Color) {
+private fun QuickLogDateHeader(selectedDate: LocalDate) {
+    // Quiet grey caption, not a brand chip. This line only says WHICH day the taps
+    // below write to -- it is context, not the thing being chosen, so highlighting it
+    // in brand pink competed with the actual selection for attention.
     Row(
-        modifier = Modifier
-            .padding(horizontal = QuickLogRowInset)
-            .clip(RoundedCornerShape(SakhiRadius.full))
-            .background(brand.copy(alpha = 0.09f))
-            .padding(horizontal = SakhiSpacing.space3, vertical = SakhiSpacing.space2),
+        modifier = Modifier.padding(
+            horizontal = QuickLogRowInset,
+            vertical = SakhiSpacing.space2,
+        ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
     ) {
         Icon(
             imageVector = Icons.Filled.CalendarMonth,
             contentDescription = null,
-            tint = brand,
+            tint = sakhiSecondaryLabel(),
             modifier = Modifier.size(15.dp),
         )
         Text(
             text = quickLogMenuDateTitle(selectedDate),
             style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = brand,
+            color = sakhiSecondaryLabel(),
         )
     }
 }
