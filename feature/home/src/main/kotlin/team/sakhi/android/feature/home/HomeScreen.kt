@@ -818,7 +818,9 @@ private fun HeroTipPill(
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        // Centred, and the row wraps its content rather than stretching, so the pill
+        // hugs the tip instead of running the full width of the hero.
+        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
     ) {
         Icon(
             imageVector = Icons.Rounded.AutoAwesome,
@@ -834,11 +836,18 @@ private fun HeroTipPill(
         // Floor is 11sp so it never becomes smaller than the pill's own caption scale.
         BasicText(
             text = tip,
-            style = LocalTextStyle.current.copy(color = contentColor),
+            style = LocalTextStyle.current.copy(
+                color = contentColor,
+                textAlign = TextAlign.Center,
+            ),
             maxLines = 1,
+            // Range raised from 11..13 on Karan's ask -- the tip was reading small in the
+            // hero. The step-down behaviour stays: a long tip shrinks within this range
+            // rather than being ellipsised, which is the earlier decision this pill was
+            // built around.
             autoSize = TextAutoSize.StepBased(
-                minFontSize = 11.sp,
-                maxFontSize = 13.sp,
+                minFontSize = 12.sp,
+                maxFontSize = 16.sp,
                 stepSize = 0.5.sp,
             ),
         )

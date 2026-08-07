@@ -8,7 +8,6 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.LocalRippleConfiguration
-import androidx.compose.material3.RippleConfiguration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -322,8 +321,14 @@ fun SakhiTheme(
             // `RippleConfiguration` tied to the brand colour at the theme root -- gives
             // every interactive element in the app a consistent, on-brand pink ripple
             // instead of one that happens to match whatever text colour sits nearby.
+            // No tap highlight at all. This was first a black flash (Material's default
+            // ripple takes `onSurface`, which is near-black here), then a brand-pink
+            // ripple; Karan's call is that the tap should simply work with no highlight,
+            // which is also how the iOS app behaves -- it has no ripple concept. A null
+            // `RippleConfiguration` switches ripples off for every Material component in
+            // one place, rather than each call site passing `indication = null`.
             CompositionLocalProvider(
-                LocalRippleConfiguration provides RippleConfiguration(color = brand.pink),
+                LocalRippleConfiguration provides null,
             ) {
             // Material3's `LocalContentColor` defaults to plain black app-wide unless
             // something explicitly provides it -- normally a `Surface`/`Scaffold` does

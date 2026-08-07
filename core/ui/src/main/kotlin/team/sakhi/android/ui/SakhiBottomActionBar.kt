@@ -58,11 +58,19 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.delay
 import kotlinx.datetime.LocalDate
 import team.sakhi.android.designsystem.SakhiRadius
@@ -460,10 +468,11 @@ private val QuickLogMenuCornerRadius = 24.dp
 private val QuickLogRowInset = SakhiSpacing.space3
 private val QuickLogMenuContentPadding = SakhiSpacing.space2
 // Room for the shadow to fall outside the surface without the popup window clipping it.
-private val QuickLogMenuShadowInset = 20.dp
-// Kept small on purpose: bottom inset is what pushes the panel up the screen.
-private val QuickLogMenuShadowInsetBottom = 8.dp
-private val QuickLogMenuShadowElevation = 12.dp
+// Must comfortably exceed QuickLogMenuShadowElevation on every side.
+private val QuickLogMenuShadowInset = 28.dp
+// Visible gap between the panel and the button it opens from.
+private val QuickLogMenuAnchorGap = 6.dp
+private val QuickLogMenuShadowElevation = 18.dp
 
 /**
  * Sakhi's own quick-log menu.
@@ -492,28 +501,45 @@ private fun SakhiQuickLogMenu(
     val brand = MaterialTheme.colorScheme.primary
     val shape = RoundedCornerShape(QuickLogMenuCornerRadius)
 
-    // Material's `DropdownMenu` is kept ONLY for its plumbing -- anchored positioning,
-    // outside-tap dismissal and back handling. A hand-rolled `Popup` was tried first and
-    // dismissed itself instantly: with `focusable = true` the ACTION_UP of the very tap
-    // that opened it landed outside the popup bounds and triggered
-    // dismiss-on-click-outside. `DropdownMenu` already solves that.
+    if (!expanded) return
+
+    // A raw `Popup`, not Material's `DropdownMenu`. Two of its internals proved
+    // unworkable here, both confirmed on device:
     //
-    // Its chrome is switched off entirely (transparent container, no border, no
-    // elevation) and the visible surface is drawn below instead, because Material's
-    // `shadowElevation` renders a hard grey drop shadow that reads as dated next to the
-    // rest of the app. `Modifier.shadow` with brand-tinted ambient/spot colours gives a
-    // soft pink glow instead -- the menu lifts off the page rather than sitting on a
-    // grey slab.
-    DropdownMenu(
-        expanded = expanded,
-        onDismissRequest = onDismiss,
-        shape = shape,
-        containerColor = Color.Transparent,
-        border = null,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        modifier = Modifier.widthIn(min = QuickLogMenuMinWidth, max = QuickLogMenuMaxWidth),
+    //  * Position. `DropdownMenu` pins the popup's bottom to the anchor's top and
+    //    ignores its own `offset` for that flipped placement -- measured, +24dp and
+    //    -24dp produced pixel-identical output -- so the panel could not be brought
+    //    closer to the button it opens from.
+    //  * Shadow. Its content sits in a scrolling, clipping container, which sliced the
+    //    drop shadow off at a hard vertical edge down the side of the panel.
+    //
+    // The earlier attempt at a raw `Popup` dismissed itself the instant it opened: with
+    // `focusable = true`, the ACTION_UP of the very tap that opened it landed outside the
+    // popup and triggered dismiss-on-click-outside. That is fixed here by arming
+    // dismissal only after the opening gesture has finished, rather than by going back
+    // to a component that cannot be positioned.
+    var dismissArmed by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(QuickLogMenuDismissArmDelayMs)
+        dismissArmed = true
+    }
+
+    val density = LocalDensity.current
+    val positionProvider = remember(density) {
+        with(density) {
+            QuickLogMenuPositionProvider(
+                shadowInsetPx = QuickLogMenuShadowInset.roundToPx(),
+                anchorGapPx = QuickLogMenuAnchorGap.roundToPx(),
+            )
+        }
+    }
+
+    Popup(
+        popupPositionProvider = positionProvider,
+        onDismissRequest = { if (dismissArmed) onDismiss() },
+        properties = PopupProperties(focusable = true),
     ) {
+        Box(modifier = Modifier.widthIn(min = QuickLogMenuMinWidth, max = QuickLogMenuMaxWidth)) {
         Box(
             modifier = Modifier
                 // The inset is what makes the shadow visible at all. A popup window is
@@ -532,12 +558,11 @@ private fun SakhiQuickLogMenu(
                 // So the bottom keeps just enough room to read as a shadow while the
                 // sides and top, where the panel meets the white calendar and separation
                 // actually matters, get the full spread.
-                .padding(
-                    start = QuickLogMenuShadowInset,
-                    end = QuickLogMenuShadowInset,
-                    top = QuickLogMenuShadowInset,
-                    bottom = QuickLogMenuShadowInsetBottom,
-                )
+                // Uniform now. The bottom used to be starved to stop the panel drifting
+                // up the screen, but this menu owns its own position provider, which adds
+                // the inset back -- so the shadow can have equal room on every side
+                // without moving the panel at all.
+                .padding(QuickLogMenuShadowInset)
                 .shadow(
                     elevation = QuickLogMenuShadowElevation,
                     shape = shape,
@@ -545,8 +570,10 @@ private fun SakhiQuickLogMenu(
                     // Neutral black at low alpha, not brand pink. A pink shadow over a
                     // white sheet is very close to invisible; a soft shadow reads as
                     // soft because of its spread and low opacity, not its hue.
-                    ambientColor = Color.Black.copy(alpha = 0.16f),
-                    spotColor = Color.Black.copy(alpha = 0.22f),
+                    // Deeper, but spread wide so it stays soft: darkness comes from
+                    // alpha, softness from the elevation's falloff distance.
+                    ambientColor = Color.Black.copy(alpha = 0.22f),
+                    spotColor = Color.Black.copy(alpha = 0.30f),
                 )
                 .background(sakhiSystemBackground(), shape),
         ) {
@@ -584,6 +611,7 @@ private fun SakhiQuickLogMenu(
 
                 QuickLogOtherSymptomsRow(brand = brand, onClick = onOtherSymptoms)
             }
+        }
         }
     }
 }
@@ -698,3 +726,37 @@ private fun QuickLogOtherSymptomsRow(brand: Color, onClick: () -> Unit) {
     }
 }
 
+
+/**
+ * Places the quick-log menu directly above the button that opened it, aligned to that
+ * button's right edge, and keeps it on screen.
+ *
+ * This exists because Material's `DropdownMenu` gives no usable control here: it pins the
+ * popup's bottom to the anchor's top and ignores its `offset` for that placement, which
+ * left the panel stranded well above the button with no way to pull it down.
+ */
+private class QuickLogMenuPositionProvider(
+    private val shadowInsetPx: Int,
+    private val anchorGapPx: Int,
+) : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset {
+        // The popup is bigger than the panel by [shadowInsetPx] on every side, because
+        // the shadow needs somewhere to land. Both axes add that back, so the placement
+        // below describes where the VISIBLE panel goes, not where its invisible margin
+        // does.
+        val x = (anchorBounds.right - popupContentSize.width + shadowInsetPx)
+            .coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
+        val y = (anchorBounds.top - popupContentSize.height + shadowInsetPx - anchorGapPx)
+            .coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0))
+        return IntOffset(x, y)
+    }
+}
+
+// Long enough for the opening tap's ACTION_UP to land before outside-tap dismissal turns
+// on. Without this the menu closed itself the moment it opened.
+private const val QuickLogMenuDismissArmDelayMs = 120L
