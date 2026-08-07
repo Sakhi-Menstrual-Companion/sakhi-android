@@ -33,6 +33,7 @@ import team.sakhi.onboarding.OnboardingFlowStep
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.repositories.UserProfileRepository
+import team.sakhi.sync.DataMigration
 import team.sakhi.validation.ValidationRules
 import java.time.LocalDate
 import java.time.YearMonth
@@ -361,7 +362,18 @@ class OnboardingViewModel(
                     // hence one log here, not `periodLength` days.
                     periodLogRepository.upsert(
                         team.sakhi.models.PeriodLog(
-                            id = java.util.UUID.randomUUID().toString(),
+                            // The canonical deterministic daily id, NOT a random UUID.
+                            // Every other write path derives the id from
+                            // (user, source, date) so the same day always resolves to
+                            // one row -- and it is uppercase on purpose, matching iOS's
+                            // PeriodLogObject.stableDailyId. A random id here meant a
+                            // later quick log for this same date could not recognise
+                            // onboarding's entry as that day's log and wrote a SECOND
+                            // one, leaving the day with two conflicting flow values.
+                            id = DataMigration.stablePeriodLogId(
+                                userId = userId,
+                                logDate = health.lastPeriodDate.toKmmLocalDate().toString(),
+                            ),
                             userId = userId,
                             logDate = health.lastPeriodDate.toKmmLocalDate(),
                             periodPresent = true,
