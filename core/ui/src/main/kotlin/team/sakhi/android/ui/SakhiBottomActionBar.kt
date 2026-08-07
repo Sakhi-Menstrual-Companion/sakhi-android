@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material.icons.outlined.Hexagon
 import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -59,6 +58,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -459,9 +459,11 @@ private val QuickLogMenuMaxWidth = 300.dp
 private val QuickLogMenuCornerRadius = 24.dp
 private val QuickLogRowInset = SakhiSpacing.space3
 private val QuickLogMenuContentPadding = SakhiSpacing.space2
-// Room for the soft glow to fall outside the surface without the popup clipping it.
-private val QuickLogMenuShadowInset = SakhiSpacing.space1
-private val QuickLogMenuShadowElevation = 26.dp
+// Room for the shadow to fall outside the surface without the popup window clipping it.
+private val QuickLogMenuShadowInset = 20.dp
+// Kept small on purpose: bottom inset is what pushes the panel up the screen.
+private val QuickLogMenuShadowInsetBottom = 8.dp
+private val QuickLogMenuShadowElevation = 12.dp
 
 /**
  * Sakhi's own quick-log menu.
@@ -514,15 +516,37 @@ private fun SakhiQuickLogMenu(
     ) {
         Box(
             modifier = Modifier
-                .padding(horizontal = QuickLogMenuShadowInset)
+                // The inset is what makes the shadow visible at all. A popup window is
+                // sized to its content, so anything drawn outside that content -- which
+                // is exactly what a shadow is -- gets clipped by the window edge.
+                // Verified by sampling pixels around the panel: without this the
+                // surrounding pixels were pure #FFFFFF on all four sides, i.e. no shadow
+                // reached the screen.
+                //
+                // Deliberately ASYMMETRIC. This popup is bottom-anchored and grows
+                // upward, so every pixel of bottom inset lifts the whole panel away from
+                // the button -- a uniform 24dp inset visibly shoved the menu up the
+                // screen. `DropdownMenu`'s `offset` cannot claw that back: measured on
+                // device, +24dp and -24dp both produced a pixel-identical result,
+                // because the position provider ignores it for the flipped placement.
+                // So the bottom keeps just enough room to read as a shadow while the
+                // sides and top, where the panel meets the white calendar and separation
+                // actually matters, get the full spread.
+                .padding(
+                    start = QuickLogMenuShadowInset,
+                    end = QuickLogMenuShadowInset,
+                    top = QuickLogMenuShadowInset,
+                    bottom = QuickLogMenuShadowInsetBottom,
+                )
                 .shadow(
                     elevation = QuickLogMenuShadowElevation,
                     shape = shape,
                     clip = false,
-                    // Soft and diffuse: a wide elevation with LOW alpha spreads the falloff out
-                    // instead of drawing a tight dark edge under the panel.
-                    ambientColor = brand.copy(alpha = 0.10f),
-                    spotColor = brand.copy(alpha = 0.16f),
+                    // Neutral black at low alpha, not brand pink. A pink shadow over a
+                    // white sheet is very close to invisible; a soft shadow reads as
+                    // soft because of its spread and low opacity, not its hue.
+                    ambientColor = Color.Black.copy(alpha = 0.16f),
+                    spotColor = Color.Black.copy(alpha = 0.22f),
                 )
                 .background(sakhiSystemBackground(), shape),
         ) {
@@ -533,11 +557,14 @@ private fun SakhiQuickLogMenu(
 
                 Spacer(modifier = Modifier.height(SakhiSpacing.space2))
 
+                // Lightest first, heaviest last. iOS lists these heaviest-first; Karan
+                // asked for the reverse so the scale climbs down the menu towards the
+                // button you opened it from.
                 listOf(
-                    FlowIntensity.HEAVY,
-                    FlowIntensity.MEDIUM,
-                    FlowIntensity.LIGHT,
                     FlowIntensity.SPOTTING,
+                    FlowIntensity.LIGHT,
+                    FlowIntensity.MEDIUM,
+                    FlowIntensity.HEAVY,
                 ).forEach { level ->
                     val isSelected = selectedFlow == level
                     QuickLogFlowRow(
@@ -655,7 +682,9 @@ private fun QuickLogOtherSymptomsRow(brand: Color, onClick: () -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
         Icon(
-            imageVector = Icons.Outlined.Hexagon,
+            // The real SF Symbol iOS uses here (`circle.hexagonpath`), redrawn as a
+            // vector -- Material's plain Hexagon is a different glyph.
+            painter = painterResource(R.drawable.ic_circle_hexagonpath),
             contentDescription = null,
             tint = brand,
             modifier = Modifier.size(20.dp),
