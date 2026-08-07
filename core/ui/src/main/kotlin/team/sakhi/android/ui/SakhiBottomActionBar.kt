@@ -56,7 +56,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -462,12 +461,7 @@ private val QuickLogRowInset = SakhiSpacing.space3
 private val QuickLogMenuContentPadding = SakhiSpacing.space2
 // Room for the soft glow to fall outside the surface without the popup clipping it.
 private val QuickLogMenuShadowInset = SakhiSpacing.space1
-private val QuickLogMenuShadowElevation = 20.dp
-// Enough of the calendar shows through to read as glass, not so much that the rows
-// lose contrast. Tuned on device: at 0.93 the calendar's date numerals were legible
-// straight through the labels, which is not acceptable on a screen people read health
-// data from.
-private const val QuickLogMenuSurfaceAlpha = 0.965f
+private val QuickLogMenuShadowElevation = 18.dp
 
 /**
  * Sakhi's own quick-log menu.
@@ -526,22 +520,9 @@ private fun SakhiQuickLogMenu(
                     shape = shape,
                     clip = false,
                     ambientColor = brand.copy(alpha = 0.18f),
-                    spotColor = brand.copy(alpha = 0.30f),
+                    spotColor = brand.copy(alpha = 0.28f),
                 )
-                // Translucent, brand-tinted glass rather than flat white. The menu opens
-                // over the calendar sheet, which is itself white, so a white panel had
-                // nothing to separate it and the two surfaces blended into each other.
-                // Alpha alone would not fix that (white over white is still white), so
-                // the separation comes from the pink wash on top: the calendar reads
-                // faintly through the panel and the panel reads as its own layer.
-                .background(sakhiSystemBackground().copy(alpha = QuickLogMenuSurfaceAlpha), shape)
-                .background(
-                    brush = Brush.verticalGradient(
-                        listOf(brand.copy(alpha = 0.14f), brand.copy(alpha = 0.06f)),
-                    ),
-                    shape = shape,
-                )
-                .border(1.dp, brand.copy(alpha = 0.22f), shape),
+                .background(sakhiSystemBackground(), shape),
         ) {
             Column(modifier = Modifier.padding(QuickLogMenuContentPadding)) {
                 // Date first, top down -- the date you are about to log against should be
