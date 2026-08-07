@@ -30,7 +30,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -67,6 +66,7 @@ import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.flowDisplayNameRes
 import team.sakhi.android.ui.HorizontalRulerSlider
 import team.sakhi.android.ui.KeyboardSafeScaffold
@@ -234,7 +234,7 @@ fun LoggingSheet(
                         }
                     },
                 )
-                HorizontalDivider()
+                SakhiListDivider()
             },
             body = {
                 Column(
@@ -296,7 +296,7 @@ fun LoggingSheet(
                     // user's very first flow selection (before any cycle history exists)
                     // still reveals the section immediately, matching existing behavior.
                     if (uiState.selectedFlow != null || hasPeriodData) {
-                        HorizontalDivider()
+                        SakhiListDivider()
 
                         Text(
                             text = stringResource(R.string.logging_symptoms),
@@ -332,7 +332,7 @@ fun LoggingSheet(
                                     )
                                 }
                                 if (uiState.canViewWeight) {
-                                    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                    SakhiListDivider(startInset = SakhiSpacing.space5)
                                     ExpandableValueRow(
                                         label = stringResource(R.string.logging_section_weight),
                                         value = uiState.weightKg,
@@ -349,7 +349,7 @@ fun LoggingSheet(
                                     )
                                 }
                                 if (uiState.canViewTemperature) {
-                                    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                    SakhiListDivider(startInset = SakhiSpacing.space5)
                                     ExpandableValueRow(
                                         label = stringResource(R.string.logging_section_bbt),
                                         value = uiState.bbtCelsius,
@@ -434,14 +434,14 @@ fun LoggingSheet(
                                         enabled = uiState.canViewDischarge,
                                         onSelect = viewModel::onDischargeColorSelected,
                                     )
-                                    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                    SakhiListDivider(startInset = SakhiSpacing.space5)
                                     SymptomRow(
                                         label = Symptom.UNUSUAL_DISCHARGE_SMELL.displayName,
                                         checked = Symptom.UNUSUAL_DISCHARGE_SMELL in uiState.selectedSymptoms,
                                         enabled = uiState.canViewDischarge,
                                         onClick = { viewModel.toggleSymptom(Symptom.UNUSUAL_DISCHARGE_SMELL) },
                                     )
-                                    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                    SakhiListDivider(startInset = SakhiSpacing.space5)
                                     SymptomRow(
                                         label = Symptom.VAGINAL_ITCHING.sheetLabel(),
                                         checked = Symptom.VAGINAL_ITCHING in uiState.selectedSymptoms,
@@ -462,7 +462,7 @@ fun LoggingSheet(
                                         enabled = uiState.canViewMedications,
                                         onClick = viewModel::togglePainkillerTaken,
                                     )
-                                    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+                                    SakhiListDivider(startInset = SakhiSpacing.space5)
                                     SymptomRow(
                                         label = stringResource(R.string.logging_doctor_visited),
                                         checked = uiState.doctorVisited,
@@ -489,7 +489,7 @@ fun LoggingSheet(
                 }
             },
             footer = {
-                HorizontalDivider()
+                SakhiListDivider()
                 SaveBar(
                     isSaving = uiState.isSaving,
                     isSaved = uiState.saveMessage != null,
@@ -572,7 +572,7 @@ private fun symptomSection(
             onClick = { onToggle(symptom) },
         )
         if (!isLast || index != symptoms.lastIndex) {
-            HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
+            SakhiListDivider(startInset = SakhiSpacing.space5)
         }
     }
 }
