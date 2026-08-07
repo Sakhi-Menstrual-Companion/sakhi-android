@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.logging
 
+import team.sakhi.android.common.CycleDetectionCoordinator
 import android.content.Context
 import io.mockk.CapturingSlot
 import io.mockk.coEvery
@@ -42,6 +43,7 @@ import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.session.SessionPermissions
 import team.sakhi.sync.DataMigration
+import team.sakhi.repositories.CycleDataRepository
 
 /**
  * State-machine test for `LoggingViewModel` -- the richest ViewModel tested in this
@@ -124,6 +126,14 @@ class LoggingViewModelTest {
     }
 
     private fun mockContext(): Context = mockk {
+        // Header phase line (iOS shows `cyclePhase.name` under the date).
+        every { getString(R.string.logging_phase_menstrual) } returns "Menstrual Phase"
+        every { getString(R.string.logging_phase_follicular) } returns "Follicular Phase"
+        every { getString(R.string.logging_phase_ovulation) } returns "Ovulation Phase"
+        every { getString(R.string.logging_phase_luteal) } returns "Luteal Phase"
+        every { getString(R.string.logging_phase_pms) } returns "PMS Phase"
+        every { getString(R.string.logging_phase_delayed) } returns "Delayed Period"
+        every { getString(R.string.logging_phase_unknown) } returns "Cycle"
         every { getString(R.string.logging_error_session_not_ready) } returns "Session is not ready yet."
         every { getString(R.string.logging_error_care_role_cannot_save) } returns "cannot save"
         every { getString(R.string.logging_error_primary_latest_log) } returns "She made the latest change on this date, so you can no longer edit or remove it."
@@ -145,7 +155,28 @@ class LoggingViewModelTest {
         hapticManager: AndroidHapticManager = mockk(relaxed = true),
         widgetSnapshotManager: AndroidWidgetSnapshotManager = mockk(relaxed = true),
         appContext: Context = mockContext(),
-    ) = LoggingViewModel(appContext, sessionManager, periodLogRepository, hapticManager, widgetSnapshotManager)
+        // Real coordinator over the same mocked repositories: it is a thin orchestrator
+        // around the shared detector, so mocking it would only assert against itself.
+        // Cycle detection runs after a successful save; these tests assert save
+        // behaviour, and a detection failure is deliberately non-fatal to the save.
+        cycleDetectionCoordinator: CycleDetectionCoordinator = CycleDetectionCoordinator(
+            periodLogRepository = periodLogRepository,
+            cycleDataRepository = mockk(relaxed = true),
+        ),
+        // Only feeds the header's phase line; these tests assert save/permission
+        // behaviour, so an empty cycle list is the honest neutral input.
+        cycleDataRepository: CycleDataRepository = mockk<CycleDataRepository>().also {
+            coEvery { it.getAll(any()) } returns Result.success(emptyList())
+        },
+    ) = LoggingViewModel(
+        appContext,
+        sessionManager,
+        periodLogRepository,
+        hapticManager,
+        widgetSnapshotManager,
+        cycleDetectionCoordinator,
+        cycleDataRepository,
+    )
 
     @Test
     fun `no session resets to a fresh state for the selected date`() = runTest {
@@ -552,7 +583,10 @@ class LoggingViewModelTest {
 
         val state = viewModel.uiState.value
         assertFalse(state.isSaving)
-        assertEquals("disk full", state.error)
+        // Was asserting the RAW exception message. That pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible copy. UI shows app copy; cause is logged only.
+        assertEquals("Failed to save log", state.error)
         assertEquals(1, state.saveAttemptId)
         verify(exactly = 1) { hapticManager.error() }
     }

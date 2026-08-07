@@ -1,5 +1,8 @@
 package team.sakhi.android.feature.calendar
 
+import team.sakhi.android.ui.CloseButton
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.ContentTransform
@@ -99,6 +102,13 @@ import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.sp
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
 
 /**
  * Android port of iOS `HomeCalendarSheet.swift` + `HomeCalendarYearGrid.swift`.
@@ -123,6 +133,12 @@ fun CalendarScreen(
     logViewModel: LoggingViewModel = koinViewModel(),
     onAskSakhi: () -> Unit = {},
     onLog: (LocalDate) -> Unit = {},
+    // Year mode is hoistable so the host can bind it to a sheet detent. iOS ties the
+    // two together explicitly -- `HomeCalendarSheet.swift`'s header states
+    // "compact = month, expanded = year", and it crossfades the two as the sheet
+    // rises. Left null, the screen keeps its own state so it still works standalone.
+    yearExpanded: Boolean? = null,
+    onYearExpandedChange: ((Boolean) -> Unit)? = null,
     // Real feature build (2026-07-16): propagates the month-view day tap up to
     // Home's own `selectedDate` (matches iOS's real `HomeCalendarSheet`
     // `onDateTap: { date in onDayTap(date) }`, which does NOT dismiss the
@@ -142,7 +158,9 @@ fun CalendarScreen(
     val locale = Locale.getDefault()
     val compactHeaders = remember(locale) { localizedWeekdayHeaders(sundayFirst = true, locale = locale) }
     val expandedHeaders = remember(locale) { localizedWeekdayHeaders(sundayFirst = false, locale = locale) }
-    var isYearExpanded by rememberSaveable { mutableStateOf(false) }
+    var localYearExpanded by rememberSaveable { mutableStateOf(false) }
+    val isYearExpanded = yearExpanded ?: localYearExpanded
+    val setYearExpanded: (Boolean) -> Unit = onYearExpandedChange ?: { localYearExpanded = it }
     var viewingYear by rememberSaveable { mutableIntStateOf(uiState.visibleMonth.year) }
     var yearSlideDirection by rememberSaveable { mutableIntStateOf(1) }
     var monthDragOffsetPx by remember { mutableFloatStateOf(0f) }
@@ -234,7 +252,7 @@ fun CalendarScreen(
                     resetYearSelection()
                     viewingYear += 1
                 },
-                onCollapse = { isYearExpanded = false },
+                onCollapse = { setYearExpanded(false) },
                 onResetToCurrentYear = {
                     hapticManager.selection()
                     yearSlideDirection = if (compactToday.year > viewingYear) 1 else -1
@@ -252,7 +270,7 @@ fun CalendarScreen(
                 onJumpToToday = viewModel::jumpToToday,
                 onExpandYear = {
                     viewingYear = uiState.visibleMonth.year
-                    isYearExpanded = true
+                    setYearExpanded(true)
                 },
             )
             SakhiWeekdayHeaderRow(labels = compactHeaders)
@@ -284,7 +302,15 @@ fun CalendarScreen(
                     yearSelection = yearSelection,
                     onMonthSelected = { month ->
                         viewModel.jumpToMonth(month)
-                        isYearExpanded = false
+                        setYearExpanded(false)
+                    },
+                    // Same effect as the header chevrons, including clearing any
+                    // in-progress multi-selection, exactly as iOS's `changeYear` does.
+                    onChangeYear = { delta ->
+                        hapticManager.selection()
+                        yearSlideDirection = delta
+                        resetYearSelection()
+                        viewingYear += delta
                     },
                     onToggleDate = { date ->
                         hapticManager.impact(HapticImpact.LIGHT)
@@ -333,7 +359,7 @@ fun CalendarScreen(
                 Text(
                     text = stringResource(R.string.calendar_no_access),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     modifier = Modifier.padding(top = SakhiSpacing.space4),
                 )
             }
@@ -367,6 +393,7 @@ fun CalendarScreen(
                 hasLoggedForDate = logUiState.hasAnyData,
                 isLogSaving = logUiState.isSaving,
                 selectedFlow = logUiState.selectedFlow,
+                selectedDate = uiState.selectedDate,
                 showCalendarButton = false,
                 onAskSakhiClick = {
                     hapticManager.selection()
@@ -482,12 +509,17 @@ private fun EditPeriodDatesBar(
                         maxLines = 2,
                         modifier = Modifier.weight(1f),
                     )
-                    IconButton(onClick = onCancel) {
-                        Icon(
-                            Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.calendar_edit_period_dates_cancel),
-                        )
-                    }
+                    CloseButton(
+                        onClick = onCancel,
+                        // The bar is `inverseSurface`, so it needs the on-gradient
+                        // treatment rather than an onSurface tint that would vanish --
+                        // but tinted from `inverseOnSurface`, not hardcoded white. That
+                        // token flips with the theme exactly as the bar does; a fixed
+                        // white glyph disappeared into the light bar in dark mode.
+                        onGradient = true,
+                        onGradientColor = MaterialTheme.colorScheme.inverseOnSurface,
+                        contentDescription = stringResource(R.string.calendar_edit_period_dates_cancel),
+                    )
                 }
             }
             else -> {
@@ -506,18 +538,55 @@ private fun EditPeriodDatesBar(
                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         modifier = Modifier.weight(1f),
                     )
-                    TextButton(onClick = onUndo, enabled = canUndo) {
-                        Text(stringResource(R.string.calendar_edit_period_dates_undo))
+                    // Both buttons sit on the dark bar, so they take their colours from
+                    // it rather than from the theme's primary. iOS: Undo is a translucent
+                    // white capsule (0.14 enabled / 0.07 disabled, text white / white at
+                    // 0.30) sized 56x36; Save is a solid white capsule with bar-dark text.
+                    // Android was using a default TextButton and Button, which render pink
+                    // on pink-adjacent dark and gave Undo no readable disabled state.
+                    val onBar = MaterialTheme.colorScheme.inverseOnSurface
+                    Surface(
+                        shape = CircleShape,
+                        color = onBar.copy(alpha = if (canUndo) 0.14f else 0.07f),
+                        modifier = Modifier
+                            .size(width = 56.dp, height = 36.dp)
+                            .clickable(enabled = canUndo, onClick = onUndo)
+                            .semantics { role = Role.Button },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = stringResource(R.string.calendar_edit_period_dates_undo),
+                                fontSize = 13.sp,
+                                color = if (canUndo) onBar else onBar.copy(alpha = 0.30f),
+                            )
+                        }
                     }
                     Spacer(modifier = Modifier.width(SakhiSpacing.space2))
-                    Button(onClick = onSave, enabled = !isSaving) {
-                        if (isSaving) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Text(stringResource(R.string.calendar_edit_period_dates_save))
+                    Surface(
+                        shape = CircleShape,
+                        color = onBar,
+                        modifier = Modifier
+                            .clickable(enabled = !isSaving, onClick = onSave)
+                            .semantics { role = Role.Button },
+                    ) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                        ) {
+                            if (isSaving) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.inverseSurface,
+                                )
+                            } else {
+                                Text(
+                                    text = stringResource(R.string.calendar_edit_period_dates_save),
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.inverseSurface,
+                                )
+                            }
                         }
                     }
                 }
@@ -546,7 +615,7 @@ private fun CalendarHeader(
     ) {
         HeaderNavButton(
             onClick = onPreviousMonth,
-            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            icon = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
             contentDescription = stringResource(R.string.calendar_previous_month),
         )
         Box(
@@ -590,7 +659,7 @@ private fun CalendarHeader(
         }
         HeaderNavButton(
             onClick = onNextMonth,
-            icon = Icons.AutoMirrored.Filled.ArrowForward,
+            icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = stringResource(R.string.calendar_next_month),
         )
     }
@@ -613,7 +682,7 @@ private fun CalendarYearHeader(
     ) {
         HeaderNavButton(
             onClick = onPreviousYear,
-            icon = Icons.AutoMirrored.Filled.ArrowBack,
+            icon = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
             contentDescription = stringResource(R.string.calendar_previous_year),
         )
         Box(
@@ -658,7 +727,7 @@ private fun CalendarYearHeader(
         }
         HeaderNavButton(
             onClick = onNextYear,
-            icon = Icons.AutoMirrored.Filled.ArrowForward,
+            icon = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = stringResource(R.string.calendar_next_year),
         )
     }
@@ -672,13 +741,19 @@ private fun HeaderNavButton(
 ) {
     IconButton(
         onClick = onClick,
-        modifier = Modifier.size(48.dp),
+        // iOS: `Image(systemName: "chevron.left").font(.lato(15, .bold)).frame(44, 44)`
+        // -- a small chevron inside a large touch target. Android was drawing a 36dp
+        // arrow glyph, which read as an oversized arrow rather than iOS's light chevron.
+        modifier = Modifier.size(44.dp),
     ) {
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(SakhiSpacing.space8 + SakhiSpacing.space1),
+            // iOS `SakhiCalendarView:116`: the month-nav chevron is
+            // `DS.Colors.label` -- full strength. NOT the tertiary used for list
+            // disclosure chevrons; different role, two steps darker.
+            tint = sakhiLabel(),
+            modifier = Modifier.size(18.dp),
         )
     }
 }
@@ -881,8 +956,23 @@ private fun CalendarYearView(
     isMultiSelectMode: Boolean = false,
     yearSelection: Set<LocalDate> = emptySet(),
     onToggleDate: (LocalDate) -> Unit = {},
+    /**
+     * Horizontal swipe across the months, matching iOS's `simultaneousGesture` on
+     * `yearMonthsScroll`: `changeYear(by: w < 0 ? 1 : -1)` past a 50pt drag.
+     *
+     * Android had no horizontal gesture here at all, so the swipe fell through to the
+     * sheet's own drag handling and **collapsed the calendar** instead of changing year —
+     * the opposite of what iOS does with the same motion. Handling it here also consumes
+     * the horizontal axis, which is what stops the collapse.
+     */
+    onChangeYear: (Int) -> Unit = {},
 ) {
     val listState = rememberLazyListState()
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // iOS: minimumDistance 50 on the drag gesture.
+    val yearSwipeThresholdPx = with(density) { 50.dp.toPx() }
+    var yearDragTotalPx by remember(viewingYear) { mutableFloatStateOf(0f) }
+    val yearDragState = rememberDraggableState { delta -> yearDragTotalPx += delta }
 
     LaunchedEffect(viewingYear, visibleMonth, listState) {
         val targetIndex = if (viewingYear == visibleMonth.year) {
@@ -899,10 +989,24 @@ private fun CalendarYearView(
             yearSlideTransition(slideDirection)
         },
         label = "calendar_year_change",
+        modifier = Modifier.draggable(
+            state = yearDragState,
+            orientation = Orientation.Horizontal,
+            onDragStopped = {
+                val travelled = yearDragTotalPx
+                yearDragTotalPx = 0f
+                if (abs(travelled) > yearSwipeThresholdPx) {
+                    // Dragging left (negative) moves forward a year, as on iOS.
+                    onChangeYear(if (travelled < 0) 1 else -1)
+                }
+            },
+        ),
     ) { year ->
         LazyColumn(
             state = listState,
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+            // iOS: `VStack(spacing: 0)` — the month label's own top padding (12) is the
+            // only separation between months, so an extra 16dp gap here double-spaced them.
+            verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             items(12) { monthIndex ->
                 val monthStart = LocalDate(year, monthIndex + 1, 1)
@@ -951,38 +1055,37 @@ private fun CalendarYearMonthCard(
     yearSelection: Set<LocalDate> = emptySet(),
     onToggleDate: (LocalDate) -> Unit = {},
 ) {
-    Surface(
-        shape = RoundedCornerShape(SakhiRadius.xxl),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.24f),
-        border = if (isVisibleMonth) {
-            androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.22f))
-        } else {
-            null
-        },
+    // iOS draws no container here. `yearMonthsScroll` is a plain `VStack(spacing: 0)`
+    // per month: a left-aligned label (`.lato(15, .bold)`, accent when it is the current
+    // calendar month) with `.padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 4)`,
+    // and the grid directly beneath. Android had wrapped each month in a rounded, tinted
+    // Surface with a border on the visible month -- twelve cards iOS does not have, which
+    // also boxed in the grid and ate horizontal room.
+    Column(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-        ) {
-            Text(
-                text = monthLabel(month),
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = if (month.year == compactToday.year && month.month == compactToday.month) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.colorScheme.onSurface
-                },
-            )
-            SakhiMiniMonthGrid(
-                days = days.toSakhiCalendarDays(),
-                isMultiSelectMode = isMultiSelectMode,
-                selectionSet = yearSelection,
-                onDayToggle = onToggleDate,
-            )
-        }
+        Text(
+            text = monthLabel(month),
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (month.year == compactToday.year && month.month == compactToday.month) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(top = 12.dp, bottom = 4.dp),
+        )
+        SakhiMiniMonthGrid(
+            days = days.toSakhiCalendarDays(),
+            isMultiSelectMode = isMultiSelectMode,
+            selectionSet = yearSelection,
+            onDayToggle = onToggleDate,
+        )
     }
 }
 

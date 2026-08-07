@@ -42,6 +42,14 @@ import team.sakhi.session.SessionPermissions
 @OptIn(ExperimentalCoroutinesApi::class)
 class PartnerChecklistViewModelTest {
 
+    // The VM now takes a Context so it can fall back to a real string when the user's
+    // name is unknown -- the shared session resolver returns "" for that case instead of
+    // substituting the word "User".
+    private fun mockContext(): android.content.Context = mockk {
+        every { getString(R.string.home_partner_checklist_fallback_name) } returns "Her care partner"
+    }
+
+
     private val testDispatcher = StandardTestDispatcher()
 
     @Before
@@ -105,7 +113,7 @@ class PartnerChecklistViewModelTest {
         val sessionManager = mockk<SessionManager>()
         every { sessionManager.current } returns null
         val aiRepository = mockk<AIRepository>()
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
@@ -121,7 +129,7 @@ class PartnerChecklistViewModelTest {
             sessionManager.current
         } returns sessionContext(canViewPredictions = false, canViewCycleHistory = false)
         val aiRepository = mockk<AIRepository>()
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
@@ -138,7 +146,7 @@ class PartnerChecklistViewModelTest {
         val sessionManager = mockk<SessionManager>()
         every { sessionManager.current } returns sessionContext(userId = "same-user", targetUserId = "same-user")
         val aiRepository = mockk<AIRepository>()
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
@@ -152,7 +160,7 @@ class PartnerChecklistViewModelTest {
         val sessionManager = mockk<SessionManager>()
         every { sessionManager.current } returns sessionContext(partnershipId = null)
         val aiRepository = mockk<AIRepository>()
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
@@ -168,7 +176,7 @@ class PartnerChecklistViewModelTest {
         val aiRepository = mockk<AIRepository>()
         val existing = checklist(listOf(PartnerChecklistItem("i1", "Buy snacks", false)))
         coEvery { aiRepository.getChecklist(any(), any()) } returns Result.success(existing)
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
@@ -193,7 +201,7 @@ class PartnerChecklistViewModelTest {
         coEvery {
             aiRepository.generatePartnerChecklist(any(), any(), any(), any(), any(), any(), any())
         } returns Result.success(generated)
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
@@ -218,7 +226,7 @@ class PartnerChecklistViewModelTest {
             gate.await()
             Result.success(existing)
         }
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
@@ -250,7 +258,7 @@ class PartnerChecklistViewModelTest {
             gate.await()
             Result.success(generated)
         }
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
@@ -277,7 +285,7 @@ class PartnerChecklistViewModelTest {
         coEvery {
             aiRepository.generatePartnerChecklist(any(), any(), any(), any(), any(), any(), any())
         } returns Result.failure(IllegalStateException("network down"))
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
@@ -311,7 +319,7 @@ class PartnerChecklistViewModelTest {
         coEvery {
             aiRepository.generatePartnerChecklist(any(), any(), any(), any(), any(), any(), any())
         } returns Result.failure(IllegalStateException("network down"))
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(
             cyclePhase = CyclePhase.LUTEAL,
@@ -337,7 +345,7 @@ class PartnerChecklistViewModelTest {
         every { sessionManager.current } returns sessionContext()
         val aiRepository = mockk<AIRepository>()
         coEvery { aiRepository.getChecklist(any(), any()) } returns Result.success(checklist(emptyList()))
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, mockk())
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, mockk())
 
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
@@ -356,7 +364,7 @@ class PartnerChecklistViewModelTest {
         coEvery { aiRepository.getChecklist(any(), any()) } returns Result.success(existing)
         coEvery { aiRepository.toggleChecklistItem(any(), any(), any()) } returns Result.success(existing)
         val hapticManager = mockk<AndroidHapticManager>(relaxed = true)
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, hapticManager)
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, hapticManager)
         viewModel.loadOrGenerate(CyclePhase.FOLLICULAR, 8)
         advanceUntilIdle()
 
@@ -378,7 +386,7 @@ class PartnerChecklistViewModelTest {
         every { sessionManager.current } returns null
         val aiRepository = mockk<AIRepository>()
         val hapticManager = mockk<AndroidHapticManager>(relaxed = true)
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, hapticManager)
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, hapticManager)
 
         viewModel.toggle("i1")
         advanceUntilIdle()
@@ -394,7 +402,7 @@ class PartnerChecklistViewModelTest {
         every { sessionManager.current } returns sessionContext(userId = "same-user", targetUserId = "same-user")
         val aiRepository = mockk<AIRepository>()
         val hapticManager = mockk<AndroidHapticManager>(relaxed = true)
-        val viewModel = PartnerChecklistViewModel(sessionManager, aiRepository, hapticManager)
+        val viewModel = PartnerChecklistViewModel(mockContext(), sessionManager, aiRepository, hapticManager)
 
         viewModel.toggle("i1")
         advanceUntilIdle()

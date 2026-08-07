@@ -1,7 +1,4 @@
 <resources>
-    <string name="home_waiting_for_session">Waiting for session</string>
-    <string name="home_session_summary_own">Showing %1$s\'s cycle</string>
-    <string name="home_session_summary_partner">Viewing %1$s access for user %2$s</string>
 
     <string name="home_sync_idle">Sync idle</string>
     <string name="home_sync_syncing">Syncing</string>
@@ -9,10 +6,6 @@
     <string name="home_sync_stale">Data marked stale</string>
     <string name="home_sync_failed">Sync failed</string>
     <string name="home_load_cycle_failed">Failed to load cycle data</string>
-
-    <string name="home_partner_snapshot_revision">Partner snapshot revision %1$d</string>
-    <string name="home_partner_snapshot_refreshed">refreshed %1$s</string>
-    <string name="home_partner_snapshot_revision_with_refreshed">%1$s • %2$s</string>
 
     <string name="home_refresh_content_description">Refresh</string>
     <string name="home_open_profile_content_description">Open profile</string>
@@ -27,13 +20,25 @@
     <string name="home_hero_until_next_her">until her next period</string>
     <string name="home_hero_until_next_self">until next period</string>
 
+    <!-- Hero, matching iOS `heroContent`. In-period reads "Day 3", not "3 Days" -->
+    <string name="home_hero_tip_log_reminder">Please remember to log</string>
+    <string name="home_hero_day_number">Day %1$d</string>
+    <string name="home_hero_period_expected_of_her">of her expected period</string>
+    <string name="home_hero_period_expected_of_your">of your expected period</string>
+    <string name="home_hero_since_expected_her">since her expected period</string>
+    <string name="home_hero_since_expected_self">since expected period</string>
     <plurals name="home_day_count">
         <item quantity="one">%d Day</item>
         <item quantity="other">%d Days</item>
     </plurals>
 
+    <!-- iOS home.activity.log, shown as the "History" badge on the logged-details card.
+         Nil in partner mode, so a partner sees no history affordance. -->
+    <string name="home_logged_history_badge">History</string>
     <string name="home_logged_partner_title">Her day</string>
-    <string name="home_logged_self_title">Logged today</string>
+    <!-- iOS home.logged.label. The partner variant is "Her day"; the self variant asks
+         about feeling, not about the act of logging. -->
+    <string name="home_logged_self_title">How you feel</string>
     <string name="home_logged_partner_empty">She hasn\'t logged today yet</string>
     <string name="home_logged_self_empty">Log your day</string>
     <string name="home_log_category_flow">Flow</string>
@@ -75,7 +80,9 @@
     </plurals>
 
     <string name="home_phase_info_partner_title">What\'s happening to her body?</string>
-    <string name="home_phase_info_self_title">What\'s happening in your body</string>
+    <!-- iOS home.info.body. First person ("my body") and a question mark, matching the
+         partner variant above, which Android already phrased as a question. -->
+    <string name="home_phase_info_self_title">What\'s Happening to my body?</string>
     <string name="home_phase_info_body_changes">BODY CHANGES</string>
 
     <string name="home_partner_checklist_title">What You Can Do</string>
@@ -106,13 +113,26 @@
     <string name="home_insight_self_title">Sakhi\'s tip for today</string>
     <string name="home_insight_powered">Powered by Sakhi AI</string>
 
+    <!-- Learning-section card titles. iOS spells these in sentence case
+         ("Menstrual phase"), unlike the top-bar names below, which come from a
+         different iOS source and are title case. Do not merge the two sets. -->
     <string name="home_phase_menstrual">Menstrual phase</string>
     <string name="home_phase_follicular">Follicular phase</string>
-    <string name="home_phase_ovulation">Ovulation phase</string>
     <string name="home_phase_luteal">Luteal phase</string>
-    <string name="home_phase_delayed">Delayed period</string>
     <string name="home_phase_first_period_partner">Her first period</string>
     <string name="home_phase_first_period_self">Track your first period</string>
+
+    <!-- Top-bar / day-detail phase names, one per engine PhaseKind. These mirror
+         iOS `SakhiCycleInsightEngine.present(_:)`, which names PMS separately even
+         though it reports the luteal phase. Keying these off CyclePhase instead
+         lost that distinction, since PMS folds into LUTEAL there. -->
+    <string name="home_phase_name_menstrual">Menstrual Phase</string>
+    <string name="home_phase_name_follicular">Follicular Phase</string>
+    <string name="home_phase_name_ovulation">Ovulation Phase</string>
+    <string name="home_phase_name_luteal">Luteal Phase</string>
+    <string name="home_phase_name_pms">PMS Phase</string>
+    <string name="home_phase_name_delayed">Delayed Phase</string>
+    <string name="home_phase_name_unknown">Unknown Phase</string>
 
     <string name="home_phase_snippet_menstrual_overview">Your period is here. Your body is shedding the lining it built last month, and starting fresh. It\'s completely normal to feel tired, crampy, or a little low, your hormones are at their lowest point right now.</string>
     <string name="home_phase_snippet_menstrual_body_1">Your uterus gently cramps to help shed the lining, that\'s what causes period pain</string>
@@ -207,4 +227,5 @@
     <string name="home_learning_tracking_tip_3">Sleep quality and stress both affect your cycle length, log them too</string>
     <string name="home_learning_tracking_tip_4">Cycles vary month to month. Three cycles gives Sakhi a reliable baseline</string>
 
+    <string name="home_partner_checklist_fallback_name">Her care partner</string>
 </resources>

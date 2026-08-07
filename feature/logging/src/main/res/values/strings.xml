@@ -1,19 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="logging_close">Close</string>
-    <string name="logging_flow">Flow</string>
-    <string name="logging_symptoms">Symptoms</string>
+    <!-- iOS home.log.flow / home.sections.symptoms. "Other Symptoms" is deliberate on
+         iOS: flow is logged in the section above, so what follows is everything else. -->
+    <string name="logging_flow">Flow Intensity</string>
+    <string name="logging_symptoms">Other Symptoms</string>
     <string name="logging_section_body">Body</string>
     <string name="logging_section_weight">Weight</string>
     <string name="logging_weight_value">%1$d Kg</string>
-    <string name="logging_section_bbt">Basal Body Temperature</string>
+    <!-- iOS's logging sheet labels this row "BBT", not the expanded name. -->
+    <string name="logging_section_bbt">BBT</string>
     <string name="logging_bbt_value">%1$.1f °C</string>
     <string name="logging_section_pain">Pain</string>
     <string name="logging_section_digestive">Digestive</string>
     <string name="logging_section_physical">Physical</string>
     <string name="logging_section_mood">Mood</string>
     <string name="logging_section_sleep">Sleep</string>
+    <!-- Two distinct labels on iOS: cardSectionLabel("Discharge") heads the group, and
+         the colour picker row inside it reads "Discharge Color" (home.log.discharge).
+         Android was using one string for both, so the row lost the word it needed. -->
     <string name="logging_section_discharge">Discharge</string>
+    <string name="logging_discharge_color">Discharge Color</string>
+    <!-- Two rows iOS spells out more fully in the logging sheet than its own
+         Symptom.displayName does. iOS hardcodes these in HomeLoggingSheet while its
+         day-detail chips keep the shorter enum value, so the longer wording belongs to
+         the sheet only - putting it on displayName would change the chips too, where
+         iOS shows the short form. -->
+    <string name="logging_symptom_water_retention">Water Retention / Swelling</string>
+    <string name="logging_symptom_vaginal_itching">Vaginal Itching / Irritation</string>
     <string name="logging_section_log">Log</string>
     <string name="logging_painkiller_taken">Painkiller Taken</string>
     <string name="logging_doctor_visited">Doctor Visited</string>
@@ -26,10 +40,7 @@
     <string name="logging_not_selected">Not selected</string>
     <string name="logging_selection_state">%1$s selected</string>
     <string name="logging_not_selected_state">%1$s not selected</string>
-    <string name="logging_flow_spotting">Spotting</string>
-    <string name="logging_flow_light">Slight</string>
-    <string name="logging_flow_medium">Moderate</string>
-    <string name="logging_flow_heavy">Heavy</string>
+    <!-- Flow wording now lives once, in core:ui (FlowLabels.kt / sakhi_flow_*). -->
     <string name="logging_save_saving">Saving...</string>
     <string name="logging_save_saved">Saved</string>
     <string name="logging_save_retry">Save failed, tap to retry</string>
@@ -45,4 +56,12 @@
     <string name="logging_error_future_date">You can only log today or earlier.</string>
     <string name="logging_error_missing_flow">Pick a flow intensity before saving.</string>
     <string name="logging_error_flow_without_period">Flow cannot be saved without a period.</string>
+    <!-- iOS logging header shows `cyclePhase.name` under the date. -->
+    <string name="logging_phase_menstrual">Menstrual Phase</string>
+    <string name="logging_phase_follicular">Follicular Phase</string>
+    <string name="logging_phase_ovulation">Ovulation Phase</string>
+    <string name="logging_phase_luteal">Luteal Phase</string>
+    <string name="logging_phase_pms">PMS Phase</string>
+    <string name="logging_phase_delayed">Delayed Period</string>
+    <string name="logging_phase_unknown">Cycle</string>
 </resources>

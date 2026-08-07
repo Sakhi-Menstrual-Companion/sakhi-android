@@ -11,11 +11,14 @@ val homeFeatureModule = module {
             syncStore = get(),
             cycleDataRepository = get(),
             periodLogRepository = get(),
+            cycleDetectionCoordinator = get(),
+            recommendationRepository = get(),
             appContext = get(),
         )
     }
     viewModel {
         PartnerChecklistViewModel(
+            appContext = get(),
             sessionManager = get(),
             aiRepository = get(),
             hapticManager = get(),

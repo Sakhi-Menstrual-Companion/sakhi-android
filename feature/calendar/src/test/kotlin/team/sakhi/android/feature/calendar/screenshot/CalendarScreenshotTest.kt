@@ -1,8 +1,10 @@
 package team.sakhi.android.feature.calendar.screenshot
 
+import team.sakhi.android.common.CycleDetectionCoordinator
 import android.content.Context
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.mockk.coEvery
 import io.mockk.every
@@ -33,6 +35,7 @@ import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.session.SessionPermissions
+import team.sakhi.models.PeriodLog
 
 /**
  * Second slice of the screenshot-test durability lane (first slice was
@@ -47,7 +50,9 @@ import team.sakhi.session.SessionPermissions
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34])
+// Pixel 5 rather than Robolectric's 320x470 default: the grid and the bottom bar do not
+// both fit at the default size, so a capture cannot show what it exists to pin.
+@Config(sdk = [34], qualifiers = RobolectricDeviceQualifiers.Pixel5)
 class CalendarScreenshotTest {
 
     @get:Rule
@@ -106,6 +111,19 @@ class CalendarScreenshotTest {
         cycleLength = 28,
     )
 
+    /** A cycle only exists because logs produced it; keep the two doubles consistent. */
+    private fun periodLogsFor(cycle: CycleData): List<PeriodLog> =
+        (0 until (cycle.periodLength ?: 5)).map { offset ->
+            PeriodLog(
+                id = "log-${cycle.id}-$offset",
+                userId = cycle.userId,
+                logDate = DateConverter.addDays(cycle.periodStartDate, offset),
+                periodPresent = true,
+                createdByUserId = cycle.userId,
+                sourceUserId = cycle.userId,
+            )
+        }
+
     private fun newViewModel(): CalendarViewModel {
         val session = sessionContext()
         val sessionManager = mockk<SessionManager> {
@@ -118,7 +136,21 @@ class CalendarScreenshotTest {
         val appContext: Context = mockk {
             every { getString(any()) } returns "Failed to load calendar data"
         }
-        return CalendarViewModel(sessionManager, cycleDataRepository, mockk(relaxed = true), appContext)
+        return CalendarViewModel(
+            sessionManager,
+            cycleDataRepository,
+            // Day marks come from the shared engine, which reads **logged period days**.
+            // This previously returned an empty list, so the captured calendar had no
+            // period / predicted / fertile / ovulation markers at all -- the lane looked
+            // like it covered the grid while being blind to every marker colour in it.
+            // Expanding the fixture cycle into its own run of logs is what makes the
+            // markers render, and is the same consistency rule HomeViewModelTest documents.
+            mockk<PeriodLogRepository> {
+                coEvery { getAll(any()) } returns Result.success(periodLogsFor(menstrualCycle()))
+            },
+            mockk(relaxed = true),
+            appContext,
+        )
     }
 
     // `CalendarScreen` now also drives its own dedicated `LoggingViewModel` (the
@@ -134,6 +166,10 @@ class CalendarScreenshotTest {
         }
         val periodLogRepository = mockk<PeriodLogRepository> {
             coEvery { getForDateRange(any(), any(), any()) } returns Result.success(emptyList())
+            // `getAll` became reachable from the logging sheet's own load path; without
+            // this the mock throws rather than returning an empty result, which failed the
+            // whole render.
+            coEvery { getAll(any()) } returns Result.success(emptyList())
         }
         val appContext: Context = mockk {
             every { getString(any()) } returns ""
@@ -144,6 +180,20 @@ class CalendarScreenshotTest {
             periodLogRepository = periodLogRepository,
             hapticManager = mockk(relaxed = true),
             widgetSnapshotManager = mockk(relaxed = true),
+            // Real coordinator over the same mocked repositories -- a thin orchestrator
+            // around the shared detector, so a mock would only assert against itself.
+            cycleDetectionCoordinator = CycleDetectionCoordinator(
+                periodLogRepository = periodLogRepository,
+                cycleDataRepository = mockk(relaxed = true),
+            ),
+            // Added when the logging sheet started showing the phase under the date --
+            // it cannot be derived from logs alone. Returns the same cycle the calendar
+            // fixture uses rather than a relaxed default, so the sheet's phase line and
+            // the grid it sits under cannot disagree.
+            cycleDataRepository = mockk {
+                coEvery { getAll(any()) } returns Result.success(listOf(menstrualCycle()))
+                coEvery { getLatest(any()) } returns Result.success(menstrualCycle())
+            },
         )
     }
 

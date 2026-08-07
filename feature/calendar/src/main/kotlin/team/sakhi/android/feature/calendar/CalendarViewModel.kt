@@ -1,5 +1,7 @@
 package team.sakhi.android.feature.calendar
 
+import team.sakhi.repositories.PeriodLogRepository
+import team.sakhi.android.common.CycleInsightAdapter
 import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
@@ -25,6 +27,7 @@ import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
+import team.sakhi.android.common.toSafeUserMessage
 
 private fun currentMonthStart(): LocalDate {
     val today = DateConverter.today()
@@ -66,6 +69,7 @@ data class CalendarUiState(
 class CalendarViewModel(
     private val sessionManager: SessionManager,
     private val cycleDataRepository: CycleDataRepository,
+    private val periodLogRepository: PeriodLogRepository,
     private val hapticManager: AndroidHapticManager,
     private val appContext: Context,
 ) : ViewModel() {
@@ -74,6 +78,7 @@ class CalendarViewModel(
     private val _uiState = MutableStateFlow(CalendarUiState())
     val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
     private var cachedSession: SessionContext? = null
+    private var cachedPeriodLogDates: Set<LocalDate> = emptySet()
     private var cachedCycles: List<CycleData> = emptyList()
 
     init {
@@ -205,11 +210,23 @@ class CalendarViewModel(
         }
 
         val requestedTargetUserId = session.targetUserId
+        // Cleared FIRST. Marks are now built from logged days, so leaving the previous
+        // target's logs in place would render that person's period days while the new
+        // target is still loading -- a real cross-account leak, caught by
+        // `ensureYearLoaded does not reuse the previous targets cached cycles`.
+        cachedPeriodLogDates = emptySet()
+        val loadedLogDates = runCatching {
+            periodLogRepository.getAll(requestedTargetUserId).getOrDefault(emptyList())
+        }.getOrDefault(emptyList())
+            .filter { it.periodPresent }
+            .mapTo(mutableSetOf()) { it.logDate }
         cycleDataRepository.getAll(requestedTargetUserId)
             .onSuccess { cycles ->
                 if (sessionManager.current?.targetUserId != requestedTargetUserId) return
                 cachedSession = session
                 cachedCycles = cycles
+                // Only adopt the logs once this target is confirmed still current.
+                cachedPeriodLogDates = loadedLogDates
                 val monthsToLoad = preloadMonthsFor(month)
                 val monthCache = buildMonthCache(
                     months = monthsToLoad,
@@ -243,8 +260,7 @@ class CalendarViewModel(
                     days = monthCache[month],
                     monthCache = monthCache,
                     isLoading = false,
-                    error = throwable.message
-                        ?: appContext.getString(R.string.calendar_load_failed),
+                    error = throwable.toSafeUserMessage(appContext, R.string.calendar_load_failed),
                     hasAnyCalendarAccess = hasCalendarAccess(session),
                 )
             }
@@ -333,10 +349,15 @@ class CalendarViewModel(
         session: SessionContext,
     ): Map<LocalDate, Map<LocalDate, CalendarMarker.DayMark>> {
         return months.associateWith { month ->
-            val rawMarks = CalendarMarker.buildMarks(
+            // Engine-built, matching iOS's `PeriodManager` -> `buildCalendarState`.
+            // `CalendarMarker.buildMarks(cycles)` cannot project predicted/fertile/
+            // ovulation/PMS days for the cycle you are currently in, because its
+            // cycleLength stays null until the cycle closes.
+            val rawMarks = CycleInsightAdapter.calendarMarks(
                 from = monthGridStart(month),
                 to = monthGridEnd(month),
-                cycles = cycles,
+                periodLogDates = cachedPeriodLogDates,
+                today = DateConverter.today(),
             )
             rawMarks.mapValues { (_, mark) ->
                 filterMarkForSession(mark, session)

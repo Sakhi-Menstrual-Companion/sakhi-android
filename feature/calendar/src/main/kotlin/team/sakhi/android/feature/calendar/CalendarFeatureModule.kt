@@ -9,6 +9,7 @@ val calendarFeatureModule = module {
         CalendarViewModel(
             sessionManager = get(),
             cycleDataRepository = get(),
+            periodLogRepository = get(),
             hapticManager = get(),
             appContext = get(),
         )

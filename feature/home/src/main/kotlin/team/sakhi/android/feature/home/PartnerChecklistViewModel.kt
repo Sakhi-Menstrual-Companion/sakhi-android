@@ -34,6 +34,7 @@ data class PartnerChecklistUiState(
  * already read/write straight to Supabase).
  */
 class PartnerChecklistViewModel(
+    private val appContext: android.content.Context,
     private val sessionManager: SessionManager,
     private val aiRepository: AIRepository,
     private val hapticManager: AndroidHapticManager,
@@ -80,7 +81,14 @@ class PartnerChecklistViewModel(
                 dateString = dateString,
                 cyclePhase = cyclePhase.value,
                 cycleDay = cycleDay,
-                partnerName = session.userName,
+                // `session.userName` is empty when the name is genuinely unknown (the
+                // shared resolver no longer substitutes the word "User"), and this value
+                // is interpolated straight into an AI prompt -- "Suggest the caring things
+                // $partnerName can do today" -- so a blank would produce a malformed
+                // sentence for the model.
+                partnerName = session.userName.ifBlank {
+                    appContext.getString(R.string.home_partner_checklist_fallback_name)
+                },
             ).onSuccess { checklist ->
                 if (discardStaleLoad(session, key)) return@onSuccess
                 _uiState.update {

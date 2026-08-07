@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.logging
 
+import team.sakhi.android.ui.CloseButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import kotlinx.datetime.LocalDate
@@ -63,15 +64,20 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.ui.flowDisplayNameRes
 import team.sakhi.android.ui.HorizontalRulerSlider
 import team.sakhi.android.ui.KeyboardSafeScaffold
+import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.logging.DischargeColor
 import team.sakhi.logging.Symptom
 import team.sakhi.models.FlowIntensity
 import kotlin.math.roundToInt
+import team.sakhi.android.designsystem.sakhiSystemBackground
+import androidx.compose.foundation.border
 
 /**
  * Daily log sheet — ports iOS `HomeLoggingSheet.swift` (683 lines): drag handle,
@@ -200,26 +206,34 @@ fun LoggingSheet(
     SheetSurface(showDragHandle = true) {
         KeyboardSafeScaffold(
             topBar = {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = formattedHeaderDate(uiState.selectedDate),
-                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    IconButton(onClick = onClose) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.logging_close),
-                        )
-                    }
-                }
+                // Shared nav bar, so this close button matches Profile's exactly. Its
+                // "title" is two stacked lines, so it goes in the `leading` slot.
+                SakhiNavBar(
+                    onClose = onClose,
+                    leading = {
+                        // iOS header: VStack(alignment: .leading, spacing: 2) of the date
+                        // (lato 20 bold) over the phase name (lato 13, secondaryLabel).
+                        // Android showed the date alone.
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = formattedHeaderDate(uiState.selectedDate),
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            uiState.phaseName?.let { phase ->
+                                Text(
+                                    text = phase,
+                                    fontSize = 13.sp,
+                                    color = sakhiSecondaryLabel(),
+                                )
+                            }
+                        }
+                    },
+                )
                 HorizontalDivider()
             },
             body = {
@@ -295,7 +309,10 @@ fun LoggingSheet(
 
                         Surface(
                             shape = RoundedCornerShape(SakhiRadius.xl),
-                            tonalElevation = SakhiSpacing.space1,
+                            // iOS: `.background(DS.Colors.systemBackground)` -- the symptom
+                            // block is a plain WHITE card. `tonalElevation` on a lightPink
+                            // `surface` tinted it pink instead.
+                            color = sakhiSystemBackground(),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = SakhiSpacing.space6),
@@ -409,7 +426,7 @@ fun LoggingSheet(
                                     Text(
                                         text = stringResource(R.string.logging_section_discharge).uppercase(),
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = sakhiSecondaryLabel(),
                                         modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
                                     )
                                     DischargeColorRow(
@@ -426,7 +443,7 @@ fun LoggingSheet(
                                     )
                                     HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
                                     SymptomRow(
-                                        label = Symptom.VAGINAL_ITCHING.displayName,
+                                        label = Symptom.VAGINAL_ITCHING.sheetLabel(),
                                         checked = Symptom.VAGINAL_ITCHING in uiState.selectedSymptoms,
                                         enabled = uiState.canViewDischarge,
                                         onClick = { viewModel.toggleSymptom(Symptom.VAGINAL_ITCHING) },
@@ -436,7 +453,7 @@ fun LoggingSheet(
                                     Text(
                                         text = stringResource(R.string.logging_section_log).uppercase(),
                                         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        color = sakhiSecondaryLabel(),
                                         modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
                                     )
                                     SymptomRow(
@@ -544,12 +561,12 @@ private fun symptomSection(
     Text(
         text = title.uppercase(),
         style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = sakhiSecondaryLabel(),
         modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
     )
     symptoms.forEachIndexed { index, symptom ->
         SymptomRow(
-            label = symptom.displayName,
+            label = symptom.sheetLabel(),
             checked = symptom in selected,
             enabled = enabled,
             onClick = { onToggle(symptom) },
@@ -558,6 +575,24 @@ private fun symptomSection(
             HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space5))
         }
     }
+}
+
+/**
+ * The label this symptom shows *in the logging sheet*, which is not always its
+ * `displayName`.
+ *
+ * iOS does the same thing, just implicitly: `HomeLoggingSheet` hardcodes
+ * "Water Retention / Swelling" and "Vaginal Itching / Irritation" for these two rows,
+ * while its own `Symptom.displayName` returns the shorter "Water Retention" and
+ * "Itching / Irritation" — and its day-detail chips render the short form. Android's
+ * `displayName` already matches iOS's enum exactly, so the longer wording has to live
+ * here at the sheet rather than on the shared enum, otherwise the chips would drift.
+ */
+@Composable
+private fun Symptom.sheetLabel(): String = when (this) {
+    Symptom.WATER_RETENTION -> stringResource(R.string.logging_symptom_water_retention)
+    Symptom.VAGINAL_ITCHING -> stringResource(R.string.logging_symptom_vaginal_itching)
+    else -> displayName
 }
 
 @Composable
@@ -597,6 +632,19 @@ private fun LogCheckbox(checked: Boolean) {
             .background(
                 color = if (checked) MaterialTheme.colorScheme.primary else Color.Transparent,
                 shape = RoundedCornerShape(6.dp),
+            )
+            // iOS `LogCheckbox` strokes the box at 1.5pt in `separator` when off and in
+            // pink when on. Android drew no stroke at all, so an unchecked box was a
+            // fully transparent 22dp square -- invisible. Every symptom row looked like
+            // it had no control next to it.
+            .border(
+                width = 1.5.dp,
+                color = if (checked) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant
+                },
+                shape = RoundedCornerShape(6.dp),
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -633,7 +681,9 @@ private fun FlowCard(
 
     Surface(
         shape = RoundedCornerShape(SakhiRadius.lg),
-        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+        // iOS: `.fill(selected ? DS.Colors.pink : DS.Colors.systemBackground)` -- the
+        // unselected chip is a plain WHITE card, not Material's lavender `surfaceVariant`.
+        color = if (selected) MaterialTheme.colorScheme.primary else sakhiSystemBackground(),
         modifier = modifier
             .semantics {
                 this.selected = selected
@@ -722,7 +772,7 @@ private fun ExpandableValueRow(
                 Text(
                     text = "+",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }
@@ -767,7 +817,7 @@ private fun DischargeColorRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = stringResource(R.string.logging_section_discharge),
+                text = stringResource(R.string.logging_discharge_color),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
@@ -845,8 +895,13 @@ private fun SaveBar(
         ),
         modifier = Modifier
             .fillMaxWidth()
-            .height(52.dp)
-            .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
+            // Padding BEFORE height. Reversed, `.height(52.dp).padding(vertical = 16.dp)`
+            // shrinks the button's own box to 52 - 32 = 20dp, and Material3's Button adds
+            // its internal content padding on top of that, so the label was clipped away
+            // entirely -- the Save button rendered as a bare pink bar with no text.
+            // Applying the margins first makes it a real 52dp button inside them.
+            .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4)
+            .height(52.dp),
     ) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
@@ -874,12 +929,9 @@ private fun SaveBar(
     }
 }
 
-private fun flowLabelRes(flow: FlowIntensity): Int = when (flow) {
-    FlowIntensity.SPOTTING -> R.string.logging_flow_spotting
-    FlowIntensity.LIGHT -> R.string.logging_flow_light
-    FlowIntensity.MEDIUM -> R.string.logging_flow_medium
-    FlowIntensity.HEAVY -> R.string.logging_flow_heavy
-}
+// Delegates to core:ui so the sheet, the quick-log menu and Home's chip cannot disagree
+// about what the same logged value is called -- they already had, before this.
+private fun flowLabelRes(flow: FlowIntensity): Int = flowDisplayNameRes(flow)
 
 @Composable
 private fun formattedHeaderDate(date: kotlinx.datetime.LocalDate): String {

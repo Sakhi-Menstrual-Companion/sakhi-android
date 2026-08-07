@@ -1,5 +1,8 @@
 package team.sakhi.android.feature.home
 
+import team.sakhi.android.common.CycleInsightAdapter
+import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.rounded.AutoAwesome
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -120,12 +123,15 @@ import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.phasePrimaryColor
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.LoadingShimmer
 import team.sakhi.android.ui.PhaseBadge
+import team.sakhi.android.ui.flowDisplayName
 import team.sakhi.android.ui.SakhiBottomActionBar
 import team.sakhi.android.feature.logging.LoggingViewModel
 import team.sakhi.android.feature.recommendations.RecommendationFoodUi
@@ -135,11 +141,33 @@ import team.sakhi.date.DateConverter
 import team.sakhi.logging.LogTokenEncoder
 import team.sakhi.logging.Mood
 import team.sakhi.logging.Symptom
+import team.sakhi.cycle.CyclePhaseInsight
 import team.sakhi.models.CyclePhase
 import team.sakhi.models.FlowIntensity
 import team.sakhi.models.PeriodLog
 import team.sakhi.design.SakhiColors
 import team.sakhi.sync.SyncRuntimeState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.layout.onGloballyPositioned
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.layout.Spacer
+import team.sakhi.recommendations.FoodEmoji
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import team.sakhi.android.designsystem.sakhiGroupedBackground
+import team.sakhi.android.designsystem.sakhiSystemGray5
+import androidx.compose.foundation.layout.navigationBarsPadding
 
 /**
  * Phase 1 real home screen: renders shared cycle, permission, and sync state from
@@ -157,8 +185,11 @@ fun HomeScreen(
     onOpenProfile: () -> Unit = {},
     onOpenCare: () -> Unit = {},
     onOpenCalendar: () -> Unit = {},
+    /** Counterpart to [onOpenCalendar] — see the `onPhaseTap` call site. */
+    onCloseCalendar: () -> Unit = {},
     onOpenChat: () -> Unit = {},
     onQuickLogClick: (LocalDate) -> Unit = {},
+    onLockedLogClick: () -> Unit = {},
     viewModel: HomeViewModel = koinViewModel(),
     recommendationsViewModel: RecommendationsViewModel = koinViewModel(),
     quickLogViewModel: LoggingViewModel = koinViewModel(),
@@ -167,10 +198,22 @@ fun HomeScreen(
     val recoState by recommendationsViewModel.uiState.collectAsStateWithLifecycle()
     val quickLogUiState by quickLogViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val accentColor = phasePrimaryColor(uiState.phase)
     val phasePalette = rememberHomePhasePalette(uiState.phase)
+    // Taken from the Home phase palette, NOT `phasePrimaryColor(...)`. The latter
+    // returns the raw `PhaseVisualStyle.colorHex` (#E85787 for menstrual), which
+    // bypasses the white-in-period-mode override iOS applies when it builds this same
+    // palette (`PhaseColorManager.swift:94`). Using the raw token here put pink text
+    // and icons on the pink menstrual background.
+    val accentColor = phasePalette.primary
     val hapticManager = koinInject<AndroidHapticManager>()
+    val scope = rememberCoroutineScope()
     val scrollState = rememberScrollState()
+    // iOS's phase label scrolls the day-detail to the "phaseInfo" card
+    // (`proxyReader.scrollTo("phaseInfo", anchor: .top)`). Compose's verticalScroll has
+    // no id-based anchor, so the card reports its own offset within the scroll content
+    // and the tap animates there.
+    var scrollColumnTop by remember { mutableFloatStateOf(0f) }
+    var phaseCardOffset by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
     val heroScrollProgress by remember(scrollState, density) {
         derivedStateOf {
@@ -255,22 +298,28 @@ fun HomeScreen(
                     hapticManager.selection()
                     viewModel.selectDate(DateConverter.today())
                 },
+                onPhaseTap = {
+                    hapticManager.selection()
+                    // iOS's `onPhaseTap` is `showCalendar = false` *then*
+                    // `phaseScrollTrigger += 1` -- the phase card it scrolls to lives
+                    // under the calendar sheet, so without closing the calendar first
+                    // the scroll happened behind it and the tap looked inert.
+                    onCloseCalendar()
+                    scope.launch {
+                        // iOS: withAnimation(.easeInOut(duration: 0.42)) then
+                        // scrollTo("phaseInfo", anchor: .top).
+                        scrollState.animateScrollTo(
+                            phaseCardOffset.roundToInt().coerceAtLeast(0),
+                            animationSpec = tween(durationMillis = 420),
+                        )
+                    }
+                },
             )
-            Text(
-                text = uiState.session?.let { sessionSummary(context, it) }
-                    ?: stringResource(R.string.home_waiting_for_session),
-                style = MaterialTheme.typography.bodyMedium,
-                color = homeSecondaryTextColor(
-                    phasePalette = phasePalette,
-                    hasCycleData = uiState.hasCycleData,
-                    isMenstrual = uiState.phase == CyclePhase.MENSTRUAL,
-                ),
-            )
-
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .verticalScroll(scrollState),
+                    .verticalScroll(scrollState)
+                    .onGloballyPositioned { scrollColumnTop = it.positionInRoot().y },
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
             ) {
             val canShowHero = uiState.session?.isViewingOwnData == true || uiState.canViewPredictions
@@ -283,27 +332,18 @@ fun HomeScreen(
                 )
             }
 
-            StateChip(
-                label = syncLabel(context, uiState.syncState),
-                tint = syncTint(uiState.syncState, accentColor),
-            )
-
-            uiState.partnerSnapshotRevision?.let { revision ->
-                val revisionText = stringResource(
-                    R.string.home_partner_snapshot_revision,
-                    revision,
-                )
-                val revisionAndRefreshText = uiState.partnerSnapshotRefreshedAt?.let {
-                    stringResource(
-                        R.string.home_partner_snapshot_revision_with_refreshed,
-                        revisionText,
-                        context.getString(R.string.home_partner_snapshot_refreshed, it),
-                    )
-                }
-                Text(
-                    text = revisionAndRefreshText ?: revisionText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            // Sync state is shown only while something is actually happening, matching
+            // iOS's `topStatusBanner`, which renders solely for
+            // `isRefreshingWithStaleData` / `hasStaleFailure` and is invisible the rest
+            // of the time. Android used to pin a permanent chip here that read
+            // "Sync idle" on a healthy screen — a bring-up debug affordance, not
+            // product UI, and iOS has no equivalent. Idle and Success now render
+            // nothing, so the chip only ever appears when it is telling the user
+            // something real.
+            if (uiState.syncState.isWorthShowing()) {
+                StateChip(
+                    label = syncLabel(context, uiState.syncState),
+                    tint = syncTint(uiState.syncState, accentColor),
                 )
             }
 
@@ -368,7 +408,14 @@ fun HomeScreen(
                     partnerHeadsUpText(context, uiState.phase, uiState.dayInCycle, uiState.daysUntilNextPeriod)?.let { headsUp ->
                         PartnerHeadsUpCard(text = headsUp, accentColor = accentColor)
                     }
-                    PhaseInfoCard(phase = uiState.phase, isPartnerMode = true, accentColor = accentColor)
+                    PhaseInfoCard(
+                        phase = uiState.phase,
+                        isPartnerMode = true,
+                        accentColor = accentColor,
+                        modifier = Modifier.onGloballyPositioned {
+                            phaseCardOffset = it.positionInRoot().y - scrollColumnTop + scrollState.value
+                        },
+                    )
                     // Real gap found in the second parity sweep: iOS's real
                     // `sakhiInsightCard` renders in partner mode too (its own
                     // title branches on `isPartnerMode` -- "How to be there for
@@ -406,6 +453,7 @@ fun HomeScreen(
                     uiState.currentCycle?.let { cycle ->
                         CycleDetailsCard(
                             cycle = cycle,
+                            periodLogDates = uiState.periodLogDates,
                             dayInCycle = uiState.dayInCycle ?: 1,
                             cycleLength = uiState.cycleLength ?: 28,
                             phase = uiState.phase,
@@ -415,7 +463,14 @@ fun HomeScreen(
                             longestCycle = uiState.longestCycle,
                         )
                     }
-                    PhaseInfoCard(phase = uiState.phase, isPartnerMode = false, accentColor = accentColor)
+                    PhaseInfoCard(
+                        phase = uiState.phase,
+                        isPartnerMode = false,
+                        accentColor = accentColor,
+                        modifier = Modifier.onGloballyPositioned {
+                            phaseCardOffset = it.positionInRoot().y - scrollColumnTop + scrollState.value
+                        },
+                    )
                     SakhiInsightCard(
                         phase = uiState.phase,
                         insight = recoState.aiInsight,
@@ -429,14 +484,52 @@ fun HomeScreen(
             }
             }
 
+            // `MainActivity` now draws a fully transparent system navigation bar (was an
+            // opaque AndroidX safety scrim on 3-button-nav devices), so this bar's own content
+            // extends behind the OS back/home/recents buttons unless it claims that inset
+            // itself. The calendar sheet's copy of this same bar does not need this -- it
+            // renders inside a modal sheet, which already reserves its own bottom inset.
+            Box(modifier = Modifier.navigationBarsPadding()) {
             SakhiBottomActionBar(
                 phase = uiState.phase,
                 accentColor = accentColor,
+                // iOS passes `logFill: cardFill` and `logIconColor: standardAccent`
+                // separately. On a period day `accentColor` is white (the primary
+                // override that keeps text readable on the saturated background), so
+                // using it as the button fill produced a white glyph on a white circle —
+                // the log button, the screen's main action, rendered blank. The fill is
+                // the phase surface, exactly as `cardFill` resolves on iOS.
+                // iOS passes `logFill: cardFill` for EVERY phase, not just the period
+                // one. Special-casing menstrual (as this did) left the non-period branch
+                // on `accentColor`, which in dark resolves to the near-white Rose primary
+                // (#FAF4F8) — so the white glyph sat on a near-white circle and the log
+                // button rendered completely blank. Same defect as the period-day case,
+                // just in the cell nothing had rendered until the follicular/dark
+                // screenshot existed.
+                logFill = homeCardFill(
+                    phase = uiState.phase,
+                    hasCycleData = uiState.hasCycleData,
+                ),
+                // Third and final instance of the same bug. iOS is
+                // `logIconColor: standardAccent` (`HomeDayDetailGlassView+ActionBar:42`) --
+                // Android hardcoded white, which the comment above already described
+                // correctly and the code then ignored. The fill was corrected twice (period
+                // white-on-white, then dark near-white-on-near-white) but the *glyph* stayed
+                // white, so off a period day it sat on the light `cardFill` at almost no
+                // contrast -- on the screen's primary action, for most of the cycle.
+                // `accentColor` is Android's `standardAccent`: it is already passed as
+                // `accent` above, and it resolves to white on a period day (keeping the
+                // glyph readable on the saturated fill) and to the phase accent otherwise.
+                logIconColor = accentColor,
+                // iOS: logStrokeColor = standardAccent.opacity(0.14).
+                logStrokeColor = accentColor.copy(alpha = 0.14f),
                 isPartnerMode = uiState.session?.isViewingOwnData == false,
                 canLog = uiState.canLogPeriod,
+                onLockedLogClick = onLockedLogClick.takeIf { uiState.session?.isViewingOwnData == false },
                 hasLoggedForDate = uiState.hasLoggedForSelectedDate,
                 isLogSaving = quickLogUiState.isSaving,
                 selectedFlow = quickLogUiState.selectedFlow,
+                selectedDate = uiState.selectedDate,
                 showCalendarButton = true,
                 onCalendarClick = {
                     hapticManager.selection()
@@ -456,6 +549,7 @@ fun HomeScreen(
                     quickLogViewModel.save()
                 },
             )
+            }
         }
     }
 }
@@ -478,13 +572,16 @@ private fun StateChip(
     )
 }
 
-private fun sessionSummary(context: Context, session: team.sakhi.session.SessionContext): String = when {
-    session.isViewingOwnData -> context.getString(R.string.home_session_summary_own, session.userName)
-    else -> context.getString(
-        R.string.home_session_summary_partner,
-        session.activeRole.displayName.lowercase(),
-        session.targetUserId,
-    )
+/**
+ * Whether this sync state is worth putting on screen at all.
+ *
+ * Idle and Success are the steady, healthy states — surfacing them permanently just
+ * adds noise ("Sync idle" sitting under the hero on a perfectly fine screen). Only
+ * in-progress and problem states earn space, mirroring iOS's `topStatusBanner`.
+ */
+private fun SyncRuntimeState.isWorthShowing(): Boolean = when (this) {
+    SyncRuntimeState.Idle, is SyncRuntimeState.Success -> false
+    else -> true
 }
 
 private fun syncLabel(context: Context, syncState: SyncRuntimeState): String = when (syncState) {
@@ -524,76 +621,91 @@ private fun syncTint(
 
 private data class HeroText(val big: String, val sub: String)
 
+/**
+ * Hero headline + subtitle, a direct port of iOS's `HomeView.heroContent(snapshot:)`.
+ *
+ * Switches on the shared engine's own `PredictionStatusKind` rather than re-deriving
+ * anything from the phase, so both platforms render the same case for the same data.
+ * The previous version branched on `CyclePhase` and read `daysUntilNextPeriod`, which
+ * could not express "in period", "expected but not logged", or "since expected" at
+ * all — that is why Android showed a countdown on a day iOS calls "Day 1 of your
+ * period".
+ *
+ * Note in-period reads "Day 3", not "3 Days"; only the countdown cases are plural.
+ */
 private fun heroText(context: Context, uiState: HomeUiState): HeroText {
-    val isPartnerMode = uiState.session?.isViewingOwnData == false
+    val her = uiState.session?.isViewingOwnData == false
+    val prediction = uiState.prediction
 
-    if (!uiState.hasCycleData) {
-        return HeroText(
-            "",
+    fun notStarted() = HeroText(
+        "",
+        context.getString(
+            if (her) R.string.home_hero_not_started_partner else R.string.home_hero_not_started_self,
+        ),
+    )
+
+    if (prediction == null || !uiState.hasCycleData) return notStarted()
+
+    fun dayLabel(day: Int) = context.getString(R.string.home_hero_day_number, day)
+    fun daysLabel(n: Int) = context.resources.getQuantityString(R.plurals.home_day_count, n, n)
+
+    return when (prediction.status) {
+        CyclePhaseInsight.PredictionStatusKind.IN_PERIOD -> HeroText(
+            dayLabel(prediction.periodDay),
+            // Inside the predicted window but this day has no log yet -> "expected".
+            if (uiState.hasLoggedForSelectedDate) {
+                context.getString(
+                    if (her) R.string.home_hero_period_of_her else R.string.home_hero_period_of_your,
+                )
+            } else {
+                context.getString(
+                    if (her) {
+                        R.string.home_hero_period_expected_of_her
+                    } else {
+                        R.string.home_hero_period_expected_of_your
+                    },
+                )
+            },
+        )
+
+        CyclePhaseInsight.PredictionStatusKind.TODAY -> HeroText(
+            dayLabel(prediction.periodDay),
             context.getString(
-                if (isPartnerMode) {
-                    R.string.home_hero_not_started_partner
+                if (her) {
+                    R.string.home_hero_period_expected_of_her
                 } else {
-                    R.string.home_hero_not_started_self
+                    R.string.home_hero_period_expected_of_your
                 },
             ),
         )
-    }
 
-    return when (uiState.phase) {
-        CyclePhase.MENSTRUAL -> {
-            val day = uiState.dayInCycle ?: 1
-            HeroText(
-                context.resources.getQuantityString(R.plurals.home_day_count, day, day),
-                context.getString(
-                    if (isPartnerMode) {
-                        R.string.home_hero_period_of_her
-                    } else {
-                        R.string.home_hero_period_of_your
-                    },
-                ),
-            )
-        }
-        CyclePhase.DELAYED -> {
-            val daysDelayed = ((uiState.dayInCycle ?: 0) - (uiState.cycleLength ?: 0)).coerceAtLeast(1)
-            HeroText(
-                context.resources.getQuantityString(R.plurals.home_day_count, daysDelayed, daysDelayed),
-                context.getString(
-                    if (isPartnerMode) {
-                        R.string.home_hero_period_delayed_her
-                    } else {
-                        R.string.home_hero_period_delayed_self
-                    },
-                ),
-            )
-        }
-        else -> {
-            val daysUntil = uiState.daysUntilNextPeriod
-            if (daysUntil == null) {
-                HeroText(
-                    "",
-                    context.getString(
-                        if (isPartnerMode) {
-                            R.string.home_hero_not_started_partner
-                        } else {
-                            R.string.home_hero_not_started_self
-                        },
-                    ),
-                )
+        CyclePhaseInsight.PredictionStatusKind.UPCOMING ->
+            if (prediction.confidence == 0) {
+                notStarted()
             } else {
-                val n = daysUntil.coerceAtLeast(0)
                 HeroText(
-                    context.resources.getQuantityString(R.plurals.home_day_count, n, n),
+                    daysLabel(prediction.daysUntil),
                     context.getString(
-                        if (isPartnerMode) {
-                            R.string.home_hero_until_next_her
-                        } else {
-                            R.string.home_hero_until_next_self
-                        },
+                        if (her) R.string.home_hero_until_next_her else R.string.home_hero_until_next_self,
                     ),
                 )
             }
-        }
+
+        CyclePhaseInsight.PredictionStatusKind.DELAYED -> HeroText(
+            daysLabel(prediction.daysDelayed),
+            context.getString(
+                if (her) R.string.home_hero_period_delayed_her else R.string.home_hero_period_delayed_self,
+            ),
+        )
+
+        CyclePhaseInsight.PredictionStatusKind.NOT_LOGGED -> HeroText(
+            daysLabel(prediction.daysDelayed),
+            context.getString(
+                if (her) R.string.home_hero_since_expected_her else R.string.home_hero_since_expected_self,
+            ),
+        )
+
+        CyclePhaseInsight.PredictionStatusKind.NO_RECENT_DATA -> notStarted()
     }
 }
 
@@ -603,13 +715,23 @@ private fun HeroSection(
     accentColor: Color,
     phasePalette: HomePhasePalette,
     scrollProgress: Float,
+    onTipClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val text = heroText(context, uiState)
-    val subtitleColor = homeSecondaryTextColor(
+    val isPeriodMode = uiState.phase == CyclePhase.MENSTRUAL
+
+    // iOS `HomeDayDetailGlassView`: the hero sits on a saturated background in period
+    // mode, so its text flips to white there. Android previously used the phase's
+    // primary for the big number unconditionally, which on the menstrual background is
+    // pink-on-pink and effectively invisible -- the "Day 1" that could barely be read.
+    // `accentColor` is the phase primary, which iOS already forces to white in period
+    // mode (see rememberHomePhasePalette), so no special case is needed here.
+    val bigColor = accentColor
+    val subColor = homeSecondaryTextColor(
         phasePalette = phasePalette,
         hasCycleData = uiState.hasCycleData,
-        isMenstrual = uiState.phase == CyclePhase.MENSTRUAL,
+        isMenstrual = isPeriodMode,
     )
 
     Column(
@@ -620,21 +742,103 @@ private fun HeroSection(
                 translationY = -36.dp.toPx() * scrollProgress
                 scaleX = 1f - (0.08f * scrollProgress)
                 scaleY = 1f - (0.08f * scrollProgress)
-            },
+            }
+            // iOS `heroSection`: .padding(.horizontal, 24) / .padding(.top, .m = 16) /
+            // .padding(.bottom, 32). Android had none of these, so the countdown sat
+            // flush against the top bar and the first card with no breathing room.
+            //
+            // The bottom is 12 rather than 32 on purpose: iOS's hero sits in a
+            // `VStack(spacing: 0)` so its own 32 is the entire hero-to-first-card gap,
+            // whereas this Column's parent already contributes `space5` (20) between
+            // every child. 12 + 20 = the same 32 iOS ends up with. Card-to-card spacing
+            // is untouched and already matches iOS's `DS.Spacing.ml` (20).
+            .padding(horizontal = SakhiSpacing.space6)
+            .padding(top = SakhiSpacing.space4, bottom = SakhiSpacing.space3),
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2 + SakhiSpacing.space1 / 2),
     ) {
         if (text.big.isNotEmpty()) {
             Text(
                 text = text.big,
-                style = MaterialTheme.typography.displayMedium,
-                color = accentColor,
+                // iOS: `.font(.lato(68, .regular))`, single line, shrink-to-fit at 0.65.
+                fontSize = 68.sp,
+                lineHeight = 76.sp,
+                fontWeight = FontWeight.Normal,
+                color = bigColor,
                 maxLines = 1,
             )
         }
         Text(
             text = text.sub,
-            style = MaterialTheme.typography.titleMedium,
-            color = subtitleColor,
+            // iOS: `.font(.lato(18))`.
+            fontSize = 18.sp,
+            lineHeight = 24.sp,
+            color = subColor,
+        )
+
+        // iOS's hero tip pill: sparkles + one-line phase tip, tappable straight into
+        // Ask Sakhi. Copy comes from the shared engine's `shortTip`, not written here.
+        uiState.heroTip?.let { tip ->
+            // iOS adds `.padding(.top, 6)` to the capsule on top of the stack's 10.
+            HeroTipPill(
+                tip = tip,
+                contentColor = bigColor,
+                isPeriodMode = isPeriodMode,
+                onClick = onTipClick,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+    }
+}
+
+/**
+ * Port of iOS's hero tip capsule (`HomeDayDetailGlassView`): sparkles icon + a single
+ * line of phase copy, 16dp horizontal / 9dp vertical padding inside a pill.
+ */
+@Composable
+private fun HeroTipPill(
+    tip: String,
+    contentColor: Color,
+    isPeriodMode: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(percent = 50))
+            .background(
+                if (isPeriodMode) {
+                    Color.White.copy(alpha = 0.18f)
+                } else {
+                    contentColor.copy(alpha = 0.10f)
+                },
+            )
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.AutoAwesome,
+            contentDescription = null,
+            tint = contentColor,
+            modifier = Modifier.size(14.dp),
+        )
+        // iOS: `.font(.lato(13))` with `.lineLimit(1)`. It ellipsizes when the tip is
+        // longer than the pill, and with the hero's 24pt horizontal inset now applied
+        // (iteration 43) some real tips did exactly that. Deliberate divergence, at
+        // Karan's request: keep iOS's single line and its 13sp ceiling, but step the size
+        // down instead of cutting the sentence off, so the whole tip is always readable.
+        // Floor is 11sp so it never becomes smaller than the pill's own caption scale.
+        BasicText(
+            text = tip,
+            style = LocalTextStyle.current.copy(color = contentColor),
+            maxLines = 1,
+            autoSize = TextAutoSize.StepBased(
+                minFontSize = 11.sp,
+                maxFontSize = 13.sp,
+                stepSize = 0.5.sp,
+            ),
         )
     }
 }
@@ -750,6 +954,10 @@ private fun HomeGlassCard(
         isMenstrual -> palette.secondary.copy(alpha = 0.30f)
         else -> accentColor.copy(alpha = 0.25f)
     }
+    // Everything inside a card inherits the phase-aware primary. iOS does the equivalent
+    // by reading `textPrimary` in each subview; providing it here fixes the card title and
+    // every unstyled label in one place instead of threading a colour through each row.
+    val cardText = rememberHomeCardTextColors(phase = phase, hasCycleData = hasCycleData)
 
     Column(
         modifier = modifier
@@ -757,6 +965,10 @@ private fun HomeGlassCard(
             .background(cardFill, RoundedCornerShape(18.dp))
             .border(0.5.dp, cardStroke, RoundedCornerShape(18.dp)),
     ) {
+      CompositionLocalProvider(
+          LocalContentColor provides cardText.primary,
+          LocalHomeCardText provides cardText,
+      ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
@@ -783,15 +995,37 @@ private fun HomeGlassCard(
                 modifier = Modifier.weight(1f),
             )
             badge?.let {
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = accentColor.copy(alpha = 0.7f),
+                // iOS renders this as an HStack(spacing: 4) of
+                // `chart.bar.fill` (10pt bold) + text (12pt bold) + `chevron.right`
+                // (9pt bold) inside a capsule. Android drew the text alone, so the
+                // "History" affordance on "How you feel" did not read as one.
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier
                         .background(badgeFill, RoundedCornerShape(SakhiRadius.full))
                         .border(0.5.dp, accentColor.copy(alpha = 0.10f), RoundedCornerShape(SakhiRadius.full))
-                        .padding(horizontal = SakhiSpacing.space3, vertical = SakhiSpacing.space1),
-                )
+                        .padding(horizontal = 11.dp, vertical = 6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.BarChart,
+                        contentDescription = null,
+                        tint = accentColor.copy(alpha = 0.7f),
+                        modifier = Modifier.size(10.dp),
+                    )
+                    Text(
+                        text = it,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = accentColor.copy(alpha = 0.7f),
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = accentColor.copy(alpha = 0.7f),
+                        modifier = Modifier.size(9.dp),
+                    )
+                }
             }
             onRefresh?.let { refresh ->
                 IconButton(
@@ -813,6 +1047,7 @@ private fun HomeGlassCard(
         }
         HorizontalDivider(color = dividerColor)
         content()
+      }
     }
 }
 
@@ -833,6 +1068,7 @@ private fun LoggedDetailsCard(
     accentColor: Color,
     onClick: () -> Unit,
 ) {
+    val context = LocalContext.current
     val flowLabel = stringResource(R.string.home_log_category_flow)
     val weightLabel = stringResource(R.string.home_log_category_weight)
     val bbtLabel = stringResource(R.string.home_log_category_bbt)
@@ -859,6 +1095,9 @@ private fun LoggedDetailsCard(
         phase = phase,
         accentColor = accentColor,
         hasCycleData = true,
+        // iOS: `badge: isPartnerMode ? nil : L("home.activity.log")` -- the History
+        // affordance is owner-only. Android passed no badge at all.
+        badge = if (isPartnerMode) null else stringResource(R.string.home_logged_history_badge),
         icon = Icons.AutoMirrored.Filled.ListAlt,
         modifier = Modifier.clickable(onClick = onClick),
     ) {
@@ -872,7 +1111,9 @@ private fun LoggedDetailsCard(
                     },
                 ),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // iOS `cardInnerPlaceholder` renders this at `iconAccent.opacity(0.60)`,
+                // not a ladder level -- the placeholder is accent-tinted on both platforms.
+                color = accentColor.copy(alpha = 0.60f),
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
             )
         } else {
@@ -883,7 +1124,9 @@ private fun LoggedDetailsCard(
                 horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
             ) {
                 if (flow != null) {
-                    LogChip(icon = Icons.Filled.WaterDrop, value = flow.displayName, category = flowLabel, accentColor = accentColor)
+                    // iOS's `logChip(... value: flow.displayName ...)` reads that off its
+                    // own FlowLevel ("Moderate"), not KMM's ("Medium") -- see flowDisplayName.
+                    LogChip(icon = Icons.Filled.WaterDrop, value = flowDisplayName(context, flow), category = flowLabel, accentColor = accentColor)
                 }
                 weightKg?.let {
                     LogChip(icon = Icons.Filled.MonitorWeight, value = weightFormat.format(it), category = weightLabel, accentColor = accentColor)
@@ -929,7 +1172,7 @@ private fun LogChip(icon: ImageVector, value: String, category: String, accentCo
         Text(
             text = category,
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = LocalHomeCardText.current.secondary,
             textAlign = TextAlign.Center,
         )
     }
@@ -956,6 +1199,7 @@ private fun LogChip(icon: ImageVector, value: String, category: String, accentCo
 @Composable
 private fun CycleDetailsCard(
     cycle: team.sakhi.models.CycleData,
+    periodLogDates: Set<kotlinx.datetime.LocalDate>,
     dayInCycle: Int,
     cycleLength: Int,
     phase: CyclePhase,
@@ -966,9 +1210,18 @@ private fun CycleDetailsCard(
 ) {
     val context = LocalContext.current
     val today = DateConverter.today()
-    val marks = remember(cycle) {
+    // Engine-built, matching the calendar. `CalendarMarker.buildMarks(listOf(cycle))`
+    // cannot mark predicted/fertile/ovulation days for a cycle still in progress,
+    // because that cycle's length is null until it closes -- so this strip showed only
+    // logged days while the calendar beside it showed predictions too.
+    val marks = remember(cycle, periodLogDates, cycleLength) {
         val end = DateConverter.addDays(cycle.cycleStartDate, cycleLength - 1)
-        CalendarMarker.buildMarks(cycle.cycleStartDate, end, listOf(cycle))
+        CycleInsightAdapter.calendarMarks(
+            from = cycle.cycleStartDate,
+            to = end,
+            periodLogDates = periodLogDates,
+            today = DateConverter.today(),
+        )
     }
     val days = remember(cycle, cycleLength) {
         (0 until cycleLength).map { DateConverter.addDays(cycle.cycleStartDate, it) }
@@ -993,7 +1246,7 @@ private fun CycleDetailsCard(
                 Text(
                     text = stringResource(R.string.home_cycle_day_total, cycleLength),
                     style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = LocalHomeCardText.current.secondary,
                 )
             }
             Text(
@@ -1003,7 +1256,7 @@ private fun CycleDetailsCard(
                     stringResource(R.string.home_cycle_day_label)
                 },
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = LocalHomeCardText.current.tertiary,
                 modifier = Modifier.padding(start = SakhiSpacing.space5, end = SakhiSpacing.space5, bottom = SakhiSpacing.space3),
             )
 
@@ -1046,7 +1299,7 @@ private fun CycleDetailsCard(
                         DateConverter.formatShort(cycle.cycleStartDate),
                     ),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = LocalHomeCardText.current.tertiary,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
                     CycleLegendDot(color = accentColor, label = stringResource(R.string.home_cycle_legend_period))
@@ -1065,6 +1318,7 @@ private fun CycleDetailsCard(
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
             ) {
                 CycleStatusTile(
+                    phase = phase,
                     cyclesAnalyzed = cyclesAnalyzed,
                     shortestCycle = shortestCycle,
                     longestCycle = longestCycle,
@@ -1079,6 +1333,7 @@ private fun CycleDetailsCard(
                             cycleLength,
                         ),
                         icon = Icons.Filled.Autorenew,
+                        phase = phase,
                         modifier = Modifier.weight(1f),
                     )
                     CycleStatTile(
@@ -1089,6 +1344,7 @@ private fun CycleDetailsCard(
                             cycle.periodLength ?: 5,
                         ),
                         icon = Icons.Filled.WaterDrop,
+                        phase = phase,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -1103,7 +1359,7 @@ private fun CycleLegendDot(color: Color, label: String, striped: Boolean = false
         Box(modifier = Modifier.size(6.dp).background(color, CircleShape)) {
             if (striped) DiagonalHatch(modifier = Modifier.matchParentSize(), clip = CircleShape, lineAlpha = 0.55f, step = 2.5.dp)
         }
-        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = LocalHomeCardText.current.tertiary)
     }
 }
 
@@ -1202,28 +1458,63 @@ private fun DiagonalHatch(modifier: Modifier = Modifier, clip: androidx.compose.
 }
 
 @Composable
-private fun CycleStatTile(title: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
-    Surface(
-        shape = RoundedCornerShape(SakhiRadius.lg),
-        tonalElevation = SakhiSpacing.space1,
-        modifier = modifier,
+private fun CycleStatTile(
+    title: String,
+    value: String,
+    icon: ImageVector,
+    phase: CyclePhase,
+    modifier: Modifier = Modifier,
+) {
+    // Port of iOS `cycleInfoTile`. Android drew a plain themed `Surface` with
+    // `tonalElevation`, which ignores the phase entirely -- on a period day that left a
+    // pale tile with dark text sitting on the saturated card. iOS tints it from the phase
+    // secondary and uses the same text ladder as everything else in the card.
+    val palette = rememberHomePhasePalette(phase)
+    val cardText = LocalHomeCardText.current
+    val isPeriodMode = phase == CyclePhase.MENSTRUAL
+    val softFill = palette.secondary.copy(alpha = if (isPeriodMode) 0.20f else 0.08f)
+    val softStroke = palette.secondary.copy(alpha = if (isPeriodMode) 0.35f else 0.28f)
+
+    Column(
+        modifier = modifier
+            .background(softFill, RoundedCornerShape(SakhiRadius.lg))
+            .border(0.5.dp, softStroke, RoundedCornerShape(SakhiRadius.lg))
+            // iOS: .padding(.horizontal, .m) / .padding(.vertical, .ml)
+            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space5)
+            .semantics(mergeDescendants = true) {
+                contentDescription = title
+                stateDescription = value
+            },
+        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
     ) {
-        Column(
-            modifier = Modifier
-                .padding(SakhiSpacing.space3)
-                .semantics(mergeDescendants = true) {
-                    contentDescription = title
-                    stateDescription = value
-                },
+        // iOS puts the icon and title on one row, with the value beneath — Android had
+        // stacked icon / value / title.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
-            Text(
-                text = value,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                modifier = Modifier.padding(top = SakhiSpacing.space2),
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = palette.secondary,
+                modifier = Modifier.size(11.dp),
             )
-            Text(text = title, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = title,
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+                color = cardText.tertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+        Text(
+            text = value,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.Bold,
+            color = cardText.primary,
+            maxLines = 1,
+        )
     }
 }
 
@@ -1234,11 +1525,13 @@ private fun CycleStatTile(title: String, value: String, icon: ImageVector, modif
 // delayed-period algorithm behind Profile's own "Cycle Health" badge).
 @Composable
 private fun CycleStatusTile(
+    phase: CyclePhase,
     cyclesAnalyzed: Int,
     shortestCycle: Int,
     longestCycle: Int,
     accentColor: Color,
 ) {
+    val phasePalette = rememberHomePhasePalette(phase)
     val context = LocalContext.current
     val hasMeasuredStats = cyclesAnalyzed > 0
     val isRegular = (longestCycle - shortestCycle) <= 7
@@ -1250,7 +1543,7 @@ private fun CycleStatusTile(
 
     Surface(
         shape = RoundedCornerShape(SakhiRadius.lg),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f),
+        color = sakhiGroupedBackground().copy(alpha = 0.32f),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -1275,18 +1568,31 @@ private fun CycleStatusTile(
                 Text(
                     text = stringResource(R.string.home_cycle_status_title),
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = LocalHomeCardText.current.secondary,
                 )
                 Text(
                     text = detail,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                    color = LocalHomeCardText.current.tertiary,
                 )
             }
             if (hasMeasuredStats) {
+                // iOS: badgeBg = isRegular ? cycleCardAccent@(period ? 0.22 : 0.14)
+                //                          : Color.white@0.10
+                //      badgeFg = isRegular ? cycleCardAccent : textSecondary
+                // `cycleCardAccent` is the phase *secondary* (`warmAccent`), not the
+                // primary Android was using. The irregular pill was the worse half:
+                // `onSurface@0.08` is near-black in light theme, so it read as a grey
+                // chip with dark text instead of a translucent light one.
+                val badgeAccent = phasePalette.secondary
+                val badgeFg = if (isRegular) badgeAccent else LocalHomeCardText.current.secondary
                 Surface(
                     shape = RoundedCornerShape(SakhiRadius.full),
-                    color = if (isRegular) accentColor.copy(alpha = 0.14f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                    color = if (isRegular) {
+                        badgeAccent.copy(alpha = if (phase == CyclePhase.MENSTRUAL) 0.22f else 0.14f)
+                    } else {
+                        Color.White.copy(alpha = 0.10f)
+                    },
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = SakhiSpacing.space2, vertical = SakhiSpacing.space1),
@@ -1296,7 +1602,7 @@ private fun CycleStatusTile(
                         Icon(
                             imageVector = if (isRegular) Icons.Filled.Check else Icons.Filled.Warning,
                             contentDescription = null,
-                            tint = if (isRegular) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                            tint = badgeFg,
                             modifier = Modifier.size(12.dp),
                         )
                         Text(
@@ -1306,7 +1612,7 @@ private fun CycleStatusTile(
                                 stringResource(R.string.home_cycle_status_irregular)
                             },
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                            color = if (isRegular) accentColor else MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = badgeFg,
                         )
                     }
                 }
@@ -1316,7 +1622,12 @@ private fun CycleStatusTile(
 }
 
 @Composable
-private fun PhaseInfoCard(phase: CyclePhase, isPartnerMode: Boolean, accentColor: Color) {
+private fun PhaseInfoCard(
+    phase: CyclePhase,
+    isPartnerMode: Boolean,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+) {
     val snippet = phaseSnippet(phase)
     val icon = when (phase) {
         CyclePhase.MENSTRUAL -> Icons.Filled.WaterDrop
@@ -1338,6 +1649,7 @@ private fun PhaseInfoCard(phase: CyclePhase, isPartnerMode: Boolean, accentColor
         phase = phase,
         accentColor = accentColor,
         hasCycleData = true,
+        modifier = modifier,
         icon = icon,
     ) {
         PhaseBadge(
@@ -1348,14 +1660,16 @@ private fun PhaseInfoCard(phase: CyclePhase, isPartnerMode: Boolean, accentColor
         Text(
             text = stringResource(snippet.overviewRes),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = LocalHomeCardText.current.secondary,
             modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
         )
         if (snippet.bodyChangeResIds.isNotEmpty()) {
             Text(
                 text = stringResource(R.string.home_phase_info_body_changes),
                 style = MaterialTheme.typography.labelSmall,
-                color = accentColor,
+                // iOS `textSection` — white at 0.58 on a period day, phase primary at
+                // 0.56 otherwise. Was full-strength accent, which over-weighted a caption.
+                color = LocalHomeCardText.current.section,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
             )
             snippet.bodyChangeResIds.forEach { changeResId ->
@@ -1374,7 +1688,7 @@ private fun PhaseInfoCard(phase: CyclePhase, isPartnerMode: Boolean, accentColor
                     Text(
                         text = stringResource(changeResId),
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = LocalHomeCardText.current.secondary,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -1427,7 +1741,7 @@ private fun PartnerChecklistCard(
                 Text(
                     text = stringResource(R.string.home_partner_checklist_failed),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
                 Text(
                     text = stringResource(R.string.home_retry),
@@ -1460,7 +1774,7 @@ private fun PartnerChecklistCard(
                     Text(
                         text = item.text,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (item.isCompleted) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                        color = if (item.isCompleted) sakhiSecondaryLabel() else sakhiLabel(),
                         textDecoration = if (item.isCompleted) TextDecoration.LineThrough else null,
                         modifier = Modifier.weight(1f),
                     )
@@ -1519,7 +1833,7 @@ private fun PartnerNoDataCard() {
                 .fillMaxWidth()
                 .padding(SakhiSpacing.space6),
         ) {
-            Icon(Icons.Filled.NightsStay, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(32.dp))
+            Icon(Icons.Filled.NightsStay, contentDescription = null, tint = sakhiSecondaryLabel(), modifier = Modifier.size(32.dp))
             Text(
                 text = stringResource(R.string.home_partner_no_data_title),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -1529,7 +1843,7 @@ private fun PartnerNoDataCard() {
             Text(
                 text = stringResource(R.string.home_partner_no_data_body),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = SakhiSpacing.space2),
             )
@@ -1573,7 +1887,7 @@ private fun PartnerHeadsUpCard(text: PartnerHeadsUpCardText, accentColor: Color)
                     Text(
                         text = stringResource(R.string.home_partner_heads_up_days),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                     )
                 }
             }
@@ -1702,7 +2016,7 @@ private fun EmptyStateCard(accentColor: Color) {
         Text(
             text = stringResource(R.string.home_empty_state_body),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             modifier = Modifier.padding(SakhiSpacing.space5),
         )
     }
@@ -1898,7 +2212,7 @@ private fun LearningIntro(text: String) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = sakhiSecondaryLabel(),
         modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
     )
     LearningDivider()
@@ -1923,7 +2237,7 @@ private fun LearningRows(rows: List<Triple<ImageVector, String, String>>) {
             }
             Column {
                 Text(text = title, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
-                Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text = subtitle, style = MaterialTheme.typography.bodySmall, color = sakhiSecondaryLabel())
             }
         }
     }
@@ -1947,11 +2261,11 @@ private fun LearningOverviewRow(icon: ImageVector, color: Color, name: String, d
         Column(modifier = Modifier.weight(1f)) {
             Text(text = name, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (subtitle != null) FontWeight.Bold else FontWeight.Normal))
             subtitle?.let {
-                Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text = it, style = MaterialTheme.typography.bodySmall, color = sakhiSecondaryLabel())
             }
         }
         days?.let {
-            Text(text = it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = it, style = MaterialTheme.typography.bodySmall, color = sakhiSecondaryLabel())
         }
     }
 }
@@ -1973,7 +2287,7 @@ private fun LearningAbbrRow(abbr: String, name: String, description: String) {
         }
         Column {
             Text(text = name, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold))
-            Text(text = description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(text = description, style = MaterialTheme.typography.bodySmall, color = sakhiSecondaryLabel())
         }
     }
 }
@@ -2010,7 +2324,7 @@ private fun LearningPhaseDetailCard(
         Text(
             text = overview,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
         )
         LearningDivider()
@@ -2027,7 +2341,7 @@ private fun LearningPhaseDetailCard(
                         .size(5.dp)
                         .background(phaseColor.copy(alpha = 0.5f), CircleShape),
                 )
-                Text(text = point, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(text = point, style = MaterialTheme.typography.bodySmall, color = sakhiSecondaryLabel())
             }
         }
     }
@@ -2076,29 +2390,101 @@ private fun NutritionCard(
             Text(
                 text = stringResource(R.string.home_nutrition_empty),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // iOS has no empty state for this card at all (it shows a shimmer while
+                // loading and always has foods afterwards), so there is no colour to copy.
+                // The ladder keeps it consistent with the rest of the card rather than
+                // inventing a third treatment.
+                color = LocalHomeCardText.current.secondary,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
             )
             }
             else -> {
-                foods.forEach { food ->
+                // iOS `nutritionCard`: foods are chunked **4 per page** into a swipeable
+                // TabView pinned to a fixed 214pt, with a capsule page indicator below
+                // when there is more than one page. Android rendered every food in one
+                // flat column, so the card grew with the data and had no paging at all.
+                // Hoisted out of the row loop on purpose: `remember` inside an
+                // unkeyed `forEach` is a recomposition hazard, and the palette is
+                // constant for the whole card anyway.
+                val foodTilePalette = rememberHomePhasePalette(phase)
+                val pages = remember(foods) { foods.chunked(4) }
+                val pagerState = rememberPagerState(pageCount = { pages.size })
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(214.dp),
+                    verticalAlignment = Alignment.Top,
+                ) { page ->
+                  Column(modifier = Modifier.fillMaxWidth()) {
+                    pages[page].forEachIndexed { rowIndex, food ->
+                    // iOS: 0.5pt rule at textTertiary@0.10, inset 46pt, between rows only.
+                    if (rowIndex > 0) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(start = 46.dp)
+                                .height(0.5.dp)
+                                .background(LocalHomeCardText.current.tertiary.copy(alpha = 0.10f)),
+                        )
+                    }
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                            // iOS `foodRecommendationRow`: .padding(.horizontal, 14)
+                            // .padding(.vertical, 7). The 8dp Android used pushed four
+                            // rows past iOS's fixed 214pt page, clipping the fourth.
+                            .padding(horizontal = 14.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
+                        // iOS `foodRecommendationRow`: a 36x36 r11 tile filled
+                        // `secondary@(period ? 0.22 : 0.14)` holding the food's emoji at
+                        // 19pt. The emoji is derived, not stored -- `FoodItem` carries no
+                        // emoji field, which is exactly why iOS wrote `FoodEmoji.resolve`.
+                        // That resolver is now ported to SakhiCore and used here.
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .background(
+                                    foodTilePalette.secondary.copy(
+                                        alpha = if (phase == CyclePhase.MENSTRUAL) 0.22f else 0.14f,
+                                    ),
+                                    RoundedCornerShape(11.dp),
+                                ),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = FoodEmoji.resolve(food.name, food.category),
+                                fontSize = 19.sp,
+                            )
+                        }
                         Column(modifier = Modifier.weight(1f)) {
+                            // iOS `foodRecommendationRow`: name lato(14,.bold) in
+                            // textPrimary, sub-line lato(12) in textTertiary, VStack
+                            // spacing 2. Android's bodyLarge/bodySmall rows were tall
+                            // enough that four no longer fit iOS's fixed 214pt page.
                             Text(
                                 text = food.name,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface,
+                                fontSize = 14.sp,
+                                // iOS lato(14) leads at ~16.8pt; Compose's default 1.4x
+                                // leading made the row tall enough that the fourth item
+                                // overflowed the 214pt page.
+                                lineHeight = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = LocalHomeCardText.current.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             Text(
                                 text = food.category,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 12.sp,
+                                // iOS lato(12) leads at ~14.4pt.
+                                lineHeight = 14.sp,
+                                color = LocalHomeCardText.current.tertiary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.padding(top = 2.dp),
                             )
                         }
                         food.nutritionLabel?.let { label ->
@@ -2106,6 +2492,41 @@ private fun NutritionCard(
                                 text = label,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = accentColor,
+                            )
+                        }
+                    }
+                    }
+                    // iOS keeps rows pinned to the top: a page with fewer than 4 items
+                    // shows blank space beneath rather than centring them.
+                    Spacer(modifier = Modifier.weight(1f))
+                  }
+                }
+                if (pages.size > 1) {
+                    // iOS: capsule dots, active 10x4 at standardAccent@0.72,
+                    // inactive 4x4 at textTertiary@0.20, 4pt apart.
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                        horizontalArrangement = Arrangement.Center,
+                    ) {
+                        pages.indices.forEach { index ->
+                            val isActive = index == pagerState.currentPage
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 2.dp)
+                                    .size(
+                                        width = if (isActive) 10.dp else 4.dp,
+                                        height = 4.dp,
+                                    )
+                                    .background(
+                                        if (isActive) {
+                                            accentColor.copy(alpha = 0.72f)
+                                        } else {
+                                            LocalHomeCardText.current.tertiary.copy(alpha = 0.20f)
+                                        },
+                                        RoundedCornerShape(SakhiRadius.full),
+                                    ),
                             )
                         }
                     }
@@ -2213,13 +2634,13 @@ private fun SakhiInsightCard(
             Text(
                 text = insight,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = LocalHomeCardText.current.secondary,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
             )
             Text(
                 text = stringResource(R.string.home_insight_powered),
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                color = LocalHomeCardText.current.tertiary,
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
             )
         }
@@ -2237,6 +2658,88 @@ private data class HomePhasePalette(
     val tileStroke: Color,
 )
 
+/**
+ * Card text colours, ported from iOS's `HomeDayDetailGlassView+GlassCard.swift` ladder
+ * (`textPrimary` / `textSecondary` / `textSection` / `textTertiary`).
+ *
+ * On a period day the cards are filled with the saturated phase surface, so iOS switches
+ * every label to **white** at four fixed opacities. Android was leaving these to
+ * `MaterialTheme.colorScheme.onSurface`/`onSurfaceVariant`, which stays near-black in
+ * light theme -- so "How you feel", "What to Eat" and their rows rendered dark text on a
+ * dark pink card. Off a period day iOS tints text with the phase primary rather than the
+ * theme's neutral, which this reproduces too.
+ */
+/**
+ * The active card text ladder. Rows inside a card read this instead of
+ * `MaterialTheme.colorScheme.onSurfaceVariant`, which stays near-black in light theme and
+ * is unreadable on the saturated period-day card fill.
+ */
+private val LocalHomeCardText = compositionLocalOf {
+    HomeCardTextColors(Color.Unspecified, Color.Unspecified, Color.Unspecified, Color.Unspecified)
+}
+
+/**
+ * iOS's `cardFill`, extracted so the bottom bar's log button can use the same value the
+ * cards do — which is what iOS does (`logFill: cardFill`). Kept in one place so the two
+ * cannot drift again.
+ */
+@Composable
+private fun homeCardFill(phase: CyclePhase, hasCycleData: Boolean): Color {
+    val palette = rememberHomePhasePalette(phase)
+    val isDark = LocalSakhiDarkTheme.current
+    val surface = MaterialTheme.colorScheme.surface
+    return when {
+        !hasCycleData -> surface
+        phase == CyclePhase.MENSTRUAL -> palette.surface
+        isDark -> palette.tileFill
+        else -> palette.tileFill.copy(alpha = 0.14f)
+    }
+}
+
+private data class HomeCardTextColors(
+    val primary: Color,
+    val secondary: Color,
+    val section: Color,
+    val tertiary: Color,
+)
+
+@Composable
+private fun rememberHomeCardTextColors(
+    phase: CyclePhase,
+    hasCycleData: Boolean,
+): HomeCardTextColors {
+    val palette = rememberHomePhasePalette(phase)
+    val neutralPrimary = sakhiLabel()
+    val neutralSecondary = sakhiSecondaryLabel()
+    val isPeriodMode = phase == CyclePhase.MENSTRUAL
+    // iOS uses the *raw* phase primary here (`PhaseColors(phase).primary`), not the
+    // menstrual white override -- in period mode the ladder is white anyway, and off it
+    // the override does not apply.
+    val phaseText = palette.primary
+    return remember(phase, hasCycleData, isPeriodMode, phaseText, neutralPrimary, neutralSecondary) {
+        when {
+            !hasCycleData -> HomeCardTextColors(
+                primary = neutralPrimary,
+                secondary = neutralSecondary,
+                section = neutralSecondary,
+                tertiary = neutralSecondary.copy(alpha = 0.6f),
+            )
+            isPeriodMode -> HomeCardTextColors(
+                primary = Color.White,
+                secondary = Color.White.copy(alpha = 0.75f),
+                section = Color.White.copy(alpha = 0.58f),
+                tertiary = Color.White.copy(alpha = 0.50f),
+            )
+            else -> HomeCardTextColors(
+                primary = phaseText,
+                secondary = phaseText.copy(alpha = 0.72f),
+                section = phaseText.copy(alpha = 0.56f),
+                tertiary = phaseText.copy(alpha = 0.45f),
+            )
+        }
+    }
+}
+
 @Composable
 private fun rememberHomePhasePalette(phase: CyclePhase): HomePhasePalette {
     val isDark = LocalSakhiDarkTheme.current
@@ -2245,7 +2748,18 @@ private fun rememberHomePhasePalette(phase: CyclePhase): HomePhasePalette {
             if (phase == CyclePhase.UNKNOWN) CyclePhase.FOLLICULAR else phase,
         )
         HomePhasePalette(
-            primary = resolved.primary.toComposeColor(),
+            // iOS `PhaseColorManager.swift:94`:
+            //   `let primary: Color = phase == .menstrual ? .white : c.primary`
+            // The menstrual background is a saturated pink, so its raw primary token
+            // (#E85787) sits almost on top of the background (#D9406F..#E85787) and
+            // every text/icon/accent drawn with it disappeared. Android was using the
+            // raw token unconditionally -- this is the single reason the menstrual
+            // phase read as "wrong colours everywhere" rather than one bad surface.
+            primary = if (phase == CyclePhase.MENSTRUAL) {
+                Color.White
+            } else {
+                resolved.primary.toComposeColor()
+            },
             secondary = resolved.secondary.toComposeColor(),
             surface = resolved.surface.toComposeColor(),
             bgTop = resolved.bgTop.toComposeColor(),
@@ -2283,7 +2797,7 @@ private fun homeSecondaryTextColor(
     hasCycleData: Boolean,
     isMenstrual: Boolean,
 ): Color = when {
-    !hasCycleData -> MaterialTheme.colorScheme.onSurfaceVariant
+    !hasCycleData -> sakhiSecondaryLabel()
     isMenstrual -> Color.White.copy(alpha = 0.90f)
     else -> phasePalette.primary.copy(alpha = 0.72f)
 }
@@ -2297,6 +2811,7 @@ private fun HomeTopBar(
     onOpenCare: () -> Unit,
     onOpenCalendar: () -> Unit,
     onResetToToday: () -> Unit,
+    onPhaseTap: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val hasCycleData = uiState.hasCycleData
@@ -2313,7 +2828,7 @@ private fun HomeTopBar(
     }
     val iconStroke = foreground.copy(alpha = 0.14f)
     val phaseLabel = if (hasCycleData) {
-        uiState.phase.displayName(context)
+        uiState.phaseKind.displayName(context)
     } else if (uiState.session?.isViewingOwnData == false) {
         stringResource(R.string.home_phase_first_period_partner)
     } else {
@@ -2343,6 +2858,7 @@ private fun HomeTopBar(
                 heroContentSub = heroSummary.sub,
                 foreground = foreground,
                 progress = heroScrollProgress,
+                onPhaseTap = onPhaseTap,
             )
         }
 
@@ -2399,6 +2915,7 @@ private fun HeroTopBarSubtitle(
     heroContentSub: String,
     foreground: Color,
     progress: Float,
+    onPhaseTap: () -> Unit = {},
 ) {
     Box(
         modifier = Modifier.height(16.dp),
@@ -2407,15 +2924,23 @@ private fun HeroTopBarSubtitle(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
-            modifier = Modifier.alpha(1f - progress),
+            modifier = Modifier
+                .alpha(1f - progress)
+                // iOS gates the tap the same way: `.allowsHitTesting(progress < 0.5)`,
+                // so the label stops responding once it has faded into the collapsed
+                // "Day 1 · of your period" summary.
+                .clickable(enabled = progress < 0.5f, onClick = onPhaseTap),
         ) {
             Text(
                 text = phaseName,
                 style = MaterialTheme.typography.labelMedium,
                 color = foreground.copy(alpha = 0.72f),
             )
+            // iOS: `Image(systemName: "chevron.down").font(.lato(8, .bold))`. Android was
+            // drawing a `MoreHoriz` ellipsis, which reads as "more options" rather than
+            // "this expands downward" -- and nothing happened when it was tapped.
             Icon(
-                imageVector = Icons.Filled.MoreHoriz,
+                imageVector = Icons.Rounded.KeyboardArrowDown,
                 contentDescription = null,
                 tint = foreground.copy(alpha = 0.50f),
                 modifier = Modifier.size(12.dp),
@@ -2450,11 +2975,20 @@ private fun HeroTopBarSubtitle(
     }
 }
 
-private fun CyclePhase.displayName(context: Context): String = when (this) {
-    CyclePhase.MENSTRUAL -> context.getString(R.string.home_phase_menstrual)
-    CyclePhase.FOLLICULAR -> context.getString(R.string.home_phase_follicular)
-    CyclePhase.OVULATION -> context.getString(R.string.home_phase_ovulation)
-    CyclePhase.LUTEAL -> context.getString(R.string.home_phase_luteal)
-    CyclePhase.DELAYED -> context.getString(R.string.home_phase_delayed)
-    CyclePhase.UNKNOWN -> context.getString(R.string.home_phase_first_period_self)
+/**
+ * The name shown under the date in the top bar, matching iOS's
+ * `SakhiCycleInsightEngine.present(_:)`.
+ *
+ * Keyed on the engine's [CyclePhaseInsight.PhaseKind] rather than [CyclePhase]: PMS is a
+ * distinct kind but reports `CyclePhase.LUTEAL`, so going through the app-wide enum
+ * silently relabelled every PMS day as "Luteal Phase" while iOS said "PMS Phase".
+ */
+private fun CyclePhaseInsight.PhaseKind.displayName(context: Context): String = when (this) {
+    CyclePhaseInsight.PhaseKind.MENSTRUAL -> context.getString(R.string.home_phase_name_menstrual)
+    CyclePhaseInsight.PhaseKind.FOLLICULAR -> context.getString(R.string.home_phase_name_follicular)
+    CyclePhaseInsight.PhaseKind.OVULATION -> context.getString(R.string.home_phase_name_ovulation)
+    CyclePhaseInsight.PhaseKind.LUTEAL -> context.getString(R.string.home_phase_name_luteal)
+    CyclePhaseInsight.PhaseKind.PMS -> context.getString(R.string.home_phase_name_pms)
+    CyclePhaseInsight.PhaseKind.DELAYED -> context.getString(R.string.home_phase_name_delayed)
+    CyclePhaseInsight.PhaseKind.UNKNOWN -> context.getString(R.string.home_phase_name_unknown)
 }

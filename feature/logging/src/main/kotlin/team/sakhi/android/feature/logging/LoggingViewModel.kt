@@ -26,11 +26,17 @@ import team.sakhi.models.PeriodLog
 import team.sakhi.models.UserCareRole
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.AndroidWidgetSnapshotManager
+import co.touchlab.kermit.Logger
+import team.sakhi.android.common.CycleDetectionCoordinator
 import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.sync.DataMigration
+import team.sakhi.repositories.CycleDataRepository
+import team.sakhi.android.common.CycleInsightAdapter
+import team.sakhi.cycle.CyclePhaseInsight
+import team.sakhi.android.common.toSafeUserMessage
 
 data class LoggingUiState(
     val session: SessionContext? = null,
@@ -58,6 +64,12 @@ data class LoggingUiState(
     val canViewDischarge: Boolean = false,
     val canViewMedications: Boolean = false,
     val canMutateSelectedDate: Boolean = false,
+    /**
+     * Phase name shown under the date in the sheet header, matching iOS's
+     * `Text(cyclePhase.name)`. Null until the cycle read resolves, so the header simply
+     * shows the date rather than flashing a placeholder phase.
+     */
+    val phaseName: String? = null,
     val isLoadingEntry: Boolean = false,
     val isSaving: Boolean = false,
     val saveMessage: String? = null,
@@ -103,12 +115,19 @@ data class LoggingUiState(
  * so this ViewModel only orchestrates the existing KMM validation, mutation, and
  * stable-id helpers without re-implementing cycle or merge rules on Android.
  */
+/** Log-save trace: `adb logcat -s SakhiLogSave`. No health values are logged, only outcome and counts. */
+private val logSaveLog = Logger.withTag("SakhiLogSave")
+
 class LoggingViewModel(
     private val appContext: Context,
     private val sessionManager: SessionManager,
     private val periodLogRepository: PeriodLogRepository,
     private val hapticManager: AndroidHapticManager,
     private val widgetSnapshotManager: AndroidWidgetSnapshotManager,
+    private val cycleDetectionCoordinator: CycleDetectionCoordinator,
+    // Needed only for the header's phase line: iOS's logging sheet shows
+    // `cyclePhase.name` under the date, and the phase cannot be derived from logs alone.
+    private val cycleDataRepository: CycleDataRepository,
 ) : ViewModel() {
 
     private val selectedDate = MutableStateFlow(DateConverter.today())
@@ -124,6 +143,7 @@ class LoggingViewModel(
                 session to date
             }.collectLatest { (session, date) ->
                 loadEntry(session, date)
+                loadPhaseName(session, date)
             }
         }
     }
@@ -362,8 +382,45 @@ class LoggingViewModel(
                     timestampIso = nowIso,
                 )
 
+                logSaveLog.i {
+                    "upsert -> date=${state.selectedDate}, targetUserId=${attributedUserId.takeLast(4)}, " +
+                        "existingSameDayLogs=${sameDayLogs.size}"
+                }
                 periodLogRepository.upsert(nextLog)
                     .onSuccess {
+                        logSaveLog.i { "upsert OK for ${state.selectedDate}" }
+
+                        // Rebuild this user's cycles from the full log history, the
+                        // same step iOS runs after every log change
+                        // (`CycleDetectionEngine.processLogChange`). Awaited here, not
+                        // fired and forgotten, so cycles are already persisted before
+                        // the sheet reports success and Home reloads — otherwise
+                        // closing the sheet quickly would race the recompute and Home
+                        // would show stale data.
+                        //
+                        // A detection failure must not fail the save: the log row is
+                        // already safely written, and losing what she logged is far
+                        // worse than a briefly stale cycle, which the next log or app
+                        // start recomputes anyway.
+                        cycleDetectionCoordinator.processLogChange(attributedUserId)
+                            .onSuccess { cycles ->
+                                logSaveLog.i { "cycle detection OK -> ${cycles.size} cycle(s)" }
+                            }
+                            .onFailure { throwable ->
+                                // Only the exception TYPE and first line. supabase-kt
+                                // puts the full request dump in `message`, including
+                                // the `Authorization: Bearer <jwt>` header and the
+                                // apikey — a real leak observed in logcat on
+                                // 2026-08-01. A logcat capture is routinely pasted
+                                // into bug reports, so a live session token must
+                                // never reach it.
+                                logSaveLog.e {
+                                    "cycle detection FAILED (log row is saved): " +
+                                        "${throwable::class.simpleName}: " +
+                                        throwable.message.orEmpty().substringBefore('\n').take(160)
+                                }
+                            }
+
                         if (isStillCurrent(session, state.selectedDate)) {
                             _uiState.update {
                                 it.copy(
@@ -382,11 +439,12 @@ class LoggingViewModel(
                         }
                     }
                     .onFailure { throwable ->
+                        logSaveLog.e { "upsert FAILED for ${state.selectedDate}: ${throwable.message}" }
                         if (isStillCurrent(session, state.selectedDate)) {
                             _uiState.update {
                                 it.copy(
                                     isSaving = false,
-                                    error = throwable.message ?: appContext.getString(R.string.logging_error_failed_to_save),
+                                    error = throwable.toSafeUserMessage(appContext, R.string.logging_error_failed_to_save),
                                     saveAttemptId = attemptId,
                                 )
                             }
@@ -398,7 +456,7 @@ class LoggingViewModel(
                 _uiState.update {
                     it.copy(
                         isSaving = false,
-                        error = throwable.message ?: appContext.getString(R.string.logging_error_failed_to_load_existing),
+                        error = throwable.toSafeUserMessage(appContext, R.string.logging_error_failed_to_load_existing),
                         saveAttemptId = attemptId,
                     )
                 }
@@ -500,6 +558,55 @@ class LoggingViewModel(
         widgetSnapshotManager.refreshAsync()
         hapticManager.success()
     }
+
+    /**
+     * Resolves the header's phase line through the SAME shared engine Home uses
+     * (`CycleInsightAdapter` -> `CyclePhaseInsight`), so the sheet can never disagree
+     * with the phase Home is showing for the same date.
+     *
+     * Failures leave `phaseName` null rather than guessing: iOS shows a real phase or
+     * nothing, and inventing one on a health screen would be worse than omitting it.
+     */
+    private suspend fun loadPhaseName(session: SessionContext?, date: LocalDate) {
+        val targetUserId = session?.targetUserId ?: return
+        // Every read here is best-effort. The phase line is decoration on a screen whose
+        // real job is saving a log, so a failed or slow cycle read must never disturb the
+        // entry load that runs alongside it -- it just leaves the header showing the date.
+        val cycles = runCatching { cycleDataRepository.getAll(targetUserId).getOrNull() }
+            .getOrNull().orEmpty()
+        val logDates = runCatching { periodLogRepository.getAll(targetUserId).getOrNull() }
+            .getOrNull().orEmpty()
+            .filter { it.periodPresent }
+            .mapTo(mutableSetOf()) { it.logDate }
+        if (sessionManager.current?.targetUserId != targetUserId) return
+        val insight = runCatching {
+            CycleInsightAdapter.insightFor(
+                date = date,
+                cycles = cycles,
+                periodLogDates = logDates,
+                stats = null,
+            )
+        }.getOrNull() ?: return
+        _uiState.update { it.copy(phaseName = phaseDisplayName(insight.phase.kind)) }
+    }
+
+    /**
+     * Maps the engine's `PhaseKind` straight to a name rather than going through
+     * `CyclePhase`. That matters: `CyclePhase` has no PMS case, so Home's
+     * `toCyclePhase()` folds PMS into LUTEAL — but iOS names it **"PMS Phase"** in its
+     * own right. Routing through the domain enum here would silently rename it.
+     */
+    private fun phaseDisplayName(kind: CyclePhaseInsight.PhaseKind): String = appContext.getString(
+        when (kind) {
+            CyclePhaseInsight.PhaseKind.MENSTRUAL -> R.string.logging_phase_menstrual
+            CyclePhaseInsight.PhaseKind.FOLLICULAR -> R.string.logging_phase_follicular
+            CyclePhaseInsight.PhaseKind.OVULATION -> R.string.logging_phase_ovulation
+            CyclePhaseInsight.PhaseKind.LUTEAL -> R.string.logging_phase_luteal
+            CyclePhaseInsight.PhaseKind.PMS -> R.string.logging_phase_pms
+            CyclePhaseInsight.PhaseKind.DELAYED -> R.string.logging_phase_delayed
+            CyclePhaseInsight.PhaseKind.UNKNOWN -> R.string.logging_phase_unknown
+        },
+    )
 
     private suspend fun loadEntry(
         session: SessionContext?,
@@ -624,7 +731,7 @@ class LoggingViewModel(
                 isLoadingEntry = false,
                 isSaving = false,
                 saveMessage = null,
-                error = throwable.message ?: appContext.getString(R.string.logging_error_failed_to_load_daily),
+                error = throwable.toSafeUserMessage(appContext, R.string.logging_error_failed_to_load_daily),
             )
         }
     }

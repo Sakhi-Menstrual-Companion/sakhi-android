@@ -3,6 +3,7 @@ package team.sakhi.android.feature.home
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import co.touchlab.kermit.Logger
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -11,7 +12,10 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
+import team.sakhi.android.common.CycleDetectionCoordinator
+import team.sakhi.android.common.CycleInsightAdapter
 import team.sakhi.cycle.CycleMath
+import team.sakhi.cycle.CyclePhaseInsight
 import team.sakhi.date.DateConverter
 import team.sakhi.logging.LogTokenEncoder
 import team.sakhi.logging.Mood
@@ -22,6 +26,7 @@ import team.sakhi.models.PeriodLog
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.PartnerHealthSnapshot
 import team.sakhi.repositories.PeriodLogRepository
+import team.sakhi.repositories.RecommendationRepository
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
@@ -81,6 +86,17 @@ data class HomeUiState(
     val cyclesAnalyzed: Int = 0,
     val shortestCycle: Int = 0,
     val longestCycle: Int = 0,
+    // The shared engine's own answers, kept structured rather than pre-flattened to a
+    // string so the UI can render exactly the same cases iOS does (in-period vs
+    // upcoming vs delayed vs no-data). `phaseKind` also drives Home's background
+    // colour, matching iOS's per-phase palette.
+    val phaseKind: CyclePhaseInsight.PhaseKind = CyclePhaseInsight.PhaseKind.UNKNOWN,
+    val prediction: CyclePhaseInsight.PeriodPredictionSnapshot? = null,
+    // Logged period days, so the Current Cycle pill strip can mark its days from the
+    // same shared engine the calendar uses instead of deriving them from CycleData.
+    val periodLogDates: Set<LocalDate> = emptySet(),
+    /** One-line phase tip for the hero pill, from the shared engine (iOS `heroTip`). */
+    val heroTip: String? = null,
     val partnerSnapshotRevision: Long? = null,
     val partnerSnapshotRefreshedAt: String? = null,
 )
@@ -89,13 +105,24 @@ data class HomeUiState(
  * Thin home-state adapter over KMM session and sync state. The only derived values
  * are the current phase and day-in-cycle, both computed through shared `CycleMath`.
  */
+/** Home data-flow trace: `adb logcat -s SakhiHome`. No health values are logged, only counts and flags. */
+private val homeLog = Logger.withTag("SakhiHome")
+
 class HomeViewModel(
     private val sessionManager: SessionManager,
     private val syncStore: SyncStore,
     private val cycleDataRepository: CycleDataRepository,
     private val periodLogRepository: PeriodLogRepository,
+    private val cycleDetectionCoordinator: CycleDetectionCoordinator,
+    private val recommendationRepository: RecommendationRepository,
     private val appContext: Context,
 ) : ViewModel() {
+
+    // Cached engine inputs so `selectDate` can re-ask the SAME engine for another day
+    // instead of falling back to a different algorithm.
+    private var cachedCycles: List<CycleData> = emptyList()
+    private var cachedPeriodLogDates: Set<LocalDate> = emptySet()
+    private var cachedStats: team.sakhi.models.CycleStatistics? = null
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -149,6 +176,10 @@ class HomeViewModel(
                 dayInCycle = if (targetChanged) null else it.dayInCycle,
                 cycleLength = if (targetChanged) null else it.cycleLength,
                 daysUntilNextPeriod = if (targetChanged) null else it.daysUntilNextPeriod,
+                phaseKind = if (targetChanged) CyclePhaseInsight.PhaseKind.UNKNOWN else it.phaseKind,
+                prediction = if (targetChanged) null else it.prediction,
+                periodLogDates = if (targetChanged) emptySet() else it.periodLogDates,
+                heroTip = if (targetChanged) null else it.heroTip,
                 hasCycleData = if (targetChanged) false else it.hasCycleData,
                 hasLoggedForSelectedDate = if (targetChanged) false else it.hasLoggedForSelectedDate,
                 selectedLog = if (targetChanged) null else it.selectedLog,
@@ -165,47 +196,7 @@ class HomeViewModel(
 
         val requestedTargetUserId = session.targetUserId
         if (canViewCycle) {
-            cycleDataRepository.getLatest(requestedTargetUserId)
-                .onSuccess { cycle ->
-                    if (sessionManager.current?.targetUserId != requestedTargetUserId) return
-
-                    _uiState.update {
-                        // Real feature build (2026-07-16): compute phase/dayInCycle/
-                        // daysUntilNextPeriod for `it.selectedDate` (the freshest
-                        // known selection at update time, in case the user tapped a
-                        // new date while this cycle fetch was in flight), not
-                        // always "today" -- the same shared `CycleMath` functions
-                        // Calendar already uses, just no longer relying on their
-                        // implicit today-default.
-                        val date = it.selectedDate
-                        it.copy(
-                            phase = cycle?.let { c -> CycleMath.currentPhase(c, date) } ?: CyclePhase.UNKNOWN,
-                            dayInCycle = cycle?.let { c -> CycleMath.dayOfCycle(c, date) },
-                            cycleLength = cycle?.cycleLength,
-                            daysUntilNextPeriod = cycle?.let { c -> CycleMath.daysUntilNextPeriod(c, date) },
-                            hasCycleData = cycle != null,
-                            currentCycle = cycle,
-                            isLoadingCycle = false,
-                            error = null,
-                        )
-                    }
-                }
-                .onFailure { throwable ->
-                    if (sessionManager.current?.targetUserId != requestedTargetUserId) return
-
-                    _uiState.update {
-                        it.copy(
-                            phase = CyclePhase.UNKNOWN,
-                            dayInCycle = null,
-                            cycleLength = null,
-                            daysUntilNextPeriod = null,
-                            hasCycleData = false,
-                            isLoadingCycle = false,
-                            error = throwable.message
-                                ?: appContext.getString(R.string.home_load_cycle_failed),
-                        )
-                    }
-                }
+            loadCycleInsight(requestedTargetUserId)
             refreshCycleStatistics(requestedTargetUserId)
         } else {
             _uiState.update {
@@ -226,6 +217,139 @@ class HomeViewModel(
         }
 
         refreshSelectedDateLog(session, requestedTargetUserId, _uiState.value.selectedDate)
+    }
+
+    /**
+     * Loads phase and next-period prediction from the shared KMM engine — the same
+     * `CyclePhaseInsight` iOS's Home uses, via [CycleInsightAdapter].
+     *
+     * Replaces the previous `CycleMath.currentPhase` / `daysUntilNextPeriod` path.
+     * Those are a different algorithm answering a different question, which is why
+     * Android and iOS disagreed on identical data (iOS: "Day 1 of your period /
+     * Menstrual Phase", Android: "Luteal phase / 207 days" for the same account on
+     * 2026-08-01). `CycleMath` also cannot produce a countdown for an in-progress
+     * cycle at all, since it needs a `cycleLength` that only exists once the cycle has
+     * closed.
+     *
+     * Needs the full log history and every cycle, not just the latest one: the engine
+     * decides "am I inside a period right now" from the logged days themselves, which
+     * is exactly the case a single-latest-cycle read cannot see.
+     */
+    private suspend fun loadCycleInsight(targetUserId: String) {
+        val cyclesResult = cycleDataRepository.getAll(targetUserId)
+        val logsResult = periodLogRepository.getAll(targetUserId)
+
+        val failure = cyclesResult.exceptionOrNull() ?: logsResult.exceptionOrNull()
+        if (failure != null) {
+            if (sessionManager.current?.targetUserId != targetUserId) return
+            homeLog.w { "cycle insight load FAILED: ${failure.message}" }
+            _uiState.update {
+                it.copy(
+                    phase = CyclePhase.UNKNOWN,
+                    phaseKind = CyclePhaseInsight.PhaseKind.UNKNOWN,
+                    prediction = null,
+                    heroTip = null,
+                    dayInCycle = null,
+                    cycleLength = null,
+                    daysUntilNextPeriod = null,
+                    hasCycleData = false,
+                    isLoadingCycle = false,
+                    // NEVER surface `failure.message` directly. Supabase/Ktor exception
+                    // messages embed the full request URL, the `Authorization: Bearer …`
+                    // header and the apikey -- those were rendering verbatim on Home as
+                    // user-visible red text (seen on a real device). Show the app's own
+                    // copy instead; the raw cause still goes to the log below for
+                    // debugging.
+                    error = appContext.getString(R.string.home_load_cycle_failed),
+                )
+            }
+            return
+        }
+
+        val cycles = cyclesResult.getOrDefault(emptyList())
+        val logs = logsResult.getOrDefault(emptyList())
+        if (sessionManager.current?.targetUserId != targetUserId) return
+
+        val periodLogDates = logs.filter { it.periodPresent }.mapTo(mutableSetOf()) { it.logDate }
+        val stats = CycleMath.computeStatistics(cycles.filter { it.isComplete })
+        cachedCycles = cycles
+        cachedPeriodLogDates = periodLogDates
+        cachedStats = stats
+
+        _uiState.update {
+            // Computed for `it.selectedDate`, not always today, so browsing to another
+            // day in Calendar re-answers the same questions for that day.
+            val insight = CycleInsightAdapter.insightFor(
+                date = it.selectedDate,
+                cycles = cycles,
+                periodLogDates = periodLogDates,
+                stats = stats,
+            )
+            homeLog.i {
+                "insight for ${it.selectedDate}: phase=${insight.phase.kind}, " +
+                    "cycleDay=${insight.phase.cycleDay}, status=${insight.prediction.status}, " +
+                    "daysUntil=${insight.prediction.daysUntil}, periodDay=${insight.prediction.periodDay} | " +
+                    "logs=${logs.size}, present=${periodLogDates.size}, latestPresent=${periodLogDates.maxOrNull()}, " +
+                    "todayIsPresent=${it.selectedDate in periodLogDates}, cycles=${cycles.size}"
+            }
+            it.copy(
+                phase = insight.phase.kind.toCyclePhase(),
+                phaseKind = insight.phase.kind,
+                prediction = insight.prediction,
+                periodLogDates = periodLogDates,
+                heroTip = heroTipFor(insight, it.hasLoggedForSelectedDate),
+                dayInCycle = insight.phase.cycleDay.takeIf { day -> day > 0 },
+                cycleLength = cycles.firstOrNull()?.cycleLength,
+                daysUntilNextPeriod = insight.prediction.daysUntil.takeIf { _ ->
+                    insight.prediction.status == CyclePhaseInsight.PredictionStatusKind.UPCOMING
+                },
+                hasCycleData = cycles.isNotEmpty() || periodLogDates.isNotEmpty(),
+                currentCycle = cycles.firstOrNull(),
+                isLoadingCycle = false,
+                error = null,
+            )
+        }
+    }
+
+    /**
+     * Hero tip, sourced the way iOS's `HomeDayDetailGlassView.heroTip` sources it:
+     * `recoVM.phaseTips.first ?? RecommendationRepository.syncTips(for:).first`, with a
+     * log nudge taking priority while she is in her period window but has not logged
+     * today ("Please remember to log").
+     *
+     * Deliberately NOT the engine's `analyzePhase(...).shortTip`, which was the first
+     * thing tried here: that field is terse ("Rest well") where iOS shows the curated
+     * copy ("A heating pad can ease cramps significantly"). Same phase, different text,
+     * so the platforms visibly disagreed.
+     */
+    private fun heroTipFor(
+        insight: CycleInsightAdapter.Insight,
+        hasLoggedToday: Boolean,
+    ): String? {
+        val inPeriodWindow = insight.prediction.status == CyclePhaseInsight.PredictionStatusKind.IN_PERIOD ||
+            insight.prediction.status == CyclePhaseInsight.PredictionStatusKind.TODAY
+        if (inPeriodWindow && !hasLoggedToday) {
+            return appContext.getString(R.string.home_hero_tip_log_reminder)
+        }
+        val phase = insight.phase.kind.toCyclePhase()
+        return recommendationRepository.getCuratedRecommendations(phase).tips.firstOrNull()
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    /**
+     * Maps the engine's phase to the app-wide [CyclePhase].
+     *
+     * PMS collapses to LUTEAL because that is what it physiologically is — iOS does the
+     * same (`kind == .pms -> CyclePhaseInfo(phase: .luteal, name: "PMS Phase")`),
+     * keeping the distinction in the label rather than the phase enum.
+     */
+    private fun CyclePhaseInsight.PhaseKind.toCyclePhase(): CyclePhase = when (this) {
+        CyclePhaseInsight.PhaseKind.MENSTRUAL -> CyclePhase.MENSTRUAL
+        CyclePhaseInsight.PhaseKind.FOLLICULAR -> CyclePhase.FOLLICULAR
+        CyclePhaseInsight.PhaseKind.OVULATION -> CyclePhase.OVULATION
+        CyclePhaseInsight.PhaseKind.LUTEAL, CyclePhaseInsight.PhaseKind.PMS -> CyclePhase.LUTEAL
+        CyclePhaseInsight.PhaseKind.DELAYED -> CyclePhase.DELAYED
+        CyclePhaseInsight.PhaseKind.UNKNOWN -> CyclePhase.UNKNOWN
     }
 
     // iOS `HomeViewModel.statistics(for:)` computes this from the user's *full*
@@ -263,6 +387,27 @@ class HomeViewModel(
     }
 
     /**
+     * Full reload after the user logs something, including the cycle.
+     *
+     * [refreshSelectedDate] deliberately does not touch cycle state, which is correct
+     * for a plain nav pop but wrong after a log save: logging a period can create or
+     * move a whole cycle. Using the narrow refresh there was why Home appeared frozen
+     * after logging — `hasLoggedForSelectedDate` updated (so the log button's pencil
+     * icon flipped, the one thing that did visibly change) while `currentCycle`,
+     * `phase`, and `dayInCycle` kept their pre-log values.
+     */
+    fun refreshAfterLogChange() {
+        val session = sessionManager.current ?: return
+        viewModelScope.launch {
+            refresh(
+                session = session,
+                syncState = syncStore.syncState.value,
+                partnerSnapshot = syncStore.partnerHealthSnapshot.value,
+            )
+        }
+    }
+
+    /**
      * Real feature build (2026-07-16): matches iOS's real `HomeView` top-bar
      * date-label toggle (`isToday ? showCalendar = true : selectedDate =
      * Date()`) plus Calendar's day-tap (`onDayTap: { date in selectedDate =
@@ -276,13 +421,26 @@ class HomeViewModel(
     fun selectDate(date: LocalDate) {
         val session = sessionManager.current ?: return
         if (_uiState.value.selectedDate == date) return
-        val cycle = _uiState.value.currentCycle
+        // Re-ask the same shared engine for the newly selected day. Previously this
+        // recomputed via `CycleMath`, so tapping a day in Calendar could report a
+        // different phase than the hero above it was showing for the same date.
+        val insight = CycleInsightAdapter.insightFor(
+            date = date,
+            cycles = cachedCycles,
+            periodLogDates = cachedPeriodLogDates,
+            stats = cachedStats,
+        )
         _uiState.update {
             it.copy(
                 selectedDate = date,
-                phase = cycle?.let { c -> CycleMath.currentPhase(c, date) } ?: CyclePhase.UNKNOWN,
-                dayInCycle = cycle?.let { c -> CycleMath.dayOfCycle(c, date) },
-                daysUntilNextPeriod = cycle?.let { c -> CycleMath.daysUntilNextPeriod(c, date) },
+                phase = insight.phase.kind.toCyclePhase(),
+                phaseKind = insight.phase.kind,
+                prediction = insight.prediction,
+                heroTip = heroTipFor(insight, it.hasLoggedForSelectedDate),
+                dayInCycle = insight.phase.cycleDay.takeIf { day -> day > 0 },
+                daysUntilNextPeriod = insight.prediction.daysUntil.takeIf { _ ->
+                    insight.prediction.status == CyclePhaseInsight.PredictionStatusKind.UPCOMING
+                },
             )
         }
         viewModelScope.launch { refreshSelectedDateLog(session, session.targetUserId, date) }
@@ -324,7 +482,18 @@ class HomeViewModel(
                 // wouldn't catch this since the account hasn't changed).
                 if (_uiState.value.selectedDate != date) return
                 val visibleLog = logs.firstOrNull()?.sanitizeForHome(session, canViewLoggedDetails)
+                homeLog.i {
+                    "read $date -> ${logs.size} log(s), hasLogged=${logs.isNotEmpty()}, " +
+                        "visibleAfterSanitize=${visibleLog != null}, canViewLoggedDetails=$canViewLoggedDetails"
+                }
                 _uiState.update { it.copy(hasLoggedForSelectedDate = logs.isNotEmpty(), selectedLog = visibleLog) }
+            }
+            // Previously absent, which is why a failed read looked identical to
+            // "nothing logged": the state was simply left untouched and nothing
+            // was reported anywhere. Home still must not invent data on a failed
+            // read, so the state stays as-is, but the failure is no longer silent.
+            .onFailure { throwable ->
+                homeLog.w { "read $date FAILED, Home left unchanged: ${throwable.message}" }
             }
     }
 

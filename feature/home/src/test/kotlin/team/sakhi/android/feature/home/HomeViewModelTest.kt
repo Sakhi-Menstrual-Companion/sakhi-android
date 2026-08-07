@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.home
 
+import team.sakhi.repositories.RecommendationRepository
 import android.content.Context
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -28,6 +29,7 @@ import team.sakhi.models.CycleData
 import team.sakhi.models.CyclePhase
 import team.sakhi.models.LogHistoryEntry
 import team.sakhi.models.PeriodLog
+import team.sakhi.android.common.CycleDetectionCoordinator
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.PartnerHealthSnapshot
 import team.sakhi.repositories.PeriodLogRepository
@@ -37,6 +39,7 @@ import team.sakhi.session.SessionManager
 import team.sakhi.session.SessionPermissions
 import team.sakhi.sync.SyncRuntimeState
 import team.sakhi.sync.SyncStore
+import kotlinx.coroutines.CompletableDeferred
 
 /**
  * First state-machine test for `HomeViewModel`, the app's central Home-screen
@@ -122,6 +125,20 @@ class HomeViewModelTest {
 
     // periodLength=5 always keeps day-of-cycle < 5 unambiguously MENSTRUAL regardless
     // of AppConfig's ovulation-window constants.
+    /** The logged period days a cycle implies: `periodStartDate` for `periodLength` days. */
+    private fun periodLogsFor(cycle: CycleData): List<PeriodLog> =
+        (0 until (cycle.periodLength ?: 5)).map { offset ->
+            val date = DateConverter.addDays(cycle.periodStartDate, offset)
+            PeriodLog(
+                id = "log-${cycle.id}-$offset",
+                userId = cycle.userId,
+                logDate = date,
+                periodPresent = true,
+                createdByUserId = cycle.userId,
+                sourceUserId = cycle.userId,
+            )
+        }
+
     private fun menstrualCycle(userId: String = "user-1", daysAgo: Int = 2): CycleData = CycleData(
         id = "cycle-1",
         userId = userId,
@@ -146,13 +163,52 @@ class HomeViewModelTest {
         sessionManager: SessionManager,
         syncStore: SyncStore,
         cycleDataRepository: CycleDataRepository = mockk(),
+        // Derived from `cycleDataRepository` on purpose. Home's phase now comes from
+        // the shared `CyclePhaseInsight` engine, which reads the *logged period days*
+        // rather than inferring a phase from a cycle record alone. A fake that returns
+        // a cycle but no logs is therefore an impossible state -- in production a cycle
+        // only exists because logs produced it -- and asserting against it would test
+        // behaviour the real app can never reach. Expanding each cycle into its own
+        // period-length run of logs keeps the two doubles consistent.
         periodLogRepository: PeriodLogRepository = mockk {
             coEvery { getForDateRange(any(), any(), any()) } returns Result.success(emptyList())
+            coEvery { getAll(any()) } coAnswers {
+                val userId = firstArg<String>()
+                // Guarded: not every test stubs `getAll` on the cycle fake, and an
+                // unstubbed mockk call throws rather than returning a failed Result.
+                val cycles = runCatching {
+                    cycleDataRepository.getAll(userId).getOrDefault(emptyList())
+                }.getOrDefault(emptyList())
+                Result.success(cycles.flatMap { cycle -> periodLogsFor(cycle) })
+            }
         },
         appContext: Context = mockk {
             every { getString(R.string.home_load_cycle_failed) } returns "Failed to load cycle data"
+            // Home's hero tip reaches for this whenever she is inside her period window
+            // but has not logged today. Leaving it unstubbed made mockk throw from
+            // inside `_uiState.update {}`, which aborted the whole state write -- every
+            // phase assertion then saw UNKNOWN and every error assertion saw null, from
+            // one missing stub rather than nine real failures.
+            every { getString(R.string.home_hero_tip_log_reminder) } returns "Please remember to log"
         },
-    ) = HomeViewModel(sessionManager, syncStore, cycleDataRepository, periodLogRepository, appContext)
+        // Real coordinator over the same mocked repositories rather than a mock of it:
+        // it is a thin orchestrator, so a fake would only assert against itself. Home's
+        // forecast call is driven by whatever `getAll` these mocks return.
+        cycleDetectionCoordinator: CycleDetectionCoordinator = CycleDetectionCoordinator(
+            periodLogRepository = periodLogRepository,
+            cycleDataRepository = cycleDataRepository,
+        ),
+    ) = HomeViewModel(
+        sessionManager,
+        syncStore,
+        cycleDataRepository,
+        periodLogRepository,
+        cycleDetectionCoordinator,
+        // Relaxed mock: the real repository needs a Ktor HttpClient that is not on the
+        // unit-test classpath, and these tests assert cycle/prediction state, not tips.
+        mockk<RecommendationRepository>(relaxed = true),
+        appContext,
+    )
 
     @Test
     fun `no session resets to a default state without touching repositories`() = runTest {
@@ -305,6 +361,18 @@ class HomeViewModelTest {
             ),
         )
         val periodLogRepository = mockk<PeriodLogRepository> {
+            // Home reads the full log history for the shared phase engine, which
+            // decides phase from logged period DAYS. Returning an empty list here
+            // would make the engine correctly answer UNKNOWN and defeat the phase
+            // assertions below, so derive the logs from this test's own cycles --
+            // the same consistency the default factory keeps.
+            coEvery { getAll(any()) } coAnswers {
+                val requested = firstArg<String>()
+                val cycles = runCatching {
+                    cycleDataRepository.getAll(requested).getOrDefault(emptyList())
+                }.getOrDefault(emptyList())
+                Result.success(cycles.flatMap { periodLogsFor(it) })
+            }
             coEvery { getForDateRange("primary-1", any(), any()) } returns Result.success(listOf(rawLog))
         }
         val viewModel = newViewModel(
@@ -335,7 +403,7 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `cycle load failure with a real message surfaces that message`() = runTest {
+    fun `cycle load failure surfaces app copy, never the raw exception message`() = runTest {
         val sessionFlow = MutableStateFlow(sessionContext())
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
@@ -347,7 +415,7 @@ class HomeViewModelTest {
         }
         val cycleDataRepository = mockk<CycleDataRepository> {
             coEvery { getLatest("user-1") } returns Result.failure(RuntimeException("network down"))
-            coEvery { getAll("user-1") } returns Result.success(emptyList())
+            coEvery { getAll("user-1") } returns Result.failure(RuntimeException("network down"))
         }
         val viewModel = newViewModel(sessionManager, syncStore, cycleDataRepository)
 
@@ -357,7 +425,13 @@ class HomeViewModelTest {
         assertEquals(CyclePhase.UNKNOWN, state.phase)
         assertFalse(state.hasCycleData)
         assertFalse(state.isLoadingCycle)
-        assertEquals("network down", state.error)
+        // This used to assert the raw `throwable.message` was shown. That assertion was
+        // itself pinning a real defect: Supabase/Ktor messages carry the request URL, the
+        // `Authorization: Bearer …` header and the apikey, and they were rendering
+        // verbatim as red text on Home (seen on a real device). The user-facing string
+        // must be the app's own copy; the raw cause goes to the log only.
+        assertEquals("Failed to load cycle data", state.error)
+        assertFalse(state.error.orEmpty().contains("network down"))
     }
 
     @Test
@@ -373,7 +447,7 @@ class HomeViewModelTest {
         }
         val cycleDataRepository = mockk<CycleDataRepository> {
             coEvery { getLatest("user-1") } returns Result.failure(RuntimeException())
-            coEvery { getAll("user-1") } returns Result.success(emptyList())
+            coEvery { getAll("user-1") } returns Result.failure(RuntimeException())
         }
         val viewModel = newViewModel(sessionManager, syncStore, cycleDataRepository)
 
@@ -401,7 +475,12 @@ class HomeViewModelTest {
         val cycleDataRepository = mockk<CycleDataRepository> {
             coEvery { getLatest("user-1") } returns Result.success(ownCycle)
             coEvery { getLatest("partner-1") } returns Result.success(partnerCycle)
-            coEvery { getAll(any()) } returns Result.success(emptyList())
+            // Per target, not a blanket empty stub: Home reads the whole history via
+            // getAll now, and returning empty for both users made the shared engine
+            // correctly answer UNKNOWN for each — which would have hidden exactly the
+            // stale-data leak this test exists to catch.
+            coEvery { getAll("user-1") } returns Result.success(listOf(ownCycle))
+            coEvery { getAll("partner-1") } returns Result.success(listOf(partnerCycle))
         }
         val viewModel = newViewModel(sessionManager, syncStore, cycleDataRepository)
         advanceUntilIdle()
@@ -437,7 +516,14 @@ class HomeViewModelTest {
                 kotlinx.coroutines.awaitCancellation()
             }
             coEvery { getLatest("partner-1") } returns Result.success(follicularCycle(userId = "partner-1"))
-            coEvery { getAll(any()) } returns Result.success(emptyList())
+            // The hang has to sit on getAll, because that is the call Home actually
+            // makes now. Left on getLatest it no longer simulates anything, and the
+            // test would pass without ever exercising a stale in-flight response.
+            coEvery { getAll("user-1") } coAnswers {
+                kotlinx.coroutines.awaitCancellation()
+            }
+            coEvery { getAll("partner-1") } returns
+                Result.success(listOf(follicularCycle(userId = "partner-1")))
         }
         val viewModel = newViewModel(sessionManager, syncStore, cycleDataRepository)
         advanceUntilIdle()
@@ -450,6 +536,71 @@ class HomeViewModelTest {
         // Only the real, current target's data should ever land in state.
         assertEquals(CyclePhase.FOLLICULAR, viewModel.uiState.value.phase)
         assertEquals("partner-1", viewModel.uiState.value.currentCycle?.userId)
+    }
+
+    /**
+     * Late response for an abandoned target must not overwrite the current target's data.
+     *
+     * Stronger than the sibling test above, which hangs the abandoned request forever
+     * (`awaitCancellation`) and so only proves that a request which *never completes*
+     * cannot corrupt state. This one lets the response actually land after the session
+     * has moved on.
+     *
+     * **What actually protects this, established by mutation testing (2026-08-02):** not
+     * the `if (sessionManager.current?.targetUserId != targetUserId) return` checks. All
+     * five of those can be deleted and both this test and the whole `:feature:home` suite
+     * stay green. The real mechanism is `collectLatest` in `init`: a session change
+     * cancels the in-flight `refresh`, so the abandoned repository call never resumes.
+     * The explicit checks are defence-in-depth that this path cannot reach.
+     *
+     * So do not read a pass here as "the guard works" — it means the cancellation
+     * behaviour works. If `collectLatest` is ever changed to `collect`, or the reads are
+     * moved outside the cancelled scope, this test is what should catch it, and the
+     * guards become load-bearing for real.
+     *
+     * (The permission gates are a different story and *are* load-bearing: forcing
+     * `canViewHomeCycle` to true fails three partner-isolation tests.)
+     */
+    @Test
+    fun `a late cycle response for an abandoned target does not overwrite the current targets data`() = runTest {
+        val sessionA = sessionContext(userId = "user-1", targetUserId = "user-1")
+        val sessionB = sessionContext(userId = "user-1", targetUserId = "partner-1")
+        val sessionFlow = MutableStateFlow(sessionA)
+        val currentSlot = arrayOf(sessionA)
+        val sessionManager = mockk<SessionManager> {
+            every { session } returns sessionFlow
+            every { current } answers { currentSlot[0] }
+        }
+        val syncStore = mockk<SyncStore> {
+            every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
+            every { partnerHealthSnapshot } returns MutableStateFlow(null)
+        }
+        // user-1's read is held open, then released *after* the switch to partner-1, so
+        // the response is genuinely in-flight-then-late rather than never arriving.
+        val abandonedRead = CompletableDeferred<Result<List<CycleData>>>()
+        val cycleDataRepository = mockk<CycleDataRepository> {
+            coEvery { getLatest("user-1") } coAnswers { abandonedRead.await().map { it.firstOrNull() } }
+            coEvery { getAll("user-1") } coAnswers { abandonedRead.await() }
+            coEvery { getLatest("partner-1") } returns Result.success(follicularCycle(userId = "partner-1"))
+            coEvery { getAll("partner-1") } returns
+                Result.success(listOf(follicularCycle(userId = "partner-1")))
+        }
+        val viewModel = newViewModel(sessionManager, syncStore, cycleDataRepository)
+        advanceUntilIdle()
+
+        currentSlot[0] = sessionB
+        sessionFlow.value = sessionB
+        advanceUntilIdle()
+        // partner-1 is what the user is looking at before the late reply arrives.
+        assertEquals("partner-1", viewModel.uiState.value.currentCycle?.userId)
+
+        // The abandoned target's response finally lands, carrying a different phase so an
+        // overwrite would be unmistakable.
+        abandonedRead.complete(Result.success(listOf(menstrualCycle(userId = "user-1"))))
+        advanceUntilIdle()
+
+        assertEquals("partner-1", viewModel.uiState.value.currentCycle?.userId)
+        assertEquals(CyclePhase.FOLLICULAR, viewModel.uiState.value.phase)
     }
 
     @Test
@@ -465,7 +616,7 @@ class HomeViewModelTest {
         }
         val cycleDataRepository = mockk<CycleDataRepository> {
             coEvery { getLatest("user-1") } returns Result.success(menstrualCycle())
-            coEvery { getAll("user-1") } returns Result.success(emptyList())
+            coEvery { getAll("user-1") } returns Result.success(listOf(menstrualCycle()))
         }
         val today = DateConverter.today()
         val log = PeriodLog(
@@ -477,6 +628,18 @@ class HomeViewModelTest {
             sourceUserId = "user-1",
         )
         val periodLogRepository = mockk<PeriodLogRepository> {
+            // Home reads the full log history for the shared phase engine, which
+            // decides phase from logged period DAYS. Returning an empty list here
+            // would make the engine correctly answer UNKNOWN and defeat the phase
+            // assertions below, so derive the logs from this test's own cycles --
+            // the same consistency the default factory keeps.
+            coEvery { getAll(any()) } coAnswers {
+                val requested = firstArg<String>()
+                val cycles = runCatching {
+                    cycleDataRepository.getAll(requested).getOrDefault(emptyList())
+                }.getOrDefault(emptyList())
+                Result.success(cycles.flatMap { periodLogsFor(it) })
+            }
             coEvery { getForDateRange("user-1", today, today) } returns Result.success(listOf(log))
         }
         val viewModel = newViewModel(sessionManager, syncStore, cycleDataRepository, periodLogRepository)
@@ -516,7 +679,7 @@ class HomeViewModelTest {
         val cycle = menstrualCycle(daysAgo = 2)
         val cycleDataRepository = mockk<CycleDataRepository> {
             coEvery { getLatest("user-1") } returns Result.success(cycle)
-            coEvery { getAll("user-1") } returns Result.success(emptyList())
+            coEvery { getAll("user-1") } returns Result.success(listOf(cycle))
         }
         val futureDate = DateConverter.addDays(DateConverter.today(), 5)
         val futureLog = PeriodLog(
@@ -528,6 +691,18 @@ class HomeViewModelTest {
             sourceUserId = "user-1",
         )
         val periodLogRepository = mockk<PeriodLogRepository> {
+            // Home reads the full log history for the shared phase engine, which
+            // decides phase from logged period DAYS. Returning an empty list here
+            // would make the engine correctly answer UNKNOWN and defeat the phase
+            // assertions below, so derive the logs from this test's own cycles --
+            // the same consistency the default factory keeps.
+            coEvery { getAll(any()) } coAnswers {
+                val requested = firstArg<String>()
+                val cycles = runCatching {
+                    cycleDataRepository.getAll(requested).getOrDefault(emptyList())
+                }.getOrDefault(emptyList())
+                Result.success(cycles.flatMap { periodLogsFor(it) })
+            }
             coEvery { getForDateRange(any(), any(), any()) } returns Result.success(emptyList())
             coEvery { getForDateRange("user-1", futureDate, futureDate) } returns Result.success(listOf(futureLog))
         }
@@ -604,6 +779,18 @@ class HomeViewModelTest {
         )
         val cycleDataRepository = mockk<CycleDataRepository>()
         val periodLogRepository = mockk<PeriodLogRepository> {
+            // Home reads the full log history for the shared phase engine, which
+            // decides phase from logged period DAYS. Returning an empty list here
+            // would make the engine correctly answer UNKNOWN and defeat the phase
+            // assertions below, so derive the logs from this test's own cycles --
+            // the same consistency the default factory keeps.
+            coEvery { getAll(any()) } coAnswers {
+                val requested = firstArg<String>()
+                val cycles = runCatching {
+                    cycleDataRepository.getAll(requested).getOrDefault(emptyList())
+                }.getOrDefault(emptyList())
+                Result.success(cycles.flatMap { periodLogsFor(it) })
+            }
             coEvery { getForDateRange("primary-1", today, today) } returns Result.success(listOf(todayLog))
             coEvery { getForDateRange("primary-1", otherDate, otherDate) } returns Result.success(listOf(otherLog))
         }

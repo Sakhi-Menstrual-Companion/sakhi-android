@@ -1,5 +1,7 @@
 package team.sakhi.android.feature.calendar
 
+import team.sakhi.models.PeriodLog
+import team.sakhi.repositories.PeriodLogRepository
 import android.content.Context
 import io.mockk.coEvery
 import io.mockk.coVerify
@@ -100,6 +102,19 @@ class CalendarViewModelTest {
 
     // daysAgo=2/periodLength=5/cycleLength=28 keeps "today" unambiguously inside the
     // real MENSTRUAL window regardless of AppConfig's ovulation-window constants.
+    /** The logged period days a cycle implies: `periodStartDate` for `periodLength` days. */
+    private fun periodLogsFor(cycle: CycleData): List<PeriodLog> =
+        (0 until (cycle.periodLength ?: 5)).map { offset ->
+            PeriodLog(
+                id = "log-${cycle.id}-$offset",
+                userId = cycle.userId,
+                logDate = DateConverter.addDays(cycle.periodStartDate, offset),
+                periodPresent = true,
+                createdByUserId = cycle.userId,
+                sourceUserId = cycle.userId,
+            )
+        }
+
     private fun menstrualCycle(userId: String = "user-1", daysAgo: Int = 2): CycleData = CycleData(
         id = "cycle-1",
         userId = userId,
@@ -112,11 +127,27 @@ class CalendarViewModelTest {
     private fun newViewModel(
         sessionManager: SessionManager,
         cycleDataRepository: CycleDataRepository = mockk(),
+        // Calendar now reads the logged period days too: day marks come from the
+        // shared engine's buildCalendarState, not from CycleData alone.
+        periodLogRepository: PeriodLogRepository = mockk {
+            // Derived from the cycle fake, not empty: day marks now come from the
+            // shared engine, which reads logged period DAYS. A cycle with no logs is
+            // an impossible state in production -- cycles are built from logs -- so an
+            // empty stub would make the engine correctly emit no marks and defeat the
+            // assertions below.
+            coEvery { getAll(any()) } coAnswers {
+                val requested = firstArg<String>()
+                val cycles = runCatching {
+                    cycleDataRepository.getAll(requested).getOrDefault(emptyList())
+                }.getOrDefault(emptyList())
+                Result.success(cycles.flatMap { periodLogsFor(it) })
+            }
+        },
         hapticManager: AndroidHapticManager = mockk(relaxed = true),
         appContext: Context = mockk {
             every { getString(R.string.calendar_load_failed) } returns "Failed to load calendar data"
         },
-    ) = CalendarViewModel(sessionManager, cycleDataRepository, hapticManager, appContext)
+    ) = CalendarViewModel(sessionManager, cycleDataRepository, periodLogRepository, hapticManager, appContext)
 
     private fun todayCell(viewModel: CalendarViewModel) =
         viewModel.uiState.value.days.first { it.date == DateConverter.today() }
@@ -236,7 +267,10 @@ class CalendarViewModelTest {
         advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertEquals("network down", state.error)
+        // Was asserting the RAW exception message, which pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible error copy. UI shows app copy; cause is logged.
+                assertEquals("Failed to load calendar data", state.error)
         assertFalse(state.isLoading)
     }
 
@@ -494,6 +528,7 @@ class CalendarViewModelTest {
         val viewModel = CalendarViewModel(
             sessionManager,
             cycleDataRepository,
+            mockk<PeriodLogRepository> { coEvery { getAll(any()) } returns Result.success(emptyList()) },
             mockk<AndroidHapticManager>(relaxed = true),
             mockk { every { getString(R.string.calendar_load_failed) } returns "Failed to load calendar data" },
         )
