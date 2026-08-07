@@ -15,11 +15,13 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -62,7 +64,14 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.delay
 import kotlinx.datetime.LocalDate
 import team.sakhi.android.designsystem.SakhiRadius
@@ -492,6 +501,40 @@ private fun SakhiQuickLogMenu(
     val brand = MaterialTheme.colorScheme.primary
     val shape = RoundedCornerShape(QuickLogMenuCornerRadius)
 
+    // Dim behind the menu. The panel opens over the calendar sheet, which is white,
+    // and a white panel on a white sheet had nothing separating the two -- the earlier
+    // attempt to solve that by tinting the panel itself hurt legibility, because the
+    // calendar's date numerals stayed readable straight through it. Dimming what is
+    // BEHIND the menu separates the layers without touching the menu's own contrast.
+    //
+    // Its own window, pinned to the screen origin and created before the menu, so it
+    // sits underneath the menu popup and covers the whole sheet rather than being
+    // clipped to the action bar it is declared in. Not focusable: the menu popup keeps
+    // ownership of focus and back handling, and this only needs to catch taps.
+    if (expanded) {
+        val scrimAlpha by animateFloatAsState(
+            targetValue = QuickLogScrimAlpha,
+            animationSpec = tween(QuickLogScrimFadeMs),
+            label = "quick_log_scrim",
+        )
+        Popup(
+            popupPositionProvider = ScreenOriginPositionProvider,
+            properties = PopupProperties(focusable = false),
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = scrimAlpha))
+                    .clickable(
+                        // No ripple: this is a dismiss surface, not a control.
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onDismiss,
+                    ),
+            )
+        }
+    }
+
     // Material's `DropdownMenu` is kept ONLY for its plumbing -- anchored positioning,
     // outside-tap dismissal and back handling. A hand-rolled `Popup` was tried first and
     // dismissed itself instantly: with `focusable = true` the ACTION_UP of the very tap
@@ -698,3 +741,16 @@ private fun QuickLogOtherSymptomsRow(brand: Color, onClick: () -> Unit) {
     }
 }
 
+
+/** Pins a popup to the top-left of the screen so its content can cover the window. */
+private object ScreenOriginPositionProvider : PopupPositionProvider {
+    override fun calculatePosition(
+        anchorBounds: IntRect,
+        windowSize: IntSize,
+        layoutDirection: LayoutDirection,
+        popupContentSize: IntSize,
+    ): IntOffset = IntOffset.Zero
+}
+
+private const val QuickLogScrimAlpha = 0.32f
+private const val QuickLogScrimFadeMs = 140
