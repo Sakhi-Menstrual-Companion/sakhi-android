@@ -36,6 +36,10 @@ import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.validation.ValidationRules
 import java.time.LocalDate
 import java.time.YearMonth
+import team.sakhi.repositories.CareInviteException
+import team.sakhi.android.common.toSafeUserMessage
+
+private const val ONBOARDING_CONTINUE_TRANSITION_GUARD_NANOS = 420_000_000L
 
 /**
  * Thin Android wrapper over KMM onboarding state. All routing and branching stay
@@ -63,6 +67,7 @@ class OnboardingViewModel(
 
     val navState: StateFlow<OnboardingNavState> = flowStore.state
     val completion: SharedFlow<OnboardingFlowCompletion> = flowStore.completion
+    private var continueGuardUntilNanos = 0L
     private val _healthUiState = MutableStateFlow(OnboardingHealthUiState())
     val healthUiState: StateFlow<OnboardingHealthUiState> = _healthUiState.asStateFlow()
     private val _careInviteUiState = MutableStateFlow(OnboardingCareInviteUiState())
@@ -91,10 +96,17 @@ class OnboardingViewModel(
         refreshDataSourceCapabilities()
     }
 
-    fun continueFlow() {
-        val error = validationErrorFor(navState.value.currentStep, healthUiState.value)
+    fun continueFlow(expectedStep: OnboardingFlowStep? = null) {
+        val state = navState.value
+        if (expectedStep != null && state.currentStep != expectedStep) return
+
+        val now = System.nanoTime()
+        if (now < continueGuardUntilNanos) return
+
+        val error = validationErrorFor(state.currentStep, healthUiState.value)
         flowStore.setFieldError(error)
         if (error == null) {
+            continueGuardUntilNanos = now + ONBOARDING_CONTINUE_TRANSITION_GUARD_NANOS
             flowStore.send(OnboardingFlowIntent.ContinueTapped)
         } else {
             hapticManager.error()
@@ -110,6 +122,12 @@ class OnboardingViewModel(
     }
 
     fun resolvePrivacy(authenticated: Boolean, offline: Boolean) {
+        // DO NOT start the local-only session here. An earlier version did, and it was a
+        // real regression: `SessionState.LocalOnlyUser` is mapped by `AccountClassifier`
+        // straight to `AppRoute.Home`, so the instant "Continue Offline" was tapped the
+        // app jumped to Home and the entire rest of onboarding (offline warning, terms,
+        // DOB, height, weight, cycle questions) was skipped. The offline session is
+        // started at the END of the flow instead -- see `handleSetupLoading`.
         flowStore.send(
             OnboardingFlowIntent.PrivacyDecided(
                 authenticated = authenticated,
@@ -171,7 +189,7 @@ class OnboardingViewModel(
                 hapticManager.error()
                 _conversionUiState.value = _conversionUiState.value.copy(
                     isConverting = false,
-                    error = throwable.message ?: appContext.getString(R.string.onboarding_error_generic),
+                    error = throwable.toSafeUserMessage(appContext, R.string.onboarding_error_generic),
                 )
             }
         }
@@ -223,10 +241,39 @@ class OnboardingViewModel(
                     return@onFailure
                 }
                 hapticManager.error()
+                // Never surface `throwable.message` here. It is whatever Ktor/kotlinx
+                // produced -- an HTTP status line, a serialization complaint, sometimes a
+                // URL -- and it went straight onto the screen of someone who has just
+                // typed an invite code. iOS never does this: `BeHerAcceptStep` maps each
+                // failure to a written sentence and logs only a masked code.
+                //
+                // The reasons come from `CareInviteException`, which SakhiCore now raises
+                // off the edge function's status code, so expired / already-used / wrong
+                // phone are finally distinguishable instead of collapsing into one
+                // "something went wrong".
+                val message = when {
+                    throwable.isOfflineFailure() ->
+                        appContext.getString(R.string.onboarding_error_offline)
+                    else -> when ((throwable as? CareInviteException)?.reason) {
+                        CareInviteException.Reason.EXPIRED ->
+                            appContext.getString(R.string.onboarding_error_code_expired)
+                        // 404 is "not found or already processed" -- the server cannot
+                        // separate a wrong code from a spent one, so iOS's wording for
+                        // both is the double-check-with-your-partner line.
+                        CareInviteException.Reason.NOT_FOUND ->
+                            appContext.getString(R.string.onboarding_error_code_missing)
+                        CareInviteException.Reason.WRONG_PHONE ->
+                            appContext.getString(R.string.onboarding_error_code_wrong_phone)
+                        else -> appContext.getString(R.string.onboarding_error_generic)
+                    }
+                }
+                // A wrong or spent code will not start working on retry; iOS drops the
+                // retry affordance for exactly this case (`canRetry = false` on notFound).
+                val retryable = (throwable as? CareInviteException)?.reason != CareInviteException.Reason.NOT_FOUND
                 _acceptUiState.value = _acceptUiState.value.copy(
                     isAccepting = false,
-                    error = throwable.message ?: appContext.getString(R.string.onboarding_error_generic),
-                    canRetry = true,
+                    error = message,
+                    canRetry = retryable,
                 )
             }
         }
@@ -255,10 +302,18 @@ class OnboardingViewModel(
             return
         }
 
-        val userId = authRepository.currentUserId ?: run {
-            _setupUiState.value = _setupUiState.value.copy(error = appContext.getString(R.string.onboarding_error_generic))
-            return
-        }
+        // No `currentUserId` means an OFFLINE user (chose "Continue Offline" at
+        // `PrivacyScreen`, never went through Phone/OTP). Mint the local-only session
+        // HERE, at the very end of the flow, rather than back at the privacy step:
+        // `SessionState.LocalOnlyUser` is mapped by `AccountClassifier` straight to
+        // `AppRoute.Home`, so starting it any earlier fast-forwards the app to Home and
+        // skips the remaining onboarding steps entirely (a regression this replaced).
+        //
+        // The offline id it returns is a real user id, so the save below runs normally --
+        // the repositories are offline-first and route an `offline_…` id to the shared
+        // Room store instead of Supabase, which is how this data now actually persists.
+        val userId = authRepository.currentUserId
+            ?: authRepository.startLocalOnlySession()
         if (_setupUiState.value.isSaving) return
 
         _setupUiState.value = _setupUiState.value.copy(isSaving = true, error = null)
@@ -290,6 +345,32 @@ class OnboardingViewModel(
                             periodLength = health.periodLength,
                         )
                     ).getOrThrow()
+                    // The confirmed Last Period date, written as an actual period log.
+                    //
+                    // Without this the calendar renders completely unmarked: every mark
+                    // (period, predicted, fertile, ovulation, PMS) comes from
+                    // `CycleInsightAdapter.calendarMarks`, which is driven purely by
+                    // logged days and short-circuits on `periodLogDates.isEmpty()`.
+                    // Writing only `CycleData` above left that set empty, so onboarding
+                    // produced a cycle nothing could draw from.
+                    //
+                    // Matches iOS `OnboardingViewModel.saveHealthData()` step 3, which
+                    // writes exactly one authoritative user-logged day for the confirmed
+                    // date ("this becomes the only current-period anchor used by
+                    // CycleDetectionEngine") and lets the engine derive the rest --
+                    // hence one log here, not `periodLength` days.
+                    periodLogRepository.upsert(
+                        team.sakhi.models.PeriodLog(
+                            id = java.util.UUID.randomUUID().toString(),
+                            userId = userId,
+                            logDate = health.lastPeriodDate.toKmmLocalDate(),
+                            periodPresent = true,
+                            flowIntensity = team.sakhi.models.FlowIntensity.LIGHT,
+                            loggedBy = team.sakhi.models.LogSource.USER,
+                            createdByUserId = userId,
+                            sourceUserId = userId,
+                        )
+                    ).getOrThrow()
                 }
             }.onSuccess {
                 if (!isStillCurrentUser(userId)) {
@@ -310,7 +391,7 @@ class OnboardingViewModel(
                 }
                 _setupUiState.value = _setupUiState.value.copy(
                     isSaving = false,
-                    error = throwable.message ?: appContext.getString(R.string.onboarding_error_generic),
+                    error = throwable.toSafeUserMessage(appContext, R.string.onboarding_error_generic),
                 )
             }
         }
@@ -414,7 +495,7 @@ class OnboardingViewModel(
                 hapticManager.error()
                 _careInviteUiState.value = _careInviteUiState.value.copy(
                     isCreatingInvite = false,
-                    errorMessage = throwable.message ?: appContext.getString(R.string.onboarding_error_create_invite),
+                    errorMessage = throwable.toSafeUserMessage(appContext, R.string.onboarding_error_create_invite),
                 )
             }
         }
@@ -461,7 +542,7 @@ class OnboardingViewModel(
                 hapticManager.error()
                 _careInviteUiState.value = _careInviteUiState.value.copy(
                     isCancellingInvite = false,
-                    errorMessage = throwable.message ?: appContext.getString(R.string.onboarding_error_cancel_request),
+                    errorMessage = throwable.toSafeUserMessage(appContext, R.string.onboarding_error_cancel_request),
                 )
             }
         }
@@ -568,7 +649,7 @@ class OnboardingViewModel(
                 .onFailure { throwable ->
                     hapticManager.error()
                     failDataSourceImport(
-                        throwable.message ?: appContext.getString(R.string.onboarding_error_health_connect_permission_denied),
+                        throwable.toSafeUserMessage(appContext, R.string.onboarding_error_health_connect_permission_denied),
                     )
                 }
         }
@@ -845,3 +926,22 @@ private fun allEnabledCareInvitePermissions(): ParentChildPermissions = ParentCh
     canViewSexualActivity = false,
     canGenerateReports = true,
 )
+
+/**
+ * True when a failure is a lost/absent network rather than a server rejection.
+ *
+ * `IOException` covers the whole family Ktor surfaces on Android for this —
+ * `UnknownHostException`, `ConnectException`, `SocketTimeoutException` — so matching the
+ * base type is deliberate, not lazy. The cause chain is walked because Ktor and
+ * kotlinx-serialization both wrap the original throwable.
+ */
+private fun Throwable.isOfflineFailure(): Boolean {
+    var t: Throwable? = this
+    var depth = 0
+    while (t != null && depth < 8) {
+        if (t is java.io.IOException) return true
+        t = t.cause
+        depth++
+    }
+    return false
+}

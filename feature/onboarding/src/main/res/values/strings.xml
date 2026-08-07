@@ -21,6 +21,7 @@
     <string name="onboarding_info_normal_range">Normal range</string>
     <string name="onboarding_info_average">Average</string>
     <string name="onboarding_info_source_acog">Source: American College of Obstetricians and Gynecologists (ACOG)</string>
+    <string name="onboarding_info_source_url" translatable="false">https://www.acog.org/womens-health/faqs/your-menstrual-cycle</string>
     <string name="onboarding_done">Done</string>
     <string name="onboarding_weekday_s">S</string>
     <string name="onboarding_weekday_m">M</string>
@@ -28,6 +29,7 @@
     <string name="onboarding_weekday_w">W</string>
     <string name="onboarding_weekday_f">F</string>
     <string name="onboarding_date_of_birth_format">dd / MM / yyyy</string>
+    <string name="onboarding_dob_sheet_done">Done</string>
     <string name="onboarding_month_header_format">MMMM yyyy</string>
     <string name="onboarding_health_dob_title">When were you born?</string>
     <string name="onboarding_health_generic_subtitle">It helps me understand you more deeply.</string>
@@ -48,6 +50,14 @@
     <string name="onboarding_days_info_cycle_average">28 days</string>
     <string name="onboarding_error_generic">Something went wrong. Please try again.</string>
     <string name="onboarding_error_code_missing">This code doesn\'t exist. Please double-check with your partner.</string>
+    <!-- iOS onboarding.be_her_sakhi.error.offline, shown when accepting an invite fails
+         with no connection (BeHerAcceptStep catches NetworkError.noConnection). -->
+    <string name="onboarding_error_offline">No internet connection. Please check and try again.</string>
+    <!-- iOS onboarding.be_her_sakhi.error.expired_code / .used_code. The edge function
+         answers 410 for expired and 404 for missing-or-already-used, so these two can
+         finally be told apart on Android. -->
+    <string name="onboarding_error_code_expired">This code has expired. Ask your partner to create a new invite.</string>
+    <string name="onboarding_error_code_wrong_phone">This invitation was sent to a different phone number.</string>
     <string name="onboarding_error_sign_in_before_invite">Please sign in before creating a care invite.</string>
     <string name="onboarding_fallback_user">User</string>
     <string name="onboarding_error_create_invite">Couldn\'t create invite right now. Please try again.</string>
@@ -152,6 +162,8 @@
     <string name="onboarding_ok">OK</string>
     <string name="onboarding_setup_error_title">Something went wrong</string>
     <string name="onboarding_setup_loading_message">Setting up your Sakhi...</string>
+    <string name="onboarding_setup_loading_message_2">Getting your cycle data ready...</string>
+    <string name="onboarding_setup_loading_message_3">Almost there...</string>
     <string name="onboarding_mode_selection_title">Who Are You Here For?</string>
     <string name="onboarding_mode_selection_subtitle">We\'ll tailor your experience just for you.</string>
     <string name="onboarding_mode_selection_myself_title">Myself</string>
@@ -161,8 +173,11 @@
     <string name="onboarding_partner_invite_prompt_title">Let Someone Stay Close, Always</string>
     <string name="onboarding_partner_invite_prompt_subtitle">Pick one person who\'ll always know you\'re okay, and be the first to know if you\'re not.</string>
     <string name="onboarding_partner_invite_prompt_feature_1">They know you\'re okay. Even from far.</string>
+    <string name="onboarding_partner_invite_prompt_feature_1_subtitle">A quiet update, before worry even starts.</string>
     <string name="onboarding_partner_invite_prompt_feature_2">One Tap. They\'re There.</string>
+    <string name="onboarding_partner_invite_prompt_feature_2_subtitle">The moment you need them, they\'ll know. No missed calls. No delay.</string>
     <string name="onboarding_partner_invite_prompt_feature_3">You Decide. Always.</string>
+    <string name="onboarding_partner_invite_prompt_feature_3_subtitle">Only you choose what they see. Your health, your story. Shared only when you want.</string>
     <string name="onboarding_partner_invite_prompt_continue_as_partner">Continue as Care Partner</string>
     <string name="onboarding_privacy_title">Your Privacy Comes First, Always.</string>
     <string name="onboarding_privacy_secure_title">Secure my data</string>
@@ -187,11 +202,30 @@
     <string name="onboarding_offline_warning_title">Before you continue offline</string>
     <string name="onboarding_offline_warning_subtitle">That\'s okay, you can use Sakhi without signing in. Just know that a few features won\'t be available.</string>
     <string name="onboarding_offline_warning_continue">Continue Offline</string>
+    <string name="onboarding_offline_no_backup_title">Data stays on this device</string>
+    <string name="onboarding_offline_no_backup_description">Your health data lives only on this device. Switching phones means starting fresh.</string>
+    <string name="onboarding_offline_no_care_title">Care connection unavailable</string>
+    <string name="onboarding_offline_no_care_description">You won\'t be able to invite someone to look out for you through Sakhi\'s care feature.</string>
+    <string name="onboarding_offline_no_sync_title">No cross-device sync</string>
+    <string name="onboarding_offline_no_sync_description">Your data stays on this device only, it won\'t appear on other phones or your Apple Watch.</string>
     <string name="onboarding_join_family_intro_title">You Belong Here</string>
     <string name="onboarding_join_family_intro_subtitle">Your history stays safe, right where you left it. And you\'re no longer doing this alone.</string>
     <string name="onboarding_care_upgrade_intro_title">You\'re using Sakhi offline</string>
     <string name="onboarding_care_upgrade_intro_subtitle">Care partner setup needs your online account so Sakhi can create and share the invite securely. Your logs stay safe when you continue.</string>
     <string name="onboarding_care_upgrade_intro_button">Create account</string>
+    <!-- iOS onboarding.carousel.slide1-3, used by IntroCarouselStep in .newUser /
+         .universal mode. These are NOT the same copy as onboarding.intro.feature*, which
+         backs the UniversalIntro bullet list on a different screen — Android had the
+         carousel reusing the bullet strings, so both screens said the same thing.
+         Slide 3 is word-for-word identical to intro feature 3 on iOS too; kept as its own
+         string so the carousel and the bullet list can move independently, as they do
+         on iOS. -->
+    <string name="onboarding_carousel_slide_1_title">Log It in One Tap</string>
+    <string name="onboarding_carousel_slide_1_subtitle">A cramp, a mood, a long day. Tap once and Sakhi remembers, so you never have to carry it all in your head.</string>
+    <string name="onboarding_carousel_slide_2_title">Made for You</string>
+    <string name="onboarding_carousel_slide_2_subtitle">Not the same tips everyone gets. What Sakhi suggests is shaped by your body, your cycle, your day.</string>
+    <string name="onboarding_carousel_slide_3_title">Never Do It Alone</string>
+    <string name="onboarding_carousel_slide_3_subtitle">Track just for you, or let someone you trust be there for you. You choose what they see, always.</string>
     <string name="onboarding_join_slide_1_title">Almost There</string>
     <string name="onboarding_join_slide_1_subtitle">A safe space built just for you. Your cycle, your body, always protected.</string>
     <string name="onboarding_join_slide_2_title">Always Yours</string>

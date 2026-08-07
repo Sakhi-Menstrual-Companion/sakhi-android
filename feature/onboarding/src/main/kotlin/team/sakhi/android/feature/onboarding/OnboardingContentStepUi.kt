@@ -3,9 +3,11 @@ package team.sakhi.android.feature.onboarding
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
-import androidx.annotation.StringRes
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,9 +20,12 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -36,6 +41,7 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Share
@@ -43,6 +49,8 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -50,15 +58,20 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -68,28 +81,38 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.AlertDialog
-import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.PermissionController
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-import team.sakhi.android.platform.AndroidHapticManager
-import team.sakhi.android.platform.HealthConnectAvailability
-import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.feature.auth.AuthViewModel
 import team.sakhi.android.feature.auth.OtpScreen
 import team.sakhi.android.feature.auth.PhoneScreen
+import team.sakhi.android.platform.AndroidHapticManager
+import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.platform.HealthConnectAvailability
+import team.sakhi.android.ui.BackButton
 import team.sakhi.android.ui.GlassCard
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
+import team.sakhi.android.ui.SakhiFooter
+import team.sakhi.android.ui.SakhiLoadingContext
+import team.sakhi.android.ui.SakhiLoadingView
+import team.sakhi.android.ui.SakhiTextField
+import team.sakhi.android.ui.sakhiScreenTransitionSpec
 import team.sakhi.android.ui.SecondaryButton
 import team.sakhi.auth.AccountState
 import team.sakhi.models.ParentChildPermissions
 import team.sakhi.onboarding.OnboardingFlowStep
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.designsystem.sakhiSystemGray5
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiLightPink
+import team.sakhi.android.designsystem.sakhiSystemBackground
 
 /**
  * Real parity screens for the simple display-only onboarding steps, plus the
@@ -236,10 +259,8 @@ fun OnboardingContentStepScreen(
             onContinue = onContinue,
         )
         OnboardingFlowStep.BeHerSakhi -> BeHerSakhiScreen(
-            canGoBack = canGoBack,
             fieldError = fieldError,
             onSubmit = onBeHerSakhiCodeSubmitted,
-            onBack = onBack,
         )
         else -> {}
     }
@@ -297,145 +318,117 @@ private fun ModeSelectionScreen(
     val partnerDescription = stringResource(R.string.onboarding_mode_selection_partner_description)
     val continueLabel = stringResource(R.string.onboarding_continue)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SakhiSpacing.space6),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        ModeSelectionCard(
-            icon = Icons.Filled.Person,
-            title = myselfTitle,
-            description = myselfDescription,
-            isSelected = !isPartnerSelected,
-            onClick = {
-                hapticManager.impact(HapticImpact.LIGHT)
-                isPartnerSelected = false
-            },
-        )
-        ModeSelectionCard(
-            icon = Icons.Filled.Groups,
-            title = partnerTitle,
-            description = partnerDescription,
-            isSelected = isPartnerSelected,
-            onClick = {
-                hapticManager.impact(HapticImpact.LIGHT)
-                isPartnerSelected = true
-            },
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        PrimaryButton(
-            text = continueLabel,
-            onClick = { onModeSelected(isPartnerSelected) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-    }
-}
-
-@Composable
-private fun ModeSelectionCard(
-    icon: ImageVector,
-    title: String,
-    description: String,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-) {
-    val stateSelected = stringResource(R.string.onboarding_state_selected)
-    val stateNotSelected = stringResource(R.string.onboarding_state_not_selected)
-    Surface(
-        shape = RoundedCornerShape(SakhiRadius.xxl),
-        color = if (isSelected) {
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-        } else {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f)
-        },
-        border = BorderStroke(
-            width = 1.dp,
-            color = if (isSelected) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-            } else {
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.12f)
-            },
-        ),
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics {
-                this.selected = isSelected
-                role = Role.RadioButton
-                stateDescription = if (isSelected) stateSelected else stateNotSelected
-            }
-            .clickable(onClick = onClick),
-    ) {
-        Row(
-            modifier = Modifier.padding(SakhiSpacing.space4),
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-            verticalAlignment = Alignment.CenterVertically,
+    // Content in a weighted area, action pinned in the shared `SakhiFooter` -- the
+    // real port of iOS's `SakhiFooter`, whose reserved secondary slot keeps the
+    // primary button's Y position identical across every step (previously each
+    // screen hand-placed its own button, so it shifted between screens).
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = SakhiSpacing.space6)
+                .padding(top = SakhiSpacing.space6),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .background(
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                        shape = CircleShape,
-                    ),
-                contentAlignment = Alignment.Center,
+            OnboardingStepTitle(text = title)
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+                modifier = Modifier.padding(top = SakhiSpacing.space1),
+            )
+
+            Column(
+                modifier = Modifier.padding(top = OnboardingHeaderContentGap),
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = if (isSelected) Color.White else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(22.dp),
+                PrivacyChoiceCard(
+                    icon = Icons.Filled.Person,
+                    title = myselfTitle,
+                    description = myselfDescription,
+                    isSelected = !isPartnerSelected,
+                    onClick = {
+                        hapticManager.impact(HapticImpact.LIGHT)
+                        isPartnerSelected = false
+                    },
                 )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                PrivacyChoiceCard(
+                    icon = Icons.Filled.Groups,
+                    title = partnerTitle,
+                    description = partnerDescription,
+                    isSelected = isPartnerSelected,
+                    onClick = {
+                        hapticManager.impact(HapticImpact.LIGHT)
+                        isPartnerSelected = true
+                    },
                 )
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(26.dp)
-                    .background(
-                        color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                        shape = CircleShape,
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.3f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                        shape = CircleShape,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                if (isSelected) {
-                    Icon(
-                        imageVector = Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(12.dp),
-                    )
-                }
             }
         }
+
+        SakhiFooter(
+            primaryLabel = continueLabel,
+            onPrimaryClick = { onModeSelected(isPartnerSelected) },
+        )
     }
 }
+
+// iOS `UniversalIntroContent` uses DS.Spacing.xl (28) between bullets; the Android 4dp
+// token scale skips 28, so it is spelled out here rather than rounded to 24 or 32.
+private val UniversalIntroBulletSpacing = 28.dp
+
+/** iOS `regularShell`'s sticky-header title padding — `DS.Spacing.xl`, which is 28, not 24. */
+private val OnboardingTitleTopPadding = 28.dp
+
+/**
+ * DELIBERATE DEVIATION FROM iOS -- do not "restore parity" by reverting to a smaller token.
+ *
+ * Gap between a step's header block (title + subtitle) and its content below (list, cards,
+ * text field, legal-text box). iOS uses `DS.Spacing.m` (16); Karan asked for more separation
+ * after reviewing onboarding on a real device, so the title/subtitle read as a distinct header
+ * rather than running straight into the content. Applied to every top-anchored step with this
+ * header-then-content shape across the whole onboarding flow, not just one screen -- see
+ * `ModeSelectionScreen`, `InvitePermissionsScreen`, `PrivacyScreen`, `TermsScreen`,
+ * `UniversalIntroScreen`, `InvitePickContactScreen`, `PartnerRelationScreen`,
+ * `BeHerSakhiScreen`, `DataSourceScreen`, and `OnboardingHealthStepScreen` (in
+ * `OnboardingHealthStepUi.kt`, same package -- hence not `private`). Centered/hero-style
+ * steps (`HeroContentStep`, `InviteWaitingScreen`, etc.) are a different layout shape and
+ * are not touched by this. Reduced 40 -> 32 (20%) per Karan's live review: "har view
+ * mai header and content ke bich mai space kuch jada he hogaya hai, 20% kam karo."
+ */
+internal val OnboardingHeaderContentGap = 32.dp
+
+/**
+ * Every onboarding step title, rendered a hair bolder than plain `FontWeight.Bold`.
+ *
+ * Karan reviewed a step title live on a real device and asked for it bolder. Lato only
+ * ships a static Light/Regular/Bold trio (no ExtraBold/Black file), and Android's static
+ * (non-variable) font rendering does not synthesize extra weight on top of an
+ * already-resolved Bold glyph -- confirmed empirically: `FontWeight.ExtraBold`,
+ * `FontWeight.Black`, and an explicit `fontSynthesis = FontSynthesis.All` all produced a
+ * byte-identical screenshot to plain Bold. The only way to get a visibly heavier stroke
+ * out of a single static weight is to draw it twice with a hairline offset between copies
+ * -- the standard workaround for this exact limitation. Do not "simplify" this back to a
+ * single `Text` with a heavier `FontWeight`; that was tried and does nothing on this font.
+ */
+@Composable
+internal fun OnboardingStepTitle(
+    text: String,
+    modifier: Modifier = Modifier,
+    textAlign: TextAlign? = null,
+) {
+    val style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
+    Box(modifier = modifier) {
+        Text(text = text, style = style, textAlign = textAlign, modifier = Modifier.offset(x = 0.5.dp))
+        Text(text = text, style = style, textAlign = textAlign)
+    }
+}
+
+// Transcribed from iOS `PartnerInvitePromptContent.Layout`.
+private val PartnerInvitePromptImageHeight = 335.dp
+private val PartnerInvitePromptCarouselHeight = 460.dp
+private val PartnerInvitePromptIndicatorTop = 307.dp
+
+/** iOS `IntroCarouselStep.Layout.imageVisualHeight` (300) -- was a fixed 220dp square. */
+private val IntroCarouselImageHeight = 300.dp
 
 @Composable
 private fun PartnerInvitePromptScreen(
@@ -447,127 +440,100 @@ private fun PartnerInvitePromptScreen(
     val hapticManager = koinInject<AndroidHapticManager>()
     val title = stringResource(R.string.onboarding_partner_invite_prompt_title)
     val subtitle = stringResource(R.string.onboarding_partner_invite_prompt_subtitle)
-    val feature1 = stringResource(R.string.onboarding_partner_invite_prompt_feature_1)
-    val feature2 = stringResource(R.string.onboarding_partner_invite_prompt_feature_2)
-    val feature3 = stringResource(R.string.onboarding_partner_invite_prompt_feature_3)
     val continueLabel = stringResource(R.string.onboarding_continue)
-    val backLabel = stringResource(R.string.onboarding_back)
     val continueAsPartnerLabel = stringResource(R.string.onboarding_partner_invite_prompt_continue_as_partner)
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SakhiSpacing.space6),
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = SakhiSpacing.space2),
-        )
 
-        GlassCard(
+    // iOS presents this step as a two-page carousel (`PartnerInvitePromptContent`):
+    // slide 0 is the CarePartner illustration, slide 1 is the three feature bullets.
+    // Android previously flattened both into one card with a generic Groups glyph and
+    // dropped every bullet subtitle, so the screen said noticeably less than iOS's and
+    // left a large dead gap where the subtitles belong.
+    val pagerState = rememberPagerState(pageCount = { 2 })
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = SakhiSpacing.space6),
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(SakhiSpacing.space6),
         ) {
+            OnboardingStepTitle(text = title)
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+                modifier = Modifier.padding(top = SakhiSpacing.space2),
+            )
+
+            // iOS pins the carousel to 460pt and overlays the page indicator at a fixed
+            // offset (imageTopPadding -18 + imageHeight 335 - 10 = 307) so the dots hold
+            // their position across both slides instead of tracking each page's content.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = SakhiSpacing.space4),
-                contentAlignment = Alignment.Center,
+                    .height(PartnerInvitePromptCarouselHeight),
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(88.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Groups,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(40.dp),
-                    )
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.Top,
+                ) { page ->
+                    if (page == 0) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.TopCenter,
+                        ) {
+                            Image(
+                                painter = painterResource(team.sakhi.android.ui.R.drawable.care_partner_onboarding),
+                                contentDescription = null,
+                                modifier = Modifier.height(PartnerInvitePromptImageHeight),
+                            )
+                        }
+                    } else {
+                        // iOS `pointsSlide`: VStack spacing DS.Spacing.l (24), top pad .m (16).
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = SakhiSpacing.space4),
+                            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space6),
+                        ) {
+                            FeatureBulletRow(
+                                icon = Icons.Filled.Favorite,
+                                title = stringResource(R.string.onboarding_partner_invite_prompt_feature_1),
+                                subtitle = stringResource(R.string.onboarding_partner_invite_prompt_feature_1_subtitle),
+                            )
+                            FeatureBulletRow(
+                                icon = Icons.Filled.NotificationsActive,
+                                title = stringResource(R.string.onboarding_partner_invite_prompt_feature_2),
+                                subtitle = stringResource(R.string.onboarding_partner_invite_prompt_feature_2_subtitle),
+                            )
+                            FeatureBulletRow(
+                                icon = Icons.Filled.Groups,
+                                title = stringResource(R.string.onboarding_partner_invite_prompt_feature_3),
+                                subtitle = stringResource(R.string.onboarding_partner_invite_prompt_feature_3_subtitle),
+                            )
+                        }
+                    }
                 }
-            }
 
-            CarePromptBullet(
-                icon = Icons.Filled.VisibilityOff,
-                text = feature1,
-            )
-            CarePromptBullet(
-                icon = Icons.Filled.Notifications,
-                text = feature2,
-            )
-            CarePromptBullet(
-                icon = Icons.Filled.Favorite,
-                text = feature3,
-            )
+                OnboardingDots(
+                    currentIndex = pagerState.currentPage,
+                    totalCount = 2,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = PartnerInvitePromptIndicatorTop),
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        PrimaryButton(
-            text = continueLabel,
-            onClick = {
+        SakhiFooter(
+            primaryLabel = continueLabel,
+            onPrimaryClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
                 onContinue()
             },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        if (canGoBack) {
-            TextButton(
-                onClick = onBack,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(backLabel)
-            }
-        } else {
-            TextButton(
-                onClick = onStartCareInviteUpgrade,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            ) {
-                Text(continueAsPartnerLabel)
-            }
-        }
-    }
-}
-
-@Composable
-private fun CarePromptBullet(
-    icon: ImageVector,
-    text: String,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = SakhiSpacing.space2),
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
+            secondaryLabel = if (canGoBack) null else continueAsPartnerLabel,
+            onSecondaryClick = if (canGoBack) null else onStartCareInviteUpgrade,
         )
     }
 }
@@ -582,23 +548,25 @@ private fun InvitePermissionsScreen(
     var allowAll by remember(uiState.permissions) { mutableStateOf(uiState.permissions.isFullyShared()) }
     val continueLabel = stringResource(R.string.onboarding_continue)
 
+    Column(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
             .verticalScroll(rememberScrollState())
             .padding(SakhiSpacing.space6),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
-        Text(
-            text = stringResource(R.string.onboarding_invite_permissions_title),
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-        )
+        OnboardingStepTitle(text = stringResource(R.string.onboarding_invite_permissions_title))
         Text(
             text = stringResource(R.string.onboarding_invite_permissions_subtitle),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
+            modifier = Modifier.padding(top = SakhiSpacing.space1),
         )
 
+        Column(
+            modifier = Modifier.padding(top = OnboardingHeaderContentGap),
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+        ) {
         uiState.errorMessage?.let { error ->
             SakhiAlert(
                 title = stringResource(R.string.onboarding_invite_permissions_error_title),
@@ -673,18 +641,16 @@ private fun InvitePermissionsScreen(
                 },
             )
         }
-
-        PrimaryButton(
-            text = if (uiState.isCreatingInvite) {
+        }
+    }
+        SakhiFooter(
+            primaryLabel = if (uiState.isCreatingInvite) {
                 stringResource(R.string.onboarding_invite_permissions_creating)
             } else {
                 continueLabel
             },
-            onClick = onContinue,
-            enabled = !uiState.isCreatingInvite,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = SakhiSpacing.space2),
+            onPrimaryClick = onContinue,
+            primaryEnabled = !uiState.isCreatingInvite,
         )
     }
 }
@@ -697,21 +663,26 @@ private fun PermissionCard(
     isOn: Boolean,
     onToggle: (Boolean) -> Unit,
 ) {
+    // iOS `InvitePartnerFlowSteps.swift`'s permission row: plain
+    // `profileCardBackground` (white) at `onboardingCard` radius (16 = `SakhiRadius.xl`,
+    // not `xxl`); 42pt icon circle filled `pink` when on and `lightPink` when off (not
+    // pink-at-10%-alpha); 15pt bold title over a 13pt secondary description. Same
+    // tinted-fill bug class fixed across the rest of onboarding this session.
     Surface(
-        shape = RoundedCornerShape(SakhiRadius.xxl),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.32f),
+        shape = RoundedCornerShape(SakhiRadius.xl),
+        color = sakhiSystemBackground(),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier.padding(SakhiSpacing.space4),
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+            verticalAlignment = Alignment.Top,
         ) {
             Box(
                 modifier = Modifier
                     .size(42.dp)
                     .background(
-                        color = if (isOn) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+                        color = if (isOn) MaterialTheme.colorScheme.primary else sakhiLightPink(),
                         shape = CircleShape,
                     ),
                 contentAlignment = Alignment.Center,
@@ -720,19 +691,25 @@ private fun PermissionCard(
                     imageVector = icon,
                     contentDescription = null,
                     tint = if (isOn) Color.White else MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(17.dp),
                 )
             }
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1 / 2),
+            ) {
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = sakhiSecondaryLabel(),
                 )
             }
 
@@ -775,9 +752,10 @@ private fun InviteShareScreen(
         previousConnected = uiState.isConnected
     }
 
+    Column(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
             .padding(SakhiSpacing.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -785,16 +763,15 @@ private fun InviteShareScreen(
 
         InviteHero(icon = Icons.Filled.Share)
 
-        Text(
+        OnboardingStepTitle(
             text = shareTitle,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = SakhiSpacing.space6),
         )
         Text(
             text = shareSubtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = SakhiSpacing.space2),
         )
@@ -829,24 +806,18 @@ private fun InviteShareScreen(
         )
 
         Spacer(modifier = Modifier.weight(1f))
-
-        PrimaryButton(
-            text = shareButtonLabel,
-            onClick = {
+    }
+        SakhiFooter(
+            primaryLabel = shareButtonLabel,
+            onPrimaryClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
                 shareInviteMessage(context, shareMessage)
                 onContinueToInviteWaiting()
             },
-            enabled = uiState.inviteCode.isNotBlank() && !uiState.isCancellingInvite,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        SecondaryButton(
-            text = if (uiState.isCancellingInvite) cancellingLabel else cancelLabel,
-            onClick = onCancelInvitation,
-            enabled = !uiState.isCancellingInvite,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = SakhiSpacing.space2),
+            primaryEnabled = uiState.inviteCode.isNotBlank() && !uiState.isCancellingInvite,
+            secondaryLabel = if (uiState.isCancellingInvite) cancellingLabel else cancelLabel,
+            onSecondaryClick = onCancelInvitation,
+            secondaryEnabled = !uiState.isCancellingInvite,
         )
     }
 }
@@ -877,9 +848,10 @@ private fun InviteWaitingScreen(
     val cancellingLabel = stringResource(R.string.onboarding_invite_cancelling)
     var copyNotice by remember { mutableStateOf<String?>(null) }
 
+    Column(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
             .padding(SakhiSpacing.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -898,16 +870,15 @@ private fun InviteWaitingScreen(
             waitingSubtitle
         }
 
-        Text(
+        OnboardingStepTitle(
             text = title,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = SakhiSpacing.space6),
         )
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = SakhiSpacing.space2),
         )
@@ -951,33 +922,26 @@ private fun InviteWaitingScreen(
         }
 
         Spacer(modifier = Modifier.weight(1f))
-
+    }
         if (uiState.isConnected) {
-            PrimaryButton(
-                text = connectedButtonLabel,
-                onClick = {
+            SakhiFooter(
+                primaryLabel = connectedButtonLabel,
+                onPrimaryClick = {
                     hapticManager.impact(HapticImpact.MEDIUM)
                     onContinue()
                 },
-                modifier = Modifier.fillMaxWidth(),
             )
         } else {
-            PrimaryButton(
-                text = shareButtonLabel,
-                onClick = {
+            SakhiFooter(
+                primaryLabel = shareButtonLabel,
+                onPrimaryClick = {
                     hapticManager.impact(HapticImpact.MEDIUM)
                     shareInviteMessage(context, shareMessage)
                 },
-                enabled = uiState.inviteCode.isNotBlank() && !uiState.isCancellingInvite,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            SecondaryButton(
-                text = if (uiState.isCancellingInvite) cancellingLabel else cancelLabel,
-                onClick = onCancelInvitation,
-                enabled = !uiState.isCancellingInvite,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = SakhiSpacing.space2),
+                primaryEnabled = uiState.inviteCode.isNotBlank() && !uiState.isCancellingInvite,
+                secondaryLabel = if (uiState.isCancellingInvite) cancellingLabel else cancelLabel,
+                onSecondaryClick = onCancelInvitation,
+                secondaryEnabled = !uiState.isCancellingInvite,
             )
         }
     }
@@ -1162,36 +1126,39 @@ private fun PrivacyScreen(onContinue: (offline: Boolean) -> Unit) {
     val offlineDescription = stringResource(R.string.onboarding_privacy_offline_description)
     val continueLabel = stringResource(R.string.onboarding_continue)
 
-    Column(modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            modifier = Modifier.padding(bottom = SakhiSpacing.space6),
-        )
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = SakhiSpacing.space6)
+                .padding(top = SakhiSpacing.space6),
+        ) {
+            OnboardingStepTitle(
+                text = title,
+                modifier = Modifier.padding(bottom = OnboardingHeaderContentGap),
+            )
 
-        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4)) {
-            PrivacyChoiceCard(
-                icon = Icons.Filled.Shield,
-                title = secureTitle,
-                description = secureDescription,
-                isSelected = !isOfflineSelected,
-                onClick = { isOfflineSelected = false },
-            )
-            PrivacyChoiceCard(
-                icon = Icons.Filled.PhoneAndroid,
-                title = offlineTitle,
-                description = offlineDescription,
-                isSelected = isOfflineSelected,
-                onClick = { isOfflineSelected = true },
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4)) {
+                PrivacyChoiceCard(
+                    icon = Icons.Filled.Shield,
+                    title = secureTitle,
+                    description = secureDescription,
+                    isSelected = !isOfflineSelected,
+                    onClick = { isOfflineSelected = false },
+                )
+                PrivacyChoiceCard(
+                    icon = Icons.Filled.PhoneAndroid,
+                    title = offlineTitle,
+                    description = offlineDescription,
+                    isSelected = isOfflineSelected,
+                    onClick = { isOfflineSelected = true },
+                )
+            }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        PrimaryButton(
-            text = continueLabel,
-            onClick = { onContinue(isOfflineSelected) },
-            modifier = Modifier.fillMaxWidth(),
+        SakhiFooter(
+            primaryLabel = continueLabel,
+            onPrimaryClick = { onContinue(isOfflineSelected) },
         )
     }
 }
@@ -1208,10 +1175,19 @@ private fun PrivacyChoiceCard(
     val stateNeedsAttention = stringResource(R.string.onboarding_state_needs_attention)
     val stateSelected = stringResource(R.string.onboarding_state_selected)
     val stateNotSelected = stringResource(R.string.onboarding_state_not_selected)
+    // Real port of iOS's `OnboardingPrivacyCard` (`OnboardingPrivacyComponents.swift`) --
+    // the shared card behind `CareForStep` ("Who Are You Here For?"), `PrivacyStep`, and
+    // `DataSourceStep`. The prior Android version filled the card pink when selected and
+    // put every icon in its own circular badge; iOS does neither -- the card background
+    // never changes, only the icon/title glyph colour and the border do.
+    val contentColor = if (isSelected) MaterialTheme.colorScheme.primary else sakhiLabel()
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xl),
-        tonalElevation = SakhiSpacing.space1,
-        border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        color = sakhiSystemBackground(),
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .semantics {
@@ -1226,32 +1202,44 @@ private fun PrivacyChoiceCard(
             .clickable(onClick = onClick),
     ) {
         Row(
-            modifier = Modifier.padding(SakhiSpacing.space5),
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+            modifier = Modifier.padding(
+                horizontal = PrivacyCardHorizontalPadding,
+                vertical = SakhiSpacing.space5,
+            ),
+            horizontalArrangement = Arrangement.spacedBy(PrivacyCardTrailingGap),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center,
+            // iOS: single `VStack(spacing: DS.Spacing.iconToTitle)` holding the icon
+            // (no badge), title, and description -- one uniform 10pt gap between all
+            // three, not a separate icon-circle + text-column split.
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(PrivacyCardInternalGap),
             ) {
-                Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold))
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(24.dp),
+                )
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = contentColor,
+                )
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                    color = sakhiSecondaryLabel(),
                 )
             }
             Box(
                 modifier = Modifier
+                    .padding(top = SakhiSpacing.space1)
                     .size(26.dp)
                     .border(
                         width = 2.dp,
                         color = when {
-                            isError -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f)
+                            isError -> sakhiSecondaryLabel().copy(alpha = 0.35f)
                             isSelected -> MaterialTheme.colorScheme.primary
                             else -> MaterialTheme.colorScheme.outlineVariant
                         },
@@ -1264,14 +1252,14 @@ private fun PrivacyChoiceCard(
                         Text(
                             text = "!",
                             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                     }
 
                     isSelected -> {
                         Box(
                             modifier = Modifier
-                                .size(12.dp)
+                                .size(13.dp)
                                 .background(MaterialTheme.colorScheme.primary, CircleShape),
                         )
                     }
@@ -1280,6 +1268,15 @@ private fun PrivacyChoiceCard(
         }
     }
 }
+
+/** iOS `DS.Spacing.cardHorizontal` (18) -- not on the 4dp token scale, spelled literal. */
+private val PrivacyCardHorizontalPadding = 18.dp
+
+/** iOS `DS.Spacing.cardHorizontal - DS.Spacing.xxs` (18 - 4 = 14): gap before the trailing selection circle. */
+private val PrivacyCardTrailingGap = 14.dp
+
+/** iOS `DS.Spacing.iconToTitle` (10): the one gap used between icon, title, and description. */
+private val PrivacyCardInternalGap = 10.dp
 
 // ── Terms ───────────────────────────────────────────────────────────────────
 
@@ -1295,21 +1292,29 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
     val stateSelected = stringResource(R.string.onboarding_state_selected)
     val stateNotSelected = stringResource(R.string.onboarding_state_not_selected)
 
-    Column(modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-        )
+    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .padding(horizontal = SakhiSpacing.space6)
+            .padding(top = SakhiSpacing.space6),
+    ) {
+        OnboardingStepTitle(text = title)
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space5),
+            color = sakhiSecondaryLabel(),
+            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = OnboardingHeaderContentGap),
         )
 
+        // Real port of iOS's `TermsStepContent`: both the legal-text card and the
+        // checkbox row fill `DS.Colors.profileCardBackground` (plain white), not a
+        // tinted `colorScheme.surface`/`sakhiGroupedBackground` -- the same root-cause
+        // bug pattern found across this whole session, confirmed live against an
+        // actual iOS screenshot ("you're in wale... alag hi color ke hai weird se").
         Surface(
             shape = RoundedCornerShape(SakhiRadius.xl),
-            tonalElevation = SakhiSpacing.space1,
+            color = sakhiSystemBackground(),
             modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp),
         ) {
             Text(
@@ -1335,16 +1340,25 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
                     hapticManager.impact(HapticImpact.LIGHT)
                     hasAccepted = !hasAccepted
                 }
-                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(SakhiRadius.xl))
+                .background(sakhiSystemBackground(), RoundedCornerShape(SakhiRadius.xl))
                 .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
         ) {
+            // iOS: 22x22, 6dp corner radius, filled pink + pink 1.5pt stroke when
+            // checked; filled white + separator-grey 1.5pt stroke when unchecked --
+            // was `Color.Transparent` with no border at all in the unchecked state,
+            // so the checkbox was invisible against the (also-wrong) tinted row.
             Box(
                 modifier = Modifier
                     .size(22.dp)
                     .background(
-                        color = if (hasAccepted) MaterialTheme.colorScheme.primary else Color.Transparent,
+                        color = if (hasAccepted) MaterialTheme.colorScheme.primary else sakhiSystemBackground(),
+                        shape = RoundedCornerShape(6.dp),
+                    )
+                    .border(
+                        width = 1.5.dp,
+                        color = if (hasAccepted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                         shape = RoundedCornerShape(6.dp),
                     ),
                 contentAlignment = Alignment.Center,
@@ -1360,7 +1374,7 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
             }
             Text(
                 text = agreementLabel,
-                style = MaterialTheme.typography.bodySmall,
+                fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f),
             )
@@ -1375,12 +1389,11 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+    }
 
-        PrimaryButton(
-            text = continueLabel,
-            onClick = { onContinue(hasAccepted) },
-            modifier = Modifier.fillMaxWidth(),
+        SakhiFooter(
+            primaryLabel = continueLabel,
+            onPrimaryClick = { onContinue(hasAccepted) },
         )
     }
 }
@@ -1395,50 +1408,76 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
 // entirely on Android.
 @Composable
 private fun UniversalIntroScreen(onContinue: () -> Unit) {
+    Column(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
             .verticalScroll(rememberScrollState())
-            .padding(SakhiSpacing.space6),
+            .padding(horizontal = SakhiSpacing.space6)
+            // iOS's shell puts `.padding(.top, DS.Spacing.xl)` (28) on the title, not the
+            // 24 of `space6`. The scale has no 28 step, so it is spelled out rather than
+            // rounded to the nearest token.
+            .padding(top = OnboardingTitleTopPadding),
     ) {
-        Text(
-            text = stringResource(R.string.onboarding_intro_title),
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-        )
+        OnboardingStepTitle(text = stringResource(R.string.onboarding_intro_title))
         Text(
             text = stringResource(R.string.onboarding_intro_subtitle),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space6),
+            color = sakhiSecondaryLabel(),
+            modifier = Modifier.padding(top = SakhiSpacing.space2),
         )
 
-        FeatureBulletRow(
-            icon = Icons.Filled.TouchApp,
-            title = stringResource(R.string.onboarding_intro_feature_1_title),
-            subtitle = stringResource(R.string.onboarding_intro_feature_1_subtitle),
-        )
-        FeatureBulletRow(
-            icon = Icons.Filled.AutoAwesome,
-            title = stringResource(R.string.onboarding_intro_feature_2_title),
-            subtitle = stringResource(R.string.onboarding_intro_feature_2_subtitle),
-        )
-        FeatureBulletRow(
-            icon = Icons.Filled.Favorite,
-            title = stringResource(R.string.onboarding_intro_feature_3_title),
-            subtitle = stringResource(R.string.onboarding_intro_feature_3_subtitle),
-        )
+        // iOS `UniversalIntroContent` is `VStack(spacing: .xl)` with `.padding(.top, .m)`
+        // (16). Android uses a larger gap here at Karan's request -- see
+        // `OnboardingHeaderContentGap`.
+        Column(
+            modifier = Modifier.padding(top = OnboardingHeaderContentGap),
+            verticalArrangement = Arrangement.spacedBy(UniversalIntroBulletSpacing),
+        ) {
+            FeatureBulletRow(
+                icon = Icons.Filled.TouchApp,
+                title = stringResource(R.string.onboarding_intro_feature_1_title),
+                subtitle = stringResource(R.string.onboarding_intro_feature_1_subtitle),
+            )
+            FeatureBulletRow(
+                icon = Icons.Filled.AutoAwesome,
+                title = stringResource(R.string.onboarding_intro_feature_2_title),
+                subtitle = stringResource(R.string.onboarding_intro_feature_2_subtitle),
+            )
+            FeatureBulletRow(
+                icon = Icons.Filled.Favorite,
+                title = stringResource(R.string.onboarding_intro_feature_3_title),
+                subtitle = stringResource(R.string.onboarding_intro_feature_3_subtitle),
+            )
+        }
 
-        Spacer(modifier = Modifier.weight(1f))
         Spacer(modifier = Modifier.height(SakhiSpacing.space6))
+    }
 
-        PrimaryButton(
-            text = stringResource(R.string.onboarding_continue),
-            onClick = onContinue,
-            modifier = Modifier.fillMaxWidth(),
+        SakhiFooter(
+            primaryLabel = stringResource(R.string.onboarding_continue),
+            onPrimaryClick = onContinue,
         )
     }
 }
 
+/**
+ * Port of iOS's `FeatureBulletRow` (`PartnerCareComponents.swift`) — the single component
+ * behind all nine iOS bullet rows (`UniversalIntroStep`, `PartnerInvitePromptStep`,
+ * `AcceptInviteSheet`).
+ *
+ * iOS: `HStack(alignment: .top, spacing: .m)` (16); 44pt circle; 20pt glyph;
+ * `VStack(spacing: .xxs)` (4) with a 15pt bold title over a 14pt secondary subtitle at
+ * `lineSpacing(3)`. Every iOS call site passes a subtitle, so it is required here.
+ *
+ * Carries no vertical padding of its own: on iOS the gap between rows comes from the
+ * caller's `VStack(spacing:)`, and the two callers use different values (`.xl` 28 for
+ * the intro, `.l` 24 for the invite prompt). Baking padding in here would flatten that.
+ *
+ * The badge fill stays `primary` at 12% rather than iOS's `DS.Colors.lightPink`: on
+ * Android that token is bound to `colorScheme.surface`, which is already these screens'
+ * background, so a literal port would render an invisible badge.
+ */
 @Composable
 private fun FeatureBulletRow(
     icon: ImageVector,
@@ -1446,11 +1485,9 @@ private fun FeatureBulletRow(
     subtitle: String,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = SakhiSpacing.space3),
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+        verticalAlignment = Alignment.Top,
     ) {
         Box(
             modifier = Modifier
@@ -1465,17 +1502,22 @@ private fun FeatureBulletRow(
                 modifier = Modifier.size(20.dp),
             )
         }
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+        ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = SakhiSpacing.space1),
+                fontSize = 14.sp,
+                // iOS default 14pt line height (~16.8) plus its explicit lineSpacing(3).
+                lineHeight = 20.sp,
+                color = sakhiSecondaryLabel(),
             )
         }
     }
@@ -1499,81 +1541,261 @@ private fun IntroCarouselScreen(
     canGoBack: Boolean,
     onBack: () -> Unit,
 ) {
-    var pageIndex by remember(slides) { mutableStateOf(0) }
-    val currentSlide = slides[pageIndex]
+    // iOS's real carousel is `TabView(selection:).tabViewStyle(.page)` -- a swipeable,
+    // physically-paginated view. Android was swapping `currentSlide` on a plain `var`,
+    // which recomposes instantly with no motion at all ("pura sudden transition hai").
+    // `HorizontalPager` is this app's established port of that same iOS pattern (see
+    // `PartnerInvitePromptScreen` above), so Continue now animates to the next page
+    // instead of cutting to it, and the page is swipeable too, matching iOS.
+    val pagerState = rememberPagerState(pageCount = { slides.size })
+    val coroutineScope = rememberCoroutineScope()
     val backLabel = stringResource(R.string.onboarding_back)
     val continueLabel = stringResource(R.string.onboarding_continue)
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SakhiSpacing.space6),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        if (canGoBack) {
-            TextButton(
-                onClick = onBack,
-                modifier = Modifier.align(Alignment.Start),
+    Column(modifier = Modifier.fillMaxSize()) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) { page ->
+            val slide = slides[page]
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = SakhiSpacing.space6),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Text(backLabel)
+                // Back + top spacing are the shared top bar in `OnboardingFlowHost`
+                // (matching iOS's single `regularShell` chrome), so this carousel no
+                // longer renders its own top back button / spacer placeholder -- that
+                // duplicated the shared one on `MyselfIntroCarousel`.
+                Spacer(modifier = Modifier.weight(1f))
+
+                // Real illustration, matching iOS. `BundledOnboardingContent.imageAssets`
+                // maps both `onboarding.carousel.slideN.image` and
+                // `onboarding.care_carousel.slideN.image` to `Onboarding/1|2|3`, i.e. by
+                // slide index for both carousels -- so index is the correct key here,
+                // not the flow. Falls back to the old Material icon if a carousel ever
+                // has more slides than there are illustrations, rather than crashing or
+                // showing nothing.
+                val slideIllustration = onboardingSlideIllustration(page)
+                if (slideIllustration != null) {
+                    // iOS `IntroCarouselStep.Layout.imageVisualHeight` = 300,
+                    // `.scaledToFit()` across the full page width. Android was a fixed
+                    // 220dp square -- visibly smaller than iOS and cropped to a square
+                    // instead of the illustration's real aspect ratio.
+                    Image(
+                        painter = painterResource(slideIllustration),
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(IntroCarouselImageHeight),
+                    )
+                } else {
+                    InviteHero(icon = slide.icon)
+                }
+                OnboardingDots(
+                    currentIndex = pagerState.currentPage,
+                    totalCount = slides.size,
+                    modifier = Modifier.padding(top = SakhiSpacing.space5),
+                )
+                OnboardingStepTitle(
+                    text = stringResource(slide.titleRes),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = SakhiSpacing.space6),
+                )
+                Text(
+                    text = stringResource(slide.subtitleRes),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = sakhiSecondaryLabel(),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = SakhiSpacing.space2),
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
             }
-        } else {
-            Spacer(modifier = Modifier.size(SakhiSpacing.space8))
         }
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        InviteHero(icon = currentSlide.icon)
-        OnboardingDots(
-            currentIndex = pageIndex,
-            totalCount = slides.size,
-            modifier = Modifier.padding(top = SakhiSpacing.space5),
-        )
-        Text(
-            text = stringResource(currentSlide.titleRes),
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space6),
-        )
-        Text(
-            text = stringResource(currentSlide.subtitleRes),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space2),
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        PrimaryButton(
-            text = continueLabel,
-            onClick = {
-                if (pageIndex < slides.lastIndex) {
-                    pageIndex += 1
+        SakhiFooter(
+            primaryLabel = continueLabel,
+            onPrimaryClick = {
+                if (pagerState.currentPage < slides.lastIndex) {
+                    coroutineScope.launch {
+                        pagerState.animateScrollToPage(
+                            page = pagerState.currentPage + 1,
+                            animationSpec = sakhiScreenTransitionSpec,
+                        )
+                    }
                 } else {
                     onContinue()
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
 
+/**
+ * Real port of iOS's `OfflineWarningStep` (`OfflineWarningStep.swift`). The prior Android
+ * version used the generic centered `HeroContentStep` (icon + title + subtitle), which is
+ * not what this step is on iOS at all: a top-anchored title/subtitle over a genuine
+ * 2-page carousel -- slide 0 the real "offline" illustration (`Conditions/offline`, same
+ * 335pt-tall/460pt-container geometry as `PartnerInvitePromptStep`'s carousel, since iOS
+ * explicitly notes it "matches the care-partner onboarding hero... so the offline image
+ * is the same size everywhere it appears"), slide 1 a list of what stops working (no
+ * backup, no care connection, no sync). `canGoBack`/`onBack` are unused: iOS's own
+ * `onBack` here just flips `isOfflineUser = false` and returns to `PrivacyStep`, which is
+ * `OnboardingFlowHost`'s shared back button/handler doing already, not this screen's job.
+ */
 @Composable
 private fun OfflineWarningScreen(
     canGoBack: Boolean,
     onContinue: () -> Unit,
     onBack: () -> Unit,
 ) {
-    HeroContentStep(
-        icon = Icons.Filled.CloudOff,
-        title = stringResource(R.string.onboarding_offline_warning_title),
-        subtitle = stringResource(R.string.onboarding_offline_warning_subtitle),
-        primaryLabel = stringResource(R.string.onboarding_offline_warning_continue),
-        onPrimaryClick = onContinue,
-        secondaryLabel = if (canGoBack) stringResource(R.string.onboarding_back) else null,
-        onSecondaryClick = if (canGoBack) onBack else null,
-    )
+    val title = stringResource(R.string.onboarding_offline_warning_title)
+    val subtitle = stringResource(R.string.onboarding_offline_warning_subtitle)
+    val continueLabel = stringResource(R.string.onboarding_offline_warning_continue)
+    val pagerState = rememberPagerState(pageCount = { 2 })
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(SakhiSpacing.space6),
+        ) {
+            OnboardingStepTitle(text = title)
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+                modifier = Modifier.padding(top = SakhiSpacing.space2),
+            )
+
+            // Same carousel height as `PartnerInvitePromptScreen` -- iOS reuses that
+            // exact hero size for both -- but the top offset and dots position are
+            // deliberately Offline-specific (`OfflineCarouselTopGap`/
+            // `OfflineIndicatorTop`, not the shared `PartnerInvitePrompt*` constants):
+            // Karan asked for both content and the page dots pushed down further on
+            // this screen specifically, without moving PartnerInvitePromptScreen's.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = OfflineCarouselTopGap)
+                    .height(PartnerInvitePromptCarouselHeight),
+            ) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.Top,
+                ) { page ->
+                    if (page == 0) {
+                        Box(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentAlignment = Alignment.TopCenter,
+                        ) {
+                            Image(
+                                painter = painterResource(team.sakhi.android.ui.R.drawable.condition_offline),
+                                contentDescription = null,
+                                modifier = Modifier.height(PartnerInvitePromptImageHeight),
+                            )
+                        }
+                    } else {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = SakhiSpacing.space3),
+                            verticalArrangement = Arrangement.spacedBy(UniversalIntroBulletSpacing),
+                        ) {
+                            OfflineFeatureLossRow(
+                                icon = Icons.Filled.CloudOff,
+                                title = stringResource(R.string.onboarding_offline_no_backup_title),
+                                description = stringResource(R.string.onboarding_offline_no_backup_description),
+                            )
+                            OfflineFeatureLossRow(
+                                icon = Icons.Filled.VisibilityOff,
+                                title = stringResource(R.string.onboarding_offline_no_care_title),
+                                description = stringResource(R.string.onboarding_offline_no_care_description),
+                            )
+                            OfflineFeatureLossRow(
+                                icon = Icons.Filled.Sync,
+                                title = stringResource(R.string.onboarding_offline_no_sync_title),
+                                description = stringResource(R.string.onboarding_offline_no_sync_description),
+                            )
+                        }
+                    }
+                }
+
+                OnboardingDots(
+                    currentIndex = pagerState.currentPage,
+                    totalCount = 2,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = OfflineIndicatorTop),
+                )
+            }
+        }
+
+        SakhiFooter(
+            primaryLabel = continueLabel,
+            onPrimaryClick = onContinue,
+        )
+    }
+}
+
+/** Karan: offline carousel content and page dots pushed down further than the default. */
+private val OfflineCarouselTopGap = SakhiSpacing.space4
+private val OfflineIndicatorTop = PartnerInvitePromptIndicatorTop + SakhiSpacing.space4
+
+/**
+ * iOS `offlineLossesSlide`'s row: `HStack(alignment: .top, spacing: .m)` (16), a 52x52
+ * `DS.Colors.lightPink` circle (not [FeatureBulletRow]'s 44dp -- a different, larger size
+ * used only here), 16pt bold title over a 13pt secondary description at `lineSpacing(4)`.
+ */
+@Composable
+private fun OfflineFeatureLossRow(
+    icon: ImageVector,
+    title: String,
+    description: String,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+        verticalAlignment = Alignment.Top,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .background(sakhiLightPink(), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+        ) {
+            Text(
+                text = title,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = description,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = sakhiSecondaryLabel(),
+            )
+        }
+    }
 }
 
 @Composable
@@ -1608,38 +1830,41 @@ private fun HeroContentStep(
     secondaryLabel: String? = null,
     onSecondaryClick: (() -> Unit)? = null,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(SakhiSpacing.space6),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(modifier = Modifier.weight(1f))
-        InviteHero(icon = icon)
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space6),
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space2),
-        )
-        Spacer(modifier = Modifier.weight(1f))
-        PrimaryButton(
-            text = primaryLabel,
-            onClick = onPrimaryClick,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        if (!secondaryLabel.isNullOrBlank() && onSecondaryClick != null) {
-            TextButton(onClick = onSecondaryClick) {
-                Text(secondaryLabel)
-            }
+    // Shared hero+actions layout used by 4 onboarding screens. Actions live in the
+    // shared `SakhiFooter` so the primary button's Y is identical whether or not a
+    // secondary exists (previously the optional secondary `TextButton` sat directly
+    // under the primary, so the primary shifted between screens that had one and
+    // screens that didn't).
+    Column(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = SakhiSpacing.space6),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Spacer(modifier = Modifier.weight(1f))
+            InviteHero(icon = icon)
+            OnboardingStepTitle(
+                text = title,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = SakhiSpacing.space6),
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = SakhiSpacing.space2),
+            )
+            Spacer(modifier = Modifier.weight(1f))
         }
+
+        SakhiFooter(
+            primaryLabel = primaryLabel,
+            onPrimaryClick = onPrimaryClick,
+            secondaryLabel = secondaryLabel?.takeIf { it.isNotBlank() },
+            onSecondaryClick = onSecondaryClick,
+        )
     }
 }
 
@@ -1667,27 +1892,47 @@ private fun OnboardingDots(
     }
 }
 
+
+/**
+ * The ported iOS onboarding illustration for a carousel slide, or null past slide 3.
+ *
+ * Assets are the real `Onboarding/1|2|3` PDFs from iOS's asset catalog, rasterised into
+ * Android density buckets with light and dark (`drawable-night-*`) variants, so the
+ * artwork switches with the theme exactly as iOS's light/dark PDF pair does.
+ */
+@DrawableRes
+private fun onboardingSlideIllustration(index: Int): Int? = when (index) {
+    0 -> team.sakhi.android.ui.R.drawable.onboarding_slide_1
+    1 -> team.sakhi.android.ui.R.drawable.onboarding_slide_2
+    2 -> team.sakhi.android.ui.R.drawable.onboarding_slide_3
+    else -> null
+}
+
 private data class OnboardingIntroSlide(
     val icon: ImageVector,
     @StringRes val titleRes: Int,
     @StringRes val subtitleRes: Int,
 )
 
+// iOS `IntroCarouselStep` in .newUser/.universal mode reads onboarding.carousel.slide1-3,
+// which is a different copy set from onboarding.intro.feature*, the bullet list on
+// `UniversalIntroStep`. Android pointed both at the bullet strings, so the carousel and
+// the intro screen showed identical text.
 private val myselfIntroSlides = listOf(
     OnboardingIntroSlide(
         icon = Icons.Filled.AutoAwesome,
-        titleRes = R.string.onboarding_intro_feature_1_title,
-        subtitleRes = R.string.onboarding_intro_feature_1_subtitle,
+        titleRes = R.string.onboarding_carousel_slide_1_title,
+        subtitleRes = R.string.onboarding_carousel_slide_1_subtitle,
     ),
     OnboardingIntroSlide(
         icon = Icons.Filled.Favorite,
-        titleRes = R.string.onboarding_intro_feature_2_title,
-        subtitleRes = R.string.onboarding_intro_feature_2_subtitle,
+        titleRes = R.string.onboarding_carousel_slide_2_title,
+        subtitleRes = R.string.onboarding_carousel_slide_2_subtitle,
     ),
     OnboardingIntroSlide(
         icon = Icons.Filled.Groups,
-        titleRes = R.string.onboarding_intro_feature_3_title,
-        subtitleRes = R.string.onboarding_intro_feature_3_subtitle,
+        titleRes = R.string.onboarding_carousel_slide_3_title,
+        subtitleRes = R.string.onboarding_carousel_slide_3_subtitle,
     ),
 )
 
@@ -1737,9 +1982,10 @@ private fun InviteContactAccessScreen(onContinue: () -> Unit) {
         }
     }
 
+    Column(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
             .padding(SakhiSpacing.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -1751,26 +1997,25 @@ private fun InviteContactAccessScreen(onContinue: () -> Unit) {
             modifier = Modifier.size(96.dp),
         )
         Spacer(modifier = Modifier.height(SakhiSpacing.space6))
-        Text(
+        OnboardingStepTitle(
             text = accessTitle,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
             textAlign = TextAlign.Center,
         )
         Text(
             text = accessSubtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = SakhiSpacing.space2),
         )
         Spacer(modifier = Modifier.weight(1f))
-        PrimaryButton(
-            text = accessButtonLabel,
-            onClick = {
+    }
+        SakhiFooter(
+            primaryLabel = accessButtonLabel,
+            onPrimaryClick = {
                 hapticManager.impact(HapticImpact.LIGHT)
                 permissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
             },
-            modifier = Modifier.fillMaxWidth(),
         )
     }
 
@@ -1841,26 +2086,29 @@ private fun InvitePickContactScreen(
         }
     }
 
+    Column(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
             .padding(SakhiSpacing.space6)
             .verticalScroll(rememberScrollState()),
     ) {
-        Text(
-            text = pickTitle,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-        )
+        OnboardingStepTitle(text = pickTitle)
         Text(
             text = pickSubtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space5),
+            color = sakhiSecondaryLabel(),
+            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = OnboardingHeaderContentGap),
         )
 
+        // Explicit white, like every other onboarding card. `Surface`'s default colour
+        // is `colorScheme.surface`, which in this app is brand-pink tinted (and
+        // `tonalElevation` tints it further with the primary colour), so leaving it
+        // implicit renders a pink block instead of a card.
         Surface(
             shape = RoundedCornerShape(SakhiRadius.xl),
-            tonalElevation = SakhiSpacing.space1,
+            color = sakhiSystemBackground(),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable {
@@ -1878,7 +2126,7 @@ private fun InvitePickContactScreen(
                     text = uiState.selectedContactName.ifBlank { contactPlaceholder },
                     style = MaterialTheme.typography.bodyLarge,
                     color = if (uiState.selectedContactName.isBlank()) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        sakhiSecondaryLabel()
                     } else {
                         MaterialTheme.colorScheme.onSurface
                     },
@@ -1912,17 +2160,16 @@ private fun InvitePickContactScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(SakhiSpacing.space6))
-        PrimaryButton(
-            text = continueLabel,
-            onClick = {
+    }
+        SakhiFooter(
+            primaryLabel = continueLabel,
+            onPrimaryClick = {
                 if (uiState.selectedContactName.isBlank() || pendingPartnerRelation.isBlank()) {
                     hapticManager.error()
                 } else {
                     onContinue()
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -2025,16 +2272,14 @@ private fun PartnerRelationScreen(
     val relationSubtitle = stringResource(R.string.onboarding_invite_relation_subtitle)
     val continueLabel = stringResource(R.string.onboarding_continue)
 
-    Column(modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6)) {
-        Text(
-            text = relationTitle,
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-        )
+    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.weight(1f).padding(SakhiSpacing.space6)) {
+        OnboardingStepTitle(text = relationTitle)
         Text(
             text = relationSubtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space5),
+            color = sakhiSecondaryLabel(),
+            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = OnboardingHeaderContentGap),
         )
 
         Column(
@@ -2058,8 +2303,8 @@ private fun PartnerRelationScreen(
                 modifier = Modifier.padding(vertical = SakhiSpacing.space2),
             )
         }
-
-        PrimaryButton(text = continueLabel, onClick = onContinue, modifier = Modifier.fillMaxWidth())
+    }
+        SakhiFooter(primaryLabel = continueLabel, onPrimaryClick = onContinue)
     }
 }
 
@@ -2067,10 +2312,21 @@ private fun PartnerRelationScreen(
 private fun RelationOptionCard(option: RelationOption, isSelected: Boolean, onClick: () -> Unit) {
     val stateSelected = stringResource(R.string.onboarding_state_selected)
     val stateNotSelected = stringResource(R.string.onboarding_state_not_selected)
+    // Was `Surface(tonalElevation = ...)` with no explicit colour. Material3 tonal
+    // elevation tints the surface with the PRIMARY colour, so every row rendered as a
+    // flat pink blob with no visible selected state -- nothing like the white bordered
+    // cards the rest of onboarding uses, and reported live as "kitna ganda hai".
+    // Matches `PrivacyChoiceCard` (the real port of iOS `OnboardingPrivacyCard`): the
+    // background never changes, only the border and the icon/title colour do, and there
+    // is no circular icon badge.
+    val contentColor = if (isSelected) MaterialTheme.colorScheme.primary else sakhiLabel()
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xl),
-        tonalElevation = SakhiSpacing.space1,
-        border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        color = sakhiSystemBackground(),
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .semantics {
@@ -2081,27 +2337,29 @@ private fun RelationOptionCard(option: RelationOption, isSelected: Boolean, onCl
             .clickable(onClick = onClick),
     ) {
         Row(
-            modifier = Modifier.padding(SakhiSpacing.space4),
+            modifier = Modifier.padding(
+                horizontal = PrivacyCardHorizontalPadding,
+                vertical = SakhiSpacing.space4,
+            ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(imageVector = option.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-            }
+            Icon(
+                imageVector = option.icon,
+                contentDescription = null,
+                tint = contentColor,
+                modifier = Modifier.size(24.dp),
+            )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(option.titleRes),
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = contentColor,
                 )
                 Text(
                     text = stringResource(option.subtitleRes),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }
@@ -2117,33 +2375,34 @@ private fun RelationOptionCard(option: RelationOption, isSelected: Boolean, onCl
 
 @Composable
 private fun BeHerSakhiScreen(
-    canGoBack: Boolean,
     fieldError: String?,
     onSubmit: (String) -> Unit,
-    onBack: () -> Unit,
 ) {
     var code by remember { mutableStateOf("") }
     val continueLabel = stringResource(R.string.onboarding_continue)
-    val backLabel = stringResource(R.string.onboarding_back)
 
-    Column(modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6)) {
-        Text(
-            text = stringResource(R.string.onboarding_be_her_sakhi_title),
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-        )
+    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.weight(1f).padding(SakhiSpacing.space6)) {
+        OnboardingStepTitle(text = stringResource(R.string.onboarding_be_her_sakhi_title))
         Text(
             text = stringResource(R.string.onboarding_be_her_sakhi_subtitle),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space5),
+            color = sakhiSecondaryLabel(),
+            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = OnboardingHeaderContentGap),
         )
 
-        androidx.compose.material3.OutlinedTextField(
+        // Was a bare Material3 `OutlinedTextField`, which renders transparent with a
+        // thin grey outline -- the odd one out in a flow where every other field
+        // (phone, DOB, period/cycle length) is a filled white `SakhiTextField`.
+        // Same root cause Karan reported for the other fields; this screen was missed
+        // because it only appears on the partner path.
+        SakhiTextField(
             value = code,
             onValueChange = { code = it.take(6).uppercase() },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text(stringResource(R.string.onboarding_be_her_sakhi_placeholder)) },
+            placeholder = stringResource(R.string.onboarding_be_her_sakhi_placeholder),
             singleLine = true,
+            isError = !fieldError.isNullOrBlank(),
         )
 
         if (!fieldError.isNullOrBlank()) {
@@ -2156,13 +2415,8 @@ private fun BeHerSakhiScreen(
         }
 
         Spacer(modifier = Modifier.weight(1f))
-
-        PrimaryButton(text = continueLabel, onClick = { onSubmit(code) }, modifier = Modifier.fillMaxWidth())
-        if (canGoBack) {
-            TextButton(onClick = onBack, modifier = Modifier.fillMaxWidth()) {
-                Text(backLabel)
-            }
-        }
+    }
+        SakhiFooter(primaryLabel = continueLabel, onPrimaryClick = { onSubmit(code) })
     }
 }
 
@@ -2189,6 +2443,33 @@ private fun OnboardingPhoneOtpScreen(
     onOtpResolved: (isReturningUser: Boolean) -> Unit,
     authViewModel: AuthViewModel = koinViewModel(),
 ) {
+    // The visible back button and the top-bar spacing are now owned by
+    // `OnboardingFlowHost`'s shared top bar (matching iOS's single `regularShell`
+    // chrome), so this screen no longer overlays its own -- it just renders the
+    // Phone/OTP content.
+    // The reset below is still needed: system back can step from OtpVerification back
+    // to Phone (the host's `BackHandler` decrements the step index), and without this
+    // `PhoneScreen`'s own `otpSentTo != null` auto-advance check would see the still-set
+    // OTP destination the instant it recomposes and immediately jump back forward to
+    // OtpVerification -- back would appear to do nothing. Keyed on `step` (not a one-shot
+    // top-of-flow reset) since this step can be revisited mid-flow.
+    //
+    // DELIBERATELY `remember`, not `LaunchedEffect` -- reported live as "back button
+    // isn't going back at all." `LaunchedEffect` dispatches its body as a coroutine
+    // that only runs after this composition commits; on the very frame `step` flips
+    // back to `Phone`, `PhoneScreen` below reads the still-stale `otpSentTo` and
+    // re-fires `onOtpSent` before that coroutine ever gets a turn, jumping straight
+    // back to OtpVerification -- the exact race this comment already warned about,
+    // just not far enough: an effect that runs "soon" still loses to a composable
+    // that reads state synchronously on the same pass. `remember`'s calculation
+    // block runs synchronously during composition, before `PhoneScreen` below sees
+    // the state, which actually closes the race.
+    remember(step) {
+        if (step == OnboardingFlowStep.Phone) {
+            authViewModel.resetPhoneFlow()
+        }
+    }
+
     when (step) {
         OnboardingFlowStep.Phone -> PhoneScreen(
             onOtpSent = { onContinue() },
@@ -2231,8 +2512,9 @@ private fun BeHerAcceptScreen(
         }
     }
 
+    Column(modifier = Modifier.fillMaxSize()) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6),
+        modifier = Modifier.weight(1f).padding(SakhiSpacing.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(modifier = Modifier.weight(1f))
@@ -2261,7 +2543,7 @@ private fun BeHerAcceptScreen(
                 Text(
                     text = successSubtitle,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = SakhiSpacing.space2),
                 )
@@ -2275,7 +2557,7 @@ private fun BeHerAcceptScreen(
                 Text(
                     text = uiState.error,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(top = SakhiSpacing.space2),
                 )
@@ -2286,9 +2568,9 @@ private fun BeHerAcceptScreen(
         }
 
         Spacer(modifier = Modifier.weight(1f))
-
+    }
         if (uiState.error != null && uiState.canRetry) {
-            PrimaryButton(text = retryLabel, onClick = onAccept, modifier = Modifier.fillMaxWidth())
+            SakhiFooter(primaryLabel = retryLabel, onPrimaryClick = onAccept, showSecondarySlot = false)
         }
     }
 }
@@ -2318,8 +2600,9 @@ private fun PartnerConversionWarningScreen(
     val confirmButtonLabel = stringResource(R.string.onboarding_partner_conversion_confirm_button)
     val cancelLabel = stringResource(R.string.onboarding_cancel)
 
+    Column(modifier = Modifier.fillMaxSize()) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6),
+        modifier = Modifier.weight(1f).padding(SakhiSpacing.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(modifier = Modifier.weight(1f))
@@ -2347,7 +2630,7 @@ private fun PartnerConversionWarningScreen(
         Text(
             text = subtitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(top = SakhiSpacing.space2),
         )
@@ -2363,19 +2646,18 @@ private fun PartnerConversionWarningScreen(
         }
 
         Spacer(modifier = Modifier.weight(1f))
-
-        PrimaryButton(
-            text = if (uiState.isConverting) convertingLabel else continueAsPartnerLabel,
-            enabled = !uiState.isConverting,
-            onClick = {
+    }
+        SakhiFooter(
+            primaryLabel = if (uiState.isConverting) convertingLabel else continueAsPartnerLabel,
+            primaryEnabled = !uiState.isConverting,
+            onPrimaryClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
                 showConfirm = true
             },
-            modifier = Modifier.fillMaxWidth(),
+            secondaryLabel = keepAccountLabel,
+            onSecondaryClick = onKeepOwnAccount,
+            secondaryEnabled = !uiState.isConverting,
         )
-        TextButton(onClick = onKeepOwnAccount, enabled = !uiState.isConverting, modifier = Modifier.fillMaxWidth()) {
-            Text(keepAccountLabel)
-        }
     }
 
     if (showConfirm) {
@@ -2424,14 +2706,19 @@ private fun DataSourceScreen(
     val continueLabel = stringResource(R.string.onboarding_continue)
     val importingLabel = stringResource(R.string.onboarding_importing)
 
-    Column(modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6)) {
-        Text(
+    Column(modifier = Modifier.fillMaxSize()) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .padding(horizontal = SakhiSpacing.space6)
+            .padding(top = SakhiSpacing.space6),
+    ) {
+        OnboardingStepTitle(
             text = if (uiState.importFailed) {
                 stringResource(R.string.onboarding_data_source_import_failed_title)
             } else {
                 stringResource(R.string.onboarding_data_source_title)
             },
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
         )
         Text(
             text = if (uiState.importFailed) {
@@ -2440,8 +2727,8 @@ private fun DataSourceScreen(
                 stringResource(R.string.onboarding_data_source_subtitle)
             },
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space5),
+            color = sakhiSecondaryLabel(),
+            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = OnboardingHeaderContentGap),
         )
 
         Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
@@ -2468,12 +2755,12 @@ private fun DataSourceScreen(
             )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+    }
 
-        PrimaryButton(
-            text = if (uiState.isImporting) importingLabel else continueLabel,
-            enabled = !uiState.isImporting,
-            onClick = {
+        SakhiFooter(
+            primaryLabel = if (uiState.isImporting) importingLabel else continueLabel,
+            primaryEnabled = !uiState.isImporting,
+            onPrimaryClick = {
                 when (uiState.selectedChoice) {
                     OnboardingDataSourceChoice.Manual -> onContinueManual()
                     OnboardingDataSourceChoice.HealthConnect -> when (uiState.availability) {
@@ -2490,7 +2777,6 @@ private fun DataSourceScreen(
                     }
                 }
             },
-            modifier = Modifier.fillMaxWidth(),
         )
     }
 
@@ -2525,12 +2811,12 @@ private fun SetupLoadingScreen(uiState: OnboardingSetupUiState, onSetupLoading: 
     LaunchedEffect(Unit) { onSetupLoading() }
     val retryLabel = stringResource(R.string.onboarding_retry)
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        if (uiState.error != null) {
+    if (uiState.error != null) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
             Text(
                 text = stringResource(R.string.onboarding_setup_error_title),
                 style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
@@ -2539,19 +2825,27 @@ private fun SetupLoadingScreen(uiState: OnboardingSetupUiState, onSetupLoading: 
             Text(
                 text = uiState.error,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space5),
             )
             PrimaryButton(text = retryLabel, onClick = onSetupLoading, modifier = Modifier.fillMaxWidth())
-        } else {
-            CircularProgressIndicator()
-            Text(
-                text = stringResource(R.string.onboarding_setup_loading_message),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = SakhiSpacing.space4),
-            )
         }
+    } else {
+        // Real `SakhiLoadingView` (the app's shared loading component, ported from
+        // iOS's `SakhiLoadingView.swift`) instead of a bare Material spinner -- iOS's
+        // `SakhiSetupLoadingStep` renders exactly this, in its cycling-`messages`
+        // mode. Deliberately NOT wrapped in the padded/centred Column the error branch
+        // uses: this view owns its own full-bleed background and centring, per Karan
+        // ("vo har loading ke samay aayega fully screen mai").
+        SakhiLoadingView(
+            context = SakhiLoadingContext.Messages(
+                listOf(
+                    stringResource(R.string.onboarding_setup_loading_message),
+                    stringResource(R.string.onboarding_setup_loading_message_2),
+                    stringResource(R.string.onboarding_setup_loading_message_3),
+                ),
+            ),
+        )
     }
 }

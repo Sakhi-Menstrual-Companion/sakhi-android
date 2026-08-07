@@ -36,8 +36,10 @@ import team.sakhi.care.CareRuntimeState
 import team.sakhi.care.CareStatusResponse
 import team.sakhi.care.CareStore
 import team.sakhi.models.CycleData
+import team.sakhi.models.LogSource
 import team.sakhi.models.ParentChildPermissions
 import team.sakhi.models.PartnerInvitation
+import team.sakhi.models.PeriodLog
 import team.sakhi.models.UserProfile
 import team.sakhi.onboarding.OnboardingFlowIntent
 import team.sakhi.onboarding.OnboardingFlowStep
@@ -45,6 +47,7 @@ import team.sakhi.onboarding.OnboardingFlowStore
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.repositories.UserProfileRepository
+import team.sakhi.repositories.CareInviteException
 
 /**
  * State-machine test for `OnboardingViewModel`. `AuthRepository`/`CareStore`/
@@ -79,8 +82,17 @@ class OnboardingViewModelTest {
     // finishes. Same technique `ReportsViewModelTest`/`ChatViewModelTest` established:
     // interleave a real, off-scheduler `delay` with `advanceUntilIdle()` so the IO work
     // actually progresses and the test dispatcher drains the resumption once it lands.
+    // The timeout is a BOUND, not a sleep: a passing test leaves as soon as the
+    // predicate holds, so a generous bound costs nothing. 2s was too tight under load
+    // -- these steps do real `Dispatchers.IO` work that the virtual scheduler does not
+    // control, and in a full multi-module `./gradlew test` (every module's tests running
+    // at once) that work regularly took longer than 2s. The loop then gave up while the
+    // view-model coroutine was still in flight, `tearDown`'s `resetMain()` ran underneath
+    // it, and it died on "Dispatchers.Main was accessed ... test dispatcher was unset".
+    // That is the whole reason `convertAccountToPartnerAndProceed` failed only in full
+    // runs (and only sometimes, in either variant) while passing on its own.
     private suspend fun TestScope.awaitCondition(
-        timeoutMs: Long = 2_000,
+        timeoutMs: Long = 15_000,
         predicate: () -> Boolean,
     ) {
         val deadline = System.currentTimeMillis() + timeoutMs
@@ -93,6 +105,9 @@ class OnboardingViewModelTest {
     private fun mockContext(): Context = mockk {
         every { getString(R.string.onboarding_error_generic) } returns "Something went wrong. Please try again."
         every { getString(R.string.onboarding_error_code_missing) } returns "This code doesn't exist."
+        every { getString(R.string.onboarding_error_offline) } returns "No internet connection. Please check and try again."
+        every { getString(R.string.onboarding_error_code_expired) } returns "This code has expired. Ask your partner to create a new invite."
+        every { getString(R.string.onboarding_error_code_wrong_phone) } returns "This invitation was sent to a different phone number."
         every { getString(R.string.onboarding_error_sign_in_before_invite) } returns "Please sign in before creating a care invite."
         every { getString(R.string.onboarding_fallback_user) } returns "User"
         every { getString(R.string.onboarding_error_create_invite) } returns "Couldn't create invite right now."
@@ -178,6 +193,34 @@ class OnboardingViewModelTest {
         viewModel.continueFlow()
 
         assertNull(flowStore.state.value.fieldError)
+        assertEquals(OnboardingFlowStep.Height, flowStore.state.value.currentStep)
+    }
+
+    @Test
+    fun `continueFlow ignores rapid repeat continue during the transition window`() = runTest {
+        val flowStore = OnboardingFlowStore("newUser")
+        flowStore.send(OnboardingFlowIntent.NavigateToStep(OnboardingFlowStep.DateOfBirth.stepId))
+        val viewModel = newViewModel(flowStore = flowStore)
+        advanceUntilIdle()
+        viewModel.updateDateOfBirth(java.time.LocalDate.now().minusYears(25))
+
+        viewModel.continueFlow(expectedStep = OnboardingFlowStep.DateOfBirth)
+        viewModel.continueFlow(expectedStep = OnboardingFlowStep.Height)
+
+        assertEquals(OnboardingFlowStep.Height, flowStore.state.value.currentStep)
+    }
+
+    @Test
+    fun `continueFlow ignores stale outgoing step clicks after navigation advances`() = runTest {
+        val flowStore = OnboardingFlowStore("newUser")
+        flowStore.send(OnboardingFlowIntent.NavigateToStep(OnboardingFlowStep.DateOfBirth.stepId))
+        val viewModel = newViewModel(flowStore = flowStore)
+        advanceUntilIdle()
+        viewModel.updateDateOfBirth(java.time.LocalDate.now().minusYears(25))
+
+        viewModel.continueFlow(expectedStep = OnboardingFlowStep.DateOfBirth)
+        viewModel.continueFlow(expectedStep = OnboardingFlowStep.DateOfBirth)
+
         assertEquals(OnboardingFlowStep.Height, flowStore.state.value.currentStep)
     }
 
@@ -288,25 +331,33 @@ class OnboardingViewModelTest {
 
         viewModel.handleSetupLoading()
         advanceUntilIdle()
+        // Settle before the test ends -- see the conversion re-entry guard test for why
+        // a view-model coroutine left running here fails some unrelated test later.
+        awaitCondition { !viewModel.setupUiState.value.isSaving }
 
         coVerify(exactly = 0) { userProfileRepository.upsert(any()) }
     }
 
     @Test
-    fun `handleSetupLoading saves a real UserProfile and CycleData built from the real health state`() = runTest {
+    fun `handleSetupLoading saves a real UserProfile, CycleData and period log built from the real health state`() = runTest {
         val flowStore = OnboardingFlowStore("newUser")
         val profileSlot: CapturingSlot<UserProfile> = slot()
         val cycleSlot: CapturingSlot<CycleData> = slot()
+        val periodLogSlot: CapturingSlot<PeriodLog> = slot()
         val userProfileRepository = mockk<UserProfileRepository> {
             coEvery { upsert(capture(profileSlot)) } answers { Result.success(profileSlot.captured) }
         }
         val cycleDataRepository = mockk<CycleDataRepository> {
             coEvery { upsert(capture(cycleSlot)) } answers { Result.success(cycleSlot.captured) }
         }
+        val periodLogRepository = mockk<PeriodLogRepository> {
+            coEvery { upsert(capture(periodLogSlot)) } answers { Result.success(periodLogSlot.captured) }
+        }
         val viewModel = newViewModel(
             flowStore = flowStore,
             userProfileRepository = userProfileRepository,
             cycleDataRepository = cycleDataRepository,
+            periodLogRepository = periodLogRepository,
         )
         advanceUntilIdle()
         viewModel.setHeightCm(165.0)
@@ -324,19 +375,43 @@ class OnboardingViewModelTest {
         assertEquals(58.0, profileSlot.captured.weightKg)
         assertEquals(30, cycleSlot.captured.cycleLength)
         assertEquals("user-1", cycleSlot.captured.userId)
+        // Onboarding must write the confirmed last-period date as a real period log,
+        // not just a CycleData. Every calendar mark (period, predicted, fertile,
+        // ovulation, PMS) is built from logged days only, so a cycle with no log
+        // renders a completely blank calendar -- which is exactly what shipped.
+        assertEquals("user-1", periodLogSlot.captured.userId)
+        assertEquals(cycleSlot.captured.periodStartDate, periodLogSlot.captured.logDate)
+        assertTrue(periodLogSlot.captured.periodPresent)
+        assertEquals(LogSource.USER, periodLogSlot.captured.loggedBy)
     }
 
     @Test
-    fun `handleSetupLoading with no current user surfaces a real error`() = runTest {
+    fun `handleSetupLoading with no current user completes onboarding instead of erroring`() = runTest {
+        // No `currentUserId` means an OFFLINE user (chose "Continue Offline" at the
+        // privacy step, never went through Phone/OTP) -- not a failure. This used to
+        // assert a generic error, which matched the old behaviour but was itself the
+        // bug: confirmed live on a real device that offline onboarding dead-ended on
+        // an unrecoverable "Something went wrong" screen with no way forward.
+        //
+        // The offline session is minted HERE, at the end of the flow, rather than at the
+        // privacy step: `SessionState.LocalOnlyUser` routes straight to Home via
+        // `AccountClassifier`, so starting it earlier skipped the whole rest of
+        // onboarding (a real regression, caught on device). Asserting the call happens
+        // pins that ordering.
         val flowStore = OnboardingFlowStore("newUser")
-        val authRepository = mockk<AuthRepository> { every { currentUserId } returns null }
+        val authRepository = mockk<AuthRepository> {
+            every { currentUserId } returns null
+            every { startLocalOnlySession(any()) } returns "offline_test"
+        }
         val viewModel = newViewModel(flowStore = flowStore, authRepository = authRepository)
         advanceUntilIdle()
 
         viewModel.handleSetupLoading()
         advanceUntilIdle()
+        awaitCondition { !viewModel.setupUiState.value.isSaving }
 
-        assertEquals("Something went wrong. Please try again.", viewModel.setupUiState.value.error)
+        assertNull(viewModel.setupUiState.value.error)
+        verify { authRepository.startLocalOnlySession(any()) }
     }
 
     @Test
@@ -370,6 +445,9 @@ class OnboardingViewModelTest {
 
         viewModel.createCareInvitationAndContinue()
         advanceUntilIdle()
+        // Settle the invite coroutine before the test ends -- see the conversion
+        // re-entry guard test for why leaking it fails an unrelated test later.
+        awaitCondition { viewModel.careInviteUiState.value.inviteCode.isNotBlank() }
 
         assertEquals("ABC123", viewModel.careInviteUiState.value.inviteCode)
         coVerify(exactly = 0) {
@@ -491,7 +569,17 @@ class OnboardingViewModelTest {
 
         viewModel.convertAccountToPartnerAndProceed()
         advanceUntilIdle()
-        awaitCondition { !viewModel.conversionUiState.value.isConverting }
+        // Waits on the LAST observable effect of the conversion coroutine (the flow
+        // advancing), not just `isConverting` flipping. `isConverting = false` is set
+        // before the coroutine's final step, so waiting only on it let the test finish
+        // while that coroutine was still in flight; `tearDown`'s `resetMain()` then ran
+        // underneath it and it died on "Dispatchers.Main was accessed ... test
+        // dispatcher was unset". That surfaced as an order-dependent failure of this
+        // test (release variant especially) which passed in isolation.
+        awaitCondition {
+            !viewModel.conversionUiState.value.isConverting &&
+                flowStore.state.value.currentIndex > indexBefore
+        }
 
         assertFalse(viewModel.conversionUiState.value.isConverting)
         assertNull(viewModel.conversionUiState.value.error)
@@ -514,7 +602,10 @@ class OnboardingViewModelTest {
         advanceUntilIdle()
         awaitCondition { !viewModel.conversionUiState.value.isConverting }
 
-        assertEquals("disk full", viewModel.conversionUiState.value.error)
+        // Was asserting the RAW exception message. That pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible copy. UI shows app copy; cause is logged only.
+        assertEquals("Something went wrong. Please try again.", viewModel.conversionUiState.value.error)
         assertEquals(indexBefore, flowStore.state.value.currentIndex)
     }
 
@@ -539,6 +630,14 @@ class OnboardingViewModelTest {
         advanceUntilIdle()
         gate.complete(Unit)
         advanceUntilIdle()
+        // Opening the gate resumes the conversion on `Dispatchers.IO`, which the virtual
+        // scheduler does not drive, so `advanceUntilIdle()` alone returns with that
+        // coroutine still running. Letting the test end there leaked it past
+        // `tearDown`'s `resetMain()`, where it died on "Dispatchers.Main was accessed ...
+        // test dispatcher was unset" -- and because the crash lands on whichever test is
+        // running at that moment, it surfaced as a random OTHER test failing in full
+        // suite runs. Settle here so nothing outlives the test that started it.
+        awaitCondition { !viewModel.conversionUiState.value.isConverting }
 
         coVerify(exactly = 1) { periodLogRepository.deleteAll(any()) }
     }
@@ -586,12 +685,18 @@ class OnboardingViewModelTest {
         verify(exactly = 1) { hapticManager.success() }
     }
 
+    // Was: asserted that `throwable.message` reached the UI verbatim, using a synthetic
+    // RuntimeException("invite expired") that happened to read like a sentence. Real
+    // failures here are Ktor/kotlinx throwables, so that contract put transport text --
+    // status lines, serialization complaints, sometimes a URL -- on screen in front of
+    // someone typing an invite code. The contract is now "an unrecognised failure reads
+    // as the generic sentence", with the recognised ones asserted separately below.
     @Test
-    fun `acceptBeHerSakhiInvite failure through the real store call surfaces a real message and allows retry`() = runTest {
+    fun `acceptBeHerSakhiInvite unrecognised failure shows the generic message and allows retry`() = runTest {
         val flowStore = OnboardingFlowStore("newUser")
         flowStore.send(OnboardingFlowIntent.BeHerSakhiCodeEntered(code = "ABC123"))
         val careStore = mockCareStore()
-        coEvery { careStore.acceptInvitation("ABC123", "user-1") } throws RuntimeException("invite expired")
+        coEvery { careStore.acceptInvitation("ABC123", "user-1") } throws RuntimeException("boom")
         val hapticManager = mockk<AndroidHapticManager>(relaxed = true)
         val viewModel = newViewModel(flowStore = flowStore, careStore = careStore, hapticManager = hapticManager)
         advanceUntilIdle()
@@ -602,9 +707,71 @@ class OnboardingViewModelTest {
 
         val state = viewModel.acceptUiState.value
         assertFalse(state.succeeded)
-        assertEquals("invite expired", state.error)
+        assertEquals("Something went wrong. Please try again.", state.error)
+        // The raw throwable text must never reach the UI.
+        assertFalse(state.error.orEmpty().contains("boom"))
         assertTrue(state.canRetry)
         verify(exactly = 1) { hapticManager.error() }
+    }
+
+    @Test
+    fun `acceptBeHerSakhiInvite expired code shows the expired message`() = runTest {
+        val flowStore = OnboardingFlowStore("newUser")
+        flowStore.send(OnboardingFlowIntent.BeHerSakhiCodeEntered(code = "ABC123"))
+        val careStore = mockCareStore()
+        coEvery { careStore.acceptInvitation("ABC123", "user-1") } throws
+            CareInviteException(CareInviteException.Reason.EXPIRED, 410)
+        val viewModel = newViewModel(flowStore = flowStore, careStore = careStore)
+        advanceUntilIdle()
+
+        viewModel.acceptBeHerSakhiInvite()
+        advanceUntilIdle()
+        awaitCondition { !viewModel.acceptUiState.value.isAccepting }
+
+        val state = viewModel.acceptUiState.value
+        assertEquals("This code has expired. Ask your partner to create a new invite.", state.error)
+        assertTrue(state.canRetry)
+    }
+
+    @Test
+    fun `acceptBeHerSakhiInvite unknown code shows the check-with-partner message and blocks retry`() = runTest {
+        val flowStore = OnboardingFlowStore("newUser")
+        flowStore.send(OnboardingFlowIntent.BeHerSakhiCodeEntered(code = "ABC123"))
+        val careStore = mockCareStore()
+        coEvery { careStore.acceptInvitation("ABC123", "user-1") } throws
+            CareInviteException(CareInviteException.Reason.NOT_FOUND, 404)
+        val viewModel = newViewModel(flowStore = flowStore, careStore = careStore)
+        advanceUntilIdle()
+
+        viewModel.acceptBeHerSakhiInvite()
+        advanceUntilIdle()
+        awaitCondition { !viewModel.acceptUiState.value.isAccepting }
+
+        val state = viewModel.acceptUiState.value
+        // Fixture value for onboarding_error_code_missing; the shipped string is the
+        // longer "…Please double-check with your partner." sentence.
+        assertEquals("This code doesn't exist.", state.error)
+        // Retrying the same wrong/spent code cannot succeed, so the affordance is dropped.
+        assertFalse(state.canRetry)
+    }
+
+    @Test
+    fun `acceptBeHerSakhiInvite offline failure shows the connection message`() = runTest {
+        val flowStore = OnboardingFlowStore("newUser")
+        flowStore.send(OnboardingFlowIntent.BeHerSakhiCodeEntered(code = "ABC123"))
+        val careStore = mockCareStore()
+        coEvery { careStore.acceptInvitation("ABC123", "user-1") } throws
+            java.io.IOException("unable to resolve host")
+        val viewModel = newViewModel(flowStore = flowStore, careStore = careStore)
+        advanceUntilIdle()
+
+        viewModel.acceptBeHerSakhiInvite()
+        advanceUntilIdle()
+        awaitCondition { !viewModel.acceptUiState.value.isAccepting }
+
+        val state = viewModel.acceptUiState.value
+        assertEquals("No internet connection. Please check and try again.", state.error)
+        assertTrue(state.canRetry)
     }
 
     @Test
@@ -749,7 +916,10 @@ class OnboardingViewModelTest {
         advanceUntilIdle()
         awaitCondition { !viewModel.dataSourceUiState.value.isImporting }
 
-        assertEquals("Health Connect crashed", viewModel.dataSourceUiState.value.failureMessage)
+        // Was asserting the RAW exception message. That pinned a real defect:
+        // backend exception text embeds the request URL and auth headers and was
+        // rendering as user-visible copy. UI shows app copy; cause is logged only.
+        assertEquals("Health Connect access was not granted.", viewModel.dataSourceUiState.value.failureMessage)
     }
 
     @Test
@@ -775,6 +945,9 @@ class OnboardingViewModelTest {
         advanceUntilIdle()
         gate.complete(Unit)
         advanceUntilIdle()
+        // Same reason as the conversion re-entry guard above: settle the resumed work
+        // instead of leaking it past `resetMain()`.
+        awaitCondition { !viewModel.dataSourceUiState.value.isImporting }
 
         coVerify(exactly = 1) { healthConnectManager.importOnboardingSnapshot() }
     }

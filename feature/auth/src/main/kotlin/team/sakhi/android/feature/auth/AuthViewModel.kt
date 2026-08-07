@@ -17,6 +17,7 @@ import team.sakhi.state.AuthError
 import team.sakhi.validation.PhoneCountry
 import team.sakhi.validation.PhoneValidationResult
 import team.sakhi.validation.ValidationRules
+import team.sakhi.android.common.toSafeUserMessage
 
 /**
  * Thin auth-state adapter over the shared auth repository and account classifier.
@@ -290,7 +291,7 @@ class AuthViewModel(
         return when (throwable as? AuthError) {
             AuthError.TooManyAttempts -> appContext.getString(R.string.auth_error_too_many_attempts)
             is AuthError -> throwable.userMessage
-            else -> throwable.message ?: appContext.getString(R.string.auth_error_generic)
+            else -> throwable.toSafeUserMessage(appContext, R.string.auth_error_generic)
         }
     }
 }

@@ -2,6 +2,11 @@ plugins {
     alias(libs.plugins.android.library)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
+    // Screenshot-test durability lane (2026-08-02), fourth slice. Onboarding is the one
+    // area that cannot be checked on the emulator at all: reaching it needs app data
+    // cleared, and re-login would kick the QA account off Karan's own device under the
+    // single-device rule. Screenshots are the only practical regression net here.
+    alias(libs.plugins.roborazzi)
 }
 
 android {
@@ -21,6 +26,11 @@ android {
     }
     buildFeatures {
         compose = true
+    }
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
     }
 }
 
@@ -44,6 +54,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.health.connect.client)
+    implementation(libs.androidx.browser)
     // Excludes org.jetbrains.compose.foundation/runtime: koin-compose-android pulls these
     // in at a strict 1.8.2, a duplicate of this app's real androidx.compose 1.11.4 stack
     // under the same package names -- caused a real compile failure (Modifier.weight()
@@ -56,4 +67,12 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.mockk)
     testImplementation(libs.kotlinx.coroutines.test)
+
+    // Screenshot-test durability lane.
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.roborazzi.junit.rule)
+    testImplementation(libs.compose.ui.test.junit4)
+    testImplementation(libs.compose.ui.test.manifest)
 }

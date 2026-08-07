@@ -1,5 +1,7 @@
 package team.sakhi.android.feature.auth
 
+import android.os.SystemClock
+import co.touchlab.kermit.Logger
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -27,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,15 +48,43 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import team.sakhi.android.designsystem.SakhiRadius
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.ui.KeyboardSafeScaffold
 import team.sakhi.android.ui.PrimaryButton
+import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SakhiModalSheet
 import team.sakhi.android.ui.rememberSakhiModalSheetState
+import team.sakhi.android.designsystem.sakhiSystemGray5
+import team.sakhi.android.designsystem.sakhiSystemBackground
+
+/**
+ * Trace logger for the send-OTP path, greppable on its own:
+ * `adb logcat -s SakhiAuth/Phone`.
+ *
+ * Privacy: this screen handles a phone number, which is personal data, so nothing
+ * here logs it in full (repo rule: no personal data in logs, crash reports, or
+ * notification payloads). Only the dial code, the digit count, and the last two
+ * digits are emitted — enough to tell two test accounts apart while debugging, not
+ * enough to identify a person from a captured logcat or a pasted bug report.
+ */
+private val phoneLog = Logger.withTag("SakhiAuth/Phone")
+
+private fun maskedPhone(dialCode: String, localDigits: String): String = when {
+    localDigits.isEmpty() -> "$dialCode(empty)"
+    localDigits.length <= 2 -> "$dialCode**"
+    else -> dialCode + "*".repeat(localDigits.length - 2) + localDigits.takeLast(2)
+}
+
+private fun maskedPhone(fullPhone: String): String =
+    if (fullPhone.length <= 2) "**" else "*".repeat(fullPhone.length - 2) + fullPhone.takeLast(2)
 
 /**
  * Phone-entry shell for the signed-out route. It renders only shared auth state
@@ -70,8 +101,66 @@ fun PhoneScreen(
     var showCountryPicker by remember { mutableStateOf(false) }
     var phoneFieldFocusToken by remember { mutableIntStateOf(0) }
     val countryPickerSheetState = rememberSakhiModalSheetState()
+    val countryPickerScope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    fun closeCountryPicker() {
+        countryPickerScope.launch {
+            runCatching { countryPickerSheetState.hide() }
+            showCountryPicker = false
+            phoneFieldFocusToken += 1
+        }
+    }
+
+    // Send-OTP trace bookkeeping. `sendOtpClickedAt` lets every downstream line
+    // report elapsed time since the tap, which is what actually separates a hang
+    // from a fast failure. `requestWentInFlight` separates a local validation
+    // rejection (never reached the network) from a real backend failure — both
+    // surface identically as `uiState.error`, so without this they read the same.
+    var sendOtpClickedAt by remember { mutableStateOf<Long?>(null) }
+    var requestWentInFlight by remember { mutableStateOf(false) }
+    fun sinceClick(): String =
+        sendOtpClickedAt?.let { "+${SystemClock.elapsedRealtime() - it}ms" } ?: "no tap recorded"
+
+    // Declared before the `otpSentTo` early-return below so they compose on every
+    // pass. If they sat after it, the success transition — the one that matters
+    // most — would hit the early `return` and never log at all.
+    LaunchedEffect(uiState.isSendingOtp) {
+        if (uiState.isSendingOtp) {
+            requestWentInFlight = true
+            phoneLog.d {
+                "[2] in flight (${sinceClick()}): AuthViewModel.sendOtp -> " +
+                    "AuthRepository.sendOtp -> KMM SakhiSupabaseClient -> POST /auth/v1/otp"
+            }
+        }
+    }
+    // Numbered [4], after the navigation line below, because that is the real
+    // emission order: the navigation log runs during recomposition while this
+    // effect is only dispatched on the following pass. Verified on the emulator —
+    // "[4] leaving…" printed at +727ms and this at +743ms on the same send.
+    LaunchedEffect(uiState.otpSentTo) {
+        val sentTo = uiState.otpSentTo ?: return@LaunchedEffect
+        phoneLog.i { "[4] state confirmed: otpSentTo=${maskedPhone(sentTo)} (${sinceClick()})" }
+    }
+    LaunchedEffect(uiState.error) {
+        val message = uiState.error ?: return@LaunchedEffect
+        if (requestWentInFlight) {
+            phoneLog.w { "[3] send-OTP FAILED at the backend (${sinceClick()}): $message" }
+        } else {
+            phoneLog.w { "[2] rejected by KMM phone validation, no network call made: $message" }
+        }
+    }
 
     uiState.otpSentTo?.takeIf { uiState.verifiedAuthResult == null }?.let { phone ->
+        // Logged in the composition body rather than an effect because the `return`
+        // below unmounts this screen immediately — an effect placed here would be
+        // disposed before it ran. Fires once or twice at most, for that reason.
+        phoneLog.i { "[3] OTP sent, leaving PhoneScreen -> OtpScreen for ${maskedPhone(phone)} (${sinceClick()})" }
+        // iOS `PhoneStep.dismissKeyboardBeforeContinue`: the keyboard comes down before
+        // the push, not mid-transition -- paired with `OtpField`'s own delayed
+        // auto-focus so the OTP field's keyboard only comes up once its screen has
+        // landed, instead of two IME animations overlapping the screen slide.
+        keyboardController?.hide()
         onOtpSent(phone)
         return
     }
@@ -88,13 +177,9 @@ fun PhoneScreen(
                 selectedCountry = uiState.selectedCountry,
                 onCountrySelected = { country ->
                     viewModel.selectCountry(country)
-                    showCountryPicker = false
-                    phoneFieldFocusToken += 1
+                    closeCountryPicker()
                 },
-                onDismiss = {
-                    showCountryPicker = false
-                    phoneFieldFocusToken += 1
-                },
+                onDismiss = ::closeCountryPicker,
                 asSheet = true,
             )
         }
@@ -115,7 +200,9 @@ fun PhoneScreen(
                 Text(
                     text = stringResource(R.string.auth_phone_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // iOS `OnboardingFlowView` sticky header: title is `DS.Colors.label`,
+                    // subtitle is `DS.Colors.secondaryLabel`.
+                    color = sakhiSecondaryLabel(),
                 )
 
                 PhoneEntryField(
@@ -132,17 +219,31 @@ fun PhoneScreen(
             }
         },
         footer = {
-            PrimaryButton(
-                text = if (uiState.isSendingOtp) {
+            // Shared `SakhiFooter` so the primary button sits at the identical Y as
+            // every other screen in the app (this screen previously hand-placed its
+            // own button, which put "Continue" ~480px higher than every onboarding
+            // step -- verified on-device before the fix). `KeyboardSafeScaffold`
+            // still owns lifting this above the IME.
+            SakhiFooter(
+                primaryLabel = if (uiState.isSendingOtp) {
                     stringResource(R.string.auth_phone_sending)
                 } else {
                     stringResource(R.string.auth_phone_continue)
                 },
-                onClick = viewModel::sendOtp,
-                enabled = !uiState.isSendingOtp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
+                onPrimaryClick = {
+                    sendOtpClickedAt = SystemClock.elapsedRealtime()
+                    requestWentInFlight = false
+                    phoneLog.i {
+                        "[1] Send-OTP tapped: phone=" +
+                            maskedPhone(uiState.selectedCountry.dialCode, uiState.localDigits) +
+                            ", digits=${uiState.localDigits.length}/" +
+                            "${uiState.selectedCountry.expectedLocalDigits}" +
+                            ", validation=${uiState.validation}" +
+                            ", isSendingOtp=${uiState.isSendingOtp}"
+                    }
+                    viewModel.sendOtp()
+                },
+                primaryEnabled = !uiState.isSendingOtp,
             )
         },
     )
@@ -178,18 +279,29 @@ private fun PhoneEntryField(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(SakhiSpacing.space12 + SakhiSpacing.space2)
+                // A prior pass here misread iOS's `SakhiTextField` as having no
+                // background at all -- that was a literal `.background(` text search
+                // missing `.dsCard(context)` (`SakhiDesignSystem.swift:231`), a named
+                // modifier that applies one. `.dsCard(.pink)` (the default context, and
+                // what `PhoneStep` uses) fills `DS.Colors.profileCardBackground` == plain
+                // white in light mode == `sakhiSystemBackground()`. Removing the fill
+                // entirely was a real regression, not a parity fix.
                 .background(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+                    color = sakhiSystemBackground(),
                     shape = RoundedCornerShape(SakhiRadius.xl),
                 )
-                .border(
-                    width = if (hasError) SakhiSpacing.space1 / 2 else SakhiSpacing.space1 / 4,
-                    color = if (hasError) {
-                        MaterialTheme.colorScheme.error
+                // iOS `dsErrorBorder`: 1pt `DS.Colors.pink` when `hasError`, not the
+                // Material error/red Android was drawing here.
+                .then(
+                    if (hasError) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                            shape = RoundedCornerShape(SakhiRadius.xl),
+                        )
                     } else {
-                        MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                        Modifier
                     },
-                    shape = RoundedCornerShape(SakhiRadius.xl),
                 ),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -260,9 +372,22 @@ private fun PhoneEntryField(
                     ) {
                         if (phoneDigits.isEmpty() && !isFocused) {
                             Text(
-                                text = phoneFieldLabel,
+                                // iOS passes `onboarding.phone.placeholder` -- a sample
+                                // number ("7898565431") -- straight into `SakhiTextField`
+                                // as the placeholder, so the field shows the expected
+                                // shape and length rather than restating the label above
+                                // it. Android already had that exact string
+                                // (`auth_phone_placeholder_number`) but never referenced
+                                // it, showing the generic "Phone number" instead. The
+                                // label is kept for the accessibility contentDescription,
+                                // where a sample number would read as a real value.
+                                text = stringResource(R.string.auth_phone_placeholder_number),
                                 style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f),
+                                // iOS `SakhiTextField` renders its placeholder in
+                                // `DS.Colors.placeholderText` (`UIColor.placeholderText`),
+                                // which is the same #3C3C43 @ 30% as `tertiaryLabel` — not
+                                // Material's purple grey at an invented 0.75 alpha.
+                                color = sakhiTertiaryLabel(),
                             )
                         }
                         innerTextField()

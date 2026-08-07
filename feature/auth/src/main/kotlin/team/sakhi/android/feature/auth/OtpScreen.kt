@@ -16,9 +16,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.ui.KeyboardSafeScaffold
 import team.sakhi.android.ui.OtpField
 import team.sakhi.android.ui.PrimaryButton
+import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.auth.AuthResultWithAccount
 
 /**
@@ -55,7 +58,9 @@ fun OtpScreen(
                 Text(
                     text = stringResource(R.string.auth_otp_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // Same iOS sticky-header rule as PhoneScreen: subtitle is
+                    // `DS.Colors.secondaryLabel`.
+                    color = sakhiSecondaryLabel(),
                 )
 
                 OtpField(
@@ -74,37 +79,26 @@ fun OtpScreen(
             }
         },
         footer = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
-                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
-            ) {
-                TextButton(
-                    onClick = viewModel::resendOtp,
-                    enabled = !uiState.isSendingOtp && !uiState.isVerifyingOtp,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = if (uiState.isSendingOtp) {
-                            stringResource(R.string.auth_otp_resending)
-                        } else {
-                            stringResource(R.string.auth_otp_resend_cta)
-                        },
-                    )
-                }
-
-                PrimaryButton(
-                    text = if (uiState.isVerifyingOtp) {
-                        stringResource(R.string.auth_otp_verifying)
-                    } else {
-                        stringResource(R.string.auth_phone_continue)
-                    },
-                    onClick = { viewModel.verifyOtp(uiState.otpDigits) },
-                    enabled = !uiState.isSendingOtp && !uiState.isVerifyingOtp,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
+            // Shared `SakhiFooter`: primary pinned at the same Y as every other
+            // screen, with "Resend" as the secondary action BELOW it -- matching
+            // iOS's footer order (primary first, secondary underneath). This screen
+            // previously rendered Resend *above* a hand-placed primary button.
+            SakhiFooter(
+                primaryLabel = if (uiState.isVerifyingOtp) {
+                    stringResource(R.string.auth_otp_verifying)
+                } else {
+                    stringResource(R.string.auth_phone_continue)
+                },
+                onPrimaryClick = { viewModel.verifyOtp(uiState.otpDigits) },
+                primaryEnabled = !uiState.isSendingOtp && !uiState.isVerifyingOtp,
+                secondaryLabel = if (uiState.isSendingOtp) {
+                    stringResource(R.string.auth_otp_resending)
+                } else {
+                    stringResource(R.string.auth_otp_resend_cta)
+                },
+                onSecondaryClick = viewModel::resendOtp,
+                secondaryEnabled = !uiState.isSendingOtp && !uiState.isVerifyingOtp,
+            )
         },
     )
 }

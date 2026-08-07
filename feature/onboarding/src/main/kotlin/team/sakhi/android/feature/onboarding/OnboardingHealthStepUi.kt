@@ -1,7 +1,8 @@
 package team.sakhi.android.feature.onboarding
 
-import android.app.DatePickerDialog
+import android.net.Uri
 import androidx.annotation.StringRes
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -11,9 +12,11 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -27,36 +30,46 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Info
-import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
+import androidx.compose.material3.SelectableDates
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
-import team.sakhi.android.ui.PrimaryButton
+import team.sakhi.android.ui.CloseButton
+import team.sakhi.android.ui.HeightRulerPicker
+import team.sakhi.android.ui.SakhiFooter
+import team.sakhi.android.ui.SakhiModalSheet
 import team.sakhi.android.ui.SakhiTextField
+import team.sakhi.android.ui.WeightWheelPicker
+import team.sakhi.android.ui.rememberSakhiModalSheetState
 import team.sakhi.models.HealthCondition
 import team.sakhi.onboarding.OnboardingFlowStep
 import java.time.LocalDate
@@ -65,6 +78,12 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlin.math.roundToInt
+import team.sakhi.android.designsystem.sakhiDeepRose
+import team.sakhi.android.designsystem.sakhiLightPink
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemGray5
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 
 @Composable
 fun OnboardingHealthStepScreen(
@@ -98,28 +117,34 @@ fun OnboardingHealthStepScreen(
         stringResource(R.string.onboarding_weekday_s),
     )
 
+    // Scrolling content in a weighted area, action pinned in the shared `SakhiFooter`
+    // so the primary button sits at the identical Y on every health step (and every
+    // other screen in the app) instead of riding at the end of the scroll content.
+    Column(modifier = Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .weight(1f)
             .verticalScroll(rememberScrollState())
-            .padding(SakhiSpacing.space6),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+            .padding(horizontal = SakhiSpacing.space6)
+            .padding(top = SakhiSpacing.space6),
     ) {
-        LinearProgressIndicator(
-            progress = { navStateProgress.coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Text(
+        // iOS has no linear progress bar here -- none of the health steps
+        // (`DateOfBirthStep`, `HeightStep`, `WeightStep`, etc.) set `progressDots`,
+        // the only progress affordance `OnboardingFlowView`'s shell renders, so this
+        // screen shows neither dots nor a bar on iOS. This was an Android-only
+        // addition with no iOS counterpart.
+        OnboardingStepTitle(
             text = stringResource(copy.titleRes),
-            style = MaterialTheme.typography.headlineMedium,
+            modifier = Modifier.padding(top = SakhiSpacing.space4),
         )
         Text(
             text = stringResource(copy.subtitleRes),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
+            modifier = Modifier.padding(top = SakhiSpacing.space1, bottom = OnboardingHeaderContentGap),
         )
 
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4)) {
         when (step) {
             OnboardingFlowStep.DateOfBirth -> DateOfBirthStepContent(
                 dateOfBirth = uiState.dateOfBirth,
@@ -173,55 +198,50 @@ fun OnboardingHealthStepScreen(
                 color = MaterialTheme.colorScheme.error,
             )
         }
-
-        PrimaryButton(
-            text = stringResource(R.string.onboarding_continue),
-            onClick = onContinue,
-            modifier = Modifier.padding(top = SakhiSpacing.space2),
-        )
-
-        if (canGoBack) {
-            TextButton(onClick = onBack) {
-                Text(stringResource(R.string.onboarding_back))
-            }
         }
+
+    }
+
+        // Back is the shared top-bar back button owned by `OnboardingFlowHost`
+        // (matching iOS's single top-of-screen `DSBackButton`), so no redundant
+        // bottom back button here. `canGoBack`/`onBack` stay on the signature since
+        // the host still passes them and the system `BackHandler` uses the same path.
+        SakhiFooter(
+            primaryLabel = stringResource(R.string.onboarding_continue),
+            onPrimaryClick = onContinue,
+        )
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DateOfBirthStepContent(
     dateOfBirth: LocalDate,
     onDateSelected: (LocalDate) -> Unit,
 ) {
-    val context = LocalContext.current
     val zoneId = remember { ZoneId.systemDefault() }
     val minDate = remember { LocalDate.now().minusYears(80) }
     val maxDate = remember { LocalDate.now().minusYears(12) }
     val dateOfBirthFormatter = rememberDateFormatter(R.string.onboarding_date_of_birth_format)
+    var showPicker by remember { mutableStateOf(false) }
 
-    PinkCard(
+    // Row styling ported from iOS's `OnboardingDateOfBirthPicker` (`dsCard(.pink)` row,
+    // formatted date + pink calendar glyph). The picker itself is deliberately NOT a
+    // pixel port of iOS's wheel sheet -- per Karan, "native android ka component use
+    // karo, to pick date aur validation sahi rahegi": Compose Material3's own
+    // `DatePickerDialog`/`DatePicker` handles date validity (leap years, days-per-month,
+    // the min/max bound) correctly out of the box, which a hand-rolled day/month/year
+    // wheel has to get right itself. Explicit, deliberate deviation from iOS here.
+    Surface(
+        shape = RoundedCornerShape(SakhiRadius.xl),
+        color = sakhiSystemBackground(),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        // iOS presents a wheel-style DOB picker in a bottom sheet. Android uses the
-        // platform date picker here until the shared sheet lane is in place.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(SakhiSpacing.space12 + SakhiSpacing.space2)
-                .clickable {
-                    DatePickerDialog(
-                        context,
-                        { _, year, month, dayOfMonth ->
-                            onDateSelected(LocalDate.of(year, month + 1, dayOfMonth))
-                        },
-                        dateOfBirth.year,
-                        dateOfBirth.monthValue - 1,
-                        dateOfBirth.dayOfMonth,
-                    ).apply {
-                        datePicker.minDate = minDate.atStartOfDay(zoneId).toInstant().toEpochMilli()
-                        datePicker.maxDate = maxDate.atStartOfDay(zoneId).toInstant().toEpochMilli()
-                    }.show()
-                }
+                .clickable { showPicker = true }
                 .padding(horizontal = SakhiSpacing.space4),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
@@ -237,6 +257,45 @@ private fun DateOfBirthStepContent(
             )
         }
     }
+
+    if (showPicker) {
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = dateOfBirth.atStartOfDay(zoneId).toInstant().toEpochMilli(),
+            selectableDates = remember(minDate, maxDate) {
+                object : SelectableDates {
+                    override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                        val date = java.time.Instant.ofEpochMilli(utcTimeMillis)
+                            .atZone(java.time.ZoneOffset.UTC)
+                            .toLocalDate()
+                        return !date.isBefore(minDate) && !date.isAfter(maxDate)
+                    }
+                }
+            },
+        )
+        DatePickerDialog(
+            onDismissRequest = { showPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val picked = java.time.Instant.ofEpochMilli(millis)
+                            .atZone(java.time.ZoneOffset.UTC)
+                            .toLocalDate()
+                        onDateSelected(picked)
+                    }
+                    showPicker = false
+                }) {
+                    Text(stringResource(R.string.onboarding_dob_sheet_done))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) {
+                    Text(stringResource(R.string.onboarding_cancel))
+                }
+            },
+        ) {
+            DatePicker(state = datePickerState)
+        }
+    }
 }
 
 @Composable
@@ -246,14 +305,20 @@ private fun HeightStepContent(
     onUnitChanged: (Boolean) -> Unit,
     onHeightCmChanged: (Double) -> Unit,
 ) {
+    val hapticManager = koinInject<AndroidHapticManager>()
     val totalInches = ((heightCm / INCH_TO_CM).roundToNearestInt()).coerceIn(36, 84)
     val feet = totalInches / 12
     val inches = totalInches % 12
     val displayCm = heightCm.coerceIn(100.0, 220.0).roundToNearestInt()
 
-    PinkCard {
+    // Karan: match Weight's card height to this one ("weight ka ruler toh perfect hai"
+    // -- only the container height, not the wheel itself). `heightIn(min=)` rather than
+    // a hard `height()` so this card's own natural size (already taller than the
+    // minimum) is untouched; Weight's shorter natural content is the one actually
+    // stretched up to match.
+    PinkCard(modifier = Modifier.heightIn(min = HealthPickerCardHeight)) {
         Column(
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
         ) {
             SegmentedToggle(
                 options = listOf(
@@ -264,45 +329,59 @@ private fun HeightStepContent(
                 onSelected = { onUnitChanged(it == 0) },
             )
 
+            // iOS `HeightStepContent`: value column (left) + ruler (right) in one
+            // `HStack(spacing: .m)`, the value column pinned to the ruler's own
+            // 300pt height so both stay vertically centred as one unit.
+            //
+            // `fillMaxWidth()` matters here: without it the Row sizes to wrap its
+            // content instead of spanning the card, so the ruler's `weight(1f)` has no
+            // real extra space to claim and collapses to a narrow measured width --
+            // reported live as "ruler kafi kam width ka ho rakha hai."
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (useImperial) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
-                        verticalAlignment = Alignment.Bottom,
-                    ) {
-                        LargeValueText(text = feet.toString())
-                        UnitText(text = stringResource(R.string.onboarding_unit_ft))
-                        LargeValueText(text = inches.toString())
-                        UnitText(text = stringResource(R.string.onboarding_unit_in))
-                    }
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
-                        verticalAlignment = Alignment.Bottom,
-                    ) {
-                        LargeValueText(text = displayCm.toString())
-                        UnitText(text = stringResource(R.string.onboarding_unit_cm))
+                Column(
+                    verticalArrangement = Arrangement.Center,
+                    modifier = Modifier.height(HeightRulerPickerHeight),
+                ) {
+                    if (useImperial) {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            LargeValueText(text = feet.toString(), fontSize = HeightValueFontSize)
+                            UnitText(text = stringResource(R.string.onboarding_unit_ft), fontSize = HeightUnitFontSize)
+                            Spacer(modifier = Modifier.width(SakhiSpacing.space1))
+                            LargeValueText(text = inches.toString(), fontSize = HeightValueFontSize)
+                            UnitText(text = stringResource(R.string.onboarding_unit_in), fontSize = HeightUnitFontSize)
+                        }
+                    } else {
+                        Row(verticalAlignment = Alignment.Bottom) {
+                            LargeValueText(text = displayCm.toString(), fontSize = HeightValueFontSize)
+                            UnitText(text = stringResource(R.string.onboarding_unit_cm), fontSize = HeightUnitFontSize)
+                        }
                     }
                 }
-            }
 
-            // iOS uses a custom vertical ruler picker. Android keeps the same
-            // canonical cm state and unit toggle, but uses a slider for now.
-            Slider(
-                value = if (useImperial) totalInches.toFloat() else displayCm.toFloat(),
-                onValueChange = { next ->
-                    if (useImperial) {
-                        onHeightCmChanged(next.toDouble().roundToNearestInt() * INCH_TO_CM)
-                    } else {
-                        onHeightCmChanged(next.toDouble().roundToNearestInt().toDouble())
-                    }
-                },
-                valueRange = if (useImperial) 36f..84f else 100f..220f,
-            )
+                // iOS `.id(weightUnit)`-equivalent: forces fresh internal drag state
+                // when the unit toggle flips, instead of reusing a `dragBase` computed
+                // against the previous unit's scale.
+                key(useImperial) {
+                    HeightRulerPicker(
+                        value = if (useImperial) totalInches.toFloat() else displayCm.toFloat(),
+                        range = if (useImperial) 36f..84f else 100f..220f,
+                        onValueChange = { next ->
+                            if (useImperial) {
+                                onHeightCmChanged(next.toDouble() * INCH_TO_CM)
+                            } else {
+                                onHeightCmChanged(next.toDouble())
+                            }
+                        },
+                        onHapticSelection = { hapticManager.selection() },
+                        onHapticImpact = { hapticManager.impact(HapticImpact.LIGHT) },
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
         }
     }
 }
@@ -314,15 +393,25 @@ private fun WeightStepContent(
     onUnitChanged: (Boolean) -> Unit,
     onWeightKgChanged: (Double) -> Unit,
 ) {
+    val hapticManager = koinInject<AndroidHapticManager>()
     val displayWeight = if (useMetric) {
         weightKg.coerceIn(30.0, 150.0).roundToNearestInt()
     } else {
         (weightKg.coerceIn(30.0, 150.0) * POUNDS_PER_KILOGRAM).roundToNearestInt()
     }
 
-    PinkCard {
+    // Same `heightIn(min=)` as `HeightStepContent`'s card. Deliberately TOP-anchored
+    // (plain `spacedBy`, no `CenterVertically`): Karan asked for the card's extra height
+    // to show up as breathing room directly under the segmented toggle, which
+    // `SegmentedToggle` now owns via its own bottom gap. Centring the column instead
+    // spread that height above and below the whole group, which is not the ask.
+    PinkCard(modifier = Modifier.heightIn(min = HealthPickerCardHeight)) {
+        // NOTE: do not give any child here a `weight(1f)`. The card sets only a
+        // *minimum* height, so this column's max height is unbounded, and a weighted
+        // child resolves to zero height -- which silently made the value text and the
+        // whole dial disappear when it was tried.
         Column(
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
         ) {
             SegmentedToggle(
                 options = listOf(
@@ -338,30 +427,33 @@ private fun WeightStepContent(
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.Bottom,
             ) {
-                LargeValueText(text = displayWeight.toString())
+                LargeValueText(text = displayWeight.toString(), fontSize = WeightValueFontSize)
                 Spacer(modifier = Modifier.width(SakhiSpacing.space1))
                 UnitText(
                     text = if (useMetric) {
                         stringResource(R.string.onboarding_unit_kg)
                     } else {
                         stringResource(R.string.onboarding_unit_lbs)
-                    }
+                    },
+                    fontSize = WeightUnitFontSize,
                 )
             }
 
-            // iOS uses a rotating dial wheel here. Android uses a slider until the
-            // matching custom wheel component is built.
-            Slider(
-                value = displayWeight.toFloat(),
-                onValueChange = { next ->
-                    val rounded = next.toDouble().roundToNearestInt()
-                    onWeightKgChanged(
-                        if (useMetric) rounded.toDouble()
-                        else rounded / POUNDS_PER_KILOGRAM
-                    )
-                },
-                valueRange = if (useMetric) 30f..150f else 66f..331f,
-            )
+            // iOS `.id(weightUnit)`-equivalent -- see the matching comment on
+            // `HeightRulerPicker` above.
+            key(useMetric) {
+                WeightWheelPicker(
+                    value = displayWeight,
+                    range = if (useMetric) 30..150 else 66..331,
+                    onValueChange = { next ->
+                        onWeightKgChanged(
+                            if (useMetric) next.toDouble() else next / POUNDS_PER_KILOGRAM,
+                        )
+                    },
+                    onHapticSelection = { hapticManager.selection() },
+                    onHapticImpact = { hapticManager.impact(HapticImpact.LIGHT) },
+                )
+            }
         }
     }
 }
@@ -388,7 +480,7 @@ private fun LastPeriodStepContent(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = onPreviousMonth) {
+                IconButton(onClick = onPreviousMonth, modifier = Modifier.size(32.dp)) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = stringResource(R.string.onboarding_previous_month),
@@ -402,6 +494,7 @@ private fun LastPeriodStepContent(
                 IconButton(
                     onClick = onNextMonth,
                     enabled = displayedMonth < currentMonth,
+                    modifier = Modifier.size(32.dp),
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowForward,
@@ -418,26 +511,37 @@ private fun LastPeriodStepContent(
                     Text(
                         text = label,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        // Weekday letters, same role as `SakhiCalendar.weekdayRow`, which
+                        // iOS renders in `DS.Colors.tertiaryLabel` -- not secondary.
+                        color = sakhiTertiaryLabel(),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.weight(1f),
                     )
                 }
             }
 
-            days.chunked(7).forEach { week ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
-                ) {
-                    week.forEach { date ->
-                        CalendarDayCell(
-                            date = date,
-                            isSelected = date == selectedDate,
-                            enabled = date != null && !date.isAfter(LocalDate.now()),
-                            onClick = { if (date != null) onDateSelected(date) },
-                            modifier = Modifier.weight(1f),
-                        )
+            // iOS `SakhiCalendarView(cellHeight: 34, rowSpacing: 2, navButtonSize: 32)`
+            // -- the outer Column's `spacedBy(space3)` (12dp) was applying between
+            // every week row too, not just between the header/weekday/grid blocks.
+            // Across up to 6 week rows that's ~50dp of excess height on its own --
+            // reported live as the card getting clipped by the footer. Own
+            // tightly-spaced Column for just the day grid, separate from the looser
+            // 12dp gap above it.
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                days.chunked(7).forEach { week ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+                    ) {
+                        week.forEach { date ->
+                            CalendarDayCell(
+                                date = date,
+                                isSelected = date == selectedDate,
+                                enabled = date != null && !date.isAfter(LocalDate.now()),
+                                onClick = { if (date != null) onDateSelected(date) },
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
                 }
             }
@@ -455,8 +559,14 @@ private fun DaysLengthStepContent(
 ) {
     var showInfo by remember { mutableStateOf(false) }
 
+    // iOS `PeriodLengthContent`/`CycleLengthContent`: `VStack(alignment: .trailing)`, a
+    // plain text button below the field ("What is period length?", 13pt pink, no icon),
+    // not the Material `TextButton` + info-glyph Android had. `.days` suffix on the field
+    // is `.lato(17)` `secondaryLabel`, matching what Android's `trailingContent` already
+    // did -- untouched.
     Column(
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
     ) {
         SakhiTextField(
             value = value,
@@ -466,55 +576,136 @@ private fun DaysLengthStepContent(
             trailingContent = {
                 Text(
                     text = stringResource(R.string.onboarding_days_suffix),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 17.sp,
+                    color = sakhiSecondaryLabel(),
                 )
             },
         )
 
-        TextButton(
-            onClick = { showInfo = true },
-            modifier = Modifier.align(Alignment.End),
-        ) {
-            Icon(
-                imageVector = Icons.Rounded.Info,
-                contentDescription = null,
-                modifier = Modifier.size(SakhiSpacing.space4),
-            )
-            Spacer(modifier = Modifier.width(SakhiSpacing.space1))
-            Text(infoButtonText)
-        }
+        Text(
+            text = infoButtonText,
+            fontSize = 13.sp,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { showInfo = true },
+        )
     }
 
     if (showInfo) {
-        AlertDialog(
-            onDismissRequest = { showInfo = false },
-            title = { Text(stringResource(info.titleRes)) },
-            text = {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-                ) {
-                    Text(stringResource(info.explanationRes))
-                    InfoPill(
+        DaysInfoSheet(info = info, onDismiss = { showInfo = false })
+    }
+}
+
+/**
+ * Real port of iOS's `DaysInfoSheet` (`OnboardingInputPickers.swift`) -- a `.medium`
+ * detent bottom sheet, not an `AlertDialog`. Header row (title left, close button
+ * right), explanation paragraph, two stat pills (normal range / average) side by side
+ * on `DS.Colors.lightPink`, and a tappable ACOG source line. The actual Safari/Custom
+ * Tabs launch for the source link is left as a plain external-browser `Intent` rather
+ * than an in-app browser sheet -- iOS's `SFSafariViewController` has no direct Compose
+ * equivalent, and a full custom-tab integration is its own scoped piece of work, not
+ * this pass's layout/colour parity fix.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DaysInfoSheet(info: DaysInfo, onDismiss: () -> Unit) {
+    val sheetState = rememberSakhiModalSheetState()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val sourceUrl = stringResource(R.string.onboarding_info_source_url)
+
+    SakhiModalSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+    ) {
+        // `SakhiModalSheet`'s own `containerColor` is deliberately `Color.Transparent`
+        // (its host content is expected to supply its own fill -- `CountryPicker`, the
+        // only other real sheet content in the app, already does this via
+        // `.background(colorScheme.background)`). This Column never did, so the sheet
+        // rendered as floating text over the scrim with no visible card at all --
+        // reported live as "background bhi nahi hai... weird si aa rahi hai."
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(sakhiSystemBackground()),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SakhiSpacing.space6)
+                    .padding(top = SakhiSpacing.space5, bottom = SakhiSpacing.space4),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(info.titleRes),
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                )
+                // Shared `CloseButton` (plain white circle, no stroke, no shadow) instead
+                // of a hand-rolled `IconButton` -- per Karan: "use cross button in this
+                // sheet jo header mai ho raha hai," matching every other close affordance
+                // in the app rather than a one-off.
+                CloseButton(onClick = onDismiss)
+            }
+
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = SakhiSpacing.space6)
+                    .padding(bottom = SakhiSpacing.space8),
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space6),
+            ) {
+                Text(
+                    text = stringResource(info.explanationRes),
+                    style = MaterialTheme.typography.bodyMedium,
+                    lineHeight = 22.sp,
+                )
+
+                Row(horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
+                    InfoStatPill(
                         label = stringResource(R.string.onboarding_info_normal_range),
                         value = stringResource(info.normalRangeRes),
+                        modifier = Modifier.weight(1f),
                     )
-                    InfoPill(
+                    InfoStatPill(
                         label = stringResource(R.string.onboarding_info_average),
                         value = stringResource(info.averageRes),
-                    )
-                    Text(
-                        text = stringResource(R.string.onboarding_info_source_acog),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f),
                     )
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = { showInfo = false }) {
-                    Text(stringResource(R.string.onboarding_done))
-                }
-            },
+
+                Text(
+                    text = stringResource(R.string.onboarding_info_source_acog),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    // Chrome Custom Tabs -- the standard Android equivalent of iOS's
+                    // `SFSafariViewController`, opening the ACOG source inside an in-app
+                    // web view instead of handing off to the external browser app. Per
+                    // Karan: "original link open ho jaye web view mai."
+                    modifier = Modifier.clickable {
+                        CustomTabsIntent.Builder().build().launchUrl(context, Uri.parse(sourceUrl))
+                    },
+                )
+            }
+        }
+    }
+}
+
+/** iOS `statPill`: `DS.Colors.lightPink` fill, `DS.Colors.deepRose` text, `onboardingCard` radius. */
+@Composable
+private fun InfoStatPill(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .background(sakhiLightPink(), RoundedCornerShape(SakhiRadius.xl))
+            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
+        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = sakhiDeepRose().copy(alpha = 0.65f),
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = sakhiDeepRose(),
         )
     }
 }
@@ -525,8 +716,17 @@ private fun HealthConditionsStepContent(
     onConditionToggled: (HealthCondition) -> Unit,
 ) {
     val hapticManager = koinInject<AndroidHapticManager>()
+    // iOS `HealthConditionContent`: `ScrollView(.vertical) { ... }.frame(maxHeight:
+    // 320)` -- the row list scrolls internally past 320pt rather than growing the
+    // card without bound. Android had neither cap, so with enough conditions the card
+    // grew past the footer -- reported live as "container... footer ke niche cut ho
+    // raha hai."
     PinkCard {
-        Column {
+        Column(
+            modifier = Modifier
+                .heightIn(max = 320.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
             HealthCondition.entries.forEachIndexed { index, condition ->
                 HealthConditionRow(
                     condition = condition,
@@ -577,8 +777,8 @@ private fun HealthConditionRow(
             )
             Text(
                 text = condition.shortDescription,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                color = sakhiSecondaryLabel(),
             )
         }
         Box(
@@ -613,11 +813,20 @@ private fun SegmentedToggle(
     selectedIndex: Int,
     onSelected: (Int) -> Unit,
 ) {
+    // iOS: track is `DS.Colors.gray5` (`UIColor.systemGray5`, neutral grey), not the app's
+    // pink page background; the selected pill is `DS.Colors.profileCardBackground` (white)
+    // with a soft drop shadow, not a flat `colorScheme.surface` (this app's pink-tinted
+    // brand surface) -- same root-cause bug pattern as `PinkCard` above. Label size is
+    // `.lato(16, ...)`, not the default `bodyMedium` (14sp via the token scale).
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            // Karan: the extra card height should land BELOW the segment, not be spread
+            // around the whole card. Owned here rather than at each call site so every
+            // container using this toggle gets the same gap automatically.
+            .padding(bottom = SegmentedToggleBottomGap)
             .background(
-                color = MaterialTheme.colorScheme.background,
+                color = sakhiSystemGray5(),
                 shape = RoundedCornerShape(SakhiRadius.full),
             )
             .padding(SakhiSpacing.space1),
@@ -627,8 +836,15 @@ private fun SegmentedToggle(
             Box(
                 modifier = Modifier
                     .weight(1f)
+                    .then(
+                        if (selected) {
+                            Modifier.shadow(elevation = 3.dp, shape = RoundedCornerShape(SakhiRadius.full))
+                        } else {
+                            Modifier
+                        },
+                    )
                     .background(
-                        color = if (selected) MaterialTheme.colorScheme.surface else androidx.compose.ui.graphics.Color.Transparent,
+                        color = if (selected) sakhiSystemBackground() else Color.Transparent,
                         shape = RoundedCornerShape(SakhiRadius.full),
                     )
                     .clickable { onSelected(index) }
@@ -637,9 +853,8 @@ private fun SegmentedToggle(
             ) {
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.bodyMedium.copy(
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                    ),
+                    fontSize = 16.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                     color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                 )
             }
@@ -652,43 +867,22 @@ private fun PinkCard(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // Same root-cause bug class found across this whole session: iOS `dsCard(.pink)` fills
+    // `DS.Colors.profileCardBackground` (plain white in light mode), not a tinted surface.
+    // `colorScheme.surface` is bound to the brand `lightPink` in this app's theme, which is
+    // why every card in this flow (DOB, Height, Weight, HealthConditions) read pink-tinted
+    // instead of white -- likely the single biggest driver of "ekdum alag hai" (completely
+    // different) next to iOS.
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(SakhiRadius.xl),
-        color = MaterialTheme.colorScheme.surface,
+        color = sakhiSystemBackground(),
     ) {
         Column(
             modifier = Modifier.padding(SakhiSpacing.space4),
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
             content = content,
         )
-    }
-}
-
-@Composable
-private fun InfoPill(
-    label: String,
-    value: String,
-) {
-    Surface(
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-        shape = RoundedCornerShape(SakhiRadius.lg),
-    ) {
-        Column(
-            modifier = Modifier.padding(SakhiSpacing.space3),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
-            )
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
     }
 }
 
@@ -717,31 +911,63 @@ private fun CalendarDayCell(
                 date == null -> androidx.compose.ui.graphics.Color.Transparent
                 isSelected -> MaterialTheme.colorScheme.onPrimary
                 enabled -> MaterialTheme.colorScheme.onSurface
-                else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                else -> sakhiSecondaryLabel().copy(alpha = 0.4f)
             },
         )
     }
 }
 
+/**
+ * iOS uses two different sizes here, not one shared token: Height's ft/in/cm digits are
+ * `.lato(38, .bold)`, Weight's are `DS.Typography.largeValue` = `.lato(64, .bold)` -- so
+ * [fontSize] is required, not defaulted, forcing every call site to state which one it
+ * means rather than silently sharing a value that matches neither.
+ */
 @Composable
-private fun LargeValueText(text: String) {
+private fun LargeValueText(text: String, fontSize: androidx.compose.ui.unit.TextUnit) {
     Text(
         text = text,
-        style = MaterialTheme.typography.headlineMedium.copy(
-            fontSize = SakhiFontSize.xxxxl,
-            fontWeight = FontWeight.Bold,
-        ),
+        fontSize = fontSize,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.onSurface,
     )
 }
 
+/** Height's unit labels are `.lato(17)`, Weight's is `DS.Typography.valueUnit` = `.lato(22)`. */
 @Composable
-private fun UnitText(text: String) {
+private fun UnitText(text: String, fontSize: androidx.compose.ui.unit.TextUnit) {
     Text(
         text = text,
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontSize = fontSize,
+        color = sakhiSecondaryLabel(),
     )
 }
+
+private val HeightValueFontSize = 38.sp
+private val HeightUnitFontSize = 17.sp
+private val WeightValueFontSize = 64.sp
+private val WeightUnitFontSize = 22.sp
+// Must match `HeightRulerPicker.kt`'s `rulerHeight` -- reduced together, live, because
+// the 300dp card was getting clipped by the footer on-device.
+private val HeightRulerPickerHeight = 260.dp
+
+/**
+ * Breathing room under the segmented unit toggle. Owned by `SegmentedToggle` itself so
+ * every onboarding container that uses it picks this up, rather than each call site
+ * remembering to add its own bottom padding.
+ */
+private val SegmentedToggleBottomGap = 12.dp
+
+/**
+ * Shared minimum card height for `HeightStepContent`/`WeightStepContent` -- Karan
+ * asked for the two containers to be the same height (Weight's card was naturally
+ * much shorter, since `WeightWheelPicker` at 148dp is far smaller than the ruler),
+ * without changing either picker itself. Reduced alongside the ruler height above.
+ * Nudged up slightly (340 -> 364) on Karan's ask; the added height lands under the
+ * toggle via `SegmentedToggleBottomGap`, and stays clear of the footer that forced the
+ * earlier reduction.
+ */
+private val HealthPickerCardHeight = 364.dp
 
 private data class HealthStepCopy(
     val titleRes: Int,

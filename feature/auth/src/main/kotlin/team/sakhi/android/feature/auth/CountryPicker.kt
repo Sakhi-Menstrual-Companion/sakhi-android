@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.auth
 
+import team.sakhi.android.ui.CloseButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +45,8 @@ import kotlinx.coroutines.delay
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.ui.SakhiTextField
 import team.sakhi.validation.PhoneCountry
 
@@ -109,13 +112,10 @@ fun CountryPicker(
                 style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
             )
-            IconButton(onClick = onDismiss) {
-                Icon(
-                    imageVector = Icons.Rounded.Close,
-                    contentDescription = stringResource(R.string.auth_country_picker_dismiss),
-                    tint = MaterialTheme.colorScheme.onSurface,
-                )
-            }
+            CloseButton(
+                onClick = onDismiss,
+                contentDescription = stringResource(R.string.auth_country_picker_dismiss),
+            )
         }
 
         val searchFieldLabel = stringResource(R.string.auth_country_picker_search_placeholder)
@@ -128,7 +128,9 @@ fun CountryPicker(
                 Icon(
                     imageVector = Icons.Rounded.Search,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    // iOS `CountryPickerSheet`: `Image(systemName: "magnifyingglass")
+                    // .foregroundColor(DS.Colors.tertiaryLabel)`.
+                    tint = sakhiTertiaryLabel(),
                 )
             },
             trailingContent = {
@@ -136,7 +138,9 @@ fun CountryPicker(
                     Icon(
                         imageVector = Icons.Rounded.Close,
                         contentDescription = stringResource(R.string.auth_country_picker_clear_search),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        // iOS: `Image(systemName: "xmark.circle.fill")
+                        // .foregroundColor(DS.Colors.tertiaryLabel)`.
+                        tint = sakhiTertiaryLabel(),
                         modifier = Modifier.clickable { query = "" },
                     )
                 }
@@ -229,7 +233,10 @@ private fun CountryRow(
     onClick: () -> Unit,
 ) {
     val rowColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-    val dialColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    // iOS: dial code is `isSelected ? DS.Colors.pink : DS.Colors.secondaryLabel`.
+    // `onSurfaceVariant` is a slot this theme never sets, so it was Material's faintly
+    // purple #49454F rather than iOS's neutral ink.
+    val dialColor = if (isSelected) MaterialTheme.colorScheme.primary else sakhiSecondaryLabel()
 
     Box(
         modifier = Modifier

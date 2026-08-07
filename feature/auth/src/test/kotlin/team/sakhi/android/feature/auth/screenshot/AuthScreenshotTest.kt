@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
+import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
 import io.mockk.mockk
 import org.junit.Rule
@@ -35,7 +36,10 @@ import team.sakhi.auth.AuthRepository
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34])
+// Pixel 5 rather than Robolectric's 320x470 default. At the default width the OTP row is
+// squeezed and the baseline showed only **five** boxes, while the code (and iOS) use six --
+// a capture that misrepresents the screen it exists to pin is worse than no capture.
+@Config(sdk = [34], qualifiers = RobolectricDeviceQualifiers.Pixel5)
 class AuthScreenshotTest {
 
     @get:Rule
