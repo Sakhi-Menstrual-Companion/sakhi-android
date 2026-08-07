@@ -63,6 +63,7 @@ import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.ui.SakhiListDivider
+import team.sakhi.android.ui.SakhiSwitch
 
 private val PrivacySecurityDividerInset = SakhiSpacing.space4 + 24.dp + SakhiSpacing.space3
 private val PrivacySecurityRowIconSize = 15.dp
@@ -355,7 +356,7 @@ private fun PrivacyToggleRow(
                 color = sakhiSecondaryLabel(),
             )
         }
-        androidx.compose.material3.Switch(
+        SakhiSwitch(
             checked = checked,
             onCheckedChange = { value ->
                 checked = value

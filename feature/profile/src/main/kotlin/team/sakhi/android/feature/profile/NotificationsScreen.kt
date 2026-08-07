@@ -63,6 +63,7 @@ import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.ui.SakhiListDivider
+import team.sakhi.android.ui.SakhiSwitch
 
 /**
  * Ports iOS `NotificationsSettingsView.swift`'s toggle rows, persisted through
@@ -357,7 +358,7 @@ private fun ToggleRow(
                 color = sakhiSecondaryLabel(),
             )
         }
-        Switch(
+        SakhiSwitch(
             checked = checked,
             onCheckedChange = { value ->
                 checked = value

@@ -79,6 +79,7 @@ import team.sakhi.android.ui.GlassCard
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SakhiListDivider
+import team.sakhi.android.ui.SakhiSwitch
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.android.ui.ToastManager
 import team.sakhi.android.ui.ToastType
@@ -1227,7 +1228,7 @@ private fun PermissionToggleRow(title: String, checked: Boolean, onCheckedChange
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        SakhiSwitch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 

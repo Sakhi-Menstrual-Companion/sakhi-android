@@ -62,6 +62,7 @@ import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.ui.SakhiListDivider
+import team.sakhi.android.ui.SakhiSwitch
 
 private val AppearanceRowDividerInset = SakhiSpacing.space4 + 24.dp + SakhiSpacing.space3
 private val AppearanceThemeIconSize = 15.dp
@@ -364,7 +365,7 @@ internal fun PreferenceToggleRow(
                 color = sakhiSecondaryLabel(),
             )
         }
-        Switch(
+        SakhiSwitch(
             checked = checked,
             onCheckedChange = { value ->
                 checked = value

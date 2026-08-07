@@ -101,6 +101,7 @@ import team.sakhi.android.ui.SakhiAlertTone
 import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SakhiLoadingContext
 import team.sakhi.android.ui.SakhiLoadingView
+import team.sakhi.android.ui.SakhiSwitch
 import team.sakhi.android.ui.SakhiTextField
 import team.sakhi.android.ui.sakhiScreenTransitionSpec
 import team.sakhi.android.ui.SecondaryButton
@@ -713,7 +714,7 @@ private fun PermissionCard(
                 )
             }
 
-            Switch(
+            SakhiSwitch(
                 checked = isOn,
                 onCheckedChange = onToggle,
             )

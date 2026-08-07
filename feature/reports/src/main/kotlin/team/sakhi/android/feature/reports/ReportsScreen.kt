@@ -86,6 +86,7 @@ import team.sakhi.report.CalendarMonth
 import team.sakhi.report.InsightSeverity
 import team.sakhi.report.ReportData
 import team.sakhi.report.ReportInsight
+import team.sakhi.android.ui.SakhiSwitch
 
 /** Android port of the iOS health-report flow: config sheet, real PDF generation, then preview/share. */
 @Composable
@@ -341,7 +342,7 @@ private fun SectionToggleRow(
                 color = sakhiSecondaryLabel(),
             )
         }
-        Switch(
+        SakhiSwitch(
             checked = selected,
             onCheckedChange = { onToggle() },
         )
