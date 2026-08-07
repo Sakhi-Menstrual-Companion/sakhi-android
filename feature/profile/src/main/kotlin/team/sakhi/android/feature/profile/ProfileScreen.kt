@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VerifiedUser
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -73,6 +72,7 @@ import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.designsystem.sakhiWarning
 import team.sakhi.android.ui.ProfileSectionLabel
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.models.CycleHealthStatus
 import team.sakhi.preferences.ThemeMode
@@ -235,7 +235,7 @@ fun ProfileScreen(
                         group.items.forEachIndexed { index, item ->
                             ProfileSettingRow(item = item)
                             if (index != group.items.lastIndex) {
-                                HorizontalDivider(modifier = Modifier.padding(start = ProfileSettingDividerInset))
+                                SakhiListDivider(startInset = ProfileSettingDividerInset)
                             }
                         }
                     }
@@ -337,7 +337,7 @@ private fun ProfileCard(
             }
 
             if (!isPartnerRole) {
-                HorizontalDivider()
+                SakhiListDivider()
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

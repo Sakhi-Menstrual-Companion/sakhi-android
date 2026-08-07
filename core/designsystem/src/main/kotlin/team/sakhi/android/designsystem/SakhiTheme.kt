@@ -262,6 +262,20 @@ fun sakhiTertiaryLabel(): androidx.compose.ui.graphics.Color =
         androidx.compose.ui.graphics.Color(0xFF3C3C43).copy(alpha = 0.30f)
     }
 
+/**
+ * iOS `DS.Colors.separator` (`UIColor.separator`) — the hairline between list rows.
+ *
+ * Distinct from Material's `outlineVariant`, which is a much heavier grey and made the
+ * profile list read as ruled paper next to iOS's near-invisible rule.
+ */
+@Composable
+fun sakhiSeparator(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) {
+        androidx.compose.ui.graphics.Color(0xFF545458).copy(alpha = 0.65f)
+    } else {
+        androidx.compose.ui.graphics.Color(0xFF3C3C43).copy(alpha = 0.36f)
+    }
+
 /** iOS `DS.Colors.confirm` — the green used for "Synced & secure" and a regular cycle. */
 @Composable
 fun sakhiConfirm(): androidx.compose.ui.graphics.Color =
