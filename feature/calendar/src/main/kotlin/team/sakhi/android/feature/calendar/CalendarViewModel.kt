@@ -131,6 +131,19 @@ class CalendarViewModel(
         hapticManager.selection()
     }
 
+    /**
+     * Re-reads logs and cycles for the visible month.
+     *
+     * The grid is driven by a `combine(session, visibleMonth)` flow, so it only reloads
+     * when one of those changes -- neither of which a log does. Logging a period
+     * therefore updated Home immediately but left the calendar showing the old marks
+     * until the app was restarted. Callers invoke this after a save or delete.
+     */
+    fun refreshAfterLogChange() {
+        val session = sessionManager.current ?: return
+        viewModelScope.launch { loadMonth(session, visibleMonth.value) }
+    }
+
     fun jumpToToday() {
         val today = DateConverter.today()
         visibleMonth.value = LocalDate(today.year, today.month, 1)

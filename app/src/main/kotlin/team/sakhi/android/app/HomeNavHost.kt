@@ -210,6 +210,9 @@ fun HomeNavHost() {
             yearExpanded = expanded,
             onYearExpandedChange = setExpanded,
             currentPhase = homeUiState.phase,
+            // Home resolves its own phase/day and has no idea a log was made from inside
+            // the calendar sheet, which owns a separate `LoggingViewModel`.
+            onLogChanged = homeViewModel::refreshAfterLogChange,
         )
     }
 

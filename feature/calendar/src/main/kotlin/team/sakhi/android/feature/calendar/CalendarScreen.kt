@@ -153,9 +153,34 @@ fun CalendarScreen(
      * cycle-level phase Home already resolves.
      */
     currentPhase: CyclePhase = CyclePhase.UNKNOWN,
+    /**
+     * Fired after a log written from this sheet has settled.
+     *
+     * This screen owns its own `LoggingViewModel` instance (see the constructor doc), so
+     * nothing else in the app hears about a log made here. Home kept showing the phase
+     * and day it had resolved when it last loaded -- logging or clearing a period from
+     * the calendar left its hero stale until the app restarted.
+     */
+    onLogChanged: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val logUiState by logViewModel.uiState.collectAsStateWithLifecycle()
+
+    // Reload the grid whenever a save settles.
+    //
+    // The grid is driven by `combine(session, visibleMonth)`, and a log changes neither,
+    // so logging a period updated Home immediately but left the calendar showing stale
+    // marks until the app restarted. Keyed on `saveAttemptId` rather than `isSaving`
+    // because a fast save can flip `isSaving` true and back inside one StateFlow emission
+    // window, which an effect watching that transition would miss entirely -- the reason
+    // that id exists at all. `save()` is asynchronous, so refreshing at the call site
+    // would race the write.
+    LaunchedEffect(logUiState.saveAttemptId, logUiState.isSaving) {
+        if (logUiState.saveAttemptId > 0 && !logUiState.isSaving) {
+            viewModel.refreshAfterLogChange()
+            onLogChanged()
+        }
+    }
     val scope = rememberCoroutineScope()
     val hapticManager = koinInject<AndroidHapticManager>()
 
