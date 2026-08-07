@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.requiredWidth
@@ -234,7 +235,16 @@ fun CalendarScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
+            // No TOP padding. iOS's month content is explicitly `.padding(.top, 0)`
+            // (HomeCalendarSheet.swift) because the 36dp drag-handle row above already
+            // provides that spacing. Android was adding another 16dp on top of the
+            // handle, which pushed the month bar ~52dp down the sheet and read as a
+            // band of dead space above it.
+            .padding(
+                start = SakhiSpacing.space5,
+                end = SakhiSpacing.space5,
+                bottom = SakhiSpacing.space4,
+            ),
     ) {
         if (isYearExpanded) {
             CalendarYearHeader(
@@ -385,6 +395,15 @@ fun CalendarScreen(
                 ?.mark
                 ?.phase
                 ?: CyclePhase.UNKNOWN
+            // Claims the navigation-bar inset, exactly as iOS reserves
+            // `.padding(.bottom, max(safeBottom, 16))` for this same bar. Home's copy
+            // already did this; the calendar's did not, because it used to live inside a
+            // `ModalBottomSheet` which reserved the inset for it. That stopped being true
+            // when the calendar became an in-tree overlay drawn over Home, and the stale
+            // comment on Home's copy still claimed otherwise. Invisible on gesture
+            // navigation, but on 3-button navigation (Karan's Xiaomi) the OS
+            // back/home/recents buttons sat right on top of the Ask Sakhi bar.
+            Box(modifier = Modifier.navigationBarsPadding()) {
             SakhiBottomActionBar(
                 phase = selectedDatePhase,
                 accentColor = phasePrimaryColor(selectedDatePhase),
@@ -409,6 +428,7 @@ fun CalendarScreen(
                     logViewModel.save()
                 },
             )
+            }
         } else if (canEditPeriodDates) {
             // Matches iOS's `canEditPeriodDates: Bool { partnerUserId == nil }` --
             // own data only, stricter than the quick-log bar's permission-based

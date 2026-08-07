@@ -487,8 +487,10 @@ fun HomeScreen(
             // `MainActivity` now draws a fully transparent system navigation bar (was an
             // opaque AndroidX safety scrim on 3-button-nav devices), so this bar's own content
             // extends behind the OS back/home/recents buttons unless it claims that inset
-            // itself. The calendar sheet's copy of this same bar does not need this -- it
-            // renders inside a modal sheet, which already reserves its own bottom inset.
+            // itself. The calendar sheet's copy of this same bar now claims the same
+            // inset directly: it used to rely on being inside a `ModalBottomSheet`, which
+            // reserved the inset for it, but that stopped being true when the calendar
+            // became an in-tree overlay drawn over Home.
             Box(modifier = Modifier.navigationBarsPadding()) {
             SakhiBottomActionBar(
                 phase = uiState.phase,
