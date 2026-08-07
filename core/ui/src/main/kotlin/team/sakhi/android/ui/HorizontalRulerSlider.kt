@@ -17,6 +17,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
@@ -34,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 
 /**
  * Port of iOS `HorizontalRulerSlider` for the logging sheet's weight/BBT rows:
@@ -68,7 +70,12 @@ fun HorizontalRulerSlider(
     val tickColor = MaterialTheme.colorScheme.onSurface
     val selectedColor = MaterialTheme.colorScheme.primary
     val labelColor = sakhiSecondaryLabel()
-    val fadeColor = MaterialTheme.colorScheme.surface
+    // iOS masks the ruler's edges with a `LinearGradient(.clear -> .black)`, i.e. it
+    // fades the ticks out to TRANSPARENT. Android paints an opaque rectangle instead, so
+    // the colour has to be whatever the ruler sits on -- the white symptom card. It was
+    // `colorScheme.surface`, the brand pink, which drew two solid pink blocks over the
+    // ends of the ruler rather than fading it.
+    val fadeColor = sakhiSystemBackground()
 
     BoxWithConstraints(
         modifier = modifier
@@ -126,7 +133,12 @@ fun HorizontalRulerSlider(
             else -> 1
         }
 
-        Canvas(modifier = Modifier.fillMaxWidth().height(horizontalRulerHeight)) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(horizontalRulerHeight)
+                .clipToBounds(),
+        ) {
             drawNeedle(anchorX = anchorX, color = selectedColor)
 
             val currentTick = value.roundToInt()
@@ -150,7 +162,7 @@ fun HorizontalRulerSlider(
 
                 drawRect(
                     color = tickColor.copy(alpha = alpha),
-                    topLeft = Offset(x - strokeWidth / 2f, rulerTopPx + (rulerTrackHeightPx - tickHeight) / 2f),
+                    topLeft = Offset(x - strokeWidth / 2f, rulerTop.toPx() + (rulerTickBand.toPx() - tickHeight) / 2f),
                     size = Size(strokeWidth, tickHeight),
                 )
 
@@ -159,7 +171,7 @@ fun HorizontalRulerSlider(
                         textMeasurer = textMeasurer,
                         text = tick.toString(),
                         x = x,
-                        y = rulerTopPx + rulerTrackHeightPx - 7.dp.toPx(),
+                        y = rulerTop.toPx() + rulerTrackHeight.toPx() - 7.dp.toPx(),
                         color = selectedColor,
                         bold = true,
                     )
@@ -168,7 +180,7 @@ fun HorizontalRulerSlider(
                         textMeasurer = textMeasurer,
                         text = tick.toString(),
                         x = x,
-                        y = rulerTopPx + rulerTrackHeightPx - 7.dp.toPx(),
+                        y = rulerTop.toPx() + rulerTrackHeight.toPx() - 7.dp.toPx(),
                         color = labelColor,
                         bold = false,
                     )
@@ -177,19 +189,19 @@ fun HorizontalRulerSlider(
 
             drawRect(
                 brush = Brush.horizontalGradient(listOf(fadeColor, Color.Transparent)),
-                topLeft = Offset(0f, rulerTopPx),
-                size = Size(40.dp.toPx(), rulerTrackHeightPx),
+                topLeft = Offset(0f, rulerTop.toPx()),
+                size = Size(40.dp.toPx(), rulerTrackHeight.toPx()),
             )
             drawRect(
                 brush = Brush.horizontalGradient(listOf(Color.Transparent, fadeColor)),
-                topLeft = Offset(size.width - 40.dp.toPx(), rulerTopPx),
-                size = Size(40.dp.toPx(), rulerTrackHeightPx),
+                topLeft = Offset(size.width - 40.dp.toPx(), rulerTop.toPx()),
+                size = Size(40.dp.toPx(), rulerTrackHeight.toPx()),
             )
 
             drawLine(
                 color = selectedColor,
-                start = Offset(anchorX, rulerTopPx),
-                end = Offset(anchorX, rulerTopPx + rulerTrackHeightPx),
+                start = Offset(anchorX, rulerTop.toPx()),
+                end = Offset(anchorX, rulerTop.toPx() + rulerTrackHeight.toPx()),
                 strokeWidth = 1.5.dp.toPx(),
             )
         }
@@ -238,5 +250,16 @@ private fun DrawScope.drawTickLabel(
 }
 
 private val horizontalRulerHeight = 64.dp
-private val rulerTopPx = 18f
-private val rulerTrackHeightPx = 60f
+
+/**
+ * iOS draws the ruler in a `Canvas().frame(height: 60)` and centres each tick inside a
+ * 42pt band (`y: (42 - h) / 2`).
+ *
+ * These were `rulerTopPx = 18f` / `rulerTrackHeightPx = 60f` -- named as pixels and used
+ * as raw floats straight in `DrawScope`, never density-converted. On a 2.75x screen that
+ * is a ~7dp offset and a ~22dp track inside a 64dp component, so the ticks bunched into a
+ * thin strip and the labels landed on top of them.
+ */
+private val rulerTop = 4.dp
+private val rulerTrackHeight = 60.dp
+private val rulerTickBand = 42.dp

@@ -698,7 +698,9 @@ private fun FlowCard(
             .clickable(onClick = onClick),
     ) {
         Column(
-            modifier = Modifier.padding(vertical = SakhiSpacing.space5),
+            // iOS: `.padding(.vertical, 22)` on the flow card (HomeLoggingSheet.swift).
+            // `space5` is 20, which read a touch short next to iOS's.
+            modifier = Modifier.padding(vertical = FlowCardVerticalPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
         ) {
@@ -942,3 +944,6 @@ private fun formattedHeaderDate(date: kotlinx.datetime.LocalDate): String {
     )
     return javaDate.format(formatter)
 }
+
+/** iOS `.padding(.vertical, 22)` on each flow-intensity card. */
+private val FlowCardVerticalPadding = 22.dp
