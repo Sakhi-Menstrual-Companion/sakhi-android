@@ -36,6 +36,11 @@ coroutines = "1.10.1"
 mockk = "1.13.13"
 coreKtx = "1.13.1"
 activityCompose = "1.9.2"
+# Chrome Custom Tabs -- the standard Android equivalent of iOS's
+# `SFSafariViewController`, for opening external links (e.g. the ACOG source in
+# onboarding's period/cycle length info sheet) inside an in-app web view instead of
+# handing off to the full external browser app.
+browser = "1.8.0"
 workManager = "2.9.0"
 healthConnect = "1.1.0-alpha12"
 glance = "1.1.1"
@@ -82,12 +87,23 @@ uiAutomator = "2.4.0"
 androidxTestRunner = "1.6.2"
 androidxTestExtJunit = "1.3.0"
 
+# Structured logging (2026-08-01). Kermit over Timber because it is the same
+# Touchlab KMP logger SakhiCore could adopt later in commonMain, so Android and any
+# future shared-side logging stay on one API instead of two.
+# NOT 2.0.8 / 2.1.0 -- both publish against kotlin-stdlib 2.2.0, i.e. class metadata
+# newer than this project's pinned Kotlin 2.1.20 compiler can read. Same root cause
+# as the Koin 4.1.1-not-4.2.x, maps-compose 5.0.3-not-6.x, and Roborazzi
+# 1.60.0-not-1.61.0 pins above. 2.0.6 is the newest release still built against a
+# 2.0.x stdlib (2.0.21), confirmed live against Maven Central's poms.
+kermit = "2.0.6"
+
 [libraries]
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
 compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
 compose-material-icons-core = { group = "androidx.compose.material", name = "material-icons-core" }
@@ -116,6 +132,8 @@ koin-androidx-compose = { group = "io.insert-koin", name = "koin-androidx-compos
 
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "coroutines" }
+kermit = { group = "co.touchlab", name = "kermit", version.ref = "kermit" }
+
 junit = { group = "junit", name = "junit", version = "4.13.2" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
 

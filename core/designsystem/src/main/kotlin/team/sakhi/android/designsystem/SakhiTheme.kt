@@ -7,6 +7,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.LocalRippleConfiguration
+import androidx.compose.material3.RippleConfiguration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -122,6 +124,165 @@ private fun sakhiTypography(): Typography {
     )
 }
 
+/**
+ * iOS's `DS.Colors.systemBackground` (`UIColor.systemBackground`): white in light, near
+ * black in dark. Distinct from `colorScheme.surface`, which this app maps to brand
+ * `lightPink`, and from `surfaceVariant`, which is Material's default lavender.
+ *
+ * iOS uses it for the cards that must read as plain white sheets — the logging sheet's
+ * flow chips and its symptom block — so those needed a token neither of the Material
+ * slots provides.
+ */
+@Composable
+fun sakhiSystemBackground(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) {
+        androidx.compose.ui.graphics.Color(0xFF1C1C1E)
+    } else {
+        androidx.compose.ui.graphics.Color.White
+    }
+
+/**
+ * iOS's `DS.Colors.groupedBackground` (`UIColor.systemGroupedBackground`): #F2F2F7 in
+ * light, black in dark.
+ *
+ * The neutral grey iOS puts *behind* white cards, and inside small inset controls like
+ * the report sheet's date-range capsule. Android had been reaching for
+ * `colorScheme.surfaceVariant` in those places, which is Material's lavender (#ECE5EE) —
+ * visibly purple next to a pink app, and the same default that already had to be driven
+ * out of the logging sheet and the quick-log menu.
+ */
+@Composable
+fun sakhiGroupedBackground(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) {
+        androidx.compose.ui.graphics.Color.Black
+    } else {
+        androidx.compose.ui.graphics.Color(0xFFF2F2F7)
+    }
+
+/**
+ * iOS's `DS.Colors.gray5` (`UIColor.systemGray5`): #E5E5EA in light, #2C2C2E in dark.
+ *
+ * The inert-control grey — iOS fills the chat send button with it while there is nothing
+ * to send. Same reason as [sakhiGroupedBackground]: the Material slot that looks closest
+ * by name, `surfaceVariant`, is lavender.
+ */
+@Composable
+fun sakhiSystemGray5(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) {
+        androidx.compose.ui.graphics.Color(0xFF2C2C2E)
+    } else {
+        androidx.compose.ui.graphics.Color(0xFFE5E5EA)
+    }
+
+/**
+ * iOS's `DS.Colors.gray6` (`UIColor.systemGray6`): #F2F2F7 in light, #1C1C1E in dark.
+ *
+ * Deliberately **not** [sakhiGroupedBackground], even though the two are the same #F2F2F7 in
+ * light. That one models `systemGroupedBackground`, which goes to pure black in dark; this one
+ * goes to #1C1C1E. Reusing it would have rendered iOS's small inset circles as black holes on
+ * a dark background. iOS reaches for `gray6` on tiny inset controls — the chat report card's
+ * dismiss button is the case this was added for.
+ */
+@Composable
+fun sakhiSystemGray6(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) {
+        androidx.compose.ui.graphics.Color(0xFF1C1C1E)
+    } else {
+        androidx.compose.ui.graphics.Color(0xFFF2F2F7)
+    }
+
+/**
+ * The brand's light pink — `DS.Colors.lightPink` on iOS (#F8E5EC in light, its own dark
+ * variant in dark), read straight off the active [SakhiBrandColors] so it tracks the theme.
+ *
+ * Exposed because iOS uses `lightPink` as a *fill for small elements* (icon badges, the
+ * user-side avatar in chat search), not only as a page surface. Feature code previously
+ * approximated those with `primary.copy(alpha = …)`, which is a different colour.
+ */
+@Composable
+fun sakhiLightPink(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) DarkBrandColors.lightPink else LightBrandColors.lightPink
+
+/**
+ * iOS's `DS.Colors.profileCardBackground` — the fill behind every card in the grouped
+ * Profile/settings list. **White** in light mode (`UIColor.systemBackground`), white at 6%
+ * in dark, where a pure-black card would disappear into the profile gradient.
+ *
+ * Android was letting these cards fall through to `colorScheme.surface`, which this app
+ * maps to brand `lightPink` — so the whole screen was pink cards on a pink page, with the
+ * card edges barely visible, where iOS shows crisp white cards on a pale pink page.
+ */
+@Composable
+fun sakhiProfileCardBackground(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) {
+        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.06f)
+    } else {
+        androidx.compose.ui.graphics.Color.White
+    }
+
+/**
+ * iOS's `DS.Colors.label` (`UIColor.label`) — full-strength primary ink.
+ *
+ * Completes the ladder next to [sakhiSecondaryLabel] and [sakhiTertiaryLabel], which were
+ * already derived the same way. Material's nearest slot, `onSurface`, is the baseline
+ * `#1D1B20` — a dark *purple*-grey rather than iOS's plain black, and this theme never sets
+ * it, so every `colorScheme.onSurface` in the app is that baseline.
+ *
+ * Added because the primary/secondary pair has to move together: migrating secondary text to
+ * `sakhiSecondaryLabel()` while primary stayed on Material's slot would leave a single text
+ * ladder drawing its two levels from two different colour systems.
+ */
+@Composable
+fun sakhiLabel(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) {
+        androidx.compose.ui.graphics.Color.White
+    } else {
+        androidx.compose.ui.graphics.Color.Black
+    }
+
+/**
+ * iOS's `DS.Colors.secondaryLabel` (`UIColor.secondaryLabel`) — the label ink at 60%.
+ *
+ * Material's nearest slot, `onSurfaceVariant`, resolves to the baseline `#49454F`: darker
+ * than iOS's and faintly purple, so secondary text sat heavier here than on iOS.
+ */
+@Composable
+fun sakhiSecondaryLabel(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) {
+        androidx.compose.ui.graphics.Color(0xFFEBEBF5).copy(alpha = 0.60f)
+    } else {
+        androidx.compose.ui.graphics.Color(0xFF3C3C43).copy(alpha = 0.60f)
+    }
+
+/** iOS's `DS.Colors.tertiaryLabel` — the same ink at 30%, for section captions. */
+@Composable
+fun sakhiTertiaryLabel(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) {
+        androidx.compose.ui.graphics.Color(0xFFEBEBF5).copy(alpha = 0.30f)
+    } else {
+        androidx.compose.ui.graphics.Color(0xFF3C3C43).copy(alpha = 0.30f)
+    }
+
+/** iOS `DS.Colors.confirm` — the green used for "Synced & secure" and a regular cycle. */
+@Composable
+fun sakhiConfirm(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) DarkBrandColors.confirm else LightBrandColors.confirm
+
+/**
+ * iOS `DS.Colors.warning` — `deepRose` at 65%, NOT an orange.
+ *
+ * The "Irregular" cycle badge uses it. Android had a hardcoded `#F39C48`, which read as a
+ * tan/orange pill where iOS shows a muted rose one.
+ */
+@Composable
+fun sakhiWarning(): androidx.compose.ui.graphics.Color =
+    sakhiDeepRose().copy(alpha = 0.65f)
+
+/** iOS `DS.Colors.danger` — plain `deepRose`. */
+@Composable
+fun sakhiDeepRose(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) DarkBrandColors.deepRose else LightBrandColors.deepRose
+
 /** Resolves a phase's primary hex (KMM `PhaseVisualStyle.colorHex`) straight to Compose. */
 @Composable
 fun phasePrimaryColor(phase: CyclePhase): androidx.compose.ui.graphics.Color =
@@ -152,6 +313,18 @@ fun SakhiTheme(
             colorScheme = materialColorScheme(brand, darkTheme),
             typography = sakhiTypography(),
         ) {
+            // Compose's default ripple derives its colour from `LocalContentColor`, not
+            // a fixed system tone -- on this app's mostly-white cards `LocalContentColor`
+            // resolves to a dark `onSurface`/`onBackground` (body text is black-ish), so
+            // every tap ripple rendered as a harsh dark/black flash instead of a subtle
+            // branded one. Reported live: "jo highlight aa raha hai... black sa aaraha
+            // hai." The standard production fix -- explicitly providing a
+            // `RippleConfiguration` tied to the brand colour at the theme root -- gives
+            // every interactive element in the app a consistent, on-brand pink ripple
+            // instead of one that happens to match whatever text colour sits nearby.
+            CompositionLocalProvider(
+                LocalRippleConfiguration provides RippleConfiguration(color = brand.pink),
+            ) {
             // Material3's `LocalContentColor` defaults to plain black app-wide unless
             // something explicitly provides it -- normally a `Surface`/`Scaffold` does
             // this. This app has neither at the root (each screen paints its own
@@ -167,6 +340,7 @@ fun SakhiTheme(
                 color = MaterialTheme.colorScheme.background,
                 content = content,
             )
+            }
         }
     }
 }

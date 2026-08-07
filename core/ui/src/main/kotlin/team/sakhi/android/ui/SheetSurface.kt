@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -39,6 +40,16 @@ import team.sakhi.android.designsystem.SakhiSpacing
 fun SheetSurface(
     modifier: Modifier = Modifier,
     showDragHandle: Boolean = false,
+    /**
+     * Solid fill, when [backgroundBrush] is not used.
+     *
+     * Defaults to `colorScheme.surface` (brand `lightPink`), which is right for the sheets
+     * iOS also fills that way. Profile is not one of them: iOS gives it
+     * `profileStaticPageBackground()` -> `DS.Colors.background` (#F8F2F4), a lighter,
+     * much less saturated page. On `lightPink` its white cards barely separated from the
+     * page, which is the whole look of that screen.
+     */
+    color: Color = MaterialTheme.colorScheme.surface,
     backgroundBrush: Brush? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -75,7 +86,7 @@ fun SheetSurface(
         Surface(
             modifier = modifier.fillMaxSize(),
             shape = shape,
-            color = MaterialTheme.colorScheme.surface,
+            color = color,
         ) {
             sheetBody()
         }

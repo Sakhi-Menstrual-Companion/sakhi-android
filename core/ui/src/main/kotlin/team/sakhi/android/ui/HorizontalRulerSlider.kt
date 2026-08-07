@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
 
 /**
  * Port of iOS `HorizontalRulerSlider` for the logging sheet's weight/BBT rows:
@@ -66,7 +67,7 @@ fun HorizontalRulerSlider(
 
     val tickColor = MaterialTheme.colorScheme.onSurface
     val selectedColor = MaterialTheme.colorScheme.primary
-    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val labelColor = sakhiSecondaryLabel()
     val fadeColor = MaterialTheme.colorScheme.surface
 
     BoxWithConstraints(

@@ -26,6 +26,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 /**
  * Shared profile/detail sheet shell: drag handle, back header, divider, and a
@@ -52,29 +54,20 @@ fun DetailSheetScaffold(
         showDragHandle = showDragHandle,
         backgroundBrush = profilePageBackgroundBrush(),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = SakhiSpacing.space6,
-                    top = SakhiSpacing.space5,
-                    end = SakhiSpacing.space6,
-                    bottom = SakhiSpacing.space2,
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BackButton(onClick = onBack)
-            if (headerIcon == null && !title.isNullOrBlank()) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                    modifier = Modifier.weight(1f),
-                )
-            } else {
-                Row(modifier = Modifier.weight(1f)) {}
-            }
-            trailingHeaderContent()
-        }
+        // One nav bar for every sheet (iOS `DSNavBar`), replacing the hand-rolled header
+        // row this used to draw. That row used its own paddings (24/20/8 here vs the nav
+        // bar's 24/20/8 plus proper button sizing), so the back button sat tight against
+        // the sheet's rounded top edge and read as clipped -- the same complaint on every
+        // sheet that was not Profile.
+        //
+        // When the body renders a big centred `headerIcon` block, the title belongs to
+        // that block, so the bar carries the button alone; iOS's own alignment rule then
+        // left-aligns a lone title, which is why passing it here would be wrong.
+        SakhiNavBar(
+            onBack = onBack,
+            title = title?.takeIf { headerIcon == null && it.isNotBlank() },
+            trailing = trailingHeaderContent,
+        )
         if (headerIcon == null) {
             HorizontalDivider()
         }
@@ -127,7 +120,7 @@ fun DetailSheetScaffold(
                             Text(
                                 text = subtitleText,
                                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = SakhiFontSize.base),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = sakhiSecondaryLabel(),
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -141,7 +134,7 @@ fun DetailSheetScaffold(
                     Text(
                         text = subtitleText,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = sakhiSecondaryLabel(),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                     )

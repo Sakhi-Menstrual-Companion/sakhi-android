@@ -20,6 +20,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.unit.Dp
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiGroupedBackground
+import team.sakhi.android.designsystem.sakhiSystemGray5
 
 /** Lightweight shimmer placeholder for loading rows, cards, and hero blocks. */
 @Composable
@@ -27,7 +29,8 @@ fun LoadingShimmer(
     modifier: Modifier = Modifier,
     height: Dp = SakhiSpacing.space16,
     width: Dp? = null,
-    baseColor: Color = MaterialTheme.colorScheme.surfaceVariant,
+    // iOS's inert placeholder grey, not Material's lavender surfaceVariant.
+    baseColor: Color = sakhiSystemGray5(),
 ) {
     val transition = rememberInfiniteTransition(label = "sakhiShimmer")
     val alpha by transition.animateFloat(

@@ -6,8 +6,12 @@ import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.WindowInsetsSides
+import kotlinx.coroutines.launch
 
 /**
  * Shared modal-sheet host for Android surfaces that mirror iOS `.sheet(...)`
@@ -29,8 +33,16 @@ fun SakhiModalSheet(
     showSystemDragHandle: Boolean = false,
     content: @Composable () -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
+
+    fun dismissWithSheetMotion() {
+        scope.launch { sheetState.hide() }.invokeOnCompletion {
+            if (!sheetState.isVisible) onDismissRequest()
+        }
+    }
+
     ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
+        onDismissRequest = ::dismissWithSheetMotion,
         sheetState = sheetState,
         dragHandle = if (showSystemDragHandle) {
             { BottomSheetDefaults.DragHandle() }
@@ -39,6 +51,17 @@ fun SakhiModalSheet(
         },
         containerColor = Color.Transparent,
         tonalElevation = 0.dp,
+        // Material's default applies the navigation-bar inset here, so every sheet in the
+        // app stopped short of the bottom edge and the Home background showed through as
+        // a strip under the content. iOS's sheets run to the edge -- `HomeCalendarSheet`
+        // fills its background with `.ignoresSafeArea(edges: .bottom)`.
+        //
+        // Only the BOTTOM is dropped. Zeroing every side also pulled the sheet under the
+        // status bar, where the nav bar's close button collided with the system icons --
+        // iOS keeps its sheets below the status bar, so the top inset stays.
+        contentWindowInsets = {
+            BottomSheetDefaults.windowInsets.only(WindowInsetsSides.Top)
+        },
     ) {
         content()
     }

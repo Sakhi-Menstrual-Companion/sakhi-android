@@ -13,6 +13,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -31,6 +32,8 @@ import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 
 /**
  * Real port of iOS `WeightWheelPicker` (`OnboardingInputPickers.swift`) -- a
@@ -66,13 +69,24 @@ fun WeightWheelPicker(
 
     val tickColor = MaterialTheme.colorScheme.onSurface
     val selectedColor = MaterialTheme.colorScheme.primary
-    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val fadeColor = MaterialTheme.colorScheme.surface
+    val labelColor = sakhiSecondaryLabel()
+    // Fades to the card it's drawn inside, which is `sakhiSystemBackground()` (white) --
+    // was `colorScheme.surface` (this app's brand pink tint), which rendered as two
+    // solid pink blocks cutting the dial off instead of a smooth fade into the white
+    // card, reported live and confirmed on-device ("inside white container pink color
+    // element kyun hai").
+    val fadeColor = sakhiSystemBackground()
 
     Canvas(
         modifier = modifier
             .fillMaxWidth()
             .height(wheelHeight)
+            // Matches `.clipped()` on the iOS wheel (OnboardingInputPickers.swift:112).
+            // The +-78 degree sweep is nearly a semicircle, so its end ticks fall well
+            // outside this 148dp band. SwiftUI clips them; Compose does NOT clip draw
+            // content to layout bounds, so those ticks were painting over the card as
+            // stray marks in the lower corners.
+            .clipToBounds()
             .pointerInput(Unit) {
                 // Same cumulative-delta correction as `HeightRulerPicker` --
                 // Compose's `dragAmount` is per-frame, SwiftUI's `translation`

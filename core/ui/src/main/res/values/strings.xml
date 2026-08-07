@@ -16,6 +16,17 @@
     <string name="sakhi_action_bar_log_content_description">Log</string>
     <string name="sakhi_action_bar_other_symptoms">Other symptoms  ›</string>
     <string name="sakhi_action_bar_flow_selected">%1$s  ✓</string>
+    <!-- iOS repeats this header over both the flow rows and the read-only date row
+         (`HomeDayDetailGlassView+ActionBar.quickLogMenuContent`). Kept identical here so
+         the two menus read the same; flagged to Karan as a likely iOS copy-paste. -->
+    <string name="sakhi_action_bar_select_date">Select date</string>
+    <!-- iOS `logMenuDateTitle`: DateFormatter "d MMM, EEEE" -->
+    <string name="sakhi_action_bar_menu_date_format">d MMM, EEEE</string>
+    <!-- App-wide flow wording. See FlowLabels.kt for why these are not KMM's. -->
+    <string name="sakhi_flow_spotting">Spotting</string>
+    <string name="sakhi_flow_light">Slight</string>
+    <string name="sakhi_flow_medium">Moderate</string>
+    <string name="sakhi_flow_heavy">Heavy</string>
 
     <string name="sakhi_ask_bar_partner_menstrual_1">How\'s she feeling today?</string>
     <string name="sakhi_ask_bar_partner_menstrual_2">What can I do for her right now?</string>
@@ -66,4 +77,17 @@
     <string name="sakhi_ask_bar_self_unknown_2">How do I start tracking?</string>
     <string name="sakhi_ask_bar_self_unknown_3">Tell me about my cycle phases...</string>
     <string name="sakhi_ask_bar_self_unknown_4">What should I log today?</string>
+    <!-- Feature access gate. Copy transcribed verbatim from iOS
+         `FeatureAccessGate.swift` so both platforms say the same thing. -->
+    <string name="feature_gate_offline_title">You\'re using Sakhi offline</string>
+    <string name="feature_gate_offline_message">This part needs the internet. You can resume online whenever you like, and nothing you have logged is lost.</string>
+    <string name="feature_gate_resume_online">Resume online</string>
+    <string name="feature_gate_not_signed_in_title">Sign in to use this</string>
+    <string name="feature_gate_not_signed_in_message">This needs a Sakhi account. Everything you have logged so far stays with you when you sign in.</string>
+    <string name="feature_gate_no_permission_title">Not shared with you yet</string>
+    <string name="feature_gate_no_permission_message">Your Sakhi hasn\'t shared this part with you. That is completely her choice, and that\'s okay.</string>
+    <string name="feature_gate_unknown_title">Not available right now</string>
+    <string name="feature_gate_unknown_message">Please try again in a moment.</string>
+    <string name="feature_gate_go_back">Go back</string>
+    <string name="close">Close</string>
 </resources>

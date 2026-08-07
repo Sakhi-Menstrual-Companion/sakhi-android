@@ -32,9 +32,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
+import kotlinx.coroutines.delay
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
+
+/** Matches the shared `SCREEN_TRANSITION_DURATION_MS` every onboarding step-to-step slide uses. */
+private const val OTP_AUTO_FOCUS_DELAY_MS = 380L
 
 /**
  * Single hidden text input rendered as 6 visible cells. The shared auth flow only
@@ -66,10 +73,22 @@ fun OtpField(
     val isFocused by interactionSource.collectIsFocusedAsState()
     val filteredValue = value.filter(Char::isDigit).take(length)
     val resolvedAccentColor = accentColor ?: MaterialTheme.colorScheme.primary
-    val resolvedContainerColor = containerColor ?: MaterialTheme.colorScheme.surface
+    // iOS `OTPStep`'s cell fill is `DS.Colors.profileCardBackground` (plain white in
+    // light mode), not a tinted surface -- `colorScheme.surface` is bound to the brand
+    // `lightPink` in this app's theme, which is why the cells were rendering pink.
+    val resolvedContainerColor = containerColor ?: sakhiSystemBackground()
 
     LaunchedEffect(autoFocus, filteredValue) {
         if (autoFocus && enabled && filteredValue.isEmpty()) {
+            // iOS `PhoneStep`: "Dismiss immediately before moving to OTP. The shell does
+            // not wait, and the OTP field focuses after its screen lands, avoiding
+            // keyboard work mid-push." Requesting focus the instant this composes lands
+            // mid-flight during the screen's own 380ms slide-in transition -- the IME
+            // animating up while the screen is still sliding in is two unsynced motions
+            // layered together, reported live as the OTP screen coming in "weird" next
+            // to every other onboarding transition. Waiting out the transition first
+            // matches iOS's explicit sequencing.
+            delay(OTP_AUTO_FOCUS_DELAY_MS)
             focusRequester.requestFocus()
         }
     }
@@ -82,7 +101,7 @@ fun OtpField(
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
 

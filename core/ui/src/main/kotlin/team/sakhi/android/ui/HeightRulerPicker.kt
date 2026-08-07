@@ -16,6 +16,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -30,6 +31,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 
 /**
  * Real port of iOS `HeightRulerPicker` (`OnboardingInputPickers.swift`) -- a
@@ -51,7 +54,8 @@ fun HeightRulerPicker(
     onHapticSelection: () -> Unit = {},
     onHapticImpact: () -> Unit = {},
 ) {
-    val pxPerUnit = with(LocalDensity.current) { 6.dp.toPx() }
+    val density = LocalDensity.current
+    val pxPerUnit = with(density) { 6.dp.toPx() }
     val lo = range.start.roundToInt()
     val hi = range.endInclusive.roundToInt()
     val textMeasurer = rememberTextMeasurer()
@@ -67,13 +71,19 @@ fun HeightRulerPicker(
 
     val tickColor = MaterialTheme.colorScheme.onSurface
     val selectedColor = MaterialTheme.colorScheme.primary
-    val labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val fadeColor = MaterialTheme.colorScheme.surface
+    val labelColor = sakhiSecondaryLabel()
+    // Fades to the card it's drawn inside, which is `sakhiSystemBackground()` (white) --
+    // was `colorScheme.surface` (this app's brand pink tint), same bug as
+    // `WeightWheelPicker`'s fade, confirmed on-device.
+    val fadeColor = sakhiSystemBackground()
 
     Canvas(
         modifier = modifier
             .fillMaxWidth()
             .height(rulerHeight)
+            // Matches `.clipped()` on the iOS ruler (OnboardingInputPickers.swift:302).
+            // See `WeightWheelPicker` for why Compose needs this explicitly.
+            .clipToBounds()
             .pointerInput(Unit) {
                 // `detectDragGestures`'s `dragAmount` is the delta *since the last
                 // callback*, unlike SwiftUI's `DragGesture.translation`, which is
@@ -125,7 +135,16 @@ fun HeightRulerPicker(
             },
     ) {
         val centerY = size.height / 2f
-        val centerX = size.width / 2f
+        // iOS's real tick row is `HStack(spacing: 0) { Spacer(); label; Rectangle() }`
+        // with no trailing padding -- the tick sits flush against the ruler's own
+        // right edge, with the Spacer absorbing all the space to its left. The
+        // previous version anchored ticks to `size.width / 2f` (canvas centre) instead
+        // of the right edge, which was fine while the canvas was accidentally narrow
+        // (a since-fixed sibling bug) but meant widening the canvas just opened a gap
+        // between the value column and the ticks instead of widening the ruler itself
+        // -- reported live as "ruler ke marks kitne kam width mai hai." Anchoring to
+        // `size.width` instead makes the tick stack actually grow with the canvas.
+        val tickEndX = size.width
 
         for (v in lo..hi) {
             val y = centerY + (value - v) * pxPerUnit
@@ -134,8 +153,19 @@ fun HeightRulerPicker(
             val isSelected = v == value.roundToInt()
             val isMajor = v % 10 == 0
             val isMid = v % 5 == 0
-            val tickLength = if (isMajor) 52f else if (isMid) 28f else 14f
-            val strokeWidth = if (isMajor) 3.5f else if (isMid) 1.5f else 1f
+            // Was bare pixel counts, not dp-converted -- unlike `WeightWheelPicker`'s
+            // equivalent, which correctly wraps its tick lengths in `.dp.toPx()`. On
+            // this device's 2.75x density, a raw "52" rendered at under 19dp, well
+            // short of the intended 52dp. Fixed size is `HeightTickLength*`, deliberately
+            // longer than iOS's literal 52/28/14pt per Karan's live review ("more increase
+            // karo width"); stroke width is `HeightTickStrokeWidth*`, deliberately thinner
+            // than iOS's literal 3.5/1.5/1pt ("stick kafi bold hogaya hai, usko kam karo").
+            val tickLength = with(density) {
+                (if (isMajor) HeightTickLengthMajor else if (isMid) HeightTickLengthMid else HeightTickLengthMinor).toPx()
+            }
+            val strokeWidth = with(density) {
+                (if (isMajor) HeightTickStrokeWidthMajor else if (isMid) HeightTickStrokeWidthMid else HeightTickStrokeWidthMinor).toPx()
+            }
             val color = when {
                 isSelected -> selectedColor
                 isMajor -> tickColor
@@ -144,7 +174,7 @@ fun HeightRulerPicker(
             }
 
             drawTick(
-                startX = centerX + 24.dp.toPx(),
+                startX = tickEndX - tickLength,
                 y = y,
                 length = tickLength,
                 color = color,
@@ -163,7 +193,7 @@ fun HeightRulerPicker(
                 drawText(
                     textLayoutResult = text,
                     topLeft = Offset(
-                        centerX + 24.dp.toPx() - text.size.width - 6.dp.toPx(),
+                        tickEndX - tickLength - text.size.width - 6.dp.toPx(),
                         y - text.size.height / 2f,
                     ),
                 )
@@ -182,13 +212,15 @@ fun HeightRulerPicker(
             size = androidx.compose.ui.geometry.Size(size.width, 60.dp.toPx()),
         )
 
-        // Fixed pink needle at vertical centre, pointing right into the ruler --
-        // matches the real iOS `arrowtriangle.right.fill` + rule overlay.
+        // Fixed pink needle at vertical centre, spanning the full ruler width and
+        // pointing right into the tick stack -- matches the real iOS
+        // `arrowtriangle.right.fill` + rule overlay, now that the tick stack itself
+        // spans the same full width instead of stopping at the old centre anchor.
         val needleY = centerY
         drawLine(
             color = selectedColor,
             start = Offset(0f, needleY),
-            end = Offset(centerX + 24.dp.toPx(), needleY),
+            end = Offset(size.width, needleY),
             strokeWidth = 2.dp.toPx(),
         )
     }
@@ -203,4 +235,18 @@ private fun DrawScope.drawTick(startX: Float, y: Float, length: Float, color: Co
     )
 }
 
-private val rulerHeight = 300.dp
+// Karan, live: the 300dp card was tall enough to get clipped by the footer on this
+// device. Reduced together with `OnboardingHealthStepUi.kt`'s matching
+// `HeightRulerPickerHeight` -- the two are deliberately duplicated (different Gradle
+// modules) and must be changed together.
+private val rulerHeight = 260.dp
+
+/** DELIBERATE DEVIATION FROM iOS's literal 52/28/14pt -- see the call-site comment. */
+private val HeightTickLengthMajor = 68.dp
+private val HeightTickLengthMid = 36.dp
+private val HeightTickLengthMinor = 18.dp
+
+/** DELIBERATE DEVIATION FROM iOS's literal 3.5/1.5/1pt -- see the call-site comment. */
+private val HeightTickStrokeWidthMajor = 2.5.dp
+private val HeightTickStrokeWidthMid = 1.2.dp
+private val HeightTickStrokeWidthMinor = 0.8.dp

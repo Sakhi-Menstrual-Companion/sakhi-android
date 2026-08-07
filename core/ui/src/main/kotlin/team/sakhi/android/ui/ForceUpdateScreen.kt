@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Headphones
@@ -24,6 +23,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 /**
  * Non-dismissable gate -- port of iOS `ForceUpdateView`. Shown in place of the
@@ -51,9 +52,10 @@ fun ForceUpdateScreen(
             ) {
                 Icon(imageVector = Icons.Filled.Headphones, contentDescription = null)
             }
+        Column(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
-                .fillMaxSize()
+                .weight(1f)
                 .padding(SakhiSpacing.space6),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
@@ -74,18 +76,16 @@ fun ForceUpdateScreen(
                 text = message,
                 style = MaterialTheme.typography.bodyMedium,
                 textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space6),
             )
-            PrimaryButton(
-                text = stringResource(R.string.force_update_update_now),
-                onClick = onUpdateClick,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space4)
-                    .height(56.dp),
+        }
+            SakhiFooter(
+                primaryLabel = stringResource(R.string.force_update_update_now),
+                onPrimaryClick = onUpdateClick,
+                showSecondarySlot = false,
             )
         }
         }

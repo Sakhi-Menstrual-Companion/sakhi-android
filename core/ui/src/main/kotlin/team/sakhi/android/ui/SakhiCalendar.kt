@@ -27,8 +27,12 @@ import androidx.compose.ui.unit.dp
 import kotlinx.datetime.LocalDate
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.design.DesignTokens
+import team.sakhi.design.SakhiColors
+import team.sakhi.models.CyclePhase
 
 @Immutable
 data class SakhiCalendarDay(
@@ -61,7 +65,9 @@ fun SakhiWeekdayHeaderRow(
             Text(
                 text = day,
                 style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                // iOS `SakhiCalendarView.weekdayRow` uses `DS.Colors.tertiaryLabel` for the
+                // S/M/T letters -- tertiary, not secondary.
+                color = sakhiTertiaryLabel(),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.weight(1f),
             )
@@ -140,6 +146,9 @@ private fun SakhiMiniMonthDayCell(
     val accentColor = MaterialTheme.colorScheme.primary
     val isDarkTheme = LocalSakhiDarkTheme.current
     val isPeriod = day.markerType == SakhiCalendarMarkerType.PERIOD
+    val ovulationRingColor = remember(isDarkTheme) {
+        SakhiColors.resolved(isDarkTheme).forPhase(CyclePhase.OVULATION).ring.toComposeColor()
+    }
 
     // Matches iOS `YearDayCell`'s multi-select fill rules exactly: a selected day
     // that's already a real period day is "marked for removal" (no fill, normal
@@ -161,8 +170,14 @@ private fun SakhiMiniMonthDayCell(
         isMultiSelectMode && (isInSelection || isPeriod) -> Color.White
         day.markerType == SakhiCalendarMarkerType.PERIOD -> Color.White
         isDarkTheme && day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> Color.White
-        day.markerType == SakhiCalendarMarkerType.OVULATION -> accentColor
-        day.markerType == SakhiCalendarMarkerType.FERTILE -> accentColor
+        // iOS `YearDayCell` labels these with `PhaseColorManager.ovulation` /
+        // `.fertileWindow`, and both resolve to `PhaseColors(.ovulation).ring` — the
+        // ovulation purple, not the app accent. Android used `primary` (pink) for both,
+        // which merged fertile/ovulation days into the same hue as today and selection
+        // and lost the distinction the year grid exists to show. Using the resolved
+        // pair so it still adapts to dark.
+        day.markerType == SakhiCalendarMarkerType.OVULATION -> ovulationRingColor
+        day.markerType == SakhiCalendarMarkerType.FERTILE -> ovulationRingColor
         day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor
         day.isToday -> accentColor
         else -> MaterialTheme.colorScheme.onSurface
@@ -222,6 +237,9 @@ private fun SakhiCalendarDayCell(
     val periodColor = DesignTokens.PERIOD_RED.toComposeColor()
     val accentColor = MaterialTheme.colorScheme.primary
     val isDarkTheme = LocalSakhiDarkTheme.current
+    val ovulationRingColor = remember(isDarkTheme) {
+        SakhiColors.resolved(isDarkTheme).forPhase(CyclePhase.OVULATION).ring.toComposeColor()
+    }
     val todayLabel = stringResource(R.string.calendar_a11y_today)
     val selectedLabel = stringResource(R.string.calendar_a11y_selected)
     val periodDayLabel = stringResource(R.string.calendar_a11y_period_day)
@@ -247,11 +265,16 @@ private fun SakhiCalendarDayCell(
             if (day.isFuture) Color.White.copy(alpha = disabledSemanticOpacity) else Color.White
         }
         day.isSelected -> accentColor
-        day.isFuture && day.markerType == SakhiCalendarMarkerType.OVULATION -> accentColor.copy(alpha = disabledSemanticOpacity)
-        day.isFuture && day.markerType == SakhiCalendarMarkerType.FERTILE -> accentColor.copy(alpha = disabledSemanticOpacity)
+        // iOS's compact `dayCell` calls these out as "Fixed semantic colors — independent
+        // of phase accent" and labels them with `PhaseColorManager.ovulation` /
+        // `.fertileWindow` (both the ovulation ring), exactly as `YearDayCell` does.
+        // Android used the phase accent, so fertile/ovulation shared a hue with today and
+        // selection on the screen users see most.
+        day.isFuture && day.markerType == SakhiCalendarMarkerType.OVULATION -> ovulationRingColor.copy(alpha = disabledSemanticOpacity)
+        day.isFuture && day.markerType == SakhiCalendarMarkerType.FERTILE -> ovulationRingColor.copy(alpha = disabledSemanticOpacity)
         day.isFuture && day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor.copy(alpha = disabledSemanticOpacity)
-        day.markerType == SakhiCalendarMarkerType.OVULATION -> accentColor
-        day.markerType == SakhiCalendarMarkerType.FERTILE -> accentColor
+        day.markerType == SakhiCalendarMarkerType.OVULATION -> ovulationRingColor
+        day.markerType == SakhiCalendarMarkerType.FERTILE -> ovulationRingColor
         day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor
         day.isToday -> accentColor
         else -> MaterialTheme.colorScheme.onSurface

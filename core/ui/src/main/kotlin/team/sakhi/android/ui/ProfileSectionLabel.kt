@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 @Composable
 fun ProfileSectionLabel(
@@ -21,7 +22,10 @@ fun ProfileSectionLabel(
             fontSize = 11.sp,
             letterSpacing = 0.5.sp,
         ),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        // iOS: `.foregroundColor(DS.Colors.tertiaryLabel)` -- the faintest of its three
+        // label inks. `onSurfaceVariant` is the baseline `#49454F`, much darker and
+        // slightly purple, so these captions read as body text rather than as captions.
+        color = sakhiTertiaryLabel(),
         modifier = modifier.padding(horizontal = SakhiSpacing.space4),
     )
 }

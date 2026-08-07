@@ -1,5 +1,7 @@
 package team.sakhi.android.platform
 
+import team.sakhi.cycle.CyclePhaseInsight
+import team.sakhi.android.common.CycleInsightAdapter
 import android.content.Context
 import androidx.annotation.PluralsRes
 import androidx.annotation.StringRes
@@ -94,10 +96,35 @@ class AndroidWidgetSnapshotManager(
         val effectiveToday = PeriodLogPolicy.latestAction(todayLogs)
         val hasLoggedToday = effectiveToday?.hasPeriod == true
 
-        val phase = CycleMath.currentPhase(cycle, today)
-        val dayInCycle = CycleMath.dayOfCycle(cycle, today)
+        // Same shared engine Home's hero uses. Previously this computed phase and
+        // countdown from `CycleMath` while Home used `CyclePhaseInsight`, so the widget
+        // could show a different phase than the app for the same day -- and
+        // `CycleMath.daysUntilNextPeriod` returns null for an in-progress cycle, so the
+        // widget's countdown was frequently blank when the app's was not.
+        val allCycles = cycleDataRepository.getAll(targetUserId).getOrDefault(emptyList())
+        val periodLogDates = periodLogRepository.getAll(targetUserId)
+            .getOrDefault(emptyList())
+            .filter { it.periodPresent }
+            .mapTo(mutableSetOf()) { it.logDate }
+        val insight = CycleInsightAdapter.insightFor(
+            date = today,
+            cycles = allCycles.ifEmpty { listOf(cycle) },
+            periodLogDates = periodLogDates,
+            stats = CycleMath.computeStatistics(allCycles.filter { it.isComplete }),
+        )
+        val phase = when (insight.phase.kind) {
+            CyclePhaseInsight.PhaseKind.MENSTRUAL -> CyclePhase.MENSTRUAL
+            CyclePhaseInsight.PhaseKind.FOLLICULAR -> CyclePhase.FOLLICULAR
+            CyclePhaseInsight.PhaseKind.OVULATION -> CyclePhase.OVULATION
+            CyclePhaseInsight.PhaseKind.LUTEAL, CyclePhaseInsight.PhaseKind.PMS -> CyclePhase.LUTEAL
+            CyclePhaseInsight.PhaseKind.DELAYED -> CyclePhase.DELAYED
+            CyclePhaseInsight.PhaseKind.UNKNOWN -> CyclePhase.UNKNOWN
+        }
+        val dayInCycle = insight.phase.cycleDay
         val cycleLength = cycle.cycleLength
-        val daysUntilNextPeriod = CycleMath.daysUntilNextPeriod(cycle, today)
+        val daysUntilNextPeriod = insight.prediction.daysUntil.takeIf {
+            insight.prediction.status == CyclePhaseInsight.PredictionStatusKind.UPCOMING
+        }
         val canLog = if (usingPartnerData) session.can(Permission.LOG_PERIOD) else true
         val hero = heroText(
             phase = phase,

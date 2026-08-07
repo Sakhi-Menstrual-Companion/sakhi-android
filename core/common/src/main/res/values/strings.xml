@@ -1,0 +1,5 @@
+<resources>
+    <!-- Shown instead of a raw backend/network exception message. See
+         SafeErrorMessage.kt for why exception text must never reach the UI. -->
+    <string name="common_error_offline">You\'re offline. Please check your connection and try again.</string>
+</resources>
