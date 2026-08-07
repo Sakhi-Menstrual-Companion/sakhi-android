@@ -80,6 +80,7 @@ import team.sakhi.android.ui.GlassCard
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SakhiListDivider
+import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SakhiSwitch
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.android.ui.ToastManager
@@ -200,6 +201,7 @@ fun CareScreen(
                     invitation = state.invitation,
                     isCancelling = uiState.isCancellingInvite,
                     onCancel = viewModel::cancelInvitation,
+                    onClose = onClose,
                 )
 
                 is CareRuntimeState.OwnerConnected -> PartnerDetailContent(
@@ -704,6 +706,7 @@ private fun PendingInviteContent(
     invitation: PartnerInvitation,
     isCancelling: Boolean,
     onCancel: () -> Unit,
+    onClose: () -> Unit,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboard.current
@@ -720,6 +723,10 @@ private fun PendingInviteContent(
     val shareMessage = context.getString(R.string.care_pending_share_message, invitation.inviteCode)
 
     Column(modifier = Modifier.fillMaxSize()) {
+    // iOS opens this view with `DSNavBar(onClose:)` (CareModeSettingsView.swift). Android
+    // had no bar at all here, so the pending state was a dead end -- the only way out was
+    // Cancel Request, which withdraws the invitation rather than just closing the sheet.
+    SakhiNavBar(onClose = onClose)
     Column(
         modifier = Modifier
             .weight(1f)
