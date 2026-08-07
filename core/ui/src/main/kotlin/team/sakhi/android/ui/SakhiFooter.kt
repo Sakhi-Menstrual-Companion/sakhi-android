@@ -62,7 +62,12 @@ fun SakhiFooter(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.background)
+            // No fill of its own. It used to paint `colorScheme.background`, which
+            // happens to match the onboarding pages but NOT any host that paints its own
+            // surface -- inside the Care sheet that showed as a white band under the
+            // buttons while the page above it was pink. iOS's footer is simply part of
+            // the page. Every caller lays the footer out below its content rather than
+            // over it, so there is nothing to hide behind an opaque fill.
             .navigationBarsPadding()
             .padding(bottom = SakhiSpacing.space5),
     ) {
