@@ -58,6 +58,7 @@ import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SakhiNavDirection
 import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 private const val WEBSITE_URL = "https://sakhi.rachna.co"
@@ -256,6 +257,7 @@ private fun AboutActionSectionCard(
     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
         ProfileSectionLabel(text = label)
         Surface(
+            color = sakhiSystemBackground(),
             shape = RoundedCornerShape(SakhiRadius.xl),
             tonalElevation = SakhiSpacing.space1,
             modifier = Modifier.fillMaxWidth(),
@@ -277,6 +279,7 @@ private fun AboutSingleActionCard(
     row: AboutActionRow,
 ) {
     Surface(
+        color = sakhiSystemBackground(),
         shape = RoundedCornerShape(SakhiRadius.xl),
         tonalElevation = SakhiSpacing.space1,
         modifier = Modifier.fillMaxWidth(),
@@ -323,6 +326,7 @@ private fun AboutInfoSectionCard(
     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
         ProfileSectionLabel(text = label)
         Surface(
+            color = sakhiSystemBackground(),
             shape = RoundedCornerShape(SakhiRadius.xl),
             tonalElevation = SakhiSpacing.space1,
             modifier = Modifier.fillMaxWidth(),

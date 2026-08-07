@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
@@ -173,6 +174,7 @@ private fun FeedbackTypeMenuCard(
     var menuExpanded by remember { mutableStateOf(false) }
 
     Surface(
+        color = sakhiSystemBackground(),
         shape = RoundedCornerShape(SakhiRadius.xl),
         tonalElevation = SakhiSpacing.space1,
         modifier = Modifier.fillMaxWidth(),
@@ -249,6 +251,7 @@ private fun FeedbackInputCard(
     val nearingLimit = feedbackText.length > MAX_CHARS - 50
 
     Surface(
+        color = sakhiSystemBackground(),
         shape = RoundedCornerShape(SakhiRadius.xl),
         tonalElevation = SakhiSpacing.space1,
         modifier = Modifier.fillMaxWidth(),

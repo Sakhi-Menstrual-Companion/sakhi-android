@@ -46,6 +46,7 @@ import team.sakhi.models.UserProfile
 import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.SessionManager
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.common.toSafeUserMessage
 
@@ -162,6 +163,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4)) {
                         Surface(
+                            color = sakhiSystemBackground(),
                             shape = RoundedCornerShape(SakhiRadius.xl),
                             tonalElevation = SakhiSpacing.space1,
                             modifier = Modifier.fillMaxWidth(),
@@ -195,6 +197,7 @@ fun EditProfileScreen(onBack: () -> Unit) {
 
                         profile?.phone?.takeIf { it.isNotBlank() }?.let { phone ->
                             Surface(
+                                color = sakhiSystemBackground(),
                                 shape = RoundedCornerShape(SakhiRadius.xl),
                                 tonalElevation = SakhiSpacing.space1,
                                 modifier = Modifier.fillMaxWidth(),

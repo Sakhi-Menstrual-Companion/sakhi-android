@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +46,7 @@ import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SakhiTextField
 import team.sakhi.validation.PhoneCountry
 
@@ -169,10 +169,7 @@ fun CountryPicker(
                         onClick = { onCountrySelected(country) },
                     )
                     if (index < filtered.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = SakhiSpacing.space6 + SakhiSpacing.space12 - SakhiSpacing.space1),
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
-                        )
+                        SakhiListDivider(startInset = SakhiSpacing.space6 + SakhiSpacing.space12 - SakhiSpacing.space1)
                     }
                 }
             }

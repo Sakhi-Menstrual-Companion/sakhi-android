@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.filled.ArrowOutward
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -61,7 +60,9 @@ import team.sakhi.preferences.UserPreferenceDefaults
 import team.sakhi.preferences.UserPreferenceKeys
 import team.sakhi.session.SessionManager
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.ui.SakhiListDivider
 
 /**
  * Ports iOS `NotificationsSettingsView.swift`'s toggle rows, persisted through
@@ -287,6 +288,7 @@ private fun ToggleSection(
     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
         ProfileSectionLabel(text = stringResource(labelRes))
         Surface(
+            color = sakhiSystemBackground(),
             shape = RoundedCornerShape(SakhiRadius.xl),
             tonalElevation = SakhiSpacing.space1,
             modifier = Modifier.fillMaxWidth(),
@@ -303,7 +305,7 @@ private fun ToggleSection(
                         onToggleChanged = onToggleChanged,
                     )
                     if (index != rows.lastIndex) {
-                        HorizontalDivider(modifier = Modifier.padding(start = NotificationToggleDividerInset))
+                        SakhiListDivider(startInset = NotificationToggleDividerInset)
                     }
                 }
             }
@@ -373,6 +375,7 @@ private fun NotificationSettingsCard(
 ) {
     val context = LocalContext.current
     Surface(
+        color = sakhiSystemBackground(),
         shape = RoundedCornerShape(SakhiRadius.xl),
         tonalElevation = SakhiSpacing.space1,
         modifier = Modifier.fillMaxWidth(),

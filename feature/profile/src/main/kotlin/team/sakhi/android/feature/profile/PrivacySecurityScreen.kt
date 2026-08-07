@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -61,7 +60,9 @@ import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.SessionManager
 import java.io.File
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.ui.SakhiListDivider
 
 private val PrivacySecurityDividerInset = SakhiSpacing.space4 + 24.dp + SakhiSpacing.space3
 private val PrivacySecurityRowIconSize = 15.dp
@@ -106,6 +107,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 ProfileSectionLabel(text = stringResource(R.string.profile_privacy_section_privacy))
                 Surface(
+                    color = sakhiSystemBackground(),
                     shape = RoundedCornerShape(SakhiRadius.xl),
                     tonalElevation = SakhiSpacing.space1,
                     modifier = Modifier.fillMaxWidth(),
@@ -124,7 +126,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                                 key = UserPreferenceKeys.PRIVACY_SCREENSHOT_WARNING,
                                 default = UserPreferenceDefaults.PRIVACY_SCREENSHOT_WARNING,
                             )
-                            HorizontalDivider(modifier = Modifier.padding(start = PrivacySecurityDividerInset))
+                            SakhiListDivider(startInset = PrivacySecurityDividerInset)
                         }
                         PrivacyToggleRow(
                             title = stringResource(R.string.profile_privacy_analytics),
@@ -141,6 +143,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 ProfileSectionLabel(text = stringResource(R.string.profile_privacy_section_your_data))
                 Surface(
+                    color = sakhiSystemBackground(),
                     shape = RoundedCornerShape(SakhiRadius.xl),
                     tonalElevation = SakhiSpacing.space1,
                     modifier = Modifier.fillMaxWidth(),
@@ -229,6 +232,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
 
                 ProfileSectionLabel(text = stringResource(R.string.profile_privacy_section_permissions))
                 Surface(
+                    color = sakhiSystemBackground(),
                     shape = RoundedCornerShape(SakhiRadius.xl),
                     tonalElevation = SakhiSpacing.space1,
                     modifier = Modifier.fillMaxWidth(),
@@ -289,7 +293,7 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                                 )
                             }
                             if (index != 2) {
-                                HorizontalDivider(modifier = Modifier.padding(start = PrivacySecurityDividerInset))
+                                SakhiListDivider(startInset = PrivacySecurityDividerInset)
                             }
                         }
                     }

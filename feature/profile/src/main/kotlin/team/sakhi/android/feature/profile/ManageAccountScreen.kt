@@ -92,6 +92,7 @@ import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.session.SessionManager
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.common.toSafeUserMessage
 
@@ -332,6 +333,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                     contentAlignment = Alignment.Center,
                 ) {
                     Surface(
+                        color = sakhiSystemBackground(),
                         shape = RoundedCornerShape(SakhiRadius.xl),
                         tonalElevation = SakhiSpacing.space1,
                     ) {
@@ -449,6 +451,7 @@ private fun MenuContent(
         Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
             ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_your_data))
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth(),
@@ -466,6 +469,7 @@ private fun MenuContent(
         Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
             ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_danger_zone))
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth(),
@@ -545,6 +549,7 @@ private fun ResetContent(
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_what_happens))
                 Surface(
+                    color = sakhiSystemBackground(),
                     shape = RoundedCornerShape(SakhiRadius.xl),
                     tonalElevation = SakhiSpacing.space1,
                     modifier = Modifier.fillMaxWidth(),
@@ -692,6 +697,7 @@ private fun DeleteContent(
                         subtitle = stringResource(R.string.profile_manage_account_leave_reason_subtitle),
                     )
                     Surface(
+                        color = sakhiSystemBackground(),
                         shape = RoundedCornerShape(SakhiRadius.xl),
                         tonalElevation = SakhiSpacing.space1,
                         modifier = Modifier.fillMaxWidth(),
@@ -754,6 +760,7 @@ private fun DeleteContent(
                     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                         ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_what_will_be_removed))
                         Surface(
+                            color = sakhiSystemBackground(),
                             shape = RoundedCornerShape(SakhiRadius.xl),
                             tonalElevation = SakhiSpacing.space1,
                             modifier = Modifier.fillMaxWidth(),
@@ -878,6 +885,7 @@ private fun BigLossCard(
     subtitle: String,
 ) {
     Surface(
+        color = sakhiSystemBackground(),
         shape = RoundedCornerShape(SakhiRadius.xl),
         tonalElevation = SakhiSpacing.space1,
         modifier = Modifier
@@ -985,6 +993,7 @@ private fun StatPill(
     modifier: Modifier = Modifier,
 ) {
     Surface(
+        color = sakhiSystemBackground(),
         shape = RoundedCornerShape(14.dp),
         tonalElevation = SakhiSpacing.space1,
         modifier = modifier.semantics(mergeDescendants = true) {},

@@ -21,7 +21,6 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,9 +42,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.ProfileSectionLabel
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SakhiNavDirection
 import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.design.DesignTokens
@@ -165,6 +166,7 @@ fun LegalScreen(onBack: () -> Unit) {
             )
 
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth(),
@@ -234,6 +236,7 @@ internal fun SettingsSectionCard(label: String?, rows: List<SettingsSectionRow>)
             ProfileSectionLabel(text = labelText)
         }
         Surface(
+            color = sakhiSystemBackground(),
             shape = RoundedCornerShape(SakhiRadius.xl),
             tonalElevation = SakhiSpacing.space1,
             modifier = Modifier.fillMaxWidth(),
@@ -314,7 +317,7 @@ internal fun SettingsSectionCard(label: String?, rows: List<SettingsSectionRow>)
                         } else {
                             SakhiSpacing.space4
                         }
-                        HorizontalDivider(modifier = Modifier.padding(start = dividerStart))
+                        SakhiListDivider(startInset = dividerStart)
                     }
                 }
             }

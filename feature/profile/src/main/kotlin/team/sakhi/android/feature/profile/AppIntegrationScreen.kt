@@ -18,7 +18,6 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Hotel
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -55,6 +54,7 @@ import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SecondaryButton
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
@@ -336,7 +336,7 @@ private fun InsightCard(
                 )
             }
             rows.forEach { row ->
-                HorizontalDivider(modifier = Modifier.padding(start = AppIntegrationInsightDividerInset))
+                SakhiListDivider(startInset = AppIntegrationInsightDividerInset)
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -371,7 +371,7 @@ private fun TemperatureInsightCard(
         GlassCard(modifier = Modifier.fillMaxWidth()) {
             rows.forEachIndexed { index, row ->
                 if (index > 0) {
-                    HorizontalDivider(modifier = Modifier.padding(start = AppIntegrationInsightDividerInset))
+                    SakhiListDivider(startInset = AppIntegrationInsightDividerInset)
                 }
                 Row(
                     modifier = Modifier

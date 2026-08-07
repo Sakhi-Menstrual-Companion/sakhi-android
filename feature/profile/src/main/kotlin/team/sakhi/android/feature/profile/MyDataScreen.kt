@@ -73,6 +73,7 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.util.Locale
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.designsystem.sakhiGroupedBackground
 import team.sakhi.android.designsystem.sakhiSystemGray5
@@ -599,6 +600,7 @@ private fun DataGroup(
     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
         ProfileSectionLabel(text = title)
         Surface(
+            color = sakhiSystemBackground(),
             shape = RoundedCornerShape(SakhiRadius.xl),
             tonalElevation = SakhiSpacing.space1,
             modifier = Modifier.fillMaxWidth(),

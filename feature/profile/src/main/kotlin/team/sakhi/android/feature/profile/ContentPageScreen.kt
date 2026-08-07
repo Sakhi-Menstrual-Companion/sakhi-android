@@ -95,6 +95,7 @@ import team.sakhi.repositories.SanityFaq
 import team.sakhi.repositories.SanityLegalPage
 import team.sakhi.repositories.SanityPortableTextBlock
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 /**
@@ -411,6 +412,7 @@ private fun LiveFaqContent(faqs: List<SanityFaq>, languageCode: String) {
         faqs.forEach { faq ->
             val faqId = faq.stableId.ifBlank { faq.question.localized(languageCode) }
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.lg),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth(),
@@ -462,6 +464,7 @@ private fun ContentCard(
     badgeStyle: ContentCardBadgeStyle,
 ) {
     Surface(
+        color = sakhiSystemBackground(),
         shape = RoundedCornerShape(SakhiRadius.lg),
         tonalElevation = SakhiSpacing.space1,
         modifier = Modifier.fillMaxWidth(),
@@ -568,6 +571,7 @@ private fun sfSymbolToMaterialIcon(symbol: String): ImageVector = when {
 @Composable
 private fun TextContentCard(item: ContentItem) {
     Surface(
+        color = sakhiSystemBackground(),
         shape = RoundedCornerShape(SakhiRadius.lg),
         tonalElevation = SakhiSpacing.space1,
         modifier = Modifier.fillMaxWidth(),

@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -60,7 +59,9 @@ import team.sakhi.preferences.ThemePreferenceStore
 import team.sakhi.preferences.UserPreferenceDefaults
 import team.sakhi.preferences.UserPreferenceKeys
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.ui.SakhiListDivider
 
 private val AppearanceRowDividerInset = SakhiSpacing.space4 + 24.dp + SakhiSpacing.space3
 private val AppearanceThemeIconSize = 15.dp
@@ -103,6 +104,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 ProfileSectionLabel(text = stringResource(R.string.profile_appearance_section_theme))
                 Surface(
+                    color = sakhiSystemBackground(),
                     shape = RoundedCornerShape(SakhiRadius.xl),
                     tonalElevation = SakhiSpacing.space1,
                     modifier = Modifier.fillMaxWidth(),
@@ -150,7 +152,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
                                 }
                             }
                             if (index != options.lastIndex) {
-                                HorizontalDivider(modifier = Modifier.padding(start = AppearanceRowDividerInset))
+                                SakhiListDivider(startInset = AppearanceRowDividerInset)
                             }
                         }
                     }
@@ -160,6 +162,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
             Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
                 ProfileSectionLabel(text = stringResource(R.string.profile_appearance_section_interaction))
                 Surface(
+                    color = sakhiSystemBackground(),
                     shape = RoundedCornerShape(SakhiRadius.xl),
                     tonalElevation = SakhiSpacing.space1,
                     modifier = Modifier.fillMaxWidth(),
@@ -173,7 +176,7 @@ fun AppearanceScreen(onBack: () -> Unit) {
                             key = UserPreferenceKeys.HAPTICS_ENABLED,
                             default = UserPreferenceDefaults.HAPTICS_ENABLED,
                         )
-                        HorizontalDivider(modifier = Modifier.padding(start = AppearanceRowDividerInset))
+                        SakhiListDivider(startInset = AppearanceRowDividerInset)
                         PreferenceToggleRow(
                             title = stringResource(R.string.profile_appearance_reduce_motion),
                             subtitle = stringResource(R.string.profile_appearance_reduce_motion_subtitle),
@@ -206,6 +209,7 @@ private fun LanguageCard(currentLanguage: AppLanguage, onLanguageChosen: (AppLan
     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
         ProfileSectionLabel(text = stringResource(R.string.profile_appearance_section_language))
         Surface(
+            color = sakhiSystemBackground(),
             shape = RoundedCornerShape(SakhiRadius.xl),
             tonalElevation = SakhiSpacing.space1,
             modifier = Modifier.fillMaxWidth(),

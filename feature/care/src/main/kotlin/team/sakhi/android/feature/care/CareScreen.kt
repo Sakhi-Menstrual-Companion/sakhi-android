@@ -39,7 +39,6 @@ import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -79,6 +78,7 @@ import team.sakhi.android.ui.BackButton
 import team.sakhi.android.ui.GlassCard
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiFooter
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.android.ui.ToastManager
 import team.sakhi.android.ui.ToastType
@@ -88,6 +88,7 @@ import team.sakhi.models.CarePartnership
 import team.sakhi.models.ParentChildPermissions
 import team.sakhi.models.PartnerInvitation
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.common.toSafeUserMessage
 
@@ -310,6 +311,7 @@ private fun PartnerDetailContent(
 
             SectionHeader(text = stringResource(R.string.care_section_details))
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier
@@ -336,6 +338,7 @@ private fun PartnerDetailContent(
                 modifier = Modifier.padding(top = SakhiSpacing.space6),
             )
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier
@@ -362,7 +365,7 @@ private fun PartnerDetailContent(
             Spacer(modifier = Modifier.height(SakhiSpacing.space16))
         }
 
-        HorizontalDivider()
+        SakhiListDivider()
         TextButton(
             onClick = { showConfirmRemove = true },
             enabled = !isRemoving,
@@ -587,7 +590,7 @@ private fun SectionHeader(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun RowDivider() {
-    HorizontalDivider(modifier = Modifier.padding(start = SakhiSpacing.space10))
+    SakhiListDivider(startInset = SakhiSpacing.space10)
 }
 
 @Composable
@@ -907,6 +910,7 @@ private fun InviteCreationContent(
         val arrivedWithCode = uiState.acceptInviteCode.isNotBlank()
         val createInviteCard: @Composable () -> Unit = {
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth(),
@@ -953,6 +957,7 @@ private fun InviteCreationContent(
         }
         val acceptCodeCard: @Composable () -> Unit = {
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth(),
@@ -1116,6 +1121,7 @@ private fun PartnerPermissionsEditContent(
 
             SectionHeader(text = stringResource(R.string.care_section_what_they_can_do))
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space6),
@@ -1140,6 +1146,7 @@ private fun PartnerPermissionsEditContent(
                 modifier = Modifier.padding(top = SakhiSpacing.space6),
             )
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space6),
@@ -1176,7 +1183,7 @@ private fun PartnerPermissionsEditContent(
             Spacer(modifier = Modifier.height(SakhiSpacing.space16))
         }
 
-        HorizontalDivider()
+        SakhiListDivider()
         SakhiFooter(
             primaryLabel = if (isSaving) stringResource(R.string.care_saving) else stringResource(R.string.care_save),
             primaryEnabled = !isSaving,
@@ -1273,7 +1280,7 @@ private fun PartnerHistoryContent(
                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
             )
         }
-        HorizontalDivider()
+        SakhiListDivider()
 
         if (!isLoaded) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -1352,6 +1359,7 @@ private fun PartnerHistoryContent(
         ) {
             SectionHeader(text = stringResource(R.string.care_section_recent_activity))
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth(),
@@ -1406,6 +1414,7 @@ private fun PartnerHistoryContent(
                 modifier = Modifier.padding(top = SakhiSpacing.space6),
             )
             Surface(
+                color = sakhiSystemBackground(),
                 shape = RoundedCornerShape(SakhiRadius.xxl),
                 tonalElevation = SakhiSpacing.space1,
                 modifier = Modifier.fillMaxWidth(),

@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.EmptyState
@@ -68,6 +69,7 @@ import java.util.Locale
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.common.toSafeUserMessage
+import team.sakhi.android.ui.SakhiListDivider
 
 /**
  * Ports iOS `ActivityLogView.swift`'s real per-field audit-trail ledger: month
@@ -144,6 +146,7 @@ fun ActivityLogScreen(onBack: () -> Unit) {
                 }
                 if (groupedEntries.isEmpty() && error == null) {
                     Surface(
+                        color = sakhiSystemBackground(),
                         shape = RoundedCornerShape(SakhiRadius.lg),
                         tonalElevation = SakhiSpacing.space1,
                         modifier = Modifier.fillMaxWidth(),
@@ -306,6 +309,7 @@ private fun DayBlock(entry: DayEntry) {
         }
 
         Surface(
+            color = sakhiSystemBackground(),
             shape = RoundedCornerShape(SakhiRadius.lg),
             tonalElevation = SakhiSpacing.space1,
             modifier = Modifier.fillMaxWidth(),
@@ -358,9 +362,7 @@ private fun DayBlock(entry: DayEntry) {
                         )
                     }
                     if (index != entry.rows.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = SakhiSpacing.space4 + 36.dp + SakhiSpacing.space3),
-                        )
+                        SakhiListDivider(startInset = SakhiSpacing.space4 + 36.dp + SakhiSpacing.space3)
                     }
                 }
             }
