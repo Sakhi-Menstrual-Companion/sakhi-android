@@ -112,6 +112,12 @@ fun SakhiBottomActionBar(
      */
     onLockedLogClick: (() -> Unit)? = null,
     hasLoggedForDate: Boolean,
+    /**
+     * The selected day already has detail logged (symptoms, moods, notes, weight...),
+     * as opposed to just a flow level. Such a day opens the full sheet on tap rather
+     * than the flow-only quick menu.
+     */
+    hasLogDetail: Boolean = false,
     isLogSaving: Boolean,
     selectedFlow: FlowIntensity?,
     /**
@@ -202,7 +208,19 @@ fun SakhiBottomActionBar(
                         // menu behind a long-press, so the same tap did two different things
                         // on the two platforms and the menu was effectively undiscoverable.
                         // A partner without permission still never reaches the menu.
-                        onClick = { if (canLog) showQuickLogMenu = true else onLockedLogClick?.invoke() },
+                        // Karan: a day that already carries logged detail opens the FULL
+                        // sheet on tap, not the quick menu -- the menu only offers flow
+                        // levels, so for a day with symptoms/moods/notes on it the quick
+                        // menu is the wrong tool and hides what is already there. Days
+                        // with nothing (or only a flow) still get the quick menu, which
+                        // is the fast path the menu exists for.
+                        onClick = {
+                            when {
+                                !canLog -> onLockedLogClick?.invoke()
+                                hasLogDetail -> onLogClick()
+                                else -> showQuickLogMenu = true
+                            }
+                        },
                         onLongClick = { if (canLog) showQuickLogMenu = true },
                     ),
                 contentAlignment = Alignment.Center,

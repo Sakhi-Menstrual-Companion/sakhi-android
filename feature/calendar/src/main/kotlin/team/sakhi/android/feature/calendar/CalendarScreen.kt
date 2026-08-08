@@ -453,6 +453,9 @@ fun CalendarScreen(
                 isPartnerMode = logUiState.session?.isViewingOwnData == false,
                 canLog = logUiState.canLogPeriod && logUiState.canMutateSelectedDate,
                 hasLoggedForDate = logUiState.hasAnyData,
+                hasLogDetail = uiState.days
+                    .firstOrNull { it.date == uiState.selectedDate }
+                    ?.hasLogDetail == true,
                 isLogSaving = logUiState.isSaving,
                 selectedFlow = logUiState.selectedFlow,
                 selectedDate = uiState.selectedDate,
@@ -1220,6 +1223,7 @@ private fun List<CalendarDayUiState>.toSakhiCalendarDays(
             isSelected = selectedDate != null && day.isInVisibleMonth && day.date == selectedDate,
             isToday = day.date == today,
             isFuture = day.date > today,
+            hasLogDetail = day.hasLogDetail,
             markerType = when {
                 day.mark?.isPeriod == true -> SakhiCalendarMarkerType.PERIOD
                 day.mark?.isPredictedPeriod == true -> SakhiCalendarMarkerType.PREDICTED_PERIOD

@@ -39,6 +39,8 @@ data class CalendarDayUiState(
     val date: LocalDate,
     val isInVisibleMonth: Boolean,
     val mark: CalendarMarker.DayMark? = null,
+    /** See `CalendarViewModel.cachedLogDetailDates`. */
+    val hasLogDetail: Boolean = false,
 )
 
 @Immutable
@@ -79,6 +81,15 @@ class CalendarViewModel(
     val uiState: StateFlow<CalendarUiState> = _uiState.asStateFlow()
     private var cachedSession: SessionContext? = null
     private var cachedPeriodLogDates: Set<LocalDate> = emptySet()
+
+    /**
+     * Days carrying logged detail beyond the period itself -- symptoms, moods, notes,
+     * medications, sexual activity. Drawn as a small dot under the date, so a day someone
+     * actually described is distinguishable from a bare period day.
+     *
+     * Weight and BBT live inside `symptoms` as encoded tokens, so they are covered too.
+     */
+    private var cachedLogDetailDates: Set<LocalDate> = emptySet()
     private var cachedCycles: List<CycleData> = emptyList()
 
     init {
@@ -228,10 +239,21 @@ class CalendarViewModel(
         // target is still loading -- a real cross-account leak, caught by
         // `ensureYearLoaded does not reuse the previous targets cached cycles`.
         cachedPeriodLogDates = emptySet()
-        val loadedLogDates = runCatching {
+        cachedLogDetailDates = emptySet()
+        val loadedLogs = runCatching {
             periodLogRepository.getAll(requestedTargetUserId).getOrDefault(emptyList())
         }.getOrDefault(emptyList())
+        val loadedLogDates = loadedLogs
             .filter { it.periodPresent }
+            .mapTo(mutableSetOf()) { it.logDate }
+        val loadedDetailDates = loadedLogs
+            .filter { log ->
+                log.symptoms.isNotEmpty() ||
+                    log.moods.isNotEmpty() ||
+                    log.medications.isNotEmpty() ||
+                    !log.notes.isNullOrBlank() ||
+                    log.sexualActivity != "none"
+            }
             .mapTo(mutableSetOf()) { it.logDate }
         cycleDataRepository.getAll(requestedTargetUserId)
             .onSuccess { cycles ->
@@ -240,6 +262,7 @@ class CalendarViewModel(
                 cachedCycles = cycles
                 // Only adopt the logs once this target is confirmed still current.
                 cachedPeriodLogDates = loadedLogDates
+                cachedLogDetailDates = loadedDetailDates
                 val monthsToLoad = preloadMonthsFor(month)
                 val monthCache = buildMonthCache(
                     months = monthsToLoad,
@@ -335,6 +358,7 @@ class CalendarViewModel(
                 date = date,
                 isInVisibleMonth = date.month == visibleMonth.month && date.year == visibleMonth.year,
                 mark = marks[date],
+                hasLogDetail = date in cachedLogDetailDates,
             )
         }
     }

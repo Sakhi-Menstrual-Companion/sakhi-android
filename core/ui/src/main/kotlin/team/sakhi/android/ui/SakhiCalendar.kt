@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -43,6 +44,12 @@ data class SakhiCalendarDay(
     val isToday: Boolean = false,
     val isFuture: Boolean = false,
     val markerType: SakhiCalendarMarkerType? = null,
+    /**
+     * The day has something logged beyond the period itself -- symptoms, moods, notes,
+     * weight, BBT and so on. Drawn as a small dot under the date so a day that carries
+     * detail is distinguishable from a bare period day at a glance.
+     */
+    val hasLogDetail: Boolean = false,
 )
 
 enum class SakhiCalendarMarkerType {
@@ -335,6 +342,27 @@ private fun SakhiCalendarDayCell(
                 color = labelColor,
             )
         }
+
+        // Small dot under the date when the day carries logged detail. Sits below the
+        // day circle rather than inside it so it never competes with the period fill or
+        // the today ring.
+        if (day.hasLogDetail) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = CalendarLogDotBottomInset)
+                    .size(CalendarLogDotSize)
+                    .background(
+                        color = if (day.markerType == SakhiCalendarMarkerType.PERIOD) {
+                            // On a filled period cell the brand pink would disappear.
+                            Color.White
+                        } else {
+                            MaterialTheme.colorScheme.primary
+                        },
+                        shape = androidx.compose.foundation.shape.CircleShape,
+                    ),
+            )
+        }
     }
 }
 
@@ -343,10 +371,18 @@ private data class SakhiCalendarWeekRows(
     val rows: List<List<SakhiCalendarDay>>,
 )
 
+// Back to the original height. Growing this to make room under the ring for the log dot
+// spread the rows apart and pushed the last week of the month off the bottom of the
+// sheet -- six rows multiply every dp added here. The dot's clearance comes from a
+// slightly smaller today ring instead, which costs no layout.
 private val calendarCellHeight = SakhiSpacing.space10 + SakhiSpacing.space1 * 2
 private val CalendarDayFontSize = 15.sp
+private val CalendarLogDotSize = 4.dp
+private val CalendarLogDotBottomInset = 1.dp
 private val calendarDotSize = SakhiSpacing.space8 + SakhiSpacing.space1 / 2
-private val calendarRingSize = SakhiSpacing.space10 + SakhiSpacing.space1 / 2
+// 42dp left only ~3dp of cell below it, which is not enough for the log dot to sit
+// clear. 38dp frees that band without touching the row height.
+private val calendarRingSize = SakhiSpacing.space8 + SakhiSpacing.space1 + SakhiSpacing.space1 / 2
 private val calendarRingStroke = SakhiSpacing.space1 / 2 + SakhiSpacing.space1 / 8
 private val yearGridCellHeight = SakhiSpacing.space6
 private val yearGridDotSize = SakhiSpacing.space5
