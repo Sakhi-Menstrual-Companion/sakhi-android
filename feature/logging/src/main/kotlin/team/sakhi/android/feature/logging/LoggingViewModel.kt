@@ -436,6 +436,20 @@ class LoggingViewModel(
                             }
                             widgetSnapshotManager.refreshAsync()
                             hapticManager.success()
+
+                            // Re-read what was actually persisted.
+                            //
+                            // `loadEntry` otherwise runs only when the session or the
+                            // selected date changes, and a save changes neither -- so the
+                            // view model kept whatever the user last tapped, regardless of
+                            // what the write produced. Clearing a period left
+                            // `selectedFlow` sitting on the old value, so the sheet still
+                            // showed it selected and the action button still showed the
+                            // pencil (`hasAnyData` reads this same state), while the
+                            // calendar and Home -- which read the repository -- correctly
+                            // showed no period. That disagreement is what made a cleared
+                            // day look logged.
+                            loadEntry(session, state.selectedDate)
                         }
                     }
                     .onFailure { throwable ->

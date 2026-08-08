@@ -650,7 +650,12 @@ class LoggingViewModelTest {
         gate.complete(Unit)
         advanceUntilIdle()
 
-        coVerify(exactly = 2) { periodLogRepository.getForDateRange(any(), any(), any()) }
+        // Three reads, not two: the init block's `loadEntry`, the one `save()` makes to
+        // resolve the day's existing rows, and the reload a successful save now performs
+        // so the view model reflects what was actually persisted rather than whatever the
+        // user last tapped. The re-entry guard is still proven -- the second `save()` adds
+        // no fetch of its own.
+        coVerify(exactly = 3) { periodLogRepository.getForDateRange(any(), any(), any()) }
     }
 
     @Test
