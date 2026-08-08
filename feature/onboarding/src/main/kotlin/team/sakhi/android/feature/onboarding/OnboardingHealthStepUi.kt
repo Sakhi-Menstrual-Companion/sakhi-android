@@ -83,6 +83,8 @@ import team.sakhi.android.designsystem.sakhiLightPink
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemGray5
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.designsystem.toComposeColor
+import team.sakhi.design.SakhiUIColors
 import team.sakhi.android.designsystem.sakhiSystemBackground
 
 @Composable
@@ -405,14 +407,21 @@ private fun WeightStepContent(
     // to show up as breathing room directly under the segmented toggle, which
     // `SegmentedToggle` now owns via its own bottom gap. Centring the column instead
     // spread that height above and below the whole group, which is not the ask.
-    PinkCard(modifier = Modifier.heightIn(min = HealthPickerCardHeight)) {
-        // NOTE: do not give any child here a `weight(1f)`. The card sets only a
-        // *minimum* height, so this column's max height is unbounded, and a weighted
-        // child resolves to zero height -- which silently made the value text and the
-        // whole dial disappear when it was tried.
-        Column(
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-        ) {
+    // Fixed height, not `heightIn(min =)`. The content is shorter than
+    // `HealthPickerCardHeight`, so the card rendered at exactly that height either
+    // way -- but a min-only constraint leaves the column's max height UNBOUNDED,
+    // which makes `weight(1f)` resolve to zero (that is what once made the value
+    // text and the whole dial vanish). Pinning the height bounds the column so the
+    // leftover slack can be placed deliberately instead of always falling to the
+    // bottom, i.e. below the wheel.
+    PinkCard(modifier = Modifier.height(HealthPickerCardHeight)) {
+        // iOS `WeightStep` is a `VStack(spacing: 0)` with explicit per-child padding,
+        // NOT the uniform 12pt stack `HeightStep` uses. Real values from
+        // `WeightStep.swift`: 24 above the digits (`.padding(.top, DS.Spacing.l)`),
+        // 16 below them (`.padding(.bottom, DS.Spacing.m)`), 12 under the wheel
+        // (`.padding(.bottom, DS.Spacing.s)`). `SegmentedToggle` already contributes
+        // its own shared 12pt bottom gap, so the digits row only adds the other 12.
+        Column(modifier = Modifier.fillMaxHeight()) {
             SegmentedToggle(
                 options = listOf(
                     stringResource(R.string.onboarding_weight_option_metric),
@@ -422,8 +431,18 @@ private fun WeightStepContent(
                 onSelected = { onUnitChanged(it == 0) },
             )
 
+            // Karan: the card's leftover height belongs BETWEEN the segment and the
+            // digits, not stranded under the wheel. Safe here only because the card
+            // height is now fixed -- see the note on `PinkCard` above.
+            Spacer(modifier = Modifier.weight(1f))
+
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        top = WeightValueTopGap,
+                        bottom = WeightValueBottomGap,
+                    ),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.Bottom,
             ) {
@@ -443,6 +462,7 @@ private fun WeightStepContent(
             // `HeightRulerPicker` above.
             key(useMetric) {
                 WeightWheelPicker(
+                    modifier = Modifier.padding(bottom = WeightWheelBottomGap),
                     value = displayWeight,
                     range = if (useMetric) 30..150 else 66..331,
                     onValueChange = { next ->
@@ -894,22 +914,38 @@ private fun CalendarDayCell(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // iOS `SakhiCalendarView.dayCell` in `solidSelection` mode (what
+    // `OnboardingCalendarPicker` uses): the selection is a fixed-size RING, not a
+    // background on the cell. Painting the cell background meant the highlight
+    // stretched to the full weighted column width and rendered as a wide pill.
+    // Real iOS values: cell 34 high and full width, ring `dotSize + 8` where
+    // `dotSize = min(cellHeight - 10, 36)` = 24, so a 32pt circle at 2.5pt stroke,
+    // in `periodColor` (`CAL_PERIOD_LIGHT`), with the day text in that same colour.
+    val periodColor = SakhiUIColors.CAL_PERIOD_LIGHT.toComposeColor()
     Box(
         modifier = modifier
-            .height(SakhiSpacing.space8 + SakhiSpacing.space1 / 2)
-            .background(
-                color = if (isSelected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
-                shape = RoundedCornerShape(SakhiRadius.full),
-            )
+            .height(CalendarCellHeight)
             .clickable(enabled = enabled, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .size(CalendarSelectionRingSize)
+                    .border(
+                        width = CalendarSelectionRingStroke,
+                        color = periodColor,
+                        shape = CircleShape,
+                    ),
+            )
+        }
         Text(
             text = date?.dayOfMonth?.toString().orEmpty(),
-            style = MaterialTheme.typography.bodySmall,
+            fontSize = CalendarDayFontSize,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
             color = when {
                 date == null -> androidx.compose.ui.graphics.Color.Transparent
-                isSelected -> MaterialTheme.colorScheme.onPrimary
+                isSelected -> periodColor
                 enabled -> MaterialTheme.colorScheme.onSurface
                 else -> sakhiSecondaryLabel().copy(alpha = 0.4f)
             },
@@ -957,6 +993,21 @@ private val HeightRulerPickerHeight = 260.dp
  * remembering to add its own bottom padding.
  */
 private val SegmentedToggleBottomGap = 12.dp
+
+// iOS `WeightStep.swift`: the digits sit 24pt (`DS.Spacing.l`) below the segmented
+// toggle and 16pt (`DS.Spacing.m`) above the wheel, and the wheel keeps only 12pt
+// (`DS.Spacing.s`) under it. `SegmentedToggle` already owns 12 of the 24.
+private val WeightValueTopGap = 12.dp
+private val WeightValueBottomGap = 16.dp
+private val WeightWheelBottomGap = 12.dp
+
+// iOS `OnboardingCalendarPicker` -> `SakhiCalendarView(cellHeight: 34, rowSpacing: 2)`.
+// The ring is `dotSize + 8` where `dotSize = min(cellHeight - 10, 36)`, i.e. 32pt at a
+// 2.5pt stroke, and the day label is `.lato(13)`.
+private val CalendarCellHeight = 34.dp
+private val CalendarSelectionRingSize = 32.dp
+private val CalendarSelectionRingStroke = 2.5.dp
+private val CalendarDayFontSize = 13.sp
 
 /**
  * Shared minimum card height for `HeightStepContent`/`WeightStepContent` -- Karan
@@ -1048,11 +1099,18 @@ private fun monthGrid(month: YearMonth): List<LocalDate?> {
     repeat(month.lengthOfMonth()) { dayIndex ->
         days += month.atDay(dayIndex + 1)
     }
-    while (days.size % 7 != 0) {
+    // iOS `SakhiCalendarView` fixes the grid at `cellHeight * 6 + rowSpacing * 5`
+    // and `daysFor` always yields 42 slots, so the card is the same height in every
+    // month. Padding only to a multiple of 7 gave 5-row months a visibly shorter
+    // card that jumped when you paged.
+    while (days.size < CALENDAR_GRID_SLOTS) {
         days += null
     }
     return days
 }
+
+/** 6 weeks x 7 days -- iOS renders a constant 6-row grid regardless of the month. */
+private const val CALENDAR_GRID_SLOTS = 42
 
 private fun Double.roundToNearestInt(): Int = roundToInt().coerceAtLeast(0)
 
