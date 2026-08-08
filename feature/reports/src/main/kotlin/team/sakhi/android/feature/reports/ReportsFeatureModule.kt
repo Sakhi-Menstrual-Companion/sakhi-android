@@ -8,6 +8,10 @@ val reportsFeatureModule = module {
     single {
         ReportPdfExporter(context = get())
     }
+    single { AndroidReportStrings(context = get()) }
+    single {
+        ReportHtmlPdfExporter(context = get(), strings = get())
+    }
     viewModel {
         ReportsViewModel(
             sessionManager = get(),
@@ -15,6 +19,7 @@ val reportsFeatureModule = module {
             periodLogRepository = get(),
             userProfileRepository = get(),
             reportPdfExporter = get(),
+            reportHtmlPdfExporter = get(),
             hapticManager = get(),
             appContext = get(),
         )

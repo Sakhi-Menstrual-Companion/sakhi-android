@@ -127,6 +127,7 @@ class ReportsViewModel(
     private val periodLogRepository: PeriodLogRepository,
     private val userProfileRepository: UserProfileRepository,
     private val reportPdfExporter: ReportPdfExporter,
+    private val reportHtmlPdfExporter: ReportHtmlPdfExporter,
     private val hapticManager: AndroidHapticManager,
     private val appContext: Context,
 ) : ViewModel() {
@@ -285,14 +286,17 @@ class ReportsViewModel(
             if (discardStaleGeneration(activeSession)) return@launch
 
             val preparedUri = runCatching {
-                withContext(Dispatchers.IO) {
-                    val file = reportPdfExporter.export(
-                        document = document,
-                        selectedSections = config.sections,
-                    )
-                    reportPdfExporter.buildShareUri(file)
-                }
+                // Renders SakhiCore's shared `ReportHtml`, so iOS and Android produce
+                // the same document. `ReportHtmlPdfExporter` switches to the main
+                // thread itself (WebView is main-thread-only), which is why this is
+                // no longer wrapped in `Dispatchers.IO`.
+                val file = reportHtmlPdfExporter.export(
+                    document = document,
+                    selectedSections = config.sections,
+                )
+                reportHtmlPdfExporter.buildShareUri(file)
             }.getOrElse { throwable ->
+                android.util.Log.e("SakhiReport", "PDF export failed", throwable)
                 if (discardStaleGeneration(activeSession)) return@launch
                 _uiState.value = _uiState.value.copy(
                     phase = ReportsPhase.Error,

@@ -138,4 +138,30 @@
     <string name="reports_page_symptoms_flow">Symptoms &amp; Flow</string>
     <string name="reports_page_mood_patterns">Mood Patterns</string>
     <string name="reports_page_insights">Health Insights</string>
+    <string name="reports_date_range">Date range</string>
+    <string name="reports_cycles_analysed">Cycles analysed</string>
+    <string name="reports_disclaimer">This report contains personal health data. It is intended for informational purposes and to support conversations with your healthcare provider. It does not constitute medical advice or diagnosis.</string>
+    <string name="reports_cycle_summary">Cycle Summary</string>
+    <string name="reports_shortest_cycle">Shortest cycle</string>
+    <string name="reports_longest_cycle">Longest cycle</string>
+    <string name="reports_painkiller_days">Painkiller days</string>
+    <string name="reports_doctor_visit_days">Doctor visits</string>
+    <string name="reports_period_calendar">Period Calendar</string>
+    <string name="reports_calendar_subtitle">Cycle at a glance</string>
+    <string name="reports_calendar_legend">Solid = period logged, pale = predicted, ring = ovulation.</string>
+    <string name="reports_symptoms_flow">Symptoms &amp; Flow</string>
+    <string name="reports_mood_patterns">Mood Patterns</string>
+    <string name="reports_insights">Insights</string>
+    <string name="reports_insights_subtitle">What your cycle suggests</string>
+    <string name="reports_weekday_sun">S</string>
+    <string name="reports_weekday_mon">M</string>
+    <string name="reports_weekday_tue">T</string>
+    <string name="reports_weekday_wed">W</string>
+    <string name="reports_weekday_thu">T</string>
+    <string name="reports_weekday_fri">F</string>
+    <string name="reports_weekday_sat">S</string>
+    <plurals name="reports_occurrences">
+        <item quantity="one">%1$d time</item>
+        <item quantity="other">%1$d times</item>
+    </plurals>
 </resources>
