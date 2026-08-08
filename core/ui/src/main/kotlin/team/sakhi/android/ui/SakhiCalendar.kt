@@ -387,9 +387,16 @@ private val CalendarLogDotSize = 4.dp
 private val CalendarLogDotBottomInset = 1.dp
 private val CalendarLogDotOffsetY = 8.dp
 private val calendarDotSize = SakhiSpacing.space8 + SakhiSpacing.space1 / 2
-// 42dp left only ~3dp of cell below it, which is not enough for the log dot to sit
-// clear. 38dp frees that band without touching the row height.
-private val calendarRingSize = SakhiSpacing.space8 + SakhiSpacing.space1 + SakhiSpacing.space1 / 2
+// iOS `SakhiCalendarView` day cell: the ring is `dotSize + 8`, where
+// `dotSize = min(cellHeight - 10, 36)`. The Calendar tab uses the view's default
+// `cellHeight: 44` (`HomeCalendarSheet` overrides only `navButtonSize`), so dotSize is
+// 34 and the ring is 42.
+//
+// This was cut to 38 earlier on the belief that 42 crowded the log-detail dot. It does
+// not: that dot is Android-only (no iOS counterpart) and is drawn at the cell's bottom
+// edge with an 8dp *offset*, i.e. outside the cell bounds in the row gap, so it never
+// competed with the ring for space inside the cell.
+private val calendarRingSize = 42.dp
 private val calendarRingStroke = SakhiSpacing.space1 / 2 + SakhiSpacing.space1 / 8
 private val yearGridCellHeight = SakhiSpacing.space6
 private val yearGridDotSize = SakhiSpacing.space5
