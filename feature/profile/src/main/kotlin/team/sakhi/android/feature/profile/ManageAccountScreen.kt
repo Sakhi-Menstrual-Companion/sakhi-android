@@ -91,6 +91,7 @@ import team.sakhi.repositories.AccountRepository
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.session.SessionManager
+import team.sakhi.sync.DataMigration
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
@@ -282,6 +283,8 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                             route = ManageAccountRoute.Delete
                         },
                         error = error,
+                        isOfflineUser = session?.userId
+                            ?.let(DataMigration::isOfflineUserId) == true,
                     )
                 }
 
@@ -440,6 +443,7 @@ private fun MenuContent(
     onStartFresh: () -> Unit,
     onDeleteAccount: () -> Unit,
     error: String?,
+    isOfflineUser: Boolean,
 ) {
     Column(
         modifier = Modifier
@@ -479,7 +483,17 @@ private fun MenuContent(
                         icon = Icons.Filled.Restore,
                         iconTint = MaterialTheme.colorScheme.error,
                         title = stringResource(R.string.profile_manage_account_menu_reset_all_data),
-                        subtitle = stringResource(R.string.profile_manage_account_menu_reset_all_data_subtitle),
+                        // For an `offline_*` account there is no account to fall back
+                        // on -- the phone IS the only copy. Promising that logs and
+                        // cycles "stay safe in your account" would talk someone into
+                        // permanently destroying their own health history.
+                        subtitle = stringResource(
+                            if (isOfflineUser) {
+                                R.string.profile_manage_account_menu_reset_all_data_subtitle_offline
+                            } else {
+                                R.string.profile_manage_account_menu_reset_all_data_subtitle
+                            },
+                        ),
                         titleColor = MaterialTheme.colorScheme.error,
                         chevronTint = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
                         onClick = onStartFresh,

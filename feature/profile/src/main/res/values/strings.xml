@@ -594,6 +594,7 @@
          `resetProfileData()` is `authRepository.signOut()`, which deletes no health data, so
          promising removal here would be false on a destructive-sounding action. -->
     <string name="profile_manage_account_menu_reset_all_data_subtitle">Sign out of this device. Your logs and cycles stay safe in your account.</string>
+    <string name="profile_manage_account_menu_reset_all_data_subtitle_offline">This is the only copy of your data. Signing out of this device erases your logs and cycles for good.</string>
     <string name="profile_manage_account_menu_delete_account">Delete Account</string>
     <string name="profile_manage_account_menu_delete_account_subtitle">Permanently delete your account and all data</string>
     <string name="profile_manage_account_start_fresh_subtitle">See what gets removed from this device before you reset</string>
@@ -681,6 +682,8 @@
     <string name="profile_my_data_device_empty_subtitle">Your on-device profile, logs, and AI history will appear here once Sakhi stores them locally.</string>
     <string name="profile_my_data_cloud_empty_title">No cloud snapshot yet</string>
     <string name="profile_my_data_cloud_empty_subtitle">Once Sakhi syncs your account data, the server snapshot will appear here.</string>
+    <string name="profile_my_data_cloud_offline_title">This account is offline</string>
+    <string name="profile_my_data_cloud_offline_subtitle">Your data lives only on this phone. Nothing has been sent to Sakhi\'s servers.</string>
     <string name="profile_my_data_cloud_error_title">Couldn\'t reach Sakhi\'s servers</string>
     <string name="profile_my_data_device_footer">Live snapshot of this device. Refresh to update.</string>
     <string name="profile_my_data_cloud_footer">Encrypted on Sakhi\'s servers. Never shared or sold.</string>

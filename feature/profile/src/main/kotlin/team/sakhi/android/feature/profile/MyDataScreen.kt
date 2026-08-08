@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
@@ -163,9 +164,24 @@ internal fun MyDataRouteContent(
                     isLoading = uiState.isLoadingCloud,
                     error = uiState.cloudError,
                     isEmpty = uiState.cloudSnapshot.isEmpty(),
-                    emptyTitle = stringResource(R.string.profile_my_data_cloud_empty_title),
-                    emptySubtitle = stringResource(R.string.profile_my_data_cloud_empty_subtitle),
-                    emptyIcon = Icons.Filled.Cloud,
+                    // An offline account has no server row at all, so the ordinary
+                    // "nothing synced yet" copy would be misleading -- it implies a
+                    // sync that is pending rather than one that will never happen.
+                    emptyTitle = stringResource(
+                        if (uiState.isOfflineAccount) {
+                            R.string.profile_my_data_cloud_offline_title
+                        } else {
+                            R.string.profile_my_data_cloud_empty_title
+                        },
+                    ),
+                    emptySubtitle = stringResource(
+                        if (uiState.isOfflineAccount) {
+                            R.string.profile_my_data_cloud_offline_subtitle
+                        } else {
+                            R.string.profile_my_data_cloud_empty_subtitle
+                        },
+                    ),
+                    emptyIcon = if (uiState.isOfflineAccount) Icons.Filled.CloudOff else Icons.Filled.Cloud,
                 ) {
                     CloudSnapshotSections(snapshot = uiState.cloudSnapshot, context = context)
                 }

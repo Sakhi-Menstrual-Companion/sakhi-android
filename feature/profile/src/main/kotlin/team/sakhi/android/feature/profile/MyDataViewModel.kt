@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import team.sakhi.localdb.SakhiPhaseALocalStore
 import team.sakhi.localdb.SharedLocalRecordCodec
 import team.sakhi.models.CarePartnership
@@ -26,6 +27,7 @@ import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
+import team.sakhi.sync.DataMigration
 import team.sakhi.sync.OfflineUpgradeDataset
 import team.sakhi.android.common.toSafeUserMessage
 
@@ -56,6 +58,12 @@ data class MyDataUiState(
     val isRefreshing: Boolean = false,
     val localError: String? = null,
     val cloudError: String? = null,
+    /**
+     * True for `offline_*` accounts, which have no Supabase row at all. The cloud
+     * section renders an explanatory note instead of an empty snapshot, which would
+     * otherwise read as "synced, and the server has nothing".
+     */
+    val isOfflineAccount: Boolean = false,
 )
 
 class MyDataViewModel(
@@ -105,10 +113,17 @@ class MyDataViewModel(
                 isRefreshing = userInitiated,
                 localError = null,
                 cloudError = null,
+                isOfflineAccount = false,
             )
         }
 
-        coroutineScope {
+        // `supervisorScope`, NOT `coroutineScope`: a failing `async` child propagates
+        // its exception to the parent job the moment it throws, long before anyone
+        // calls `await()`. Under `coroutineScope` that cancelled this scope and killed
+        // the process, so the `runCatching { ...await() }` blocks below were dead code
+        // and a single unreachable Supabase table crashed all of Manage Account. iOS's
+        // `MyDataView.loadCloud()` just catches and shows `cloud.error`.
+        supervisorScope {
             // Real bug found in this session's own critical self-review: iOS's real
             // `MyDataView.swift` always reads `DataManager.shared.currentUserID` --
             // the actual signed-in device owner's own id, never whoever's cycle is
@@ -123,7 +138,14 @@ class MyDataViewModel(
             // own at all.
             val userId = session.userId
             val localDeferred = async { loadLocalSnapshot(userId) }
-            val cloudDeferred = async { loadCloudSnapshot(userId) }
+            // An `offline_*` id is not a UUID, so every one of these tables rejects it
+            // with `invalid input syntax for type uuid` -- there is no cloud row to
+            // read in the first place. Skipping is both correct and offline-first.
+            val cloudDeferred = if (DataMigration.isOfflineUserId(userId)) {
+                null
+            } else {
+                async { loadCloudSnapshot(userId) }
+            }
 
             runCatching { localDeferred.await() }
                 .onSuccess { snapshot ->
@@ -145,6 +167,21 @@ class MyDataViewModel(
                         )
                     }
                 }
+
+            if (cloudDeferred == null) {
+                if (isStillCurrent(session)) {
+                    _uiState.update {
+                        it.copy(
+                            cloudSnapshot = MyDataCloudSnapshot(),
+                            isLoadingCloud = false,
+                            isRefreshing = false,
+                            cloudError = null,
+                            isOfflineAccount = true,
+                        )
+                    }
+                }
+                return@supervisorScope
+            }
 
             runCatching { cloudDeferred.await() }
                 .onSuccess { snapshot ->
