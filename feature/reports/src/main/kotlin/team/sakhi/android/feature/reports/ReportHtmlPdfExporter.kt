@@ -9,7 +9,6 @@ import android.webkit.WebViewClient
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
-import kotlin.math.ceil
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
@@ -46,25 +45,40 @@ class ReportHtmlPdfExporter(
         document: ReportDocument,
         selectedSections: Set<ReportSection>,
     ): File = withContext(Dispatchers.Main) {
+        val sharedSections = selectedSections.toSharedKeys()
         val html = ReportHtml.render(
             data = document.report,
             strings = strings.build(document),
-            sections = selectedSections.toSharedKeys(),
+            sections = sharedSections,
         )
+        // The page count is a property of the DOCUMENT, not of how tall the WebView
+        // happens to measure. Deriving it from measured height produced 11 pages for a
+        // 6-page report: the rendered body is a few pixels taller than 6 exact A4
+        // sections, and every leftover fraction became another (mostly blank) page.
+        val pageCount = ReportHtml.pages(document.report, sharedSections).size
 
+        val widthPx = (PAGE_WIDTH_PT * RENDER_SCALE).toInt()
         val webView = WebView(context).apply {
             // No JS in the document, so leave it off: this renders user health data
             // and there is no reason to give it an execution context.
             settings.javaScriptEnabled = false
             settings.allowFileAccess = false
             settings.allowContentAccess = false
+            // One CSS pixel == RENDER_SCALE device pixels, so the stylesheet's px box
+            // (595.28 x 841.89) lands exactly on the pixel grid we draw from, and one
+            // CSS px ends up as one PDF point after the inverse scale below.
+            setInitialScale((RENDER_SCALE * 100).toInt())
+            // Give it its page width BEFORE loading, so the document lays out at the
+            // width it will actually be drawn at rather than reflowing afterwards.
+            layout(0, 0, widthPx, (PAGE_HEIGHT_PT * RENDER_SCALE).toInt())
         }
 
         awaitPageFinished(webView, html)
+        awaitFirstPaint(webView)
 
         val reportsDir = File(context.cacheDir, "reports").apply { mkdirs() }
         val outputFile = File(reportsDir, "SakhiReport_${System.currentTimeMillis()}.pdf")
-        writePdf(webView, outputFile)
+        writePdf(webView, outputFile, pageCount)
         outputFile
     }
 
@@ -103,6 +117,29 @@ class ReportHtmlPdfExporter(
         }
 
     /**
+     * `onPageFinished` only means the document loaded -- it does NOT mean anything has
+     * been painted. An offscreen WebView that is never attached to a window will happily
+     * report the page finished and then draw a blank canvas, which is exactly what
+     * produced a 750-byte empty PDF on the first run.
+     *
+     * `postVisualStateCallback` is the API that actually answers "is the DOM ready to
+     * be drawn", so we wait for that before touching the canvas.
+     */
+    private suspend fun awaitFirstPaint(webView: WebView): Unit =
+        withTimeout(LOAD_TIMEOUT_MS) {
+            suspendCancellableCoroutine { cont ->
+                webView.postVisualStateCallback(
+                    VISUAL_STATE_REQUEST_ID,
+                    object : WebView.VisualStateCallback() {
+                        override fun onComplete(requestId: Long) {
+                            if (cont.isActive) cont.resume(Unit)
+                        }
+                    },
+                )
+            }
+        }
+
+    /**
      * Draws the laid-out WebView into a [PdfDocument], one A4 page at a time.
      *
      * The print pipeline would have been the obvious route, but
@@ -114,7 +151,7 @@ class ReportHtmlPdfExporter(
      * rendered view between N*pageHeight and (N+1)*pageHeight. Translating the
      * canvas per page gives exact pagination with no guesswork.
      */
-    private fun writePdf(webView: WebView, outputFile: File) {
+    private fun writePdf(webView: WebView, outputFile: File, pageCount: Int) {
         val widthPx = (PAGE_WIDTH_PT * RENDER_SCALE).toInt()
         val pageHeightPx = (PAGE_HEIGHT_PT * RENDER_SCALE).toInt()
 
@@ -123,10 +160,9 @@ class ReportHtmlPdfExporter(
             View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
         )
-        webView.layout(0, 0, widthPx, webView.measuredHeight)
-
-        val contentHeightPx = maxOf(webView.measuredHeight, pageHeightPx)
-        val pageCount = ceil(contentHeightPx.toDouble() / pageHeightPx).toInt().coerceAtLeast(1)
+        // Lay out to exactly pageCount pages so the final section is fully drawn even
+        // if the measured height rounds a fraction short.
+        webView.layout(0, 0, widthPx, pageHeightPx * pageCount)
 
         val pdf = PdfDocument()
         for (index in 0 until pageCount) {
@@ -159,6 +195,8 @@ class ReportHtmlPdfExporter(
 
         /** Render above 1x so text is crisp, then scale back when drawing. */
         const val RENDER_SCALE = 2f
+
+        const val VISUAL_STATE_REQUEST_ID = 1L
     }
 }
 
