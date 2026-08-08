@@ -74,6 +74,7 @@ import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.design.SakhiColors
 import team.sakhi.design.SakhiUIColors
 import team.sakhi.models.CyclePhase
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.BackButton
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.EmptyState
@@ -172,7 +173,12 @@ private fun ReportsConfigScreen(
                 start = SakhiSpacing.space5,
                 top = SakhiSpacing.space5,
                 end = SakhiSpacing.space5,
-                bottom = SakhiSpacing.space16,
+                // Must clear the floating `FooterBar` below, which is a sibling in the
+                // outer Box rather than part of this scroll. At `space16` (64dp) the
+                // footer still covered the last rows -- measured on device: the footer's
+                // top edge sits at y2189 of 2400, i.e. ~77dp of screen, so the toggles
+                // behind it could never be scrolled into view.
+                bottom = ReportsFooterClearance,
             ),
         ) {
             ReportsSectionLabel(stringResource(R.string.reports_section_date_range))
@@ -185,12 +191,9 @@ private fun ReportsConfigScreen(
             GlassCard {
                 ReportSection.entries.forEachIndexed { index, section ->
                     if (index > 0) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant),
-                        )
+                        // Shared hairline, not a raw 1dp `outlineVariant` box -- the
+                        // same treatment the profile screens use.
+                        SakhiListDivider()
                     }
                     SectionToggleRow(
                         section = section,
@@ -531,12 +534,7 @@ private fun CoverPage(document: ReportDocument) {
                     )
                 }
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
-                        .background(MaterialTheme.colorScheme.outlineVariant),
-                )
+                SakhiListDivider()
 
                 GlassCard {
                     PreviewInfoRow(
@@ -1367,3 +1365,10 @@ private fun reportSectionIcon(section: ReportSection): ImageVector = when (secti
     ReportSection.Medications -> Icons.Filled.Medication
     ReportSection.Insights -> Icons.Filled.Lightbulb
 }
+
+/**
+ * Bottom inset for the reports list so it can scroll clear of the floating
+ * `FooterBar`. Covers the 52dp button, the footer's own vertical padding and the
+ * navigation-bar inset.
+ */
+private val ReportsFooterClearance = 132.dp
