@@ -237,11 +237,11 @@ fun LoggingSheet(
                 SakhiListDivider()
             },
             body = {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState()),
-                ) {
+                // iOS `contentBody` is a plain `VStack(spacing: 0)` -- the flow section
+                // and the "Symptoms" header are PINNED, and only `symptomsScrollCard`
+                // is a `ScrollView`. Android scrolled the whole body, so the flow
+                // buttons scrolled away with everything else.
+                Column(modifier = Modifier.fillMaxSize()) {
                     if (uiState.isLoadingEntry) {
                         Box(
                             modifier = Modifier
@@ -296,7 +296,10 @@ fun LoggingSheet(
                     // user's very first flow selection (before any cycle history exists)
                     // still reveals the section immediately, matching existing behavior.
                     if (uiState.selectedFlow != null || hasPeriodData) {
-                        SakhiListDivider()
+                        // iOS draws `Divider().opacity(0.25)` here, not a full-strength
+                        // separator -- Karan read Android's as a hard rule that did not
+                        // belong. Keeping it at iOS's weight rather than deleting it.
+                        SakhiListDivider(modifier = Modifier.alpha(FlowSectionDividerAlpha))
 
                         Text(
                             text = stringResource(R.string.logging_symptoms),
@@ -315,9 +318,14 @@ fun LoggingSheet(
                             color = sakhiSystemBackground(),
                             modifier = Modifier
                                 .fillMaxWidth()
+                                // Takes the height left over after the pinned flow
+                                // section, so the card itself is SHORTER than the sheet
+                                // and scrolls inside its own bounds -- iOS's
+                                // `symptomsScrollCard`.
+                                .weight(1f)
                                 .padding(horizontal = SakhiSpacing.space6),
                         ) {
-                            Column {
+                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                                 // Each block below is hidden entirely (not merely disabled)
                                 // when the viewer lacks the specific granular permission --
                                 // matches iOS `HomeLoggingSheet`'s per-section
@@ -423,11 +431,8 @@ fun LoggingSheet(
                                     )
                                 }
                                 if (uiState.canViewDischarge) {
-                                    Text(
-                                        text = stringResource(R.string.logging_section_discharge).uppercase(),
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
-                                        color = sakhiSecondaryLabel(),
-                                        modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
+                                    CardSectionLabel(
+                                        text = stringResource(R.string.logging_section_discharge),
                                     )
                                     DischargeColorRow(
                                         selected = uiState.dischargeColor,
@@ -450,11 +455,8 @@ fun LoggingSheet(
                                     )
                                 }
                                 if (uiState.canViewMedications) {
-                                    Text(
-                                        text = stringResource(R.string.logging_section_log).uppercase(),
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
-                                        color = sakhiSecondaryLabel(),
-                                        modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
+                                    CardSectionLabel(
+                                        text = stringResource(R.string.logging_section_log),
                                     )
                                     SymptomRow(
                                         label = stringResource(R.string.logging_painkiller_taken),
@@ -485,7 +487,6 @@ fun LoggingSheet(
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(SakhiSpacing.space8))
                 }
             },
             footer = {
@@ -558,12 +559,7 @@ private fun symptomSection(
     onToggle: (Symptom) -> Unit,
     isLast: Boolean = false,
 ) {
-    Text(
-        text = title.uppercase(),
-        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
-        color = sakhiSecondaryLabel(),
-        modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
-    )
+    CardSectionLabel(text = title)
     symptoms.forEachIndexed { index, symptom ->
         SymptomRow(
             label = symptom.sheetLabel(),
@@ -947,3 +943,40 @@ private fun formattedHeaderDate(date: kotlinx.datetime.LocalDate): String {
 
 /** iOS `.padding(.vertical, 22)` on each flow-intensity card. */
 private val FlowCardVerticalPadding = 22.dp
+
+/**
+ * The BODY / PAIN / DISCHARGE group titles inside the symptoms card.
+ *
+ * Real port of iOS `HomeLoggingSheet.cardSectionLabel`:
+ * `.font(.lato(11, .bold))`, `.padding(.horizontal, DS.Spacing.m)`,
+ * `.padding(.top, 18)`, `.padding(.bottom, 4)`.
+ *
+ * Android had a symmetric 8dp above and below, which is what Karan saw as the space
+ * sitting under the title instead of above it: iOS puts 18 above and only 4 below, so
+ * each title reads as attached to the rows it introduces rather than floating between
+ * groups. Extracted to one composable because the same block was inlined three times.
+ */
+@Composable
+private fun CardSectionLabel(text: String) {
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 0.6.sp,
+        ),
+        color = sakhiSecondaryLabel(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SakhiSpacing.space4)
+            .padding(top = CardSectionLabelTopPadding, bottom = CardSectionLabelBottomPadding),
+    )
+}
+
+/** iOS `contentBody`: `Divider().opacity(0.25)` between flow and symptoms. */
+private const val FlowSectionDividerAlpha = 0.25f
+
+/** iOS `cardSectionLabel`: `.padding(.top, 18)`. */
+private val CardSectionLabelTopPadding = 18.dp
+
+/** iOS `cardSectionLabel`: `.padding(.bottom, 4)`. */
+private val CardSectionLabelBottomPadding = 4.dp

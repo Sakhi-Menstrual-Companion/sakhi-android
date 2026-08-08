@@ -68,9 +68,12 @@ fun SheetSurface(
         Column(modifier = Modifier.fillMaxSize()) {
             if (showDragHandle) {
                 Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                    // iOS `dragHandle`: 38x4 capsule with `.padding(.top, 10)` and
+                    // `.padding(.bottom, 10)`. Android used 12 either side, which is
+                    // what pushed the header down away from the grabber.
                     Box(
                         modifier = Modifier
-                            .padding(vertical = SakhiSpacing.space3)
+                            .padding(vertical = DragHandleVerticalPadding)
                             .width(38.dp)
                             .height(4.dp)
                             .background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(SakhiRadius.full)),
@@ -100,3 +103,6 @@ fun SheetSurface(
         }
     }
 }
+
+/** iOS `HomeLoggingSheet.dragHandle`: 10pt above and below the capsule. */
+private val DragHandleVerticalPadding = 10.dp
