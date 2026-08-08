@@ -34,6 +34,7 @@ import team.sakhi.report.ReportSectionKey
 class ReportHtmlPdfExporter(
     private val context: Context,
     private val strings: AndroidReportStrings,
+    private val fontCss: ReportFontCss,
 ) {
 
     /**
@@ -50,6 +51,13 @@ class ReportHtmlPdfExporter(
             data = document.report,
             strings = strings.build(document),
             sections = sharedSections,
+            // NOT wired yet -- see `ReportFontCss`. Injecting the base64 Lato here
+            // blanked the document: `loadDataWithBaseURL(null, ...)` gives the page an
+            // opaque origin, where a ~300KB `data:` font URI does not load, and the
+            // render came back mostly empty (1.5MB -> 435KB, page 2 blank). Needs a
+            // real base URL -- `WebViewAssetLoader`, or writing the document and font
+            // to cache and loading over file:// -- before it can be turned on.
+            fontFaceCss = "",
         )
         // The page count is a property of the DOCUMENT, not of how tall the WebView
         // happens to measure. Deriving it from measured height produced 11 pages for a

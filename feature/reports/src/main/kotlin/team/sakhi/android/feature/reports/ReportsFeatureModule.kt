@@ -9,8 +9,9 @@ val reportsFeatureModule = module {
         ReportPdfExporter(context = get())
     }
     single { AndroidReportStrings(context = get()) }
+    single { ReportFontCss(context = get()) }
     single {
-        ReportHtmlPdfExporter(context = get(), strings = get())
+        ReportHtmlPdfExporter(context = get(), strings = get(), fontCss = get())
     }
     viewModel {
         ReportsViewModel(
