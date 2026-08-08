@@ -1658,7 +1658,7 @@ private fun OfflineWarningScreen(
     val title = stringResource(R.string.onboarding_offline_warning_title)
     val subtitle = stringResource(R.string.onboarding_offline_warning_subtitle)
     val continueLabel = stringResource(R.string.onboarding_offline_warning_continue)
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    val pagerState = rememberPagerState(pageCount = { 1 })
 
     Column(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -1692,18 +1692,10 @@ private fun OfflineWarningScreen(
                     modifier = Modifier.fillMaxSize(),
                     verticalAlignment = Alignment.Top,
                 ) { page ->
-                    if (page == 0) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.TopCenter,
-                        ) {
-                            Image(
-                                painter = painterResource(team.sakhi.android.ui.R.drawable.condition_offline),
-                                contentDescription = null,
-                                modifier = Modifier.height(PartnerInvitePromptImageHeight),
-                            )
-                        }
-                    } else {
+                    // Illustration page dropped on Karan's ask: this step is now only the
+                    // list of what going offline actually costs you, so there is nothing
+                    // to swipe past before reading it. Single page, so `page` is unused.
+                    run {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()

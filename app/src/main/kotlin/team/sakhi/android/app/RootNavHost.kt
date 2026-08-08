@@ -34,7 +34,6 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.ForceUpdateScreen
-import team.sakhi.android.ui.OfflineBanner
 import team.sakhi.android.ui.SakhiLoadingContext
 import team.sakhi.android.ui.SakhiLoadingView
 import team.sakhi.android.ui.ToastHost
@@ -245,10 +244,11 @@ fun RootNavHost() {
     ToastHost()
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (!isOnline) {
-            OfflineBanner(modifier = Modifier.padding(SakhiSpacing.space2))
-        }
-
+        // No connectivity banner. Karan asked for it gone entirely: Sakhi is offline-first
+        // by design, so losing the network is not an error state the user needs announced
+        // across the top of every screen -- logging, the calendar and Home all keep
+        // working from the local store. Features that genuinely require the cloud say so
+        // themselves through `FeatureAccessGate`.
         Box(modifier = Modifier.weight(1f)) {
             val forcedFlow = forcedOnboardingDeepLink
             if (forcedFlow != null) {

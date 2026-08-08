@@ -770,7 +770,9 @@ private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: (
                     } else {
                         Text(
                             text = stringResource(R.string.chat_last_seen_today_at, chatHeaderLastSeenTime()),
-                            style = MaterialTheme.typography.labelSmall,
+                            // `labelSmall` is 10sp here, below iOS's own `.lato(11)` for
+                            // this line and hard to read under the name.
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = ChatLastSeenFontSize),
                             color = sakhiSecondaryLabel(),
                         )
                     }
@@ -1385,11 +1387,18 @@ private fun ChatInputBar(
             shape = CircleShape,
             // iOS `SakhiAIInputBar`: `Circle().fill(canSend ? DS.Colors.pink : DS.Colors.gray5)`.
             // `surfaceVariant` made the idle send button read lavender.
-            color = if (hasText && !isSending && !isLocked) MaterialTheme.colorScheme.primary else sakhiSystemGray5(),
+            // Karan: the send button should never read as disabled. It stays on the brand
+            // fill whenever the input is usable, so it never greys out mid-conversation.
+            // The tap is still guarded on there being text -- an always-enabled button
+            // that posts an empty message would be worse than a grey one -- but the guard
+            // is now invisible rather than a dead grey circle sitting next to the field.
+            // A send in flight and a locked input are still shown, because those are real
+            // states the user needs to see.
+            color = if (isSending || isLocked) sakhiSystemGray5() else MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .minimumInteractiveComponentSize()
                 .size(36.dp)
-                .clickable(enabled = hasText && !isSending && !isLocked, onClick = onSend),
+                .clickable(enabled = !isSending && !isLocked) { if (hasText) onSend() },
         ) {
             Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
                 if (isSending) {
@@ -1427,3 +1436,6 @@ internal fun formattedDate(timestampIso: String): String {
             .format(java.time.Instant.ofEpochMilli(instant.toEpochMilliseconds()).atZone(ZoneId.systemDefault()))
     }.getOrDefault("")
 }
+
+/** iOS uses `.lato(11)` for the header's last-seen line; 10sp read too small. */
+private val ChatLastSeenFontSize = 12.sp

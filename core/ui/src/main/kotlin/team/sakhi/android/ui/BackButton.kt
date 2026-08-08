@@ -51,7 +51,7 @@ fun BackButton(
                 imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                 contentDescription = description,
                 tint = Color.White,
-                modifier = Modifier.size(18.dp),
+                modifier = Modifier.size(NavGlyphSizeSmall),
             )
         }
     } else {
@@ -65,8 +65,15 @@ fun BackButton(
                 imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                 contentDescription = description,
                 tint = DesignTokens.COLOR_PINK.toComposeColor(),
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(NavGlyphSize),
             )
         }
     }
 }
+
+// The circular button keeps its size; only the glyph inside grows. At 14-20dp inside a
+// 44dp circle the chevron and cross were swimming in padding and barely legible, which
+// is what Karan reported. These are the sizes that actually read at a glance without
+// changing the tap target or the circle.
+private val NavGlyphSize = 24.dp
+private val NavGlyphSizeSmall = 22.dp
