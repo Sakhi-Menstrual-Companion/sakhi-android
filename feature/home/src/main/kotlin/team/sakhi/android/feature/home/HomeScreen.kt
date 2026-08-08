@@ -2426,6 +2426,7 @@ private fun NutritionCard(
                 // unkeyed `forEach` is a recomposition hazard, and the palette is
                 // constant for the whole card anyway.
                 val foodTilePalette = rememberHomePhasePalette(phase)
+                val cardContext = LocalContext.current
                 val pages = remember(foods) { foods.chunked(4) }
                 val pagerState = rememberPagerState(pageCount = { pages.size })
                 HorizontalPager(
@@ -2483,6 +2484,15 @@ private fun NutritionCard(
                             // textPrimary, sub-line lato(12) in textTertiary, VStack
                             // spacing 2. Android's bodyLarge/bodySmall rows were tall
                             // enough that four no longer fit iOS's fixed 214pt page.
+                            //
+                            // The nutrient highlight belongs on this line, in an
+                            // `HStack(spacing: 5)` beside the name -- Android had it in
+                            // the row's trailing slot, which is where iOS puts the
+                            // source chevron.
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                             Text(
                                 text = food.name,
                                 fontSize = 14.sp,
@@ -2494,7 +2504,20 @@ private fun NutritionCard(
                                 color = LocalHomeCardText.current.primary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f, fill = false),
                             )
+                            // iOS: `.font(.lato(10, .bold))` in `iconAccent`.
+                            food.nutritionLabel?.let { label ->
+                                Text(
+                                    text = label,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = accentColor,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            }
                             Text(
                                 text = food.category,
                                 fontSize = 12.sp,
@@ -2506,11 +2529,27 @@ private fun NutritionCard(
                                 modifier = Modifier.padding(top = 2.dp),
                             )
                         }
-                        food.nutritionLabel?.let { label ->
-                            Text(
-                                text = label,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = accentColor,
+                        // iOS ends the row with `Link(destination: source.url)` around a
+                        // `chevron.right` (12pt semibold, textTertiary@0.55, 24x28 frame).
+                        // Android had no chevron and no way to reach the source at all --
+                        // the URL is derived locally, so this needs no backend data.
+                        // See `FoodSourceLinks` in SakhiCore.
+                        Box(
+                            modifier = Modifier
+                                .size(width = 24.dp, height = 28.dp)
+                                .clickable {
+                                    openFoodSource(cardContext, food.name)
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = cardContext.getString(
+                                    R.string.home_nutrition_open_source,
+                                    food.name,
+                                ),
+                                tint = LocalHomeCardText.current.tertiary.copy(alpha = 0.55f),
+                                modifier = Modifier.size(12.dp),
                             )
                         }
                     }
@@ -2526,7 +2565,10 @@ private fun NutritionCard(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp),
+                            // iOS pads the whole card body `.top, 4` / `.bottom, 10`;
+                            // Android had only the top gap, so the indicator sat hard
+                            // against the card's bottom edge and read as clipped.
+                            .padding(top = 4.dp, bottom = 10.dp),
                         horizontalArrangement = Arrangement.Center,
                     ) {
                         pages.indices.forEach { index ->
@@ -3010,4 +3052,22 @@ private fun CyclePhaseInsight.PhaseKind.displayName(context: Context): String = 
     CyclePhaseInsight.PhaseKind.PMS -> context.getString(R.string.home_phase_name_pms)
     CyclePhaseInsight.PhaseKind.DELAYED -> context.getString(R.string.home_phase_name_delayed)
     CyclePhaseInsight.PhaseKind.UNKNOWN -> context.getString(R.string.home_phase_name_unknown)
+}
+
+/**
+ * Opens the USDA source page for a food, matching iOS's `Link(destination:
+ * item.resolvedSource.url)` on each "What to Eat" row. The URL itself is derived in
+ * SakhiCore so both platforms resolve the same page for the same food.
+ */
+private fun openFoodSource(context: android.content.Context, foodName: String) {
+    val url = team.sakhi.repositories.FoodSourceLinks.searchUrl(foodName)
+    // Plain ACTION_VIEW: `feature:home` does not depend on androidx.browser, and a
+    // source link is a genuine hand-off out of the app rather than in-app content.
+    // `runCatching` because a device with no browser would otherwise crash here.
+    runCatching {
+        context.startActivity(
+            android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
 }

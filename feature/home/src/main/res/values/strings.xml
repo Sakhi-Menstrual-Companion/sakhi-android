@@ -108,6 +108,7 @@
     <string name="home_empty_state_body">Your body runs on a 4-phase cycle. Each phase shapes your energy, mood, and how you feel. Log your first period and Sakhi starts tracking from there.</string>
 
     <string name="home_nutrition_title">What to Eat</string>
+    <string name="home_nutrition_open_source">Open source for %1$s</string>
     <string name="home_nutrition_empty">No food recommendations are available right now.</string>
     <string name="home_insight_partner_title">How to be there for her today</string>
     <string name="home_insight_self_title">Sakhi\'s tip for today</string>
