@@ -332,12 +332,31 @@ fun HomeScreen(
             ) {
             val canShowHero = uiState.session?.isViewingOwnData == true || uiState.canViewPredictions
             if (!uiState.isLoadingCycle && canShowHero) {
-                HeroSection(
-                    uiState = uiState,
-                    accentColor = accentColor,
-                    phasePalette = phasePalette,
-                    scrollProgress = heroScrollProgress,
-                )
+                // iOS springs the hero when the day or phase changes rather than
+                // swapping it instantly -- `homePhaseTransition` is
+                // `.spring(response: 0.5, dampingFraction: 0.88, blendDuration: 0.14)`
+                // applied to `snapshot.displayPhase` (HomeView.swift). Android had no
+                // date-change animation at all: `AnimatedContent` and
+                // `animateFloatAsState` were imported here but never used.
+                //
+                // Keyed on the selected date AND the phase, because either can change
+                // the hero's content on its own (paging to another day of the same
+                // phase, or a phase boundary on the same day).
+                AnimatedContent(
+                    targetState = uiState.selectedDate to uiState.phase,
+                    transitionSpec = {
+                        fadeIn(animationSpec = spring(stiffness = HomeHeroSpringStiffness)) togetherWith
+                            fadeOut(animationSpec = spring(stiffness = HomeHeroSpringStiffness))
+                    },
+                    label = "home_hero",
+                ) { _ ->
+                    HeroSection(
+                        uiState = uiState,
+                        accentColor = accentColor,
+                        phasePalette = phasePalette,
+                        scrollProgress = heroScrollProgress,
+                    )
+                }
             }
 
             // Sync state is shown only while something is actually happening, matching
@@ -3071,3 +3090,11 @@ private fun openFoodSource(context: android.content.Context, foodName: String) {
         )
     }
 }
+
+/**
+ * iOS `homePhaseTransition` is `.spring(response: 0.5, dampingFraction: 0.88)`.
+ *
+ * SwiftUI's `response` is the spring's natural period, so the Compose equivalent is
+ * `stiffness = (2*pi / response)^2` -- (2*pi / 0.5)^2 which is about 158.
+ */
+private const val HomeHeroSpringStiffness = 158f
