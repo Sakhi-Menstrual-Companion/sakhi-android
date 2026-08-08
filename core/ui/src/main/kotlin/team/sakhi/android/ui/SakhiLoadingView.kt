@@ -13,6 +13,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -171,17 +178,43 @@ fun SakhiLoadingView(
                 delay(700)
                 messageIndex = (messageIndex + 1) % messages.size
             }
-            Text(
-                text = messages[messageIndex % messages.size],
-                style = MaterialTheme.typography.bodyMedium,
-                color = sakhiDeepRose().copy(alpha = 0.82f),
-                textAlign = TextAlign.Center,
+            // iOS animates each swap:
+            //   .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 6)),
+            //                           removal: .opacity))
+            //   .animation(.easeInOut(duration: 0.3), value: messageIndex)
+            // Android was replacing the string in place, so the text popped. The
+            // `minHeight: 48` is iOS's too -- without it a one-line message followed by
+            // a two-line one shifts everything above it.
+            AnimatedContent(
+                targetState = messageIndex % messages.size,
+                transitionSpec = {
+                    (
+                        fadeIn(animationSpec = tween(MessageFadeMillis)) +
+                            slideInVertically(
+                                animationSpec = tween(MessageFadeMillis),
+                                initialOffsetY = { MessageRiseOffsetPx },
+                            )
+                        ) togetherWith fadeOut(animationSpec = tween(MessageFadeMillis))
+                },
+                label = "loadingMessage",
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .padding(horizontal = SakhiSpacing.space6)
-                    .padding(bottom = 64.dp),
-            )
+                    .padding(bottom = MessageBottomPadding),
+            ) { index ->
+                Text(
+                    text = messages[index],
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = sakhiDeepRose().copy(alpha = 0.82f),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = MessageMinHeight)
+                        .wrapContentHeight(Alignment.CenterVertically),
+                )
+            }
         }
     }
 }
@@ -206,3 +239,12 @@ private fun DashedRing(
     }
 }
 
+// iOS `SakhiLoadingView` cycling-message block.
+/** `.frame(minHeight: 48)`. */
+private val MessageMinHeight = 48.dp
+/** `.padding(.bottom, 64)`. */
+private val MessageBottomPadding = 64.dp
+/** `.animation(.easeInOut(duration: 0.3))`. */
+private const val MessageFadeMillis = 300
+/** `.offset(y: 6)` on insertion. */
+private const val MessageRiseOffsetPx = 6
