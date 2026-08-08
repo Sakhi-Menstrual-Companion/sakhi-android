@@ -204,10 +204,25 @@ private fun SakhiMiniMonthDayCell(
             },
         contentAlignment = Alignment.Center,
     ) {
+        // iOS `YearDayCell` draws the selected-date ring here -- `Circle().stroke(accent,
+        // lineWidth: 2.5).frame(width: 40, height: 40)`. Android had no selected-date
+        // ring in the year view at all, so the day you had picked was indistinguishable
+        // from any other once the year grid was open.
+        if (day.isSelected) {
+            Box(
+                modifier = Modifier
+                    .size(yearGridRingSize)
+                    .border(
+                        yearGridRingStroke,
+                        accentColor,
+                        androidx.compose.foundation.shape.CircleShape,
+                    ),
+            )
+        }
         if (isMultiSelectMode) {
             Box(
                 modifier = Modifier
-                    .size(yearGridDotSize + SakhiSpacing.space1 / 2)
+                    .size(yearGridMultiSelectHintSize)
                     .border(1.dp, MaterialTheme.colorScheme.outlineVariant, androidx.compose.foundation.shape.CircleShape),
             )
         }
@@ -220,6 +235,7 @@ private fun SakhiMiniMonthDayCell(
             Text(
                 text = day.date.dayOfMonth.toString(),
                 style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = yearGridFontSize,
                     fontWeight = if (day.isToday || isPeriod || (isMultiSelectMode && isInSelection)) {
                         FontWeight.Bold
                     } else {
@@ -398,6 +414,18 @@ private val calendarDotSize = SakhiSpacing.space8 + SakhiSpacing.space1 / 2
 // competed with the ring for space inside the cell.
 private val calendarRingSize = 42.dp
 private val calendarRingStroke = SakhiSpacing.space1 / 2 + SakhiSpacing.space1 / 8
-private val yearGridCellHeight = SakhiSpacing.space6
-private val yearGridDotSize = SakhiSpacing.space5
+// iOS `HomeCalendarYearGrid.YearMonthGrid` / `YearDayCell`, read from source:
+//   `.frame(maxWidth: .infinity).frame(height: 36)`  -- cell
+//   `Circle().fill(fill).frame(width: 32, height: 32)` -- day dot
+//   `Circle().stroke(accent, lineWidth: 2.5).frame(width: 40, height: 40)` -- selection
+//   `Circle().stroke(systemGray4, lineWidth: 1).frame(width: 34, height: 34)` -- multi-select hint
+//   `.font(.lato(14, ...))` -- label
+// Android had a 24dp cell with a 20dp dot and an 11sp label, which rendered the year
+// view far denser and smaller than iOS's.
+private val yearGridCellHeight = 36.dp
+private val yearGridDotSize = 32.dp
+private val yearGridRingSize = 40.dp
+private val yearGridRingStroke = 2.5.dp
+private val yearGridMultiSelectHintSize = 34.dp
+private val yearGridFontSize = 14.sp
 private const val disabledSemanticOpacity = 0.68f
