@@ -99,6 +99,8 @@ import team.sakhi.android.ui.BackButton
 import team.sakhi.android.ui.GlassCard
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiAlert
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.SakhiAlertTone
 import team.sakhi.android.ui.sakhiShakeOnError
 import team.sakhi.android.ui.SakhiFooter
@@ -2809,20 +2811,21 @@ private fun DataSourceScreen(
     }
 
     if (uiState.showFailureAlert) {
-        AlertDialog(
+        // iOS presents this through `.sakhiAlert(type: .info, ...)`, which is Sakhi's
+        // own 300pt bottom sheet with the dashed-ring badge -- not a system dialog.
+        // Android was using a raw Material3 `AlertDialog`, which shares none of that
+        // styling. `SakhiAlert` could not be swapped in directly: it is an inline
+        // banner, so `SakhiAlertSheet` was added to core/ui for this.
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Info,
+            title = stringResource(R.string.onboarding_data_source_no_data_title),
+            message = uiState.failureMessage
+                ?: stringResource(R.string.onboarding_data_source_no_data_message),
+            primaryLabel = stringResource(R.string.onboarding_ok),
+            // iOS's primary button switches the choice to manual entry, which is what
+            // `onAcknowledgeFailure` already does here.
+            onPrimaryClick = onAcknowledgeFailure,
             onDismissRequest = onAcknowledgeFailure,
-            title = { Text(stringResource(R.string.onboarding_data_source_no_data_title)) },
-            text = {
-                Text(
-                    uiState.failureMessage
-                        ?: stringResource(R.string.onboarding_data_source_no_data_message),
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = onAcknowledgeFailure) {
-                    Text(stringResource(R.string.onboarding_ok))
-                }
-            },
         )
     }
 }
