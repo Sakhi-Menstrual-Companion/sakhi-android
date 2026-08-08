@@ -241,6 +241,17 @@ fun RootNavHost() {
         }
     }
 
+    // Which transition the splash route represents. `AppRoute.Splash` is shown both on a
+    // cold start and on the way out of a sign-out, and it was hardcoded to the
+    // `HomeSetup` copy -- so signing out told the user Sakhi was "setting up your home",
+    // which is the opposite of what was happening, and a cold start said it before there
+    // was a home to set up.
+    var hasBeenSignedIn by remember { mutableStateOf(false) }
+    LaunchedEffect(route) {
+        if (route is AppRoute.Home) hasBeenSignedIn = true
+        if (route is AppRoute.SignedOut) hasBeenSignedIn = false
+    }
+
     ToastHost()
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -265,7 +276,15 @@ fun RootNavHost() {
                 )
             } else {
                 when (val current = route) {
-                    is AppRoute.Splash -> SplashPlaceholder()
+                    is AppRoute.Splash -> SplashPlaceholder(
+                        // Leaving Home for the splash route means a sign-out is in
+                        // flight, not a cold start.
+                        context = if (hasBeenSignedIn) {
+                            SakhiLoadingContext.SigningOut
+                        } else {
+                            SakhiLoadingContext.AppLaunch
+                        },
+                    )
                     // Matches iOS's real MainFlowView exactly (confirmed by reading it
                     // directly): `case .splash, .signedOut, .home: return .newUser` --
                     // iOS treats a signed-out entry as onboarding's own phone/OTP step
@@ -422,7 +441,9 @@ private fun HomeSessionGate(
     if (isReady) {
         HomeNavHost()
     } else {
-        SplashPlaceholder()
+        // This one really is home setup: the gate is resolving the session before Home
+        // mounts. The splash ROUTE is a different situation and picks its own context.
+        SplashPlaceholder(context = SakhiLoadingContext.HomeSetup)
     }
 }
 
@@ -433,9 +454,11 @@ private fun HomeSessionGate(
  * `SakhiLoadingView`, so it shows the branded one here too.
  */
 @Composable
-private fun SplashPlaceholder() {
+private fun SplashPlaceholder(
+    context: SakhiLoadingContext = SakhiLoadingContext.AppLaunch,
+) {
     SakhiLoadingView(
-        context = SakhiLoadingContext.HomeSetup,
+        context = context,
         modifier = Modifier.fillMaxSize(),
     )
 }
