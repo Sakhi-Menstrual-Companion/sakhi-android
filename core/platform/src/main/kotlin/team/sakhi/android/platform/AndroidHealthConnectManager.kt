@@ -38,6 +38,15 @@ import team.sakhi.sync.OfflineUpgradeDataset
 import team.sakhi.validation.ValidationRules
 
 private const val HEALTH_CONNECT_PROVIDER_PACKAGE = "com.google.android.apps.healthdata"
+
+
+/** Declared by every app that integrates with Health Connect. */
+
+
+private const val HEALTH_PERMISSIONS_RATIONALE_ACTION =
+
+
+    "androidx.health.connect.action.SHOW_PERMISSIONS_RATIONALE"
 private const val HEALTH_CONNECT_LOOKBACK_DAYS = 180L
 private const val HEALTH_CONNECT_INSIGHTS_DAYS = 7L
 private const val TYPE_SLEEP = "sleep_session"
@@ -116,6 +125,42 @@ class AndroidHealthConnectManager(
             HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED -> HealthConnectAvailability.NotInstalled
             else -> HealthConnectAvailability.NotSupported
         }
+    }
+
+    /**
+     * Apps installed on this device that actually integrate with Health Connect, i.e.
+     * the ones capable of supplying anything worth importing.
+     *
+     * Discovered by querying for the Health Connect permissions-rationale activity,
+     * which every integrating app must declare. This runs BEFORE any permission is
+     * granted, which is the whole point: reading records to find contributing apps
+     * would require the permission we are trying to decide whether to ask for.
+     *
+     * Sakhi itself and the Health Connect provider are excluded -- neither is a source
+     * the user would recognise as "another app".
+     *
+     * Used to decide whether offering the import option is meaningful at all. With no
+     * such apps the option previously still launched Health Connect's own onboarding,
+     * which is a confusing detour to a dead end.
+     */
+    fun availableSourceApps(): List<HealthConnectSourceApp> {
+        val pm = appContext.packageManager
+        val rationale = Intent(HEALTH_PERMISSIONS_RATIONALE_ACTION)
+        return runCatching {
+            pm.queryIntentActivities(rationale, 0)
+                .mapNotNull { resolved ->
+                    val pkg = resolved.activityInfo?.packageName ?: return@mapNotNull null
+                    if (pkg == appContext.packageName || pkg == HEALTH_CONNECT_PROVIDER_PACKAGE) {
+                        return@mapNotNull null
+                    }
+                    HealthConnectSourceApp(
+                        packageName = pkg,
+                        label = resolved.loadLabel(pm)?.toString().orEmpty().ifBlank { pkg },
+                    )
+                }
+                .distinctBy { it.packageName }
+                .sortedBy { it.label.lowercase() }
+        }.getOrDefault(emptyList())
     }
 
     fun isEnabled(): Boolean = kvStore.getBool(KEY_ENABLED, false)
@@ -649,3 +694,9 @@ class AndroidHealthConnectManager(
         else -> null
     }
 }
+
+/** An installed app that can act as a Health Connect data source for the import step. */
+data class HealthConnectSourceApp(
+    val packageName: String,
+    val label: String,
+)

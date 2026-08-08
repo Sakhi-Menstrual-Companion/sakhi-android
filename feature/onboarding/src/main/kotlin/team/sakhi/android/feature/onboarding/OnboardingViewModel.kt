@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import team.sakhi.android.platform.AndroidHealthConnectManager
+import team.sakhi.android.platform.HealthConnectSourceApp
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HealthConnectAvailability
 import team.sakhi.android.platform.HapticImpact
@@ -77,6 +78,7 @@ class OnboardingViewModel(
         OnboardingDataSourceUiState(
             availability = healthConnectManager.availability(),
             requiredPermissions = healthConnectManager.onboardingRequiredPermissions,
+            sourceApps = healthConnectManager.availableSourceApps(),
         )
     )
     val dataSourceUiState: StateFlow<OnboardingDataSourceUiState> = _dataSourceUiState.asStateFlow()
@@ -614,10 +616,19 @@ class OnboardingViewModel(
     }
 
     fun handleUnavailableHealthConnectSelection() {
-        val message = when (_dataSourceUiState.value.availability) {
+        val state = _dataSourceUiState.value
+        val message = when (state.availability) {
             HealthConnectAvailability.NotInstalled -> appContext.getString(R.string.onboarding_error_health_connect_unavailable)
             HealthConnectAvailability.NotSupported -> appContext.getString(R.string.onboarding_error_health_connect_unsupported)
-            HealthConnectAvailability.Available -> appContext.getString(R.string.onboarding_error_health_connect_permission_denied)
+            // Health Connect itself is fine, but nothing on this phone feeds it, so
+            // there is no source to import from. Availability takes precedence: if
+            // Health Connect is missing entirely that is the more fundamental thing to
+            // say, and only once it is present does "no health app" become the reason.
+            HealthConnectAvailability.Available -> if (state.sourceApps.isEmpty()) {
+                appContext.getString(R.string.onboarding_error_health_connect_no_apps)
+            } else {
+                appContext.getString(R.string.onboarding_error_health_connect_permission_denied)
+            }
         }
         hapticManager.error()
         failDataSourceImport(message)
@@ -870,6 +881,12 @@ data class OnboardingDataSourceUiState(
     val selectedChoice: OnboardingDataSourceChoice = OnboardingDataSourceChoice.HealthConnect,
     val availability: HealthConnectAvailability = HealthConnectAvailability.NotSupported,
     val requiredPermissions: Set<String> = emptySet(),
+    /**
+     * Installed apps that actually integrate with Health Connect. Empty means there is
+     * nothing on this device to import FROM, so offering the import option would send
+     * the user into Health Connect's setup for no reason.
+     */
+    val sourceApps: List<HealthConnectSourceApp> = emptyList(),
     val hasPermissions: Boolean = false,
     val isImporting: Boolean = false,
     val importFailed: Boolean = false,

@@ -65,6 +65,7 @@
     <string name="onboarding_error_cancel_request">Could not cancel request.</string>
     <string name="onboarding_error_health_connect_permission_denied">Health Connect access was not granted.</string>
     <string name="onboarding_error_health_connect_unavailable">Health Connect is not available on this device.</string>
+    <string name="onboarding_error_health_connect_no_apps">We couldn\'t find a health app on this phone to bring details from. You can add them yourself instead.</string>
     <string name="onboarding_error_health_connect_unsupported">Health Connect is not supported on this device.</string>
     <string name="onboarding_error_health_connect_missing_details">Health Connect doesn\'t have the details needed for onboarding.</string>
     <string name="onboarding_validation_invalid_dob">Choose a valid date of birth</string>

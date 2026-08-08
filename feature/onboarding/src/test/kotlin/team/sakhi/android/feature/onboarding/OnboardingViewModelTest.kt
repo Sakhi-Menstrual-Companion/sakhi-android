@@ -122,6 +122,9 @@ class OnboardingViewModelTest {
             "Health Connect doesn't have the details needed for onboarding."
         every { getString(R.string.onboarding_error_health_connect_permission_denied) } returns
             "Health Connect access was not granted."
+        every { getString(R.string.onboarding_error_health_connect_no_apps) } returns
+            "We couldn't find a health app on this phone to bring details from. " +
+                "You can add them yourself instead."
         every { getString(R.string.onboarding_error_health_connect_unavailable) } returns
             "Health Connect is not available on this device."
         every { getString(R.string.onboarding_error_health_connect_unsupported) } returns
@@ -131,6 +134,11 @@ class OnboardingViewModelTest {
     private fun mockHealthConnectManager(): AndroidHealthConnectManager = mockk {
         every { availability() } returns HealthConnectAvailability.NotSupported
         every { onboardingRequiredPermissions } returns emptySet()
+        // Read in the ViewModel's initial `OnboardingDataSourceUiState` to decide
+        // whether offering the Health Connect import is meaningful at all.
+        every { availableSourceApps() } returns listOf(
+            team.sakhi.android.platform.HealthConnectSourceApp("com.example.health", "Example Health"),
+        )
         coEvery { hasAllOnboardingPermissions() } returns false
     }
 
@@ -778,6 +786,8 @@ class OnboardingViewModelTest {
     fun `onDataSourcePermissionsResult with all real required permissions granted triggers a real Health Connect import`() = runTest {
         val requiredPermissions = setOf("perm.a", "perm.b")
         val healthConnectManager = mockk<AndroidHealthConnectManager> {
+            // Read when the ViewModel builds its initial data-source state.
+            every { availableSourceApps() } returns emptyList()
             every { availability() } returns HealthConnectAvailability.Available
             every { onboardingRequiredPermissions } returns requiredPermissions
             coEvery { hasAllOnboardingPermissions() } returns true
@@ -803,6 +813,8 @@ class OnboardingViewModelTest {
     fun `onDataSourcePermissionsResult with a real required permission missing fires a haptic error and never imports`() = runTest {
         val requiredPermissions = setOf("perm.a", "perm.b")
         val healthConnectManager = mockk<AndroidHealthConnectManager> {
+            // Read when the ViewModel builds its initial data-source state.
+            every { availableSourceApps() } returns emptyList()
             every { availability() } returns HealthConnectAvailability.Available
             every { onboardingRequiredPermissions } returns requiredPermissions
             coEvery { hasAllOnboardingPermissions() } returns false
@@ -823,12 +835,38 @@ class OnboardingViewModelTest {
 
     @Test
     fun `handleUnavailableHealthConnectSelection surfaces the real message matching each real availability state`() = runTest {
+        // Third element is the installed Health Connect source apps. When Health Connect
+        // is available but nothing feeds it, the reason the import cannot run is "no
+        // health app", not "permission denied"; availability still takes precedence.
+        val exampleApp = team.sakhi.android.platform.HealthConnectSourceApp(
+            packageName = "com.example.health",
+            label = "Example Health",
+        )
         listOf(
-            HealthConnectAvailability.NotInstalled to "Health Connect is not available on this device.",
-            HealthConnectAvailability.NotSupported to "Health Connect is not supported on this device.",
-            HealthConnectAvailability.Available to "Health Connect access was not granted.",
-        ).forEach { (availability, expectedMessage) ->
+            Triple(
+                HealthConnectAvailability.NotInstalled,
+                "Health Connect is not available on this device.",
+                listOf(exampleApp),
+            ),
+            Triple(
+                HealthConnectAvailability.NotSupported,
+                "Health Connect is not supported on this device.",
+                listOf(exampleApp),
+            ),
+            Triple(
+                HealthConnectAvailability.Available,
+                "Health Connect access was not granted.",
+                listOf(exampleApp),
+            ),
+            Triple(
+                HealthConnectAvailability.Available,
+                "We couldn't find a health app on this phone to bring details from. " +
+                    "You can add them yourself instead.",
+                emptyList(),
+            ),
+        ).forEach { (availability, expectedMessage, sourceApps) ->
             val healthConnectManager = mockk<AndroidHealthConnectManager> {
+                every { availableSourceApps() } returns sourceApps
                 every { this@mockk.availability() } returns availability
                 every { onboardingRequiredPermissions } returns emptySet()
                 coEvery { hasAllOnboardingPermissions() } returns false
@@ -852,6 +890,8 @@ class OnboardingViewModelTest {
     fun `importFromHealthConnect with real imported data applies it and skips only the real fields that were imported`() = runTest {
         val flowStore = OnboardingFlowStore("newUser")
         val healthConnectManager = mockk<AndroidHealthConnectManager> {
+            // Read when the ViewModel builds its initial data-source state.
+            every { availableSourceApps() } returns emptyList()
             every { availability() } returns HealthConnectAvailability.Available
             every { onboardingRequiredPermissions } returns emptySet()
             coEvery { hasAllOnboardingPermissions() } returns true
@@ -882,6 +922,8 @@ class OnboardingViewModelTest {
     @Test
     fun `importFromHealthConnect with no real imported data surfaces the real missing-details failure`() = runTest {
         val healthConnectManager = mockk<AndroidHealthConnectManager> {
+            // Read when the ViewModel builds its initial data-source state.
+            every { availableSourceApps() } returns emptyList()
             every { availability() } returns HealthConnectAvailability.Available
             every { onboardingRequiredPermissions } returns emptySet()
             coEvery { hasAllOnboardingPermissions() } returns true
@@ -904,6 +946,8 @@ class OnboardingViewModelTest {
     @Test
     fun `importFromHealthConnect failure surfaces the real thrown message`() = runTest {
         val healthConnectManager = mockk<AndroidHealthConnectManager> {
+            // Read when the ViewModel builds its initial data-source state.
+            every { availableSourceApps() } returns emptyList()
             every { availability() } returns HealthConnectAvailability.Available
             every { onboardingRequiredPermissions } returns emptySet()
             coEvery { hasAllOnboardingPermissions() } returns true
@@ -926,6 +970,8 @@ class OnboardingViewModelTest {
     fun `importFromHealthConnect is a no-op re-entry guard while an import is already in flight`() = runTest {
         val gate = CompletableDeferred<Unit>()
         val healthConnectManager = mockk<AndroidHealthConnectManager> {
+            // Read when the ViewModel builds its initial data-source state.
+            every { availableSourceApps() } returns emptyList()
             every { availability() } returns HealthConnectAvailability.Available
             every { onboardingRequiredPermissions } returns emptySet()
             coEvery { hasAllOnboardingPermissions() } returns true

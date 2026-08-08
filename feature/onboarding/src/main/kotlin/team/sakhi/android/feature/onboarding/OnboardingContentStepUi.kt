@@ -2793,7 +2793,15 @@ private fun DataSourceScreen(
             onPrimaryClick = {
                 when (uiState.selectedChoice) {
                     OnboardingDataSourceChoice.Manual -> onContinueManual()
-                    OnboardingDataSourceChoice.HealthConnect -> when (uiState.availability) {
+                    // No installed app feeds Health Connect, so there is nothing to
+                    // import from. Show Sakhi's alert instead of walking the user into
+                    // Health Connect's own onboarding to reach a dead end.
+                    OnboardingDataSourceChoice.HealthConnect -> if (
+                        uiState.availability == HealthConnectAvailability.Available &&
+                        uiState.sourceApps.isEmpty()
+                    ) {
+                        onHealthConnectUnavailable()
+                    } else when (uiState.availability) {
                         HealthConnectAvailability.Available -> {
                             if (uiState.hasPermissions) {
                                 onImportHealthConnect()

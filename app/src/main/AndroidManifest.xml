@@ -22,6 +22,19 @@
          the user chooses the contact-based invite path, never on app launch. -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
 
+    <!--
+        Android 11+ package visibility: without this, `queryIntentActivities` for the
+        Health Connect rationale action returns an empty list even on a phone that HAS
+        health apps installed, which would make the import step wrongly report "no
+        health app on this phone" for everyone. See
+        `AndroidHealthConnectManager.availableSourceApps()`.
+    -->
+    <queries>
+        <intent>
+            <action android:name="androidx.health.connect.action.SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+    </queries>
+
     <application
         android:name="team.sakhi.android.app.SakhiApplication"
         android:allowBackup="false"
