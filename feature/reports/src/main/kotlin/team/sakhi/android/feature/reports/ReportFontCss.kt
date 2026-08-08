@@ -1,45 +1,60 @@
 package team.sakhi.android.feature.reports
 
 import android.content.Context
-import android.util.Base64
+import java.io.File
 
 /**
- * Builds the `@font-face` rules that give the report its Lato typography.
+ * Puts Lato next to the report document on disk and returns the `@font-face` rules
+ * that point at it.
  *
- * The WebView renders the document with a null base URL and no file access, so it
- * cannot load a font off disk -- the bytes have to travel inside the document. The
- * app already ships Lato as a `res/font` resource, so it is read and base64'd into
- * a data URI here.
+ * Base64 data URIs were tried first and do not work here: the document is loaded
+ * with an opaque origin, where a large `data:` font URI is refused, and the whole
+ * render came back blank. Writing the TTFs beside the HTML and loading the page
+ * over `file://` makes the font an ordinary same-origin fetch, which the WebView
+ * is happy with.
  *
- * Without this the report falls back to Roboto on Android (and San Francisco on
- * iOS), which would leave the layout shared but the typography different -- the
- * exact drift moving the report into SakhiCore was meant to end.
+ * The app already ships Lato as a `res/font` resource; this copies it out once per
+ * directory rather than re-encoding it per report.
  *
- * Encoded lazily and cached: Lato regular + bold is roughly 300KB of base64, so
- * this should happen once per process, not once per report.
+ * Without this the report falls back to Roboto on Android and San Francisco on
+ * iOS -- the layout would be shared but the typography would not, which is exactly
+ * the drift that moving the report into SakhiCore was meant to end.
  */
 class ReportFontCss(private val context: Context) {
 
-    private val css: String by lazy { build() }
-
-    operator fun invoke(): String = css
-
-    private fun build(): String = buildString {
-        appendFace(team.sakhi.android.designsystem.R.font.lato_regular, weight = 400)
-        appendFace(team.sakhi.android.designsystem.R.font.lato_bold, weight = 700)
+    /**
+     * Copies the fonts into [workingDir] if they are not already there and returns
+     * CSS referencing them by relative name.
+     */
+    fun cssFor(workingDir: File): String = buildString {
+        appendFace(workingDir, REGULAR_FILE, team.sakhi.android.designsystem.R.font.lato_regular, 400)
+        appendFace(workingDir, BOLD_FILE, team.sakhi.android.designsystem.R.font.lato_bold, 700)
     }
 
-    private fun StringBuilder.appendFace(fontRes: Int, weight: Int) {
-        val encoded = runCatching {
-            context.resources.openRawResource(fontRes).use { stream ->
-                Base64.encodeToString(stream.readBytes(), Base64.NO_WRAP)
+    private fun StringBuilder.appendFace(dir: File, fileName: String, fontRes: Int, weight: Int) {
+        val target = File(dir, fileName)
+        val copied = runCatching {
+            if (!target.exists() || target.length() == 0L) {
+                context.resources.openRawResource(fontRes).use { input ->
+                    target.outputStream().use(input::copyTo)
+                }
             }
-        }.getOrNull() ?: return   // fall back to the generic stack rather than failing the report
+            true
+        }.getOrDefault(false)
+
+        // If the copy fails the report still renders, just in the fallback face --
+        // a missing font must never cost the user their report.
+        if (!copied) return
 
         append("@font-face{font-family:'Lato';font-style:normal;font-weight:")
         append(weight)
-        append(";src:url(data:font/ttf;base64,")
-        append(encoded)
-        append(") format('truetype');}")
+        append(";src:url('")
+        append(fileName)
+        append("') format('truetype');}")
+    }
+
+    private companion object {
+        const val REGULAR_FILE = "lato_regular.ttf"
+        const val BOLD_FILE = "lato_bold.ttf"
     }
 }

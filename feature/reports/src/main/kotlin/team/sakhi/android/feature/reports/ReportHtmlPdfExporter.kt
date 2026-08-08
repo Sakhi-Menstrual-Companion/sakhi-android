@@ -46,18 +46,15 @@ class ReportHtmlPdfExporter(
         document: ReportDocument,
         selectedSections: Set<ReportSection>,
     ): File = withContext(Dispatchers.Main) {
+        val reportsDir = File(context.cacheDir, "reports").apply { mkdirs() }
         val sharedSections = selectedSections.toSharedKeys()
         val html = ReportHtml.render(
             data = document.report,
             strings = strings.build(document),
             sections = sharedSections,
-            // NOT wired yet -- see `ReportFontCss`. Injecting the base64 Lato here
-            // blanked the document: `loadDataWithBaseURL(null, ...)` gives the page an
-            // opaque origin, where a ~300KB `data:` font URI does not load, and the
-            // render came back mostly empty (1.5MB -> 435KB, page 2 blank). Needs a
-            // real base URL -- `WebViewAssetLoader`, or writing the document and font
-            // to cache and loading over file:// -- before it can be turned on.
-            fontFaceCss = "",
+            // Fonts live beside the document in `reportsDir` and are referenced by
+            // relative name, so the WebView fetches them same-origin off file://.
+            fontFaceCss = fontCss.cssFor(reportsDir),
         )
         // The page count is a property of the DOCUMENT, not of how tall the WebView
         // happens to measure. Deriving it from measured height produced 11 pages for a
@@ -70,7 +67,11 @@ class ReportHtmlPdfExporter(
             // No JS in the document, so leave it off: this renders user health data
             // and there is no reason to give it an execution context.
             settings.javaScriptEnabled = false
-            settings.allowFileAccess = false
+            // Needed so the document can pull the Lato files sitting next to it. Scoped
+            // deliberately: JS stays off, content providers stay off, and universal
+            // file access is never enabled, so the page can only read the report
+            // directory it was loaded from.
+            settings.allowFileAccess = true
             settings.allowContentAccess = false
             // One CSS pixel == RENDER_SCALE device pixels, so the stylesheet's px box
             // (595.28 x 841.89) lands exactly on the pixel grid we draw from, and one
@@ -81,12 +82,17 @@ class ReportHtmlPdfExporter(
             layout(0, 0, widthPx, (PAGE_HEIGHT_PT * RENDER_SCALE).toInt())
         }
 
-        awaitPageFinished(webView, html)
+        // Written to disk rather than passed inline: the document has to be loaded
+        // from a real file:// URL for the font references beside it to resolve.
+        val htmlFile = File(reportsDir, "report_${System.currentTimeMillis()}.html")
+        htmlFile.writeText(html)
+        awaitPageFinished(webView, htmlFile)
         awaitFirstPaint(webView)
 
-        val reportsDir = File(context.cacheDir, "reports").apply { mkdirs() }
         val outputFile = File(reportsDir, "SakhiReport_${System.currentTimeMillis()}.pdf")
         writePdf(webView, outputFile, pageCount)
+        // The intermediate document is not part of what the user shares.
+        htmlFile.delete()
         outputFile
     }
 
@@ -97,7 +103,7 @@ class ReportHtmlPdfExporter(
     )
 
     /** Resumes once the WebView reports the document laid out, or fails loudly. */
-    private suspend fun awaitPageFinished(webView: WebView, html: String): Unit =
+    private suspend fun awaitPageFinished(webView: WebView, htmlFile: File): Unit =
         withTimeout(LOAD_TIMEOUT_MS) {
             suspendCancellableCoroutine { cont ->
                 webView.webViewClient = object : WebViewClient() {
@@ -117,10 +123,7 @@ class ReportHtmlPdfExporter(
                         }
                     }
                 }
-                // `null` base URL keeps the document isolated -- it cannot reference
-                // anything on disk or the network, which is what we want for a
-                // self-contained report.
-                webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
+                webView.loadUrl(android.net.Uri.fromFile(htmlFile).toString())
             }
         }
 
