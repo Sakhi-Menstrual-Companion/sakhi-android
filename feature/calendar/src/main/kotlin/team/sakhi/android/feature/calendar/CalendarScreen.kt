@@ -481,6 +481,19 @@ fun CalendarScreen(
             // `canLogPeriod` gate: a care viewer can quick-log a single flow entry
             // if granted that permission, but bulk-editing someone else's period
             // history is never allowed here, regardless of permissions.
+            // iOS renders this as `.overlay(alignment: .bottom)` with
+            // `.padding(.horizontal, 24).padding(.bottom, max(safeBottom, 16))`.
+            // Android had no wrapper at all: the `navigationBarsPadding()` Box above
+            // wraps only the month view's action bar, so in the year view the pill sat
+            // directly on the gesture bar and covered the last month's first row.
+            // Given the same treatment as its sibling bar, whose position Karan has
+            // already signed off on.
+            Box(
+                modifier = Modifier
+                    .padding(top = SakhiSpacing.space5)
+                    .padding(horizontal = EditPeriodDatesBarHorizontalPadding)
+                    .navigationBarsPadding(),
+            ) {
             EditPeriodDatesBar(
                 isMultiSelectMode = isMultiSelectMode,
                 selectionCount = yearSelection.size,
@@ -508,6 +521,7 @@ fun CalendarScreen(
                     }
                 },
             )
+            }
         }
     }
 }
@@ -1258,6 +1272,9 @@ private fun CalendarHeaderGlyph(
         }
     }
 }
+
+/** iOS `editControl`: `.padding(.horizontal, 24)`. */
+private val EditPeriodDatesBarHorizontalPadding = 24.dp
 
 /** iOS: both header glyphs are `.frame(width: 24, height: 24)`. */
 private val CalendarHeaderGlyphSize = 24.dp
