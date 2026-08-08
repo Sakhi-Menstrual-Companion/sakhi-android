@@ -53,6 +53,7 @@ import team.sakhi.ai.SafePlaceRanker
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.session.SessionPermissions
+import team.sakhi.sync.DeterministicIds
 import team.sakhi.sync.OfflineUpgradeDataset
 
 /**
@@ -142,15 +143,19 @@ class ChatViewModelTest {
         },
     )
 
-    // Real fix (2026-07-16): `ChatViewModel`'s own `sessionId(session)` is now
-    // the same composite `userId|targetUserId|isViewingOwnData` key as
-    // `activeSessionKey` (previously just `session.userId`, which is why a
-    // single device user's self-mode and partner-mode conversations used to
-    // bleed into each other -- `session.userId` never varies by viewing
-    // mode). Tests that exercise the *real* local-cache/session-scoping
-    // logic (not just an `any()`-mocked repository return value) need their
-    // fixture `sessionId` to match this real production key.
-    private fun SessionContext.testSessionId(): String = "$userId|$targetUserId|$isViewingOwnData"
+    // `ChatViewModel.sessionId(session)` scopes a conversation by
+    // `userId|targetUserId|isViewingOwnData`, so a single device user's self-mode and
+    // partner-mode conversations cannot bleed into each other (`session.userId` alone
+    // never varies by viewing mode). That composite is now HASHED into a deterministic
+    // UUID before it reaches the database: `session_id` is a `uuid` column, and sending
+    // the raw composite made every history fetch fail with
+    // `invalid input syntax for type uuid`, which surfaced as a red error on opening
+    // chat. Tests exercising the real session-scoping logic mirror the same derivation.
+    private fun SessionContext.testSessionId(): String =
+        DeterministicIds.uuidV5(
+            namespace = AI_SESSION_NAMESPACE_FOR_TEST,
+            name = "$userId|$targetUserId|$isViewingOwnData",
+        )
 
     /** Stubs both `session` and `current` -- the init block always subscribes to `session`. */
     private fun mockSessionManager(session: SessionContext?) = mockk<SessionManager> {
@@ -1413,3 +1418,6 @@ class ChatViewModelTest {
         verify(exactly = 0) { reportPdfExporter.export(any(), any()) }
     }
 }
+
+/** Must match `AI_SESSION_NAMESPACE` in `ChatViewModel`. */
+private const val AI_SESSION_NAMESPACE_FOR_TEST = "3f1c8a2e-5d47-4b93-9c26-8a71d0e4b5c9"

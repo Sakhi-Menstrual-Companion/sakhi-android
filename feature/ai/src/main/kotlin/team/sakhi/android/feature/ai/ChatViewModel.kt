@@ -59,6 +59,7 @@ import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.sync.DataMigration
+import team.sakhi.sync.DeterministicIds
 import team.sakhi.sync.OfflineUpgradeDataset
 import team.sakhi.android.common.toSafeUserMessage
 
@@ -421,9 +422,17 @@ class ChatViewModel(
         if (activeSessionKey(sessionManager.current) != requestedSessionKey) return
 
         val loadedMessages = historyResult.getOrElse { throwable ->
-            _uiState.update {
-                it.copy(error = throwable.toSafeUserMessage(appContext, R.string.chat_error_load_history))
-            }
+            // A history fetch that fails is NOT a blocking error. The chat is perfectly
+            // usable without it -- the welcome messages are already on screen and the
+            // user can still send -- so raising a red banner over a working screen was
+            // alarming for nothing, and it fired on every open. The cause is logged so a
+            // genuine backend problem is still diagnosable.
+            android.util.Log.w(
+                "SakhiChat",
+                "conversation history load failed (chat still usable): " +
+                    "${throwable::class.simpleName}: " +
+                    throwable.message.orEmpty().substringBefore('\n').take(160),
+            )
             emptyList()
         }
 
@@ -829,7 +838,23 @@ class ChatViewModel(
     // call already routed through this function (save, load, delete via
     // `confirmClearConversation`) is now scoped consistently, with no new
     // storage path.
-    private fun sessionId(session: SessionContext): String = activeSessionKey(session).orEmpty()
+    /**
+     * The chat session id as the DATABASE needs it: a real UUID.
+     *
+     * `activeSessionKey` is a composite ("user|target|isOwn") and is exactly right for
+     * deciding in-memory whether a response still belongs to the session on screen. It
+     * was also being sent straight to Postgres as `session_id`, which is a `uuid`
+     * column, so every history fetch failed with
+     * `invalid input syntax for type uuid: "…|…|true"` and the chat raised a red error
+     * on open. Hashing the same composite into a deterministic UUID keeps one stable
+     * session per (viewer, subject, own-data) triple while giving the column the type it
+     * expects.
+     */
+    private fun sessionId(session: SessionContext): String =
+        DeterministicIds.uuidV5(
+            namespace = AI_SESSION_NAMESPACE,
+            name = activeSessionKey(session).orEmpty(),
+        )
 
     private fun activeSessionKey(session: SessionContext?): String? =
         session?.let { "${it.userId}|${it.targetUserId}|${it.isViewingOwnData}" }
@@ -1522,3 +1547,6 @@ private fun List<team.sakhi.models.CycleData>.filteredForReportWindow(
         cycle.cycleStartDate >= earliestCycleStart && cycle.cycleStartDate <= to
     }
 }
+
+/** Namespace for deriving a stable chat `session_id` UUID. */
+private const val AI_SESSION_NAMESPACE = "3f1c8a2e-5d47-4b93-9c26-8a71d0e4b5c9"
