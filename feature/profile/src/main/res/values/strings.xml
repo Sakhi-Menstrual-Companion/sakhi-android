@@ -497,6 +497,7 @@
     <string name="profile_feedback_success_body">Your feedback has been sent. We read every message and use it to make Sakhi better.</string>
     <string name="profile_feedback_count">%1$d/%2$d</string>
     <string name="profile_feedback_send">Send Feedback</string>
+    <string name="profile_feedback_too_short">Please write a little more so we can help.</string>
     <string name="profile_feedback_subject">Sakhi %1$s Feedback</string>
 
     <string name="profile_about_title">About Sakhi</string>

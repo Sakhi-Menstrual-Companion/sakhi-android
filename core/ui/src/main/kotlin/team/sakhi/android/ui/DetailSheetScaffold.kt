@@ -47,6 +47,15 @@ fun DetailSheetScaffold(
     contentPadding: PaddingValues = PaddingValues(SakhiSpacing.space5),
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(SakhiSpacing.space5),
     trailingHeaderContent: @Composable RowScope.() -> Unit = {},
+    /**
+     * Pinned bottom action area, below the scrolling body.
+     *
+     * Karan's rule: every screen with a CTA uses `SakhiFooter`, so the primary button
+     * sits at the same position everywhere. Screens that put a `PrimaryButton` at the
+     * end of their scroll content instead had it drift with the content and pick up
+     * whatever padding that screen happened to use.
+     */
+    footer: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     SheetSurface(
@@ -72,8 +81,10 @@ fun DetailSheetScaffold(
             HorizontalDivider()
         }
 
+        // The body takes the space left over once the footer is laid out, so the footer
+        // is pinned rather than floating over the content.
         val bodyModifier = Modifier
-            .fillMaxSize()
+            .then(if (footer != null) Modifier.weight(1f) else Modifier.fillMaxSize())
             .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
             .padding(contentPadding)
 
@@ -142,5 +153,7 @@ fun DetailSheetScaffold(
             }
             content()
         }
+
+        footer?.invoke()
     }
 }

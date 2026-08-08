@@ -54,6 +54,7 @@ import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.DetailSheetScaffold
+import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.design.DesignTokens
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
@@ -61,6 +62,9 @@ import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 private const val FEEDBACK_EMAIL = "hello@getswipe.in"
 private const val MAX_CHARS = 500
+
+/** iOS gates submission on a real message rather than a stray character or two. */
+private const val MIN_FEEDBACK_CHARS = 10
 private val FeedbackTypeChipSize = 32.dp
 private val FeedbackTypeGlyphSize = 13.dp
 private val FeedbackTypeChevronSize = 11.dp
@@ -104,12 +108,58 @@ fun FeedbackScreen(onBack: () -> Unit) {
     var selectedType by remember { mutableStateOf(FeedbackType.GENERAL) }
     var feedbackText by remember { mutableStateOf("") }
     var submitted by remember { mutableStateOf(false) }
+    var showTooShort by remember { mutableStateOf(false) }
+    val tooShortNote = stringResource(R.string.profile_feedback_too_short)
+        .takeIf { showTooShort && feedbackText.trim().length < MIN_FEEDBACK_CHARS }
 
     DetailSheetScaffold(
         title = stringResource(R.string.profile_feedback_title),
         subtitle = stringResource(R.string.profile_feedback_header_subtitle),
         headerIcon = Icons.Filled.Favorite,
         onBack = onBack,
+        // Karan: every CTA goes through `SakhiFooter`, so the primary action sits at
+        // the same place on every screen. "Send Feedback" used to be a `PrimaryButton`
+        // at the end of the scroll content, so it drifted with the content and used
+        // this screen's padding rather than the shared footer's.
+        footer = if (submitted) {
+            null
+        } else {
+            {
+                SakhiFooter(
+                    primaryLabel = stringResource(R.string.profile_feedback_send),
+                    // Karan: no button in the app is ever disabled. A dead button tells
+                    // the user nothing; the validation runs on tap instead and says what
+                    // is missing, the same pattern the Terms step uses.
+                    showSecondarySlot = false,
+                    note = tooShortNote,
+                    onPrimaryClick = {
+                        val trimmedFeedback = feedbackText.trim()
+                        if (trimmedFeedback.length < MIN_FEEDBACK_CHARS) {
+                            hapticManager.error()
+                            showTooShort = true
+                            return@SakhiFooter
+                        }
+                        showTooShort = false
+                        hapticManager.impact(HapticImpact.MEDIUM)
+                        val subject = context.getString(
+                            R.string.profile_feedback_subject,
+                            context.getString(selectedType.labelRes),
+                        )
+                        val mailtoUri = Uri.parse("mailto:$FEEDBACK_EMAIL")
+                            .buildUpon()
+                            .appendQueryParameter("subject", subject)
+                            .appendQueryParameter("body", trimmedFeedback)
+                            .build()
+                        val intent = Intent(Intent.ACTION_SENDTO, mailtoUri).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        if (runCatching { context.startActivity(intent) }.isSuccess) {
+                            submitted = true
+                        }
+                    },
+                )
+            }
+        },
     ) {
         if (submitted) {
             FeedbackSubmittedState()
@@ -137,30 +187,6 @@ fun FeedbackScreen(onBack: () -> Unit) {
                     },
                 )
 
-                PrimaryButton(
-                    text = stringResource(R.string.profile_feedback_send),
-                    enabled = feedbackText.trim().length >= 10,
-                    onClick = {
-                        hapticManager.impact(HapticImpact.MEDIUM)
-                        val trimmedFeedback = feedbackText.trim()
-                        val subject = context.getString(
-                            R.string.profile_feedback_subject,
-                            context.getString(selectedType.labelRes),
-                        )
-                        val mailtoUri = Uri.parse("mailto:$FEEDBACK_EMAIL")
-                            .buildUpon()
-                            .appendQueryParameter("subject", subject)
-                            .appendQueryParameter("body", trimmedFeedback)
-                            .build()
-                        val intent = Intent(Intent.ACTION_SENDTO, mailtoUri).apply {
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        if (runCatching { context.startActivity(intent) }.isSuccess) {
-                            submitted = true
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                )
             }
         }
     }
