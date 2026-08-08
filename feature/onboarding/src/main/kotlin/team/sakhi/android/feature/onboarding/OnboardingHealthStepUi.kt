@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -642,10 +643,16 @@ private fun DaysInfoSheet(info: DaysInfo, onDismiss: () -> Unit) {
         // `.background(colorScheme.background)`). This Column never did, so the sheet
         // rendered as floating text over the scrim with no visible card at all --
         // reported live as "background bhi nahi hai... weird si aa rahi hai."
+        // iOS presents this sheet with `.profileStylePresentationBackground()`, whose
+        // light-mode fill is `DS.Colors.background` -- the app's pale pink page colour,
+        // NOT `systemBackground` (white). The difference is not cosmetic: `CloseButton`
+        // is a white glass circle, so on a white sheet its background disappeared and
+        // the cross read as a bare floating glyph. Same root cause as the `SheetSurface`
+        // fix earlier in this pass.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(sakhiSystemBackground()),
+                .background(MaterialTheme.colorScheme.background),
         ) {
             Row(
                 modifier = Modifier
@@ -666,10 +673,15 @@ private fun DaysInfoSheet(info: DaysInfo, onDismiss: () -> Unit) {
                 CloseButton(onClick = onDismiss)
             }
 
+            // iOS gets its bottom breathing room from the sheet's safe area on top of
+            // the content's own `.padding(.bottom, DS.Spacing.xl)`. Android had the
+            // padding but no navigation-bar inset, so on a gesture-nav device the
+            // source line sat directly on the home indicator.
             Column(
                 modifier = Modifier
                     .padding(horizontal = SakhiSpacing.space6)
-                    .padding(bottom = SakhiSpacing.space8),
+                    .padding(bottom = SakhiSpacing.space8)
+                    .navigationBarsPadding(),
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space6),
             ) {
                 Text(
@@ -789,29 +801,44 @@ private fun HealthConditionRow(
     ) {
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1 / 2),
+            verticalArrangement = Arrangement.spacedBy(ConditionTitleDescGap),
         ) {
+            // iOS `checkRow`: title `.lato(15, .bold)`, description `.lato(13)`.
+            // Android was rendering the description at 11sp, which Karan read as too
+            // small next to the iOS build.
             Text(
                 text = condition.displayName,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = ConditionTitleFontSize,
+                    fontWeight = FontWeight.Bold,
+                ),
             )
             Text(
                 text = condition.shortDescription,
-                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = ConditionDescFontSize),
                 color = sakhiSecondaryLabel(),
             )
         }
+        // iOS `LogCheckbox`: a 22pt ROUNDED SQUARE (corner radius 6), not a circle.
+        // Unchecked is `Color.clear` with a 1.5pt `separator` stroke -- Android filled
+        // it with `colorScheme.background`, the pale pink, which read as a filled box
+        // sitting on the white card. Checked is a solid pink fill with a white tick.
+        val checkboxShape = RoundedCornerShape(ConditionCheckboxRadius)
         Box(
             modifier = Modifier
-                .size(SakhiSpacing.space5)
+                .size(ConditionCheckboxSize)
                 .background(
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.background,
-                    shape = CircleShape,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    shape = checkboxShape,
                 )
                 .border(
-                    width = SakhiSpacing.space1 / 8,
-                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
-                    shape = CircleShape,
+                    width = ConditionCheckboxStroke,
+                    color = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                    },
+                    shape = checkboxShape,
                 ),
             contentAlignment = Alignment.Center,
         ) {
@@ -820,7 +847,7 @@ private fun HealthConditionRow(
                     imageVector = Icons.Rounded.Check,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.size(SakhiSpacing.space3),
+                    modifier = Modifier.size(ConditionCheckboxGlyph),
                 )
             }
         }
@@ -1008,6 +1035,15 @@ private val CalendarCellHeight = 34.dp
 private val CalendarSelectionRingSize = 32.dp
 private val CalendarSelectionRingStroke = 2.5.dp
 private val CalendarDayFontSize = 13.sp
+
+// iOS `HealthConditionStep.checkRow` + `LogCheckbox`.
+private val ConditionTitleFontSize = 15.sp
+private val ConditionDescFontSize = 13.sp
+private val ConditionTitleDescGap = 3.dp
+private val ConditionCheckboxSize = 22.dp
+private val ConditionCheckboxRadius = 6.dp
+private val ConditionCheckboxStroke = 1.5.dp
+private val ConditionCheckboxGlyph = 14.dp
 
 /**
  * Shared minimum card height for `HeightStepContent`/`WeightStepContent` -- Karan

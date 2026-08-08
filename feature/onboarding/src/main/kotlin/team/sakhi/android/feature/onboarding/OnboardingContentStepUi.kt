@@ -394,8 +394,14 @@ private val OnboardingTitleTopPadding = 28.dp
  * steps (`HeroContentStep`, `InviteWaitingScreen`, etc.) are a different layout shape and
  * are not touched by this. Reduced 40 -> 32 (20%) per Karan's live review: "har view
  * mai header and content ke bich mai space kuch jada he hogaya hai, 20% kam karo."
+ *
+ * Then 32 -> 24 to match the real iOS value: `OnboardingStep.contentTopSpacing`
+ * defaults to `DS.Spacing.l` (24), which `OnboardingFlowView` applies as the gap
+ * between the title/subtitle block and the step content. Only the Care steps
+ * override it (to `DS.Spacing.m`). Karan reported the excess on the health
+ * conditions step, where it also pushed the conditions card down the screen.
  */
-internal val OnboardingHeaderContentGap = 32.dp
+internal val OnboardingHeaderContentGap = 24.dp
 
 /**
  * Every onboarding step title, rendered a hair bolder than plain `FontWeight.Bold`.
