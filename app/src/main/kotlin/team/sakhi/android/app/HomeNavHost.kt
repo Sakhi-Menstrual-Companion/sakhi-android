@@ -314,6 +314,12 @@ private fun ProfileOverlaySheet(
             if (target == ProfileSheetScreen.Root) SakhiNavDirection.Backward else SakhiNavDirection.Forward
         },
         label = "profile_sheet_transition",
+        // Profile's sub-screens are children of Profile, not peers of it: iOS pushes
+        // them onto the same `NavigationStack` so Profile stays behind. Without this
+        // the shared transition fades Profile fully out mid-slide, which reads as the
+        // sub-screen REPLACING it. Onboarding keeps the fade -- its steps really are
+        // peers with no parent underneath.
+        parentStaysBehind = true,
     ) { targetScreen ->
         when (targetScreen) {
             ProfileSheetScreen.Root -> ProfileScreen(

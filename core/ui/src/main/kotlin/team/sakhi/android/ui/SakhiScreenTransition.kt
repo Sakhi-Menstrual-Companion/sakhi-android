@@ -56,6 +56,18 @@ private const val INCOMING_INITIAL_ALPHA = 0.98f
 private const val OUTGOING_TARGET_ALPHA = 0f
 
 /**
+ * The outgoing alpha for a true NavigationStack-style PUSH, where the parent screen is
+ * supposed to remain underneath the incoming one rather than being replaced by it.
+ *
+ * iOS's push does not fade the parent out at all -- it slides it back by roughly a
+ * third and leaves it opaque behind the (opaque) incoming view. That is what makes a
+ * push read as "over" instead of "instead of". [OUTGOING_TARGET_ALPHA]'s fade-to-zero
+ * exists for full-bleed peer screens like onboarding steps, which have no such parent
+ * relationship, and must not be applied here.
+ */
+private const val OUTGOING_TARGET_ALPHA_PUSH = 1f
+
+/**
  * `AnimatedContent` does not itself guarantee the incoming layer draws above the
  * outgoing one -- without an explicit z-index the two can composite in either order,
  * which was the other half of the "double view" bug: the old screen sometimes painted
@@ -116,12 +128,25 @@ fun <T> SakhiScreenTransition(
     modifier: Modifier = Modifier,
     label: String = "sakhi_screen_transition",
     directionFor: (initial: T, target: T) -> SakhiNavDirection = { _, _ -> SakhiNavDirection.Forward },
+    /**
+     * True where the states form a parent/child stack (a sheet's root and its
+     * sub-screens) rather than full-bleed peers. The outgoing screen then stays opaque
+     * behind the incoming one, so the child reads as pushed OVER its parent, matching
+     * an iOS `NavigationStack`. Peer flows such as onboarding leave this false and keep
+     * the fade-to-zero that stops the two steps overlapping.
+     */
+    parentStaysBehind: Boolean = false,
     content: @Composable AnimatedContentScope.(T) -> Unit,
 ) {
     AnimatedContent(
         targetState = targetState,
         modifier = modifier.clipToBounds(),
-        transitionSpec = { sakhiScreenSlide(directionFor(initialState, targetState)) },
+        transitionSpec = {
+            sakhiScreenSlide(
+                direction = directionFor(initialState, targetState),
+                parentStaysBehind = parentStaysBehind,
+            )
+        },
         label = label,
     ) { state ->
         // The incoming layer always draws on top of the outgoing one -- see
@@ -160,9 +185,13 @@ fun <T> SakhiSheetContentTransition(
  * keys on a second piece of state as well) but must still match the app-wide feel.
  * Prefer [SakhiScreenTransition] wherever a single target state is enough.
  */
-fun sakhiScreenSlide(direction: SakhiNavDirection): ContentTransform {
+fun sakhiScreenSlide(
+    direction: SakhiNavDirection,
+    parentStaysBehind: Boolean = false,
+): ContentTransform {
     val alphaSpec = tween<Float>(SCREEN_TRANSITION_DURATION_MS, easing = screenTransitionEasing)
     val offsetSpec = tween<IntOffset>(SCREEN_TRANSITION_DURATION_MS, easing = screenTransitionEasing)
+    val outgoingAlpha = if (parentStaysBehind) OUTGOING_TARGET_ALPHA_PUSH else OUTGOING_TARGET_ALPHA
     return when (direction) {
         SakhiNavDirection.None ->
             fadeIn(tween(ROOT_FADE_DURATION_MS, easing = screenTransitionEasing))
@@ -173,7 +202,7 @@ fun sakhiScreenSlide(direction: SakhiNavDirection): ContentTransform {
                     fadeIn(alphaSpec, initialAlpha = INCOMING_INITIAL_ALPHA)
                 ).togetherWith(
                 slideOutHorizontally(offsetSpec) { fullWidth -> -fullWidth / OUTGOING_PARALLAX_DIVISOR } +
-                    fadeOut(alphaSpec, targetAlpha = OUTGOING_TARGET_ALPHA),
+                    fadeOut(alphaSpec, targetAlpha = outgoingAlpha),
             )
         SakhiNavDirection.Backward ->
             (
@@ -181,7 +210,7 @@ fun sakhiScreenSlide(direction: SakhiNavDirection): ContentTransform {
                     fadeIn(alphaSpec, initialAlpha = INCOMING_INITIAL_ALPHA)
                 ).togetherWith(
                 slideOutHorizontally(offsetSpec) { fullWidth -> fullWidth } +
-                    fadeOut(alphaSpec, targetAlpha = OUTGOING_TARGET_ALPHA),
+                    fadeOut(alphaSpec, targetAlpha = outgoingAlpha),
             )
     }
 }
