@@ -33,6 +33,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.CloudOff
@@ -60,6 +61,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -98,6 +100,7 @@ import team.sakhi.android.ui.GlassCard
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
+import team.sakhi.android.ui.sakhiShakeOnError
 import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SakhiLoadingContext
 import team.sakhi.android.ui.SakhiLoadingView
@@ -1291,6 +1294,9 @@ private val PrivacyCardInternalGap = 10.dp
 private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> Unit) {
     val hapticManager = koinInject<AndroidHapticManager>()
     var hasAccepted by remember { mutableStateOf(false) }
+    // A counter, not a Boolean: tapping Continue again while still unchecked has to
+    // re-shake, and a Boolean that is already `true` would not re-fire the effect.
+    var declinedAttempts by remember { mutableIntStateOf(0) }
     val title = stringResource(R.string.onboarding_terms_title)
     val subtitle = stringResource(R.string.onboarding_terms_subtitle)
     val agreementLabel = stringResource(R.string.onboarding_terms_agreement)
@@ -1338,6 +1344,9 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = SakhiSpacing.space4)
+                // iOS `.shakeOnError(...)` -- the card itself answers the tap so the
+                // user's eye goes to the thing they still have to do.
+                .sakhiShakeOnError(declinedAttempts.takeIf { it > 0 })
                 .semantics {
                     selected = hasAccepted
                     role = Role.Checkbox
@@ -1387,23 +1396,43 @@ private fun TermsScreen(fieldError: String?, onContinue: (accepted: Boolean) -> 
             )
         }
 
+        // Karan: short, crisp, with an icon, in the accent colour -- not a long
+        // sentence in Material's error red. This is a "you missed a step" nudge on a
+        // consent screen, not a failure.
         fieldError?.takeIf(String::isNotBlank)?.let {
-            Text(
-                text = it,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+            Row(
                 modifier = Modifier.padding(top = SakhiSpacing.space3),
-            )
+                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(TermsValidationIconSize),
+                )
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
 
     }
 
         SakhiFooter(
             primaryLabel = continueLabel,
-            onPrimaryClick = { onContinue(hasAccepted) },
+            onPrimaryClick = {
+                if (!hasAccepted) declinedAttempts++
+                onContinue(hasAccepted)
+            },
         )
     }
 }
+
+/** Sized to sit level with the 13sp validation text beside it. */
+private val TermsValidationIconSize = 16.dp
 
 // ── Universal Intro / Celebration / Offline Warning ───────────────────────
 
