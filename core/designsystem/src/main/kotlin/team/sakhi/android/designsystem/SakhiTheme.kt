@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import team.sakhi.design.DesignTokens
 import team.sakhi.design.SakhiUIColors
 import team.sakhi.models.CyclePhase
@@ -96,21 +97,29 @@ private fun sakhiTypography(): Typography {
     // font files), so styles asking for a weight the font lacks fall back to Bold —
     // the same fallback iOS's own `.lato` helper makes.
     val withFontFamily = Typography(
-        displayLarge = default.displayLarge.copy(fontFamily = SakhiFontFamily),
-        displayMedium = default.displayMedium.copy(fontFamily = SakhiFontFamily),
-        displaySmall = default.displaySmall.copy(fontFamily = SakhiFontFamily),
-        headlineLarge = default.headlineLarge.copy(fontFamily = SakhiFontFamily),
-        headlineMedium = default.headlineMedium.copy(fontFamily = SakhiFontFamily),
-        headlineSmall = default.headlineSmall.copy(fontFamily = SakhiFontFamily),
-        titleLarge = default.titleLarge.copy(fontFamily = SakhiFontFamily),
-        titleMedium = default.titleMedium.copy(fontFamily = SakhiFontFamily),
-        titleSmall = default.titleSmall.copy(fontFamily = SakhiFontFamily),
-        bodyLarge = default.bodyLarge.copy(fontFamily = SakhiFontFamily),
-        bodyMedium = default.bodyMedium.copy(fontFamily = SakhiFontFamily),
-        bodySmall = default.bodySmall.copy(fontFamily = SakhiFontFamily),
-        labelLarge = default.labelLarge.copy(fontFamily = SakhiFontFamily),
-        labelMedium = default.labelMedium.copy(fontFamily = SakhiFontFamily),
-        labelSmall = default.labelSmall.copy(fontFamily = SakhiFontFamily),
+        displayLarge = default.displayLarge.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        displayMedium = default.displayMedium.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        displaySmall = default.displaySmall.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        headlineLarge = default.headlineLarge.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        headlineMedium = default.headlineMedium.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        // `letterSpacing = 0.sp` on every style, deliberately.
+        //
+        // Material3's defaults carry tracking on most styles (0.25sp on bodyMedium,
+        // 0.4sp on bodySmall, 0.5sp on the label styles), which is what made Sakhi's
+        // copy look spaced out next to iOS. iOS applies NO tracking: a grep of the whole
+        // iOS app finds exactly four `.tracking()` calls, all deliberate one-offs (the
+        // invite code at 2, a places card at 0.6). Zeroing it here fixes every screen at
+        // once rather than per-Text.
+        headlineSmall = default.headlineSmall.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        titleLarge = default.titleLarge.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        titleMedium = default.titleMedium.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        titleSmall = default.titleSmall.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        bodyLarge = default.bodyLarge.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        bodyMedium = default.bodyMedium.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        bodySmall = default.bodySmall.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        labelLarge = default.labelLarge.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        labelMedium = default.labelMedium.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
+        labelSmall = default.labelSmall.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
     )
     return withFontFamily.copy(
         headlineLarge = withFontFamily.headlineLarge.copy(fontSize = SakhiFontSize.xxxxl, fontWeight = FontWeight.Bold),
