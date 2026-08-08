@@ -453,9 +453,6 @@ fun CalendarScreen(
                 isPartnerMode = logUiState.session?.isViewingOwnData == false,
                 canLog = logUiState.canLogPeriod && logUiState.canMutateSelectedDate,
                 hasLoggedForDate = logUiState.hasAnyData,
-                hasLogDetail = uiState.days
-                    .firstOrNull { it.date == uiState.selectedDate }
-                    ?.hasLogDetail == true,
                 isLogSaving = logUiState.isSaving,
                 selectedFlow = logUiState.selectedFlow,
                 selectedDate = uiState.selectedDate,
