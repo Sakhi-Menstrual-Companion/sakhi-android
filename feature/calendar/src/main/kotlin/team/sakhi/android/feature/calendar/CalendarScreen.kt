@@ -44,6 +44,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EditCalendar
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.scaleIn
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
@@ -695,29 +698,15 @@ private fun CalendarHeader(
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                when {
-                    isOnToday -> {
-                        Icon(
-                            imageVector = Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = stringResource(R.string.calendar_expand_year_view),
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(SakhiSpacing.space4),
-                        )
-                    }
-                    else -> {
-                        IconButton(
-                            onClick = onJumpToToday,
-                            modifier = Modifier.size(48.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Refresh,
-                                contentDescription = stringResource(R.string.calendar_today),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(SakhiSpacing.space3),
-                            )
-                        }
-                    }
-                }
+                CalendarHeaderGlyph(
+                    showPrimary = isOnToday,
+                    primaryIcon = Icons.Rounded.KeyboardArrowDown,
+                    primaryDescription = stringResource(R.string.calendar_expand_year_view),
+                    onPrimaryClick = onExpandYear,
+                    secondaryIcon = Icons.Rounded.Refresh,
+                    secondaryDescription = stringResource(R.string.calendar_today),
+                    onSecondaryClick = onJumpToToday,
+                )
             }
         }
         HeaderNavButton(
@@ -761,31 +750,16 @@ private fun CalendarYearHeader(
                     style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                if (isCurrentYear) {
-                    IconButton(
-                        onClick = onCollapse,
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.KeyboardArrowDown,
-                            contentDescription = stringResource(R.string.calendar_collapse_year_view),
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(SakhiSpacing.space3),
-                        )
-                    }
-                } else {
-                    IconButton(
-                        onClick = onResetToCurrentYear,
-                        modifier = Modifier.size(48.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Refresh,
-                            contentDescription = stringResource(R.string.calendar_current_year),
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(SakhiSpacing.space3),
-                        )
-                    }
-                }
+                // Same treatment as the month header, per Karan -- one shared glyph.
+                CalendarHeaderGlyph(
+                    showPrimary = isCurrentYear,
+                    primaryIcon = Icons.Rounded.KeyboardArrowDown,
+                    primaryDescription = stringResource(R.string.calendar_collapse_year_view),
+                    onPrimaryClick = onCollapse,
+                    secondaryIcon = Icons.Rounded.Refresh,
+                    secondaryDescription = stringResource(R.string.calendar_current_year),
+                    onSecondaryClick = onResetToCurrentYear,
+                )
             }
         }
         HeaderNavButton(
@@ -1231,3 +1205,68 @@ private fun List<CalendarDayUiState>.toSakhiCalendarDays(
         )
     }
 }
+
+/**
+ * The single glyph that sits to the right of the calendar's month/year title.
+ *
+ * Real port of iOS `SakhiCalendarView.header`: with `onChevronTap` set, exactly one
+ * button is always present -- `chevron.down` while `isOnToday`, `arrow.clockwise`
+ * otherwise -- and BOTH are `.frame(width: 24, height: 24)`. That equal size is the
+ * whole point: the title and glyph share a centred `HStack`, so if the two states had
+ * different widths the title would slide sideways every time you paged off today.
+ *
+ * Android had exactly that bug: the chevron was a bare 16dp `Icon` while the reset was
+ * a 48dp `IconButton`, a 32dp swing that shifted the centred title on every month
+ * change. Both now occupy the same fixed box and only the glyph swaps, with iOS's
+ * `.easeInOut(duration: 0.2)` and `.opacity.combined(with: .scale(scale: 0.75))`.
+ */
+@Composable
+private fun CalendarHeaderGlyph(
+    showPrimary: Boolean,
+    primaryIcon: ImageVector,
+    primaryDescription: String,
+    onPrimaryClick: () -> Unit,
+    secondaryIcon: ImageVector,
+    secondaryDescription: String,
+    onSecondaryClick: () -> Unit,
+) {
+    AnimatedContent(
+        targetState = showPrimary,
+        transitionSpec = {
+            (
+                fadeIn(animationSpec = tween(CalendarGlyphSwapMillis)) +
+                    scaleIn(
+                        animationSpec = tween(CalendarGlyphSwapMillis),
+                        initialScale = CalendarGlyphSwapScale,
+                    )
+                ) togetherWith fadeOut(animationSpec = tween(CalendarGlyphSwapMillis))
+        },
+        label = "calendarHeaderGlyph",
+    ) { primary ->
+        Box(
+            modifier = Modifier
+                .size(CalendarHeaderGlyphSize)
+                .clickable(onClick = if (primary) onPrimaryClick else onSecondaryClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = if (primary) primaryIcon else secondaryIcon,
+                contentDescription = if (primary) primaryDescription else secondaryDescription,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(CalendarHeaderGlyphIconSize),
+            )
+        }
+    }
+}
+
+/** iOS: both header glyphs are `.frame(width: 24, height: 24)`. */
+private val CalendarHeaderGlyphSize = 24.dp
+
+/** iOS: `.font(.lato(11, .bold))` on the glyph itself. */
+private val CalendarHeaderGlyphIconSize = 16.dp
+
+/** iOS: `.animation(.easeInOut(duration: 0.2), value: isOnToday)`. */
+private const val CalendarGlyphSwapMillis = 200
+
+/** iOS: `.scale(scale: 0.75)` on the transition. */
+private const val CalendarGlyphSwapScale = 0.75f
