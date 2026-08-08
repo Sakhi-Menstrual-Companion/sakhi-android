@@ -211,6 +211,13 @@ fun LoggingSheet(
                 // "title" is two stacked lines, so it goes in the `leading` slot.
                 SakhiNavBar(
                     onClose = onClose,
+                    // Karan: pull space out from under the grabber and put it below the
+                    // date row instead, above the header divider. The default 20/8 left
+                    // 30dp above the date (20 + the handle's own 10) and only 8dp under
+                    // the phase line. iOS's logging header is weighted the same way
+                    // round -- `.padding(.top, 22).padding(.bottom, 18)`.
+                    topPadding = LogHeaderTopPadding,
+                    bottomPadding = LogHeaderBottomPadding,
                     leading = {
                         // iOS header: VStack(alignment: .leading, spacing: 2) of the date
                         // (lato 20 bold) over the phase name (lato 13, secondaryLabel).
@@ -341,7 +348,13 @@ fun LoggingSheet(
                                     )
                                 }
                                 if (uiState.canViewWeight) {
-                                    SakhiListDivider(startInset = SakhiSpacing.space5)
+                                    // No leading divider here. `symptomSection` already
+                                    // draws a TRAILING one after its last row, so adding
+                                    // one here stacked two hairlines at the same y --
+                                    // reported live as the rule under "Acne" looking
+                                    // thicker than every other. It was not thicker: both
+                                    // are 2px, but two overlapping hairlines darkened it
+                                    // to #BFBFC1 against the normal #DCDCDD.
                                     ExpandableValueRow(
                                         label = stringResource(R.string.logging_section_weight),
                                         value = uiState.weightKg,
@@ -996,3 +1009,9 @@ private val CardSectionLabelTopPadding = 18.dp
 
 /** iOS `cardSectionLabel`: `.padding(.bottom, 4)`. */
 private val CardSectionLabelBottomPadding = 4.dp
+
+/** Leaves 22dp above the date once the drag handle's own 10dp is counted. */
+private val LogHeaderTopPadding = 12.dp
+
+/** iOS's logging header uses 18 under the title block; 16 keeps the header compact. */
+private val LogHeaderBottomPadding = 16.dp

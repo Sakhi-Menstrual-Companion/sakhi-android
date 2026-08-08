@@ -13,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -71,13 +72,24 @@ fun SakhiNavBar(
      */
     leading: (@Composable RowScope.() -> Unit)? = null,
     trailing: @Composable RowScope.() -> Unit = {},
+    /**
+     * Vertical padding override. Defaults are iOS's `.ml` / `.xs` (20 / 8), which suit
+     * the pushed screens that have no drag handle above them.
+     *
+     * The Logging sheet passes its own: it sits under a grabber, so its 20dp top stacks
+     * on the handle's 10dp and leaves 30dp above the date while only 8dp separates the
+     * phase line from the divider. iOS's own logging header is 22 / 18 -- weighted the
+     * other way -- which is what Karan is asking for here.
+     */
+    topPadding: Dp = 20.dp,
+    bottomPadding: Dp = 8.dp,
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             // iOS: screenHorizontal (24) / .ml (20) / .xs (8).
             .padding(horizontal = 24.dp)
-            .padding(top = 20.dp, bottom = 8.dp),
+            .padding(top = topPadding, bottom = bottomPadding),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(0.dp),
     ) {
