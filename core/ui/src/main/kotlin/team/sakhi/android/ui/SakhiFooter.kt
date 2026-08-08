@@ -58,6 +58,17 @@ fun SakhiFooter(
     secondaryEnabled: Boolean = true,
     note: String? = null,
     showSecondarySlot: Boolean = true,
+    /**
+     * Replaces the default [PrimaryButton] while keeping the footer's chrome --
+     * navigation-bar inset, paddings and reserved secondary slot -- identical to every
+     * other screen's.
+     *
+     * Exists for the Logging sheet's save bar, which is not a plain label button: it
+     * animates through saving / saved / failed states. Before this it hand-rolled the
+     * whole footer and drifted from the shared metrics. Callers that just need a
+     * labelled button should leave this null and pass [primaryLabel].
+     */
+    primarySlot: (@Composable () -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -77,12 +88,16 @@ fun SakhiFooter(
                 .padding(horizontal = SakhiSpacing.space6)
                 .padding(top = SakhiSpacing.space5),
         ) {
-            PrimaryButton(
-                text = primaryLabel,
-                onClick = onPrimaryClick,
-                enabled = primaryEnabled,
-                modifier = Modifier.fillMaxWidth(),
-            )
+            if (primarySlot != null) {
+                primarySlot()
+            } else {
+                PrimaryButton(
+                    text = primaryLabel,
+                    onClick = onPrimaryClick,
+                    enabled = primaryEnabled,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
 
             // Reserved secondary slot -- fixed 44dp box so the primary above it
             // never shifts, exactly as iOS does. When there is no secondary

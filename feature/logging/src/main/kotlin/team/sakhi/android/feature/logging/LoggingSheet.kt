@@ -66,6 +66,7 @@ import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.flowDisplayNameRes
 import team.sakhi.android.ui.HorizontalRulerSlider
@@ -891,6 +892,15 @@ private fun SaveBar(
         else -> stringResource(R.string.logging_save)
     }
 
+    // Wrapped in the shared `SakhiFooter` so the save button sits at the identical
+    // position, inset and spacing as the primary action on every other screen. It goes
+    // through `primarySlot` rather than `primaryLabel` because this button is stateful
+    // (saving spinner / saved / retry), which the plain label API cannot express.
+    SakhiFooter(
+        primaryLabel = label,
+        onPrimaryClick = onClick,
+        showSecondarySlot = false,
+        primarySlot = {
     Button(
         onClick = onClick,
         enabled = enabled && !isSaving,
@@ -899,14 +909,10 @@ private fun SaveBar(
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
         ),
+        // `SakhiFooter` now owns the horizontal margin, the top gap and the
+        // navigation-bar inset, so only the button's own height belongs here.
         modifier = Modifier
             .fillMaxWidth()
-            // Padding BEFORE height. Reversed, `.height(52.dp).padding(vertical = 16.dp)`
-            // shrinks the button's own box to 52 - 32 = 20dp, and Material3's Button adds
-            // its internal content padding on top of that, so the label was clipped away
-            // entirely -- the Save button rendered as a bare pink bar with no text.
-            // Applying the margins first makes it a real 52dp button inside them.
-            .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4)
             .height(52.dp),
     ) {
         Row(
@@ -933,6 +939,8 @@ private fun SaveBar(
             Text(label)
         }
     }
+        },
+    )
 }
 
 // Delegates to core:ui so the sheet, the quick-log menu and Home's chip cannot disagree
