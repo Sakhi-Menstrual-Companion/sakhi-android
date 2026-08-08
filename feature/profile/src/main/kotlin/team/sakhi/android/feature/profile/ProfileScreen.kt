@@ -138,6 +138,7 @@ fun ProfileScreen(
         onFeedbackClick = onFeedbackClick,
         onManageAccountClick = onManageAccountClick,
         onSignOutClick = viewModel::requestSignOut,
+        isOfflineUser = uiState.isOfflineUser,
     )
 
     if (uiState.showSignOutConfirm) {
@@ -461,6 +462,14 @@ private fun profileSettingGroups(
     onFeedbackClick: () -> Unit,
     onManageAccountClick: () -> Unit,
     onSignOutClick: () -> Unit,
+    /**
+     * A local-only (offline) account. iOS branches the whole Account group on this:
+     * `if vm.isOfflineUser` it offers "Manage Account" + "Create a Sakhi Account", and
+     * Sign Out exists only in the signed-in branch (`ProfileView.swift`). Offering to
+     * sign out of an account that was never signed in is meaningless, and worse, it is
+     * the one action that could strand data that lives only on this device.
+     */
+    isOfflineUser: Boolean,
 ): List<ProfileSettingGroup> {
     val groups = mutableListOf<ProfileSettingGroup>()
 
@@ -514,8 +523,28 @@ private fun profileSettingGroups(
             // repository writes straight to Supabase, so logging does not work offline
             // and there is no queued sync to pause. Re-add this row only once Android
             // has a local-first write path. See Android-Live-Status-Log.md.
-            ProfileSettingItem(Icons.AutoMirrored.Filled.Logout, context.getString(R.string.profile_item_sign_out), onSignOutClick, isDestructive = true),
-        ),
+            // Offline accounts get NO Sign Out. iOS branches the same way
+            // (`ProfileView.swift`): Sign Out exists only in the signed-in branch.
+            // Signing out of an account that was never signed in is meaningless, and
+            // here it is the one action that could strand data living only on this
+            // device.
+            //
+            // iOS also offers "Create a Sakhi Account" in this branch, and that row is
+            // deliberately NOT added yet. The offline-to-online migration it needs --
+            // `DataMigration.rewritePeriodLogIdentity`, which rewrites `offline_<id>`
+            // records onto the real user id -- exists in SakhiCore but is called from
+            // NOTHING except its own test. Local records are keyed by `ownerUserId`, so
+            // authenticating without that step leaves every offline log invisible to the
+            // new account and never uploaded. Shipping the button before the migration is
+            // wired would quietly lose someone's health history.
+        ).let { items ->
+            if (isOfflineUser) items else items + ProfileSettingItem(
+                Icons.AutoMirrored.Filled.Logout,
+                context.getString(R.string.profile_item_sign_out),
+                onSignOutClick,
+                isDestructive = true,
+            )
+        },
     )
 
     return groups
