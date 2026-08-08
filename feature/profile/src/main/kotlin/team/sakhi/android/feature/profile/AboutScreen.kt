@@ -57,6 +57,7 @@ import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SakhiNavDirection
 import team.sakhi.android.ui.SakhiScreenTransition
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
@@ -266,7 +267,7 @@ private fun AboutActionSectionCard(
                 rows.forEachIndexed { index, row ->
                     AboutActionRowContent(row = row)
                     if (index != rows.lastIndex) {
-                        HorizontalDivider(modifier = Modifier.padding(start = AboutRowDividerInset))
+                        SakhiListDivider(startInset = AboutRowDividerInset)
                     }
                 }
             }
@@ -356,7 +357,7 @@ private fun AboutInfoSectionCard(
                         )
                     }
                     if (index != rows.lastIndex) {
-                        HorizontalDivider(modifier = Modifier.padding(start = AboutRowDividerInset))
+                        SakhiListDivider(startInset = AboutRowDividerInset)
                     }
                 }
             }

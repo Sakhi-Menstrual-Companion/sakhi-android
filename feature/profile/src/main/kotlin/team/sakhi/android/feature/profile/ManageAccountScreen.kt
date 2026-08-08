@@ -85,6 +85,7 @@ import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
 import team.sakhi.android.ui.SakhiFooter
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.appstate.AppStateInputBridge
 import team.sakhi.auth.AuthRepository
 import team.sakhi.repositories.AccountRepository
@@ -498,7 +499,7 @@ private fun MenuContent(
                         chevronTint = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
                         onClick = onStartFresh,
                     )
-                    HorizontalDivider(modifier = Modifier.padding(horizontal = SakhiSpacing.space4))
+                    SakhiListDivider(modifier = Modifier.padding(horizontal = SakhiSpacing.space4))
                     DangerRow(
                         icon = Icons.Filled.Delete,
                         iconTint = MaterialTheme.colorScheme.error,
@@ -718,7 +719,7 @@ private fun DeleteContent(
                     ) {
                         Column {
                             LeaveReason.entries.forEachIndexed { index, reason ->
-                                if (index > 0) HorizontalDivider()
+                                if (index > 0) SakhiListDivider()
                                 ReasonRow(
                                     reason = reason,
                                     selected = reason in selectedReasons,
@@ -1090,7 +1091,7 @@ internal suspend fun deleteAccountAndSignOut(
 
 @Composable
 private fun IndentedDivider() {
-    HorizontalDivider(modifier = Modifier.padding(start = 68.dp))
+    SakhiListDivider(startInset = 68.dp)
 }
 
 @Composable

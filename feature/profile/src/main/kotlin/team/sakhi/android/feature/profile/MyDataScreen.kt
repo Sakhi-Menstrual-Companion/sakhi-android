@@ -63,6 +63,7 @@ import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.EmptyState
 import team.sakhi.android.ui.ProfileSectionLabel
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.models.ConversationMessage
 import team.sakhi.models.CycleData
 import team.sakhi.models.InvitationStatus
@@ -666,7 +667,7 @@ private fun DataRow(
             modifier = Modifier.weight(1f),
         )
     }
-    HorizontalDivider(modifier = Modifier.padding(start = 68.dp))
+    SakhiListDivider(startInset = 68.dp)
 }
 
 @Composable

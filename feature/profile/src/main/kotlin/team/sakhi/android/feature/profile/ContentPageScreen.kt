@@ -91,6 +91,7 @@ import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.DetailSheetScaffold
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.repositories.SanityFaq
 import team.sakhi.repositories.SanityLegalPage
 import team.sakhi.repositories.SanityPortableTextBlock
@@ -443,7 +444,7 @@ private fun LiveFaqContent(faqs: List<SanityFaq>, languageCode: String) {
                         )
                     }
                     if (expandedId == faqId) {
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = SakhiSpacing.space4))
+                        SakhiListDivider(modifier = Modifier.padding(horizontal = SakhiSpacing.space4))
                         Text(
                             text = faq.answer.localized(languageCode),
                             style = MaterialTheme.typography.bodyMedium,
