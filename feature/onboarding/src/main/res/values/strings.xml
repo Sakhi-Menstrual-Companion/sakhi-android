@@ -149,11 +149,11 @@
     <string name="onboarding_partner_conversion_confirm_button">Delete &amp; Continue as Partner</string>
     <string name="onboarding_cancel">Cancel</string>
     <string name="onboarding_data_source_title">Help Sakhi Know You</string>
-    <string name="onboarding_data_source_subtitle">Bring your health details from Health Connect and Sakhi will understand you better from day one.</string>
+    <string name="onboarding_data_source_subtitle">Bring your health details across and Sakhi will understand you better from day one.</string>
     <string name="onboarding_data_source_import_failed_title">Almost There</string>
     <string name="onboarding_data_source_import_failed_subtitle">Health Connect didn\'t have all the details. You can add them below.</string>
-    <string name="onboarding_data_source_health_connect_title">Import from Health Connect</string>
-    <string name="onboarding_data_source_health_connect_description">Bring your height, weight, and health details securely from Health Connect.</string>
+    <string name="onboarding_data_source_health_connect_title">Import from Other app</string>
+    <string name="onboarding_data_source_health_connect_description">Bring your height, weight, and health details securely from the health apps you already use.</string>
     <string name="onboarding_data_source_manual_title">Add Details Myself</string>
     <string name="onboarding_data_source_manual_description">Enter your details and Sakhi will start learning you from the beginning.</string>
     <string name="onboarding_importing">Importing...</string>
