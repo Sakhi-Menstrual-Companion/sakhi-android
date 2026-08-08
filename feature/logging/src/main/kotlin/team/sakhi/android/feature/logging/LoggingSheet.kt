@@ -737,7 +737,15 @@ private fun ExpandableValueRow(
     onHapticImpact: () -> Unit,
     onValueChange: (Double?) -> Unit,
 ) {
-    var expanded by remember(value != null) { mutableStateOf(false) }
+    // NOT `remember(value != null)`. Tapping "+" sets the value and expands in the same
+    // click, but making `value != null` a remember KEY meant that first write flipped
+    // the key false -> true, so Compose threw the state away and re-initialised
+    // `expanded` back to false on the very next recomposition. The value appeared and
+    // the ruler never opened -- exactly the "+ should open the value AND the scale"
+    // report. iOS holds `weightExpanded`/`bbtExpanded` as plain `@State` for this
+    // reason; the `value != null` guard on the slider below already handles a cleared
+    // value, so the key bought nothing.
+    var expanded by remember { mutableStateOf(false) }
 
     Column {
         Row(
