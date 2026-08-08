@@ -182,6 +182,15 @@ fun HomeNavHost() {
             HomeScreen(
                 viewModel = homeViewModel,
                 onOpenProfile = { presentOverlaySheet(HomeOverlaySheet.Profile()) },
+                // iOS's "How you feel" card presents the activity sheet for the selected
+                // day. Android's equivalent view is `ActivityLogScreen`, which already
+                // lives behind the profile sheet's LogHistory route -- the same route the
+                // OpenReport deep link uses for Reports.
+                onOpenLogHistory = {
+                    presentOverlaySheet(
+                        HomeOverlaySheet.Profile(initialScreen = ProfileSheetScreen.LogHistory),
+                    )
+                },
                 onOpenCare = { presentOverlaySheet(HomeOverlaySheet.Care()) },
                 onOpenCalendar = { showCalendar = true },
                 onCloseCalendar = { showCalendar = false },

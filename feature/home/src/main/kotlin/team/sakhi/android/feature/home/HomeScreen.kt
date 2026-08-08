@@ -183,6 +183,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 @Composable
 fun HomeScreen(
     onOpenProfile: () -> Unit = {},
+    /**
+     * Opens the activity/history view. iOS's "How you feel" card is tappable across its
+     * whole surface (`.contentShape(...).onTapGesture { presentActivitySheet() }` in
+     * `HomeDayDetailGlassView+Cards.swift`); the "History" capsule is only the visual
+     * affordance for it. Android drew the capsule, chevron and all, but both call sites
+     * passed an empty lambda, so the card did nothing when tapped.
+     */
+    onOpenLogHistory: () -> Unit = {},
     onOpenCare: () -> Unit = {},
     onOpenCalendar: () -> Unit = {},
     /** Counterpart to [onOpenCalendar] — see the `onPhaseTap` call site. */
@@ -395,7 +403,7 @@ fun HomeScreen(
                         isPartnerMode = true,
                         phase = uiState.phase,
                         accentColor = accentColor,
-                        onClick = { /* Activity/history sheet -- ActivityLogScreen, reachable from Profile today */ },
+                        onClick = onOpenLogHistory,
                     )
                     if (recoState.canViewPhaseRecommendations) {
                         NutritionCard(
@@ -440,7 +448,7 @@ fun HomeScreen(
                         isPartnerMode = false,
                         phase = uiState.phase,
                         accentColor = accentColor,
-                        onClick = { /* Activity/history sheet -- ActivityLogScreen, reachable from Profile today */ },
+                        onClick = onOpenLogHistory,
                     )
                     if (recoState.canViewPhaseRecommendations) {
                         NutritionCard(
