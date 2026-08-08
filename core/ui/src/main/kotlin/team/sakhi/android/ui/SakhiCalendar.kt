@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
@@ -350,6 +351,11 @@ private fun SakhiCalendarDayCell(
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
+                    // `offset` rather than padding: it moves where the dot DRAWS without
+                    // changing what the cell measures, so the extra clearance below the
+                    // today ring costs nothing in row height. Growing the cell instead
+                    // spread the grid and pushed the month's last week off the sheet.
+                    .offset(y = CalendarLogDotOffsetY)
                     .padding(bottom = CalendarLogDotBottomInset)
                     .size(CalendarLogDotSize)
                     .background(
@@ -379,6 +385,7 @@ private val calendarCellHeight = SakhiSpacing.space10 + SakhiSpacing.space1 * 2
 private val CalendarDayFontSize = 15.sp
 private val CalendarLogDotSize = 4.dp
 private val CalendarLogDotBottomInset = 1.dp
+private val CalendarLogDotOffsetY = 8.dp
 private val calendarDotSize = SakhiSpacing.space8 + SakhiSpacing.space1 / 2
 // 42dp left only ~3dp of cell below it, which is not enough for the log dot to sit
 // clear. 38dp frees that band without touching the row height.
