@@ -42,6 +42,7 @@ include(
     ":feature:calendar",
     ":feature:logging",
     ":feature:care",
+    ":feature:emergency",
     ":feature:ai",
     ":feature:recommendations",
     ":feature:profile",

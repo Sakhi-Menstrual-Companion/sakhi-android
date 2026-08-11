@@ -20,6 +20,11 @@
     </plurals>
     <string name="platform_push_logging_reminder">How are you feeling today?</string>
     <string name="platform_push_sos">Emergency alert -- tap to open</string>
+    <!-- Nearby-request push. Deliberately identifies nobody and locates nobody, so it is
+         safe on a lock screen. The detail lives behind the responder inbox, which is
+         authorised. -->
+    <string name="platform_push_emergency_nearby_title">Someone nearby needs help</string>
+    <string name="platform_push_emergency_nearby_body">A Sakhi close to you has asked for something. Can you help?</string>
     <string name="platform_health_connect_not_available">Health Connect is not available on this device.</string>
     <string name="platform_health_connect_not_supported">Health Connect is not supported on this device.</string>
     <string name="platform_health_connect_access_not_granted">Health Connect access was not granted.</string>

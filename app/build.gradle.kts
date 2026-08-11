@@ -122,6 +122,7 @@ dependencies {
     implementation(project(":feature:calendar"))
     implementation(project(":feature:logging"))
     implementation(project(":feature:care"))
+    implementation(project(":feature:emergency"))
     implementation(project(":feature:ai"))
     implementation(project(":feature:reports"))
     implementation(project(":feature:recommendations"))

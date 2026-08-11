@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+      Emergency Assistance is the one feature in this app that asks for FINE location,
+      and it is a deliberate departure from the coarse-only stance the rest of the app
+      takes (see core/platform and app manifests, where coarse is explicitly enough for
+      the 2 km nearby-places radius).
+
+      The reason is that this feature directs a real person to walk to another real
+      person. The server buckets distance to 100 m at the closest band and shows a walking
+      ETA off it. A coarse fix can be off by a kilometre or more, so "within 100 m, 2 min
+      walk" computed from one would be a confident number that is simply wrong, and a
+      wrong number is worse than no number when someone is waiting for help.
+
+      Coarse is still declared and still requested alongside it. If she grants only
+      coarse, the flow keeps working: the buckets widen and the ETA gets vaguer, which is
+      the honest degradation. Nothing here requires background location, and the app never
+      tracks her when a session is not active.
+    -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+</manifest>

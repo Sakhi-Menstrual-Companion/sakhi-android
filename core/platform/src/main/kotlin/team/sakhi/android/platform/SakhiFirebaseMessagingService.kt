@@ -95,6 +95,9 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
     private fun deepLinkUri(notification: SakhiNotification): String? = when (notification) {
         is SakhiNotification.InvitationReceived -> "sakhi://invite/${notification.inviteCode}"
         is SakhiNotification.Sos -> "sakhi://emergency/${notification.sessionId}"
+        // Opens the responder inbox rather than a session: there is no session yet, and
+        // by the time she taps, the request may already have been taken by someone else.
+        is SakhiNotification.EmergencyNearbyRequest -> "sakhi://emergency/nearby"
         is SakhiNotification.PartnerLoggedPeriod,
         is SakhiNotification.InvitationAccepted,
         is SakhiNotification.LogRequestReceived,
@@ -138,6 +141,10 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         is SakhiNotification.Sos ->
             context.getString(R.string.platform_notification_app_name) to
                 context.getString(R.string.platform_push_sos)
+        // Names nobody and locates nobody -- safe on a lock screen by construction.
+        is SakhiNotification.EmergencyNearbyRequest ->
+            context.getString(R.string.platform_push_emergency_nearby_title) to
+                context.getString(R.string.platform_push_emergency_nearby_body)
         SakhiNotification.Unknown -> null
     }
 

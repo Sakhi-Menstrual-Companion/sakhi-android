@@ -15,6 +15,7 @@ import team.sakhi.android.feature.ai.aiFeatureModule
 import team.sakhi.android.feature.auth.authFeatureModule
 import team.sakhi.android.feature.calendar.calendarFeatureModule
 import team.sakhi.android.feature.care.careFeatureModule
+import team.sakhi.android.feature.emergency.emergencyFeatureModule
 import team.sakhi.android.feature.home.homeFeatureModule
 import team.sakhi.android.feature.logging.loggingFeatureModule
 import team.sakhi.android.feature.onboarding.onboardingFeatureModule
@@ -76,6 +77,7 @@ class SakhiApplication : Application() {
                 calendarFeatureModule,
                 loggingFeatureModule,
                 careFeatureModule,
+                emergencyFeatureModule,
                 aiFeatureModule,
                 reportsFeatureModule,
                 recommendationsFeatureModule,

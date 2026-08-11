@@ -121,6 +121,12 @@ class ReportsViewModelTest {
             every { it.export(any(), any()) } returns File("/tmp/SakhiReport_default.pdf")
             every { it.buildShareUri(any()) } returns mockk()
         },
+        // The ViewModel now generates through the shared `ReportHtml` renderer; the
+        // old exporter stays injected until it is deleted.
+        reportHtmlPdfExporter: ReportHtmlPdfExporter = mockk<ReportHtmlPdfExporter>().also {
+            coEvery { it.export(any(), any()) } returns File("/tmp/SakhiReport_default.pdf")
+            every { it.buildShareUri(any()) } returns mockk()
+        },
         hapticManager: AndroidHapticManager = mockk(relaxed = true),
         appContext: Context = mockk {
             every { getString(R.string.reports_current_account_error) } returns "No current account"
@@ -136,6 +142,7 @@ class ReportsViewModelTest {
         periodLogRepository,
         userProfileRepository,
         reportPdfExporter,
+        reportHtmlPdfExporter,
         hapticManager,
         appContext,
     )
@@ -563,14 +570,14 @@ class ReportsViewModelTest {
     @Test
     fun `exportPdf without a generated report sets an export error and never invokes the exporter`() = runTest {
         val sessionManager = mockk<SessionManager> { every { current } returns null }
-        val reportPdfExporter = mockk<ReportPdfExporter>()
-        val viewModel = newViewModel(sessionManager, reportPdfExporter = reportPdfExporter)
+        val reportHtmlPdfExporter = mockk<ReportHtmlPdfExporter>()
+        val viewModel = newViewModel(sessionManager, reportHtmlPdfExporter = reportHtmlPdfExporter)
 
         viewModel.exportPdf()
         advanceUntilIdle()
 
         assertEquals("Generate a report before exporting", viewModel.uiState.value.exportErrorMessage)
-        coVerify(exactly = 0) { reportPdfExporter.export(any(), any()) }
+        coVerify(exactly = 0) { reportHtmlPdfExporter.export(any(), any()) }
     }
 
     @Test
@@ -585,8 +592,8 @@ class ReportsViewModelTest {
         }
         val fakeFile = File("/tmp/SakhiReport_test.pdf")
         val fakeUri = mockk<Uri>()
-        val reportPdfExporter = mockk<ReportPdfExporter> {
-            every { export(any(), any()) } returns fakeFile
+        val reportHtmlPdfExporter = mockk<ReportHtmlPdfExporter> {
+            coEvery { export(any(), any()) } returns fakeFile
             every { buildShareUri(fakeFile) } returns fakeUri
         }
         val hapticManager = mockk<AndroidHapticManager>(relaxed = true)
@@ -594,7 +601,7 @@ class ReportsViewModelTest {
             sessionManager,
             cycleDataRepository = cycleDataRepository,
             periodLogRepository = periodLogRepository,
-            reportPdfExporter = reportPdfExporter,
+            reportHtmlPdfExporter = reportHtmlPdfExporter,
             hapticManager = hapticManager,
         )
         viewModel.generate()
@@ -605,8 +612,8 @@ class ReportsViewModelTest {
         val state = viewModel.uiState.value
         assertEquals(fakeUri, state.sharePdfUri)
         assertNull(state.exportErrorMessage)
-        verify(exactly = 1) { reportPdfExporter.export(any(), ReportSection.entries.toSet()) }
-        verify(exactly = 1) { reportPdfExporter.buildShareUri(fakeFile) }
+        coVerify(exactly = 1) { reportHtmlPdfExporter.export(any(), ReportSection.entries.toSet()) }
+        verify(exactly = 1) { reportHtmlPdfExporter.buildShareUri(fakeFile) }
         verify(exactly = 1) { hapticManager.impact(HapticImpact.MEDIUM) }
     }
 
@@ -624,10 +631,15 @@ class ReportsViewModelTest {
         }
         val fakeFile = File("/tmp/SakhiReport_test.pdf")
         val fakeUri = mockk<Uri>()
-        val latch = CountDownLatch(1)
-        val reportPdfExporter = mockk<ReportPdfExporter> {
-            every { export(any(), any()) } answers {
-                latch.await()
+        // A suspending gate, not a `CountDownLatch`. The renderer runs on the caller's
+        // thread now (it hops to Main itself, because WebView is main-thread-only), so
+        // a blocking `latch.await()` would block the very thread the test dispatcher
+        // pumps from and deadlock -- the exact trap this file's `awaitUiState` comment
+        // describes. `CompletableDeferred` suspends instead of blocking.
+        val gate = CompletableDeferred<Unit>()
+        val reportHtmlPdfExporter = mockk<ReportHtmlPdfExporter> {
+            coEvery { export(any(), any()) } coAnswers {
+                gate.await()
                 fakeFile
             }
             every { buildShareUri(fakeFile) } returns fakeUri
@@ -636,13 +648,13 @@ class ReportsViewModelTest {
             sessionManager,
             cycleDataRepository = cycleDataRepository,
             periodLogRepository = periodLogRepository,
-            reportPdfExporter = reportPdfExporter,
+            reportHtmlPdfExporter = reportHtmlPdfExporter,
         )
         viewModel.generate()
         advanceUntilIdle()
 
         currentSlot[0] = sessionB
-        latch.countDown()
+        gate.complete(Unit)
         awaitUiState(viewModel) { it.phase == ReportsPhase.Config }
 
         val state = viewModel.uiState.value
@@ -661,14 +673,14 @@ class ReportsViewModelTest {
         val periodLogRepository = mockk<PeriodLogRepository>().also {
             coEvery { it.getForDateRange(any(), any(), any()) } returns Result.success(listOf(periodLog()))
         }
-        val reportPdfExporter = mockk<ReportPdfExporter> {
-            every { export(any(), any()) } throws RuntimeException("disk full")
+        val reportHtmlPdfExporter = mockk<ReportHtmlPdfExporter> {
+            coEvery { export(any(), any()) } throws RuntimeException("disk full")
         }
         val viewModel = newViewModel(
             sessionManager,
             cycleDataRepository = cycleDataRepository,
             periodLogRepository = periodLogRepository,
-            reportPdfExporter = reportPdfExporter,
+            reportHtmlPdfExporter = reportHtmlPdfExporter,
         )
         viewModel.generate()
         awaitUiState(viewModel) { it.phase == ReportsPhase.Error }
@@ -691,14 +703,14 @@ class ReportsViewModelTest {
         val periodLogRepository = mockk<PeriodLogRepository>().also {
             coEvery { it.getForDateRange(any(), any(), any()) } returns Result.success(listOf(periodLog()))
         }
-        val reportPdfExporter = mockk<ReportPdfExporter> {
-            every { export(any(), any()) } throws RuntimeException()
+        val reportHtmlPdfExporter = mockk<ReportHtmlPdfExporter> {
+            coEvery { export(any(), any()) } throws RuntimeException()
         }
         val viewModel = newViewModel(
             sessionManager,
             cycleDataRepository = cycleDataRepository,
             periodLogRepository = periodLogRepository,
-            reportPdfExporter = reportPdfExporter,
+            reportHtmlPdfExporter = reportHtmlPdfExporter,
         )
         viewModel.generate()
         awaitUiState(viewModel) { it.phase == ReportsPhase.Error }
@@ -720,15 +732,15 @@ class ReportsViewModelTest {
         }
         val fakeFile = File("/tmp/SakhiReport_test.pdf")
         val fakeUri = mockk<Uri>()
-        val reportPdfExporter = mockk<ReportPdfExporter> {
-            every { export(any(), any()) } returns fakeFile
+        val reportHtmlPdfExporter = mockk<ReportHtmlPdfExporter> {
+            coEvery { export(any(), any()) } returns fakeFile
             every { buildShareUri(fakeFile) } returns fakeUri
         }
         val viewModel = newViewModel(
             sessionManager,
             cycleDataRepository = cycleDataRepository,
             periodLogRepository = periodLogRepository,
-            reportPdfExporter = reportPdfExporter,
+            reportHtmlPdfExporter = reportHtmlPdfExporter,
         )
         viewModel.generate()
         awaitUiState(viewModel) { it.phase == ReportsPhase.Preview }

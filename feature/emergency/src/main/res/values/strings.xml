@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Emergency Assistance strings.
+
+  Tone: warm and requesting, never demanding. She may be standing somewhere uncomfortable
+  when she reads these, so they stay calm and plain. Keep them in step with the iOS copy in
+  SakhiApp/Features/Emergency/ so the two platforms say the same thing.
+-->
+<resources>
+
+    <!-- Shared -->
+    <string name="emergency_close">Close</string>
+    <string name="emergency_dismiss">Dismiss</string>
+    <string name="emergency_one_moment">One moment…</string>
+    <string name="emergency_try_again">Try again</string>
+    <string name="emergency_send">Send</string>
+    <string name="emergency_done">Done</string>
+    <string name="emergency_go_back">Go back</string>
+    <string name="emergency_your_sakhi">Your Sakhi</string>
+    <string name="emergency_a_sakhi_nearby">A Sakhi nearby</string>
+
+    <!-- Step 1 — requirement -->
+    <string name="emergency_what_do_you_need">What do you need?</string>
+    <string name="emergency_what_do_you_need_subtitle">Sakhi will quietly ask women near you. No one sees where you are until you choose someone.</string>
+    <string name="emergency_section_right_now">Right now</string>
+    <string name="emergency_section_something_else">Something else</string>
+    <string name="emergency_privacy_notice">Sakhis nearby only see what you need and roughly how far away you are. Your exact spot is shared with one person, and only after you pick her.</string>
+    <string name="emergency_find_safe_place">Find a washroom, hospital or police station</string>
+    <string name="emergency_i_want_to_help">I would like to help someone nearby</string>
+
+    <!-- Step 2 — spot -->
+    <string name="emergency_where_should_she_come">Where should she come?</string>
+    <string name="emergency_where_should_she_come_subtitle">A short note helps someone find you quickly. Only the Sakhi you choose will see it.</string>
+    <string name="emergency_spot_placeholder">e.g. 2nd floor washroom, near the library</string>
+    <string name="emergency_location_required">Sakhi needs location access to find someone near you. You can turn it on in Settings.</string>
+    <string name="emergency_ask_for_help">Ask for help</string>
+    <string name="emergency_recent_spots">Recent Spots</string>
+    <string name="emergency_forget_spot">Forget %1$s</string>
+
+    <!-- No nearby Sakhis (main: NoNearByViewController, copy verbatim) -->
+    <string name="emergency_no_nearby_title">No Nearby Sakhis</string>
+    <string name="emergency_no_nearby_body">Please be patient, or you can also check your block list from your profile.</string>
+    <string name="emergency_search_again">Search Again</string>
+
+    <!-- Step 3 — waiting -->
+    <string name="emergency_asking_nearby">Asking Sakhis nearby…</string>
+    <string name="emergency_asking_nearby_subtitle">We are letting women near you know what you need. This usually takes a moment.</string>
+    <string name="emergency_someone_can_help">Someone can help</string>
+    <string name="emergency_someone_can_help_subtitle">Pick who you would like to help you. She will see your exact spot only after you choose her.</string>
+    <string name="emergency_choose">Choose</string>
+    <string name="emergency_rating_summary">%1$s · helped %2$d times</string>
+    <string name="emergency_cancel_request">Cancel request</string>
+    <string name="emergency_cancel_confirm_title">Cancel this request?</string>
+    <string name="emergency_cancel_confirm_body">Sakhis nearby will stop seeing your request.</string>
+    <string name="emergency_keep_waiting">Keep waiting</string>
+
+    <!-- Step 4 — session -->
+    <string name="emergency_on_her_way">is on her way to you</string>
+    <string name="emergency_needs_your_help">needs your help</string>
+    <string name="emergency_apart">apart</string>
+    <string name="emergency_roughly">roughly</string>
+    <string name="emergency_she_needs">She needs %1$s</string>
+    <string name="emergency_open_in_maps">Open in Maps</string>
+    <string name="emergency_say_hello">Say hello so she knows you are there.</string>
+    <string name="emergency_message_hint">Message</string>
+    <string name="emergency_you">You</string>
+    <string name="emergency_did_she_reach_you">Did she reach you?</string>
+    <string name="emergency_all_done">All done?</string>
+    <string name="emergency_yes_we_are_done">Yes, we are done</string>
+    <string name="emergency_not_yet">Not yet</string>
+
+    <!-- Step 5 — feedback (main: FeedbackViewController.configureForStatus, copy verbatim) -->
+    <string name="emergency_status_did_she_help">Did She Help?</string>
+    <string name="emergency_status_thank_you">Thank You</string>
+    <string name="emergency_feedback_did_help">Did %1$s help you?</string>
+    <string name="emergency_feedback_you_helped">You helped %1$s successfully</string>
+
+    <string name="emergency_thank_you_for_helping">Thank you for helping</string>
+    <string name="emergency_rating_helps_others">Your rating helps other women know who to trust.</string>
+    <string name="emergency_tell_us_how_it_went">Tell us how it went. This stays between you and Sakhi.</string>
+    <string name="emergency_note_hint">Anything you would like to add? (optional)</string>
+    <string name="emergency_skip_for_now">Skip for now</string>
+    <string name="emergency_star_rating">%1$d stars</string>
+
+    <!-- Profile detail (main: ProfielDetailViewController) -->
+    <string name="emergency_profile_requests">Requests</string>
+    <string name="emergency_profile_helped">Helped Other</string>
+    <string name="emergency_profile_requested">Requested Help</string>
+    <string name="emergency_profile_last_active">Last Active</string>
+    <string name="emergency_profile_unknown">Unknown</string>
+    <string name="emergency_profile_block">Block</string>
+    <string name="emergency_block">Block</string>
+    <string name="emergency_unblock">Unblock</string>
+    <string name="emergency_block_body">Neither of you will see the other\'s requests. She is not told.</string>
+    <string name="emergency_unblock_body">She will be able to see your requests again.</string>
+
+    <!-- Responder inbox -->
+    <string name="emergency_help_someone_nearby">Help someone nearby</string>
+    <string name="emergency_help_someone_nearby_subtitle">Turn this on and Sakhi will tell you when a woman close by needs something. You will never see where she is unless she chooses you.</string>
+    <string name="emergency_available_to_help">Available to help</string>
+    <string name="emergency_location_shared_roughly">Sakhi knows roughly where you are</string>
+    <string name="emergency_location_not_shared">Your location is not shared</string>
+    <string name="emergency_turn_on_to_see">Turn on \"Available to help\" to see women nearby who need something.</string>
+    <string name="emergency_no_one_needs_help">No one nearby needs help right now.</string>
+    <string name="emergency_we_will_keep_checking">We will keep checking.</string>
+    <string name="emergency_someone_needs">Someone needs %1$s</string>
+    <string name="emergency_i_can_help">I can help</string>
+    <string name="emergency_offered">Offered</string>
+
+    <!-- Chat entry point -->
+    <string name="emergency_open_from_chat">Ask a Sakhi nearby for help</string>
+
+</resources>

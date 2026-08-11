@@ -160,6 +160,9 @@ import team.sakhi.android.designsystem.sakhiSecondaryLabel
 fun ChatScreen(
     viewModel: ChatViewModel = koinViewModel(),
     onClose: () -> Unit = {},
+    // The map button opens Emergency Assistance, matching iOS's `SakhiAIInputBar`. The
+    // host owns the navigation so this module does not have to depend on :feature:emergency.
+    onOpenEmergency: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val messages = uiState.displayMessages
@@ -318,6 +321,7 @@ fun ChatScreen(
                             isLocked = uiState.reportSession != null,
                             onTextChanged = viewModel::onInputChanged,
                             onSend = viewModel::sendCurrentMessage,
+                            onOpenEmergency = onOpenEmergency,
                         )
                     },
                 )
@@ -1302,6 +1306,7 @@ private fun ChatInputBar(
     isLocked: Boolean,
     onTextChanged: (String) -> Unit,
     onSend: () -> Unit,
+    onOpenEmergency: () -> Unit,
 ) {
     val placeholders = if (isPartnerMode) chatPartnerPlaceholders else chatPlaceholders
     val focusedPlaceholder = stringResource(
@@ -1332,6 +1337,19 @@ private fun ChatInputBar(
         verticalAlignment = Alignment.Bottom,
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
     ) {
+        // Emergency Assistance entry point. iOS puts the same control in the same place
+        // (`SakhiAIInputBar`'s `mappin.circle.fill`); Android had no equivalent until now.
+        IconButton(
+            onClick = onOpenEmergency,
+            modifier = Modifier.minimumInteractiveComponentSize(),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Place,
+                contentDescription = stringResource(R.string.chat_open_emergency),
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+
         Surface(
             shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),

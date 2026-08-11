@@ -24,6 +24,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.ui.SakhiModalSheet
 import team.sakhi.android.feature.ai.ChatScreen
+import team.sakhi.android.feature.emergency.EmergencyFlowScreen
 import team.sakhi.android.feature.calendar.CalendarScreen
 import team.sakhi.android.feature.care.CareScreen
 import team.sakhi.android.feature.home.HomeScreen
@@ -76,6 +77,16 @@ private sealed interface HomeOverlaySheet {
     data object Calendar : HomeOverlaySheet
     data object LogPermissionRequest : HomeOverlaySheet
     data object Chat : HomeOverlaySheet
+    // Emergency Assistance. `deepLinkRequestId` is set when arriving from a
+    // sakhi://emergency/{id} link or an SOS notification, so the flow restores that
+    // session instead of starting a fresh request.
+    data class Emergency(
+        val deepLinkRequestId: String? = null,
+        // True when arriving from a nearby-request push: land straight on the responder
+        // inbox rather than on "what do you need", because she was asked to help, not
+        // asked what she needs.
+        val openResponderInbox: Boolean = false,
+    ) : HomeOverlaySheet
     // Non-null when opened for a specific date other than today -- e.g. Calendar's
     // own "Log" button/quick-log menu, matching iOS's real per-date `calendarLogVM`.
     data class Logging(val initialDate: LocalDate? = null) : HomeOverlaySheet
@@ -165,11 +176,16 @@ fun HomeNavHost() {
             is SakhiDeepLink.OpenReport -> activeOverlaySheet = HomeOverlaySheet.Profile(initialScreen = ProfileSheetScreen.Reports)
             is SakhiDeepLink.OpenAIChat -> activeOverlaySheet = HomeOverlaySheet.Chat
             is SakhiDeepLink.OpenProfile -> activeOverlaySheet = HomeOverlaySheet.Profile()
-            // No Android "live safety session" screen exists yet (checked -- not in
-            // this session's known-built feature list), so this deliberately
-            // doesn't route anywhere rather than faking a destination; documented
-            // as a real, separate gap in the plan file, not silently dropped.
-            is SakhiDeepLink.OpenEmergency -> Unit
+            // Emergency Assistance now exists on Android, so this routes for real. The
+            // session id comes from sakhi://emergency/{id} or the SOS notification that
+            // SakhiFirebaseMessagingService turns into that same link; an empty one is
+            // left to open a fresh request rather than trying to restore nothing.
+            is SakhiDeepLink.OpenEmergency ->
+                activeOverlaySheet = HomeOverlaySheet.Emergency(
+                    deepLinkRequestId = link.sessionId.ifBlank { null },
+                )
+            SakhiDeepLink.OpenEmergencyResponderInbox ->
+                activeOverlaySheet = HomeOverlaySheet.Emergency(openResponderInbox = true)
             // Doesn't apply once already inside Home.
             SakhiDeepLink.OpenOnboarding -> Unit
             SakhiDeepLink.Unknown -> Unit
@@ -271,8 +287,19 @@ fun HomeNavHost() {
                         feature = AppFeature.SAKHI_AI_CHAT,
                         onBack = ::dismissOverlaySheet,
                     ) {
-                        ChatScreen(onClose = ::dismissOverlaySheet)
+                        ChatScreen(
+                            onClose = ::dismissOverlaySheet,
+                            onOpenEmergency = { activeOverlaySheet = HomeOverlaySheet.Emergency() },
+                        )
                     }
+                    is HomeOverlaySheet.Emergency -> EmergencyFlowScreen(
+                        onClose = ::dismissOverlaySheet,
+                        // Hands back to Chat, which already owns the nearby safe-places
+                        // overlay, rather than duplicating that surface here.
+                        onFindSafePlaces = { activeOverlaySheet = HomeOverlaySheet.Chat },
+                        deepLinkRequestId = targetSheet.deepLinkRequestId,
+                        openResponderInbox = targetSheet.openResponderInbox,
+                    )
                     is HomeOverlaySheet.Logging -> LoggingSheet(
                         hasPeriodData = homeUiState.hasCycleData || homeUiState.cyclesAnalyzed > 0,
                         initialDate = targetSheet.initialDate,
