@@ -21,9 +21,6 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -62,7 +59,6 @@ import team.sakhi.models.EmergencyRequirement
 @Composable
 internal fun EmergencyRequirementStep(
     viewModel: EmergencyViewModel,
-    onFindSafePlaces: () -> Unit,
     startOnResponderInbox: Boolean = false,
 ) {
     // Opens straight onto the inbox when she arrived from a nearby-request push: she was
@@ -93,32 +89,15 @@ internal fun EmergencyRequirementStep(
             onSelect = viewModel::chooseRequirement,
         )
 
-        // Says plainly what is shared and when. Worth the space: she is about to broadcast
-        // that she needs help, and should know the limits of that before tapping.
-        Row(horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
-            Icon(
-                imageVector = Icons.Filled.Lock,
-                contentDescription = null,
-                modifier = Modifier.size(14.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = stringResource(R.string.emergency_privacy_notice),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        SecondaryPill(
-            icon = Icons.Filled.Place,
-            label = stringResource(R.string.emergency_find_safe_place),
-            onClick = onFindSafePlaces,
-        )
-        SecondaryPill(
-            icon = Icons.Filled.VolunteerActivism,
-            label = stringResource(R.string.emergency_i_want_to_help),
-            onClick = { showResponderInbox = true },
-        )
+        // The two secondary pills that used to sit here are gone, matching iOS
+        // `EmergencyRequirementView.swift`, whose own comment records the decision: the
+        // nearby washroom/hospital/police link and the way into the helper inbox were both
+        // removed so this screen is a requirement picker and nothing else.
+        //
+        // Worth knowing what went with them, and it is the same on both platforms now: the
+        // responder inbox has no in-app route at all. A push notification is the only thing
+        // that opens it, so a helper who dismisses one cannot get back to the request.
+        // `startOnResponderInbox` is that push route, and it still works.
 
         Spacer(modifier = Modifier.size(SakhiSpacing.space8))
     }
@@ -181,7 +160,7 @@ private fun RequirementRow(requirement: EmergencyRequirement, onClick: () -> Uni
                 )
             }
             Text(
-                text = EmergencyFormatting.requirementLabelForRequester(requirement),
+                text = EmergencyFormatting.requirementShortName(requirement),
                 style = MaterialTheme.typography.bodyLarge,
                 modifier = Modifier.weight(1f),
             )
@@ -292,7 +271,7 @@ internal fun EmergencySpotStep(
         Spacer(modifier = Modifier.weight(1f))
 
         Button(
-            onClick = { viewModel.submitRequest(requirement) },
+            onClick = viewModel::confirmSpot,
             enabled = !uiState.isSubmitting,
             shape = CircleShape,
             modifier = Modifier.fillMaxWidth(),
@@ -340,7 +319,7 @@ internal fun RequirementChip(requirement: EmergencyRequirement) {
                 tint = MaterialTheme.colorScheme.primary,
             )
             Text(
-                text = EmergencyFormatting.requirementLabelForRequester(requirement),
+                text = EmergencyFormatting.requirementShortName(requirement),
                 style = MaterialTheme.typography.labelLarge,
                 color = MaterialTheme.colorScheme.primary,
             )

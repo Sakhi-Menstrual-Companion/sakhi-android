@@ -5,6 +5,7 @@ import com.getswipe.sakhi.prediction.model.PeriodLogEntry
 import kotlinx.datetime.LocalDate
 import team.sakhi.config.AppConfig
 import team.sakhi.cycle.CalendarMarker
+import team.sakhi.cycle.CycleGeometry
 import team.sakhi.cycle.CyclePhaseInsight
 import team.sakhi.models.CycleData
 import team.sakhi.models.CyclePhase
@@ -63,15 +64,22 @@ object CycleInsightAdapter {
         val todayEpochDay = date.toEpochDays().toLong()
         val logEpochDays = periodLogDates.mapTo(mutableSetOf()) { it.toEpochDays().toLong() }
 
-        // Phase: prefer a cycle we actually trust, else the most recent one. Mirrors
-        // iOS's `currentCycles.first(where: \.isTrustworthyCompleteCycle) ?? .first`.
+        // Phase geometry is the engine's, not ours.
+        //
+        // This used to normalise its own cycle length off one stored cycle while the
+        // calendar's fertile days came from `buildCalendarState`, which uses the engine's
+        // averages. Since ovulation sits at `cycleLength - 14`, one day of disagreement
+        // moved the whole window: Home said ovulation on days the calendar left plain.
+        // iOS had the identical bug and was fixed the same way.
+        val geometry = phaseGeometry(engineEntries, todayEpochDay)
         val cycleForPhase = cycles.firstOrNull { it.isTrustworthyCompleteCycle() } ?: cycles.firstOrNull()
         val phase = CyclePhaseInsight.phaseInsight(
             periodLogEpochDays = logEpochDays,
-            cycleForPhaseStartEpochDay = cycleForPhase?.cycleStartDate?.toEpochDays()?.toLong(),
-            cycleLength = normalizedCycleLength(cycleForPhase?.cycleLength, stats),
-            effectivePeriodLength = effectivePeriodLength(cycleForPhase, stats),
-            avgPeriodLengthFloor = normalizedPeriodLength(null, stats),
+            cycleForPhaseStartEpochDay = geometry?.cycleStartEpochDay
+                ?: cycleForPhase?.cycleStartDate?.toEpochDays()?.toLong(),
+            cycleLength = geometry?.cycleLength ?: normalizedCycleLength(cycleForPhase?.cycleLength, stats),
+            effectivePeriodLength = geometry?.periodLength ?: effectivePeriodLength(cycleForPhase, stats),
+            avgPeriodLengthFloor = geometry?.periodLength ?: normalizedPeriodLength(null, stats),
             todayEpochDay = todayEpochDay,
         )
 
@@ -123,14 +131,20 @@ object CycleInsightAdapter {
         // the same engine and count within them. Still no local cycle maths: the
         // boundaries are the detector's.
         val detected = SakhiPredictionEngine.detectCycles(entries)
+        val markGeometry = phaseGeometry(entries, today.toEpochDays().toLong())
         val marks = mutableMapOf<LocalDate, CalendarMarker.DayMark>()
         var day = from
         while (day <= to) {
             val epoch = day.toEpochDays().toLong()
             val isPeriod = epoch in state.periodEpochDays
             val isPredicted = epoch in state.predictedPeriodEpochDays
-            val isFertile = epoch in state.fertileWindowEpochDays
-            val isOvulation = state.ovulationEpochDay == epoch
+            // Projected from the shared geometry rather than read off `CalendarState`.
+            // The engine emits ovulation and the fertile window for the **current cycle
+            // only**, so every other month came back with nothing to colour -- page back
+            // a month and the fertile window simply was not there. `CycleGeometry` answers
+            // for any date by projecting a whole cycle at a time, as iOS's calendar does.
+            val isFertile = markGeometry?.isFertile(epoch) ?: (epoch in state.fertileWindowEpochDays)
+            val isOvulation = markGeometry?.isOvulation(epoch) ?: (state.ovulationEpochDay == epoch)
             val isPms = epoch in state.pmsWindowEpochDays
             if (isPeriod || isPredicted || isFertile || isOvulation || isPms) {
                 marks[day] = CalendarMarker.DayMark(
@@ -149,11 +163,20 @@ object CycleInsightAdapter {
                         .firstOrNull { epoch >= it.cycleStartEpochDay && epoch <= (it.cycleEndEpochDay ?: Long.MAX_VALUE) }
                         ?.let { (epoch - it.cycleStartEpochDay).toInt() + 1 }
                         ?: 0,
+                    // A fertile day is OVULATION, not FOLLICULAR. `CycleMath` and
+                    // `CyclePhaseInsight` both treat the whole fertile window that way,
+                    // and the cell next to it is already drawn in the ovulation colour
+                    // off `isFertile`, so calling the same day follicular here was the
+                    // one place still disagreeing.
+                    //
+                    // This does not change what a care partner can see: the visibility
+                    // of a fertile day is decided by `isFertile` and VIEW_PREDICTIONS in
+                    // `filterMarkForSession`, and both FOLLICULAR and OVULATION are
+                    // equally "not UNKNOWN" to its `hasVisibleState` check.
                     phase = when {
                         isPeriod || isPredicted -> CyclePhase.MENSTRUAL
-                        isOvulation -> CyclePhase.OVULATION
+                        isOvulation || isFertile -> CyclePhase.OVULATION
                         isPms -> CyclePhase.LUTEAL
-                        isFertile -> CyclePhase.FOLLICULAR
                         else -> CyclePhase.UNKNOWN
                     },
                 )
@@ -171,6 +194,22 @@ object CycleInsightAdapter {
         val end = cycleEndDate ?: return false
         val endValid = end >= cycleStartDate
         return isComplete && lengthValid && endValid
+    }
+
+    /**
+     * The cycle geometry the prediction engine itself used -- the same analysis every
+     * other window is derived from. Null when there is not enough history to describe a
+     * cycle, in which case callers fall back to what they did before.
+     */
+    private fun phaseGeometry(entries: List<PeriodLogEntry>, todayEpochDay: Long): CycleGeometry? {
+        if (entries.isEmpty()) return null
+        val analysis = SakhiPredictionEngine.analyzePhase(entries, todayEpochDay)
+        val start = analysis.cycleStartEpochDay ?: return null
+        return CycleGeometry(
+            cycleStartEpochDay = start,
+            cycleLength = analysis.avgCycleLength,
+            periodLength = analysis.avgPeriodLength,
+        )
     }
 
     /**

@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.emergency
 
+import com.google.android.gms.maps.model.LatLng
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
@@ -18,10 +19,10 @@ import team.sakhi.emergency.EmergencyRealtimeCoordinator
 import team.sakhi.emergency.EmergencyState
 import team.sakhi.emergency.EmergencyStore
 import team.sakhi.emergency.ResponderState
-import team.sakhi.models.EmergencyOffer
 import team.sakhi.models.EmergencyProfileDetail
 import team.sakhi.models.EmergencyRequirement
-import team.sakhi.models.NearbyRequest
+import team.sakhi.models.IncomingRequest
+import team.sakhi.models.NearbySakhi
 import team.sakhi.session.SessionManager
 
 /**
@@ -33,6 +34,13 @@ data class EmergencyUiState(
     val messageDraft: String = "",
     val isSubmitting: Boolean = false,
     val hasLocationPermission: Boolean = false,
+    val hasNotificationPermission: Boolean = false,
+    /**
+     * The last device fix, kept so the map can centre on her and place approximate pins
+     * relative to it. The authoritative copy still lives in the KMM store; this is a
+     * render-only mirror and must never be the value sent to the server.
+     */
+    val userLatLng: LatLng? = null,
 )
 
 /**
@@ -64,8 +72,16 @@ class EmergencyViewModel(
      */
     val nearbyAvailableCount: StateFlow<Int?> = store.nearbyAvailableCount
 
-    /** The profile card behind an offer, once she taps one open. */
+    /** The profile card she opens before deciding who to ask. */
     val profileDetail: StateFlow<EmergencyProfileDetail?> = store.profileDetail
+
+    /**
+     * Whether the three introduction screens have already been shown once. Owned by the
+     * shared store so iOS shows them on the same schedule.
+     */
+    val hasSeenIntro: StateFlow<Boolean> = store.hasSeenIntro
+
+    fun markIntroSeen() = store.markIntroSeen()
 
     private val _uiState = MutableStateFlow(EmergencyUiState())
     val uiState: StateFlow<EmergencyUiState> = _uiState.asStateFlow()
@@ -94,7 +110,9 @@ class EmergencyViewModel(
 
     private suspend fun onStateChanged(current: EmergencyState) {
         when (current) {
-            is EmergencyState.WaitingForHelp -> {
+            is EmergencyState.WaitingForAcceptance -> {
+                // Her own row, so the server can push her the answer. This is why her
+                // side is live and the helper's side is a poll.
                 subscribe(current.requestId, includeMessages = false)
                 stopSessionPolling()
             }
@@ -113,8 +131,11 @@ class EmergencyViewModel(
         if (subscribedRequestId == requestId) return
         subscribedRequestId = requestId
         runCatching {
-            realtime.subscribeToOffers(requestId)
-            if (includeMessages) realtime.subscribeToSession(requestId)
+            if (includeMessages) {
+                realtime.subscribeToSession(requestId)
+            } else {
+                realtime.subscribeToRequest(requestId)
+            }
         }
     }
 
@@ -173,6 +194,7 @@ class EmergencyViewModel(
 
         val fix = locationProvider.currentLocation() ?: return false
         store.updateDeviceLocation(fix.latitude, fix.longitude)
+        _uiState.update { it.copy(userLatLng = LatLng(fix.latitude, fix.longitude)) }
         return true
     }
 
@@ -180,6 +202,10 @@ class EmergencyViewModel(
     fun onLocationPermissionResult(granted: Boolean) {
         _uiState.update { it.copy(hasLocationPermission = granted) }
         if (granted) viewModelScope.launch { refreshLocation() }
+    }
+
+    fun onNotificationPermissionResult(granted: Boolean) {
+        _uiState.update { it.copy(hasNotificationPermission = granted) }
     }
 
     // ── Requester ────────────────────────────────────────────────────────────
@@ -191,6 +217,8 @@ class EmergencyViewModel(
 
     fun backToRequirement() = store.backToRequirement()
 
+    fun backToSpot() = store.backToSpot()
+
     fun useRecentSpot(spot: String) {
         hapticManager.impact(HapticImpact.LIGHT)
         _uiState.update { it.copy(spotDraft = spot) }
@@ -200,18 +228,44 @@ class EmergencyViewModel(
 
     fun onSpotDraftChanged(value: String) = _uiState.update { it.copy(spotDraft = value) }
 
-    fun submitRequest(requirement: EmergencyRequirement) {
+    /**
+     * Moves on to the list of Sakhis. Sends nothing — nobody learns she needs help until
+     * she has picked a person, which is how `main` worked.
+     */
+    fun confirmSpot() {
         if (_uiState.value.isSubmitting) return
-        hapticManager.impact(HapticImpact.MEDIUM)
+        hapticManager.impact(HapticImpact.LIGHT)
         _uiState.update { it.copy(isSubmitting = true) }
         viewModelScope.launch {
             // Take a fresh fix rather than trusting the one captured when the sheet
             // opened; she may have moved while choosing.
             refreshLocation()
             val spot = _uiState.value.spotDraft.trim().ifEmpty { null }
-            runCatching { store.submitRequest(requirement, spot) }
+            runCatching { store.chooseSpot(spot) }
             _uiState.update { it.copy(isSubmitting = false, spotDraft = "") }
         }
+    }
+
+    fun refreshNearbySakhis() {
+        viewModelScope.launch { runCatching { store.refreshNearbySakhis(NEARBY_RADIUS_METERS) } }
+    }
+
+    /** Asks one named Sakhi — `EAManager.sendNewRequest(helperId:)`. */
+    fun ask(sakhi: NearbySakhi) {
+        if (_uiState.value.isSubmitting) return
+        hapticManager.impact(HapticImpact.MEDIUM)
+        _uiState.update { it.copy(isSubmitting = true) }
+        viewModelScope.launch {
+            refreshLocation()
+            runCatching { store.askSakhi(sakhi.userId, sakhi.name, sakhi.photoUrl) }
+            _uiState.update { it.copy(isSubmitting = false) }
+        }
+    }
+
+    /** After a decline: back to the picker, keeping her requirement and spot. */
+    fun askSomeoneElse() {
+        hapticManager.impact(HapticImpact.LIGHT)
+        viewModelScope.launch { runCatching { store.askSomeoneElse() } }
     }
 
     fun openProfile(userId: String) {
@@ -226,10 +280,7 @@ class EmergencyViewModel(
         viewModelScope.launch { runCatching { store.setBlocked(userId, blocked) } }
     }
 
-    fun acceptOffer(offer: EmergencyOffer) {
-        hapticManager.impact(HapticImpact.MEDIUM)
-        viewModelScope.launch { runCatching { store.acceptOffer(offer.offerId) } }
-    }
+
 
     fun cancelRequest(requestId: String) {
         viewModelScope.launch { runCatching { store.cancelRequest(requestId) } }
@@ -245,26 +296,35 @@ class EmergencyViewModel(
         }
     }
 
-    fun offerHelp(request: NearbyRequest) {
+    fun acceptIncoming(request: IncomingRequest) {
         hapticManager.impact(HapticImpact.MEDIUM)
-        viewModelScope.launch { runCatching { store.offerHelp(request.requestId) } }
+        viewModelScope.launch {
+            refreshLocation()
+            runCatching { store.acceptRequest(request.requestId) }
+        }
     }
 
-    fun refreshNearby() {
-        viewModelScope.launch { runCatching { store.refreshNearby(NEARBY_RADIUS_METERS) } }
+    fun declineIncoming(request: IncomingRequest) {
+        hapticManager.impact(HapticImpact.LIGHT)
+        viewModelScope.launch { runCatching { store.rejectRequest(request.requestId) } }
+    }
+
+    fun refreshIncoming() {
+        viewModelScope.launch { runCatching { store.refreshIncoming() } }
     }
 
     /**
-     * Open requests are polled, not pushed. Realtime honours RLS and a responder has no
-     * read access to open requests until she is accepted, which is what keeps a
-     * requester's position hidden, so there is nothing the server could send her.
+     * Requests addressed to her are polled, not pushed. Realtime honours RLS and she has
+     * no read access to the request row until she accepts it, which is what keeps the
+     * requester's position hidden, so there is nothing the server could send her. A push
+     * notification covers the case where the app is closed.
      */
     fun startNearbyPolling() {
         if (nearbyPollJob?.isActive == true) return
         nearbyPollJob = viewModelScope.launch {
             while (isActive) {
                 refreshLocation()
-                runCatching { store.refreshNearby(NEARBY_RADIUS_METERS) }
+                runCatching { store.refreshIncoming() }
                 delay(NEARBY_POLL_INTERVAL_MS)
             }
         }

@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -18,6 +20,7 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyProfileDetail
+import team.sakhi.models.NearbySakhi
 
 /**
  * Replica of `ProfielDetailViewController` — the card a woman opens before deciding to let
@@ -54,9 +58,16 @@ import team.sakhi.models.EmergencyProfileDetail
 internal fun EmergencyProfileDetailSheet(
     viewModel: EmergencyViewModel,
     profile: EmergencyProfileDetail,
+    /**
+     * The Sakhi this profile belongs to, when opened from the nearby list. `null` when
+     * there is nobody to ask from here, which is when `main` hid its request button too.
+     */
+    askable: NearbySakhi? = null,
     onDismiss: () -> Unit,
 ) {
     var showBlockConfirm by remember { mutableStateOf(false) }
+    var showBlockDuringRequest by remember { mutableStateOf(false) }
+    val alreadyAsked = askable?.alreadyAsked == true
     val trust = EmergencyFormatting.trustLevel(profile.ratingCount)
     val trustColor = Color(0xFF000000 or (trust.colorHex.removePrefix("#").toLongOrNull(16) ?: 0))
 
@@ -77,9 +88,13 @@ internal fun EmergencyProfileDetailSheet(
         Text(text = trust.displayName, style = MaterialTheme.typography.labelLarge, color = trustColor)
 
         ProfileSection(stringResource(R.string.emergency_profile_requests)) {
-            ProfileRow(Icons.Filled.Group, stringResource(R.string.emergency_profile_helped), profile.helpedCount.toString())
+            // "Request Received" is every request addressed to her, answered or not
+            // (receivedCount). requestedCount is how many times *she* asked someone
+            // else, which is a fact about her own need rather than her reliability, and
+            // labelling it "received" would mislead the woman reading this screen.
+            ProfileRow(Icons.Filled.Group, stringResource(R.string.emergency_profile_received), profile.receivedCount.toString())
             HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
-            ProfileRow(Icons.Filled.Group, stringResource(R.string.emergency_profile_requested), profile.requestedCount.toString())
+            ProfileRow(Icons.Filled.Group, stringResource(R.string.emergency_profile_helped), profile.helpedCount.toString())
         }
 
         ProfileSection(stringResource(R.string.emergency_profile_last_active)) {
@@ -94,7 +109,11 @@ internal fun EmergencyProfileDetailSheet(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { showBlockConfirm = true }
+                    .clickable {
+                        // main: performUserBlocking refused while a request was live,
+                        // because blocking mid-request strands the woman walking to you.
+                        if (alreadyAsked) showBlockDuringRequest = true else showBlockConfirm = true
+                    }
                     .padding(SakhiSpacing.space3),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
@@ -116,6 +135,36 @@ internal fun EmergencyProfileDetailSheet(
                 )
             }
         }
+
+        // main: ProgressButtonView's seeker button, and the actual Ask. Full width, 60dp
+        // tall, 12dp corners. `EAManager.sendNewRequest(helperId:)` was called from this
+        // screen, so it is sent from here too.
+        if (askable != null) {
+            Button(
+                onClick = {
+                    viewModel.ask(askable)
+                    onDismiss()
+                },
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth().height(60.dp),
+            ) {
+                Text(stringResource(R.string.emergency_request_help))
+            }
+            Spacer(modifier = Modifier.size(SakhiSpacing.space4))
+        }
+    }
+
+    if (showBlockDuringRequest) {
+        AlertDialog(
+            onDismissRequest = { showBlockDuringRequest = false },
+            title = { Text(stringResource(R.string.emergency_hold_on)) },
+            text = { Text(stringResource(R.string.emergency_end_request_first)) },
+            confirmButton = {
+                TextButton(onClick = { showBlockDuringRequest = false }) {
+                    Text(stringResource(R.string.emergency_got_it))
+                }
+            },
+        )
     }
 
     if (showBlockConfirm) {

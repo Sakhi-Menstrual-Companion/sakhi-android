@@ -465,8 +465,6 @@
 
     <string name="profile_privacy_title">Privacy &amp; Security</string>
     <string name="profile_privacy_section_privacy">PRIVACY</string>
-    <string name="profile_privacy_screenshot_warning">Screenshot Warning</string>
-    <string name="profile_privacy_screenshot_warning_subtitle">Warn when a screenshot is taken</string>
     <string name="profile_privacy_analytics">Share Anonymous Analytics</string>
     <string name="profile_privacy_analytics_subtitle">Helps improve Sakhi. Never shares your health data or names.</string>
     <string name="profile_privacy_section_your_data">YOUR DATA</string>

@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.LocationOff
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.VolunteerActivism
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +35,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -40,16 +43,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.models.EmergencyFormatting
-import team.sakhi.models.NearbyRequest
+import team.sakhi.models.IncomingRequest
 
 /**
- * The other side of the network — being the Sakhi someone finds.
+ * The other side of the network — being the Sakhi someone asked.
+ *
+ * This is not a feed of everyone nearby who needs something, and it must not become one.
+ * On `main` a helper only ever saw a request that named her, and answered it with Accept
+ * or Decline. Migration 036 put that back after a rebuild had turned it into a broadcast.
  *
  * Being findable is opt-in, off by default, and reversible in one tap. The list refreshes
- * on a timer rather than arriving over Realtime, and that is not a shortcut: a responder
- * has no read access to open requests until she is accepted, precisely so a requester's
- * coordinates stay hidden, so there is nothing the server could push her. Polling a
- * function that returns coarsened distances is the honest version of this feature.
+ * on a timer rather than arriving over Realtime, and that is not a shortcut: she has no
+ * read access to the request row until she accepts it, precisely so the requester's
+ * coordinates stay hidden, so there is nothing the server could push her. A push
+ * notification covers the case where the app is closed.
  */
 @Composable
 internal fun EmergencyResponderInbox(viewModel: EmergencyViewModel) {
@@ -83,17 +90,18 @@ internal fun EmergencyResponderInbox(viewModel: EmergencyViewModel) {
 
         if (!responder.isAvailable) {
             OffState()
-        } else if (responder.nearbyRequests.isEmpty()) {
+        } else if (responder.incoming.isEmpty()) {
             EmptyNearby(isRefreshing = responder.isRefreshing)
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
                 modifier = Modifier.padding(bottom = SakhiSpacing.space5),
             ) {
-                items(responder.nearbyRequests, key = { it.requestId }) { request ->
-                    NearbyRequestCard(
+                items(responder.incoming, key = { it.requestId }) { request ->
+                    IncomingRequestCard(
                         request = request,
-                        onOffer = { viewModel.offerHelp(request) },
+                        onAccept = { viewModel.acceptIncoming(request) },
+                        onDecline = { viewModel.declineIncoming(request) },
                     )
                 }
             }
@@ -207,59 +215,98 @@ private fun EmptyNearby(isRefreshing: Boolean) {
 }
 
 /**
- * Shows what she needs and roughly how far. No name, no spot, no position — that is all
- * the server will give out before the requester has picked someone.
+ * Who is asking, what she needs, and roughly how far. No spot label and no position: that
+ * is the accept-gate, and it is the one place this build deliberately does not follow
+ * `main`, which handed the helper exact coordinates the moment the request arrived.
  */
 @Composable
-private fun NearbyRequestCard(request: NearbyRequest, onOffer: () -> Unit) {
+private fun IncomingRequestCard(
+    request: IncomingRequest,
+    onAccept: () -> Unit,
+    onDecline: () -> Unit,
+) {
+    val trust = EmergencyFormatting.trustLevel(request.ratingCount)
+    val trustColor = Color(0xFF000000 or (trust.colorHex.removePrefix("#").toLongOrNull(16) ?: 0))
+
     Surface(
         shape = RoundedCornerShape(SakhiRadius.lg),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
+        Column(
             modifier = Modifier.padding(SakhiSpacing.space3),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                contentAlignment = Alignment.Center,
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
             ) {
-                Icon(
-                    imageVector = request.requirement.icon(),
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
+                EmergencyAvatar(name = request.requesterName, photoUrl = request.requesterPhotoUrl)
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = request.requesterName
+                            ?: stringResource(R.string.emergency_a_sakhi_nearby),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = trust.displayName,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = trustColor,
+                    )
+                }
+
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = request.requirement.icon(),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(
-                        R.string.emergency_someone_needs,
-                        EmergencyFormatting.requirementLabel(request.requirement).lowercase(),
+
+            Text(
+                text = stringResource(
+                    R.string.emergency_she_needs,
+                    EmergencyFormatting.requirementLabel(request.requirement).lowercase(),
+                ),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
+
+            Text(
+                text = "${EmergencyFormatting.approximateDistance(request.distanceBucketMeters)} · " +
+                    EmergencyFormatting.walkingTime(request.etaMinutes),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            // main: ProgressButtonView's helper UI — Reject in red on the left, Accept in
+            // green on the right, both 50dp tall with 12dp corners and 16dp between.
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Button(
+                    onClick = onDecline,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
                     ),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Text(
-                    text = "${EmergencyFormatting.approximateDistance(request.distanceBucketMeters)} · " +
-                        EmergencyFormatting.walkingTime(request.etaMinutes),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (request.alreadyOffered) {
-                Text(
-                    text = stringResource(R.string.emergency_offered),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            } else {
-                Button(onClick = onOffer, shape = CircleShape) {
-                    Text(stringResource(R.string.emergency_i_can_help))
+                    modifier = Modifier.weight(1f).height(50.dp),
+                ) {
+                    Text(stringResource(R.string.emergency_decline))
+                }
+                Button(
+                    onClick = onAccept,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f).height(50.dp),
+                ) {
+                    Text(stringResource(R.string.emergency_accept))
                 }
             }
         }

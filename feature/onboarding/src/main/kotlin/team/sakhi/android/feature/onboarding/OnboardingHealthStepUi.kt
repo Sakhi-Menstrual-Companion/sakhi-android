@@ -66,6 +66,8 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.CloseButton
 import team.sakhi.android.ui.HeightRulerPicker
+import team.sakhi.android.ui.OnboardingHeaderContentGap
+import team.sakhi.android.ui.OnboardingStepTitle
 import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SakhiModalSheet
 import team.sakhi.android.ui.SakhiTextField

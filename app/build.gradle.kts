@@ -38,15 +38,27 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        // Renamed 2026-07-17 to match iOS's actual current bundle id
-        // (com.galgotiasuniversity.rachnasakhi, see 01-iOS's project.pbxproj) and the
-        // real google-services.json Karan provided, which is registered under this
-        // package name, not the old team.sakhi.android.
-        applicationId = "com.galgotiasuniversity.rachnasakhi"
+        // Renamed 2026-08-13 to com.rachna.mysakhi. The earlier com.rachna.sakhi Play
+        // Console app already had a different upload certificate registered against it
+        // (SHA-1 A4:22:BB:9C:...), whose keystore is not on this machine, so a fresh
+        // package means a fresh Play app that accepts the current upload key instead of
+        // needing a Google upload-key reset.
+        //
+        // This is now PERMANENT once the first bundle is uploaded, Play never allows a
+        // package rename after that. It deliberately diverges from iOS's bundle id
+        // (com.galgotiasuniversity.rachnasakhi, see 01-iOS's project.pbxproj); the two
+        // stores are independent namespaces, so that divergence is fine.
+        //
+        // Anything keyed on the package name must be registered under com.rachna.mysakhi
+        // or it silently fails at runtime in release: Firebase (google-services.json),
+        // the Google Maps/Places key's Android app restriction, and Supabase phone auth's
+        // SHA-1/SHA-256 allowlist. Release upload-key SHA-1 is
+        // 2B:03:38:B6:BC:91:15:06:1E:39:4E:A6:2E:45:5A:8B:C1:42:FE:89.
+        applicationId = "com.rachna.mysakhi"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0"   // matches iOS MARKETING_VERSION; one launch, one number
         // Temporary fallback keeps clean checkouts buildable, but the new
         // Nearby Places map surfaces still need a Maps-authorized runtime key.
         manifestPlaceholders["googleMapsApiKey"] = secret(
@@ -66,7 +78,7 @@ android {
         buildConfigField("String", "USDA_API_KEY", "\"${secret("USDA_API_KEY")}\"")
     }
 
-    // Real release keystore, generated 2026-07-17 (keystore/sakhi-release.jks,
+    // Real release keystore, generated 2026-08-13 (keystore/sakhi-release.jks,
     // git-ignored). Falls back to the debug config on a clean checkout where the
     // keystore/secrets aren't present (e.g. CI without the real file), so the
     // project still builds -- but any actual release artifact must be built

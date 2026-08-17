@@ -2,7 +2,6 @@ package team.sakhi.android.feature.profile
 
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.provider.Settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -114,21 +113,6 @@ fun PrivacySecurityScreen(onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column {
-                        // MainActivity can only detect screenshots on API 34+
-                        // (`registerScreenCaptureCallback`); the pre-34 alternative needs
-                        // READ_MEDIA_IMAGES, which this app will not ask for. Below 34 the
-                        // row is hidden rather than shown as a toggle that does nothing.
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            PrivacyToggleRow(
-                                title = stringResource(R.string.profile_privacy_screenshot_warning),
-                                subtitle = stringResource(R.string.profile_privacy_screenshot_warning_subtitle),
-                                icon = Icons.Filled.PhotoCamera,
-                                kvStore = kvStore,
-                                key = UserPreferenceKeys.PRIVACY_SCREENSHOT_WARNING,
-                                default = UserPreferenceDefaults.PRIVACY_SCREENSHOT_WARNING,
-                            )
-                            SakhiListDivider(startInset = PrivacySecurityDividerInset)
-                        }
                         PrivacyToggleRow(
                             title = stringResource(R.string.profile_privacy_analytics),
                             subtitle = stringResource(R.string.profile_privacy_analytics_subtitle),

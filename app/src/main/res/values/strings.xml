@@ -8,6 +8,4 @@
     <string name="app_support_title">Support</string>
     <!-- Verbatim from iOS's handleScreenshotTaken() in SakhiAppShellSnapshot.swift, which
          shows this as a 7s warning toast gated on the same preference. -->
-    <string name="app_screenshot_warning_title">Screenshot taken</string>
-    <string name="app_screenshot_warning_message">Your health data may be visible in this screenshot.</string>
 </resources>

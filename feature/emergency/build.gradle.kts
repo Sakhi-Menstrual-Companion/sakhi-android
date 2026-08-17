@@ -31,6 +31,10 @@ dependencies {
     implementation(project(":core:platform"))
     implementation(project(":core:ui"))
 
+    // The flow is a map with a sheet over it, same as iOS. Uses the same
+    // maps-compose version feature:ai already pulls in.
+    implementation(libs.google.maps.compose)
+
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)

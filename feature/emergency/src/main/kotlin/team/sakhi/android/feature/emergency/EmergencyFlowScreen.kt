@@ -11,6 +11,13 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.BottomSheetScaffold
+import androidx.compose.material3.SheetValue
+import androidx.compose.material3.rememberBottomSheetScaffoldState
+import androidx.compose.material3.rememberStandardBottomSheetState
+import com.google.android.gms.maps.model.LatLng
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -49,7 +57,6 @@ import team.sakhi.emergency.EmergencyState
 @Composable
 fun EmergencyFlowScreen(
     onClose: () -> Unit,
-    onFindSafePlaces: () -> Unit,
     deepLinkRequestId: String? = null,
     openResponderInbox: Boolean = false,
     viewModel: EmergencyViewModel = koinViewModel(),
@@ -57,11 +64,19 @@ fun EmergencyFlowScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val nearbyCount by viewModel.nearbyAvailableCount.collectAsStateWithLifecycle()
+    val hasSeenIntro by viewModel.hasSeenIntro.collectAsStateWithLifecycle()
+    val responder by viewModel.responderState.collectAsStateWithLifecycle()
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
     ) { granted ->
         viewModel.onLocationPermissionResult(granted.values.any { it })
+    }
+
+    val notificationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        viewModel.onNotificationPermissionResult(granted)
     }
 
     LaunchedEffect(deepLinkRequestId) {
@@ -72,38 +87,68 @@ fun EmergencyFlowScreen(
         }
     }
 
-    // Restore lands on Idle when she has nothing in flight, which is the point to start a
-    // fresh request — that is what tapping the map button asked for.
-    LaunchedEffect(state) {
-        if (deepLinkRequestId == null && state is EmergencyState.Idle) viewModel.begin()
+    if (!hasSeenIntro) {
+        EmergencyOnboarding(
+            locationGranted = uiState.hasLocationPermission,
+            notificationsGranted = uiState.hasNotificationPermission,
+            onRequestLocation = {
+                permissionLauncher.launch(
+                    arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
+                )
+            },
+            onRequestNotifications = {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    // Pre-13 has no runtime notification permission; it is granted at install.
+                    viewModel.onNotificationPermissionResult(true)
+                }
+            },
+            onFinished = viewModel::markIntroSeen,
+            onCancel = {
+                viewModel.dismiss()
+                onClose()
+            },
+        )
+        return
     }
 
-    LaunchedEffect(Unit) {
-        if (!uiState.hasLocationPermission) {
+    // Restore lands on Idle when she has nothing in flight, which is the point to start a
+    // fresh request — that is what tapping the map button asked for. Not when she came
+    // from an incoming-request push, though: she is here to answer, not to ask.
+    LaunchedEffect(state, hasSeenIntro) {
+        if (hasSeenIntro && deepLinkRequestId == null && !openResponderInbox && state is EmergencyState.Idle) {
+            viewModel.begin()
+        }
+    }
+
+    // Only once she is past the introduction. The intro's own Location Access toggle is
+    // what asks first; prompting behind an explainer she has not read yet inverts the
+    // order the screens were designed in.
+    LaunchedEffect(hasSeenIntro) {
+        if (hasSeenIntro && !uiState.hasLocationPermission) {
             permissionLauncher.launch(
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
             )
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {},
-                actions = {
-                    IconButton(onClick = {
-                        viewModel.dismiss()
-                        onClose()
-                    }) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = stringResource(R.string.emergency_close),
-                        )
-                    }
-                },
-            )
-        },
-    ) { padding ->
+    // Map first, sheet over it — the shape of the original screen, and of iOS. The sheet
+    // is non-modal on purpose: `main`'s most recognisable detail is that it does not dim
+    // the map, which stays visible and pannable behind every step.
+    val sheetState = rememberBottomSheetScaffoldState(
+        bottomSheetState = rememberStandardBottomSheetState(
+            initialValue = SheetValue.PartiallyExpanded,
+            skipHiddenState = true,
+        ),
+    )
+
+    BottomSheetScaffold(
+        scaffoldState = sheetState,
+        sheetPeekHeight = SheetPeekHeight,
+        sheetContainerColor = MaterialTheme.colorScheme.background,
+        sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        sheetContent = {
         AnimatedContent(
             targetState = state.stepKey(),
             transitionSpec = {
@@ -113,24 +158,27 @@ fun EmergencyFlowScreen(
                     ).togetherWith(fadeOut())
             },
             label = "emergency-step",
-            modifier = Modifier.padding(padding).fillMaxSize(),
+            modifier = Modifier.fillMaxSize(),
         ) { key ->
-            // Read the live value rather than closing over the animated key, so an offer
-            // arriving mid-step updates the list instead of animating the whole screen.
+            // Read the live value rather than closing over the animated key, so a list
+            // refresh mid-step updates in place instead of animating the whole screen.
             when (val current = remember(key) { state }) {
                 is EmergencyState.Loading -> EmergencyLoading()
 
                 is EmergencyState.Idle,
                 is EmergencyState.ChoosingRequirement,
-                -> if (nearbyCount == 0) {
+                -> if (nearbyCount == 0 && !openResponderInbox) {
                     // main's presentNoActiveRequestBottomSheet(): empty state when nobody
                     // is around, picker otherwise. Null keeps showing the picker rather
                     // than flashing an empty state while the count is still loading.
-                    EmergencyNoNearbyStep(viewModel = viewModel, onFindSafePlaces = onFindSafePlaces)
+                    //
+                    // Skipped when she arrived from a push telling her someone asked her
+                    // for help: the inbox is hosted by the requirement step, so showing
+                    // the empty state here would swallow the notification entirely.
+                    EmergencyNoNearbyStep(viewModel = viewModel)
                 } else {
                     EmergencyRequirementStep(
                         viewModel = viewModel,
-                        onFindSafePlaces = onFindSafePlaces,
                         startOnResponderInbox = openResponderInbox,
                     )
                 }
@@ -140,9 +188,20 @@ fun EmergencyFlowScreen(
                     requirement = current.requirement,
                 )
 
-                is EmergencyState.WaitingForHelp -> EmergencyWaitingStep(
+                is EmergencyState.ChoosingSakhi -> EmergencyNearbySakhisStep(
                     viewModel = viewModel,
                     step = current,
+                )
+
+                is EmergencyState.WaitingForAcceptance -> EmergencyWaitingStep(
+                    viewModel = viewModel,
+                    step = current,
+                )
+
+                is EmergencyState.Rejected -> EmergencyRejectedStep(
+                    viewModel = viewModel,
+                    step = current,
+                    onExit = onClose,
                 )
 
                 is EmergencyState.InSession -> EmergencySessionStep(
@@ -162,19 +221,127 @@ fun EmergencyFlowScreen(
                 )
             }
         }
+        },
+    ) { padding ->
+        // The scaffold's `padding` reserves the whole peek height at the bottom. Applying
+        // it here would stop the map dead at the sheet's top edge, and since the scaffold
+        // background is the same colour as the sheet, the sheet's 28dp corners would sit
+        // against an identical colour and read as square. The map runs the full height
+        // instead, exactly as it does on iOS, and the sheet floats over it.
+        Box(modifier = Modifier.fillMaxSize()) {
+            EmergencyMap(
+                userLocation = uiState.userLatLng,
+                pins = state.mapPins(uiState.userLatLng, responder.incoming),
+                pulseRadiusMeters = state.pulseRadiusMeters(),
+                bottomInset = SheetPeekHeight,
+            )
+
+            EmergencyMapOverlay(
+                nearbyCount = state.overlayCount(nearbyCount ?: 0, responder.incoming.size),
+                onBack = {
+                    viewModel.dismiss()
+                    onClose()
+                },
+                modifier = Modifier.align(Alignment.TopCenter)
+                    .statusBarsPadding()
+                    .padding(top = padding.calculateTopPadding()),
+            )
+        }
     }
 }
 
 /**
- * Animating on the state object itself would restart the transition every time an offer
- * arrives. Keying on step identity keeps it to real step changes.
+ * How much of the screen the sheet occupies at rest. Shared by the scaffold and by the
+ * map's camera inset, which have to agree: the map draws behind the sheet, so the camera
+ * needs to know how much of it is actually visible.
+ */
+private val SheetPeekHeight = 420.dp
+
+/**
+ * Where each step's pins come from.
+ *
+ * Pre-accept these are placed from (bucketed distance, 45°-snapped bearing) around her
+ * own position, so they are estimates by construction. Inside an accepted session the
+ * server gives real coordinates to both women, and that pin is exact.
+ */
+private fun EmergencyState.mapPins(
+    origin: LatLng?,
+    incoming: List<team.sakhi.models.IncomingRequest>,
+): List<EmergencyMapPin> {
+    if (origin == null) return emptyList()
+
+    return when (this) {
+        is EmergencyState.ChoosingSakhi -> sakhis.mapNotNull { sakhi ->
+            val bearing = sakhi.approximateBearingDegrees?.toDouble() ?: return@mapNotNull null
+            val bucket = sakhi.distanceBucketMeters?.toDouble() ?: return@mapNotNull null
+            EmergencyMapPin(
+                id = sakhi.userId,
+                position = origin.offset(bucket, bearing),
+                title = sakhi.name,
+                isApproximate = true,
+            )
+        }
+
+        // Nothing to draw. The one Sakhi she asked has not agreed yet, so the server
+        // gives out no position for her, not even a bucket.
+        is EmergencyState.WaitingForAcceptance -> emptyList()
+
+        is EmergencyState.InSession -> listOf(
+            EmergencyMapPin(
+                id = session.requestId,
+                position = LatLng(session.location.latitude, session.location.longitude),
+                title = if (session.viewerIsRequester) session.responderName else session.requesterName,
+                // Only here, matching iOS `EmergencyMapScreen.swift:103`. The exact spot is
+                // the point of the pin once someone has accepted; before that the server
+                // gives out no position worth labelling.
+                spotLabel = session.spotLabel,
+                isApproximate = false,
+            ),
+        )
+
+        // Her inbox: one pin per woman who has asked her.
+        else -> incoming.mapNotNull { request ->
+            val bearing = request.approximateBearingDegrees?.toDouble() ?: return@mapNotNull null
+            val bucket = request.distanceBucketMeters?.toDouble() ?: return@mapNotNull null
+            EmergencyMapPin(
+                id = request.requestId,
+                position = origin.offset(bucket, bearing),
+                title = request.requesterName,
+                isApproximate = true,
+            )
+        }
+    }
+}
+
+/** The original drew a red pulse over the user while a request was live. */
+private fun EmergencyState.pulseRadiusMeters(): Double? = when (this) {
+    is EmergencyState.WaitingForAcceptance, is EmergencyState.ChoosingSakhi -> 120.0
+    is EmergencyState.InSession -> 60.0
+    else -> null
+}
+
+/**
+ * What the "Nearby Sakhis: N" pill counts, which changes with the step exactly as it did
+ * on `main`: the women she can pick from while choosing, the women who have asked her when
+ * she is the helper, and otherwise how many Sakhis are simply around.
+ */
+private fun EmergencyState.overlayCount(availableNearby: Int, incomingCount: Int): Int = when (this) {
+    is EmergencyState.ChoosingSakhi -> sakhis.size
+    else -> if (incomingCount > 0) incomingCount else availableNearby
+}
+
+/**
+ * Animating on the state object itself would restart the transition every time the nearby
+ * list refreshes. Keying on step identity keeps it to real step changes.
  */
 private fun EmergencyState.stepKey(): String = when (this) {
     is EmergencyState.Idle -> "idle"
     is EmergencyState.Loading -> "loading"
     is EmergencyState.ChoosingRequirement -> "requirement"
     is EmergencyState.ChoosingSpot -> "spot"
-    is EmergencyState.WaitingForHelp -> "waiting"
+    is EmergencyState.ChoosingSakhi -> "choosing-sakhi"
+    is EmergencyState.WaitingForAcceptance -> "waiting"
+    is EmergencyState.Rejected -> "rejected"
     is EmergencyState.InSession -> "session"
     is EmergencyState.Completed -> "completed"
     is EmergencyState.Failed -> "failed"

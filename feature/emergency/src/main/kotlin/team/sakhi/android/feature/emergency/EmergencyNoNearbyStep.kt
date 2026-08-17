@@ -47,7 +47,6 @@ import team.sakhi.android.designsystem.SakhiSpacing
 @Composable
 internal fun EmergencyNoNearbyStep(
     viewModel: EmergencyViewModel,
-    onFindSafePlaces: () -> Unit,
 ) {
     var visible by remember { mutableStateOf(false) }
     var isSearching by remember { mutableStateOf(false) }
@@ -118,10 +117,8 @@ internal fun EmergencyNoNearbyStep(
             }
         }
 
-        // Not in the original, which had nowhere else to go from here. A woman who needs a
-        // washroom right now should not be stuck on a screen whose only action is "wait".
-        TextButton(onClick = onFindSafePlaces) {
-            Text(stringResource(R.string.emergency_find_safe_place))
-        }
+        // iOS's `EmergencyNoNearbyView` has exactly one action, "Search Again". The
+        // safe-places link that used to sit here was removed there and is removed here for
+        // the same reason, so the empty state reads the same on both platforms.
     }
 }

@@ -193,6 +193,14 @@ private fun blockedCopyFor(reason: BlockReason?): BlockedCopy = when (reason) {
         primaryLabel = R.string.feature_gate_go_back,
         image = R.drawable.care_partner_onboarding,
     )
+    BlockReason.REMOTELY_DISABLED -> BlockedCopy(
+        title = R.string.feature_gate_paused_title,
+        message = R.string.feature_gate_paused_message,
+        primaryLabel = R.string.feature_gate_go_back,
+        // The maintenance illustration, not the offline one: nothing is wrong with her
+        // connection and the screen should not suggest otherwise.
+        image = R.drawable.condition_upgrade,
+    )
     // iOS treats an unmapped reason as `.unknown` with its own copy, and uses the same
     // care-partner illustration as `.noPermission`.
     null -> BlockedCopy(

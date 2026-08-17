@@ -1,6 +1,5 @@
 package team.sakhi.android.app
 
-import android.app.Activity
 import android.content.Intent
 import android.graphics.Color
 import android.os.Build
@@ -8,7 +7,6 @@ import android.os.Bundle
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.annotation.RequiresApi
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -20,13 +18,8 @@ import org.koin.compose.koinInject
 import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.R
 import team.sakhi.android.designsystem.SakhiTheme
-import team.sakhi.android.ui.ToastManager
-import team.sakhi.android.ui.ToastType
-import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.preferences.ThemeMode
 import team.sakhi.preferences.ThemePreferenceStore
-import team.sakhi.preferences.UserPreferenceDefaults
-import team.sakhi.preferences.UserPreferenceKeys
 
 /**
  * `FragmentActivity`, not plain `ComponentActivity` — `AndroidBiometricAdapter`
@@ -99,25 +92,6 @@ class MainActivity : FragmentActivity() {
         }
     }
 
-    // Deliberately untyped at the MainActivity level -- see `ScreenshotWarningController`
-    // below for why. Holds one once `onStart` creates it on API 34+; null otherwise.
-    private var screenshotWarningController: ScreenshotWarningController? = null
-
-    override fun onStart() {
-        super.onStart()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            val controller = ScreenshotWarningController(this)
-            screenshotWarningController = controller
-            controller.register()
-        }
-    }
-
-    override fun onStop() {
-        screenshotWarningController?.unregister()
-        screenshotWarningController = null
-        super.onStop()
-    }
-
     // Cold start: `onCreate`'s `intent` above. Already running (tapped a link
     // while the app is alive): this. Both must handle it, or a deep link tapped
     // from a backgrounded app silently does nothing.
@@ -134,61 +108,5 @@ class MainActivity : FragmentActivity() {
             return
         }
         AndroidDeepLinkManager.handleIntent(intent)
-    }
-}
-
-/**
- * Ports iOS's screenshot warning (`handleScreenshotTaken` in `SakhiAppShellSnapshot`), which
- * the Privacy & Security toggle has always claimed to control on Android while nothing
- * implemented it — the preference was written and never read.
- *
- * A genuine crash, found on a real API 33 device, not a parity nitpick: this callback used
- * to be a field directly on `MainActivity` typed `Activity.ScreenCaptureCallback`
- * (`@RequiresApi`-annotated) with the *registration calls* guarded by
- * `Build.VERSION.SDK_INT >= UPSIDE_DOWN_CAKE`. That guard is not enough. `@RequiresApi` is
- * lint metadata only — it does not stop the ART verifier from resolving a field's *type* when
- * `MainActivity` itself loads, on every device, regardless of any runtime check. On API < 34
- * that type does not exist, so the whole app failed with
- * `NoClassDefFoundError: Landroid/app/Activity$ScreenCaptureCallback` on every single launch,
- * before `onCreate` ever ran — verified from a live crash on a real Android 13 phone.
- *
- * The fix is this file's actual point: put the API-34 type inside its **own class**, and only
- * ever instantiate that class from behind the SDK check (in `MainActivity.onStart`).
- * `MainActivity`'s own field for it is untyped as this class, so `MainActivity`'s verification
- * only needs `ScreenshotWarningController`'s class descriptor to exist, not its members —
- * *this* class's fields aren't resolved until it is actually loaded, which never happens on a
- * pre-34 device because the guarded `ScreenshotWarningController(this)` call never runs.
- *
- * `registerScreenCaptureCallback` is API 34+ full stop; the only pre-34 way to notice a
- * screenshot is observing MediaStore, which needs `READ_MEDIA_IMAGES` — handing a period
- * tracker read access to the user's entire photo library to deliver a warning is a far worse
- * privacy trade than not warning, so this stays deliberately 34+ only. The Privacy & Security
- * settings row hides itself below 34 rather than promising something the OS cannot deliver.
- */
-@RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
-private class ScreenshotWarningController(private val activity: MainActivity) {
-
-    private val callback = Activity.ScreenCaptureCallback {
-        val kvStore = KoinPlatform.getKoin().get<PlatformKeyValueStore>()
-        val enabled = kvStore.getBool(
-            UserPreferenceKeys.PRIVACY_SCREENSHOT_WARNING,
-            UserPreferenceDefaults.PRIVACY_SCREENSHOT_WARNING,
-        )
-        if (!enabled) return@ScreenCaptureCallback
-        ToastManager.show(
-            title = activity.getString(R.string.app_screenshot_warning_title),
-            message = activity.getString(R.string.app_screenshot_warning_message),
-            type = ToastType.WARNING,
-            // iOS shows this toast for 7.0s; matched exactly.
-            durationMs = 7_000L,
-        )
-    }
-
-    fun register() {
-        activity.registerScreenCaptureCallback(activity.mainExecutor, callback)
-    }
-
-    fun unregister() {
-        activity.unregisterScreenCaptureCallback(callback)
     }
 }

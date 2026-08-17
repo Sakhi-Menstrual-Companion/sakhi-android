@@ -17,9 +17,11 @@ build/
 gradle-app.setting
 captures/
 
-## Signing
+## Signing — the whole keystore dir stays out of git (the .jks is the Play
+## upload key; the .pem is public but kept together with it to avoid mistakes)
 *.jks
 *.keystore
+keystore/
 
 ## IDE
 .idea/

@@ -298,6 +298,12 @@ private fun SakhiCalendarDayCell(
         day.isFuture && day.markerType == SakhiCalendarMarkerType.OVULATION -> ovulationRingColor.copy(alpha = disabledSemanticOpacity)
         day.isFuture && day.markerType == SakhiCalendarMarkerType.FERTILE -> ovulationRingColor.copy(alpha = disabledSemanticOpacity)
         day.isFuture && day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor.copy(alpha = disabledSemanticOpacity)
+        // A future day with no marker. iOS ends its `isFuture` branch with
+        // `DS.Colors.secondaryLabel`; Android had no such branch, so a plain future date
+        // fell through to full-strength `onSurface` and read exactly as solid as a day
+        // that has already happened. Every *marked* future day was already dimmed above,
+        // which made the undimmed plain ones look like the odd ones out.
+        day.isFuture -> sakhiSecondaryLabel()
         day.markerType == SakhiCalendarMarkerType.OVULATION -> ovulationRingColor
         day.markerType == SakhiCalendarMarkerType.FERTILE -> ovulationRingColor
         day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor

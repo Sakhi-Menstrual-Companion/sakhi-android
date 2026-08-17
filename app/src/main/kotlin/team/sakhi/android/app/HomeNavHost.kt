@@ -296,7 +296,6 @@ fun HomeNavHost() {
                         onClose = ::dismissOverlaySheet,
                         // Hands back to Chat, which already owns the nearby safe-places
                         // overlay, rather than duplicating that surface here.
-                        onFindSafePlaces = { activeOverlaySheet = HomeOverlaySheet.Chat },
                         deepLinkRequestId = targetSheet.deepLinkRequestId,
                         openResponderInbox = targetSheet.openResponderInbox,
                     )

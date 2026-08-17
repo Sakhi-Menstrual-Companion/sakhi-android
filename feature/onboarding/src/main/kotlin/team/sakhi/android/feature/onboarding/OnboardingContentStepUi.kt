@@ -96,7 +96,13 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.platform.HealthConnectAvailability
 import team.sakhi.android.ui.BackButton
+import team.sakhi.android.ui.FeatureBulletRow
 import team.sakhi.android.ui.GlassCard
+import team.sakhi.android.ui.OnboardingBulletSpacing
+import team.sakhi.android.ui.OnboardingHeaderContentGap
+import team.sakhi.android.ui.OnboardingIntroScaffold
+import team.sakhi.android.ui.OnboardingStepTitle
+import team.sakhi.android.ui.OnboardingTitleTopPadding
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertKind
@@ -377,62 +383,6 @@ private fun ModeSelectionScreen(
     }
 }
 
-// iOS `UniversalIntroContent` uses DS.Spacing.xl (28) between bullets; the Android 4dp
-// token scale skips 28, so it is spelled out here rather than rounded to 24 or 32.
-private val UniversalIntroBulletSpacing = 28.dp
-
-/** iOS `regularShell`'s sticky-header title padding — `DS.Spacing.xl`, which is 28, not 24. */
-private val OnboardingTitleTopPadding = 28.dp
-
-/**
- * DELIBERATE DEVIATION FROM iOS -- do not "restore parity" by reverting to a smaller token.
- *
- * Gap between a step's header block (title + subtitle) and its content below (list, cards,
- * text field, legal-text box). iOS uses `DS.Spacing.m` (16); Karan asked for more separation
- * after reviewing onboarding on a real device, so the title/subtitle read as a distinct header
- * rather than running straight into the content. Applied to every top-anchored step with this
- * header-then-content shape across the whole onboarding flow, not just one screen -- see
- * `ModeSelectionScreen`, `InvitePermissionsScreen`, `PrivacyScreen`, `TermsScreen`,
- * `UniversalIntroScreen`, `InvitePickContactScreen`, `PartnerRelationScreen`,
- * `BeHerSakhiScreen`, `DataSourceScreen`, and `OnboardingHealthStepScreen` (in
- * `OnboardingHealthStepUi.kt`, same package -- hence not `private`). Centered/hero-style
- * steps (`HeroContentStep`, `InviteWaitingScreen`, etc.) are a different layout shape and
- * are not touched by this. Reduced 40 -> 32 (20%) per Karan's live review: "har view
- * mai header and content ke bich mai space kuch jada he hogaya hai, 20% kam karo."
- *
- * Then 32 -> 24 to match the real iOS value: `OnboardingStep.contentTopSpacing`
- * defaults to `DS.Spacing.l` (24), which `OnboardingFlowView` applies as the gap
- * between the title/subtitle block and the step content. Only the Care steps
- * override it (to `DS.Spacing.m`). Karan reported the excess on the health
- * conditions step, where it also pushed the conditions card down the screen.
- */
-internal val OnboardingHeaderContentGap = 24.dp
-
-/**
- * Every onboarding step title, rendered a hair bolder than plain `FontWeight.Bold`.
- *
- * Karan reviewed a step title live on a real device and asked for it bolder. Lato only
- * ships a static Light/Regular/Bold trio (no ExtraBold/Black file), and Android's static
- * (non-variable) font rendering does not synthesize extra weight on top of an
- * already-resolved Bold glyph -- confirmed empirically: `FontWeight.ExtraBold`,
- * `FontWeight.Black`, and an explicit `fontSynthesis = FontSynthesis.All` all produced a
- * byte-identical screenshot to plain Bold. The only way to get a visibly heavier stroke
- * out of a single static weight is to draw it twice with a hairline offset between copies
- * -- the standard workaround for this exact limitation. Do not "simplify" this back to a
- * single `Text` with a heavier `FontWeight`; that was tried and does nothing on this font.
- */
-@Composable
-internal fun OnboardingStepTitle(
-    text: String,
-    modifier: Modifier = Modifier,
-    textAlign: TextAlign? = null,
-) {
-    val style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
-    Box(modifier = modifier) {
-        Text(text = text, style = style, textAlign = textAlign, modifier = Modifier.offset(x = 0.5.dp))
-        Text(text = text, style = style, textAlign = textAlign)
-    }
-}
 
 // Transcribed from iOS `PartnerInvitePromptContent.Layout`.
 private val PartnerInvitePromptImageHeight = 335.dp
@@ -1446,118 +1396,27 @@ private val TermsValidationIconSize = 16.dp
 // entirely on Android.
 @Composable
 private fun UniversalIntroScreen(onContinue: () -> Unit) {
-    Column(modifier = Modifier.fillMaxSize()) {
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = SakhiSpacing.space6)
-            // iOS's shell puts `.padding(.top, DS.Spacing.xl)` (28) on the title, not the
-            // 24 of `space6`. The scale has no 28 step, so it is spelled out rather than
-            // rounded to the nearest token.
-            .padding(top = OnboardingTitleTopPadding),
+    OnboardingIntroScaffold(
+        title = stringResource(R.string.onboarding_intro_title),
+        subtitle = stringResource(R.string.onboarding_intro_subtitle),
+        primaryLabel = stringResource(R.string.onboarding_continue),
+        onPrimaryClick = onContinue,
     ) {
-        OnboardingStepTitle(text = stringResource(R.string.onboarding_intro_title))
-        Text(
-            text = stringResource(R.string.onboarding_intro_subtitle),
-            style = MaterialTheme.typography.bodyMedium,
-            color = sakhiSecondaryLabel(),
-            modifier = Modifier.padding(top = SakhiSpacing.space2),
+        FeatureBulletRow(
+            icon = Icons.Filled.TouchApp,
+            title = stringResource(R.string.onboarding_intro_feature_1_title),
+            subtitle = stringResource(R.string.onboarding_intro_feature_1_subtitle),
         )
-
-        // iOS `UniversalIntroContent` is `VStack(spacing: .xl)` with `.padding(.top, .m)`
-        // (16). Android uses a larger gap here at Karan's request -- see
-        // `OnboardingHeaderContentGap`.
-        Column(
-            modifier = Modifier.padding(top = OnboardingHeaderContentGap),
-            verticalArrangement = Arrangement.spacedBy(UniversalIntroBulletSpacing),
-        ) {
-            FeatureBulletRow(
-                icon = Icons.Filled.TouchApp,
-                title = stringResource(R.string.onboarding_intro_feature_1_title),
-                subtitle = stringResource(R.string.onboarding_intro_feature_1_subtitle),
-            )
-            FeatureBulletRow(
-                icon = Icons.Filled.AutoAwesome,
-                title = stringResource(R.string.onboarding_intro_feature_2_title),
-                subtitle = stringResource(R.string.onboarding_intro_feature_2_subtitle),
-            )
-            FeatureBulletRow(
-                icon = Icons.Filled.Favorite,
-                title = stringResource(R.string.onboarding_intro_feature_3_title),
-                subtitle = stringResource(R.string.onboarding_intro_feature_3_subtitle),
-            )
-        }
-
-        Spacer(modifier = Modifier.height(SakhiSpacing.space6))
-    }
-
-        SakhiFooter(
-            primaryLabel = stringResource(R.string.onboarding_continue),
-            onPrimaryClick = onContinue,
+        FeatureBulletRow(
+            icon = Icons.Filled.AutoAwesome,
+            title = stringResource(R.string.onboarding_intro_feature_2_title),
+            subtitle = stringResource(R.string.onboarding_intro_feature_2_subtitle),
         )
-    }
-}
-
-/**
- * Port of iOS's `FeatureBulletRow` (`PartnerCareComponents.swift`) — the single component
- * behind all nine iOS bullet rows (`UniversalIntroStep`, `PartnerInvitePromptStep`,
- * `AcceptInviteSheet`).
- *
- * iOS: `HStack(alignment: .top, spacing: .m)` (16); 44pt circle; 20pt glyph;
- * `VStack(spacing: .xxs)` (4) with a 15pt bold title over a 14pt secondary subtitle at
- * `lineSpacing(3)`. Every iOS call site passes a subtitle, so it is required here.
- *
- * Carries no vertical padding of its own: on iOS the gap between rows comes from the
- * caller's `VStack(spacing:)`, and the two callers use different values (`.xl` 28 for
- * the intro, `.l` 24 for the invite prompt). Baking padding in here would flatten that.
- *
- * The badge fill stays `primary` at 12% rather than iOS's `DS.Colors.lightPink`: on
- * Android that token is bound to `colorScheme.surface`, which is already these screens'
- * background, so a literal port would render an invisible badge.
- */
-@Composable
-private fun FeatureBulletRow(
-    icon: ImageVector,
-    title: String,
-    subtitle: String,
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
-        verticalAlignment = Alignment.Top,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(44.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
-        }
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
-        ) {
-            Text(
-                text = title,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            Text(
-                text = subtitle,
-                fontSize = 14.sp,
-                // iOS default 14pt line height (~16.8) plus its explicit lineSpacing(3).
-                lineHeight = 20.sp,
-                color = sakhiSecondaryLabel(),
-            )
-        }
+        FeatureBulletRow(
+            icon = Icons.Filled.Favorite,
+            title = stringResource(R.string.onboarding_intro_feature_3_title),
+            subtitle = stringResource(R.string.onboarding_intro_feature_3_subtitle),
+        )
     }
 }
 
@@ -1737,7 +1596,7 @@ private fun OfflineWarningScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(top = SakhiSpacing.space3),
-                            verticalArrangement = Arrangement.spacedBy(UniversalIntroBulletSpacing),
+                            verticalArrangement = Arrangement.spacedBy(OnboardingBulletSpacing),
                         ) {
                             OfflineFeatureLossRow(
                                 icon = Icons.Filled.CloudOff,

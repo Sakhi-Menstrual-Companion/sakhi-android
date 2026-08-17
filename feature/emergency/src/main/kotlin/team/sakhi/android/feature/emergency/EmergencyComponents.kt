@@ -20,13 +20,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Checkroom
-import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Medication
+import androidx.compose.material.icons.filled.Thermostat
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -60,10 +58,9 @@ import team.sakhi.models.EmergencyRequirement
 internal fun EmergencyRequirement.icon(): ImageVector = when (this) {
     EmergencyRequirement.PAD -> Icons.Filled.WaterDrop
     EmergencyRequirement.TAMPON -> Icons.Filled.WaterDrop
-    EmergencyRequirement.MENSTRUAL_CUP -> Icons.Filled.HealthAndSafety
+    // iOS uses "thermometer" here, the symbol `main` paired with a hot water bag.
+    EmergencyRequirement.HOT_WATER_BAG -> Icons.Filled.Thermostat
     EmergencyRequirement.PAINKILLER -> Icons.Filled.Medication
-    EmergencyRequirement.CLEAN_CLOTHES -> Icons.Filled.Checkroom
-    EmergencyRequirement.WALK_WITH_ME -> Icons.Filled.DirectionsWalk
     EmergencyRequirement.OTHER -> Icons.Filled.MoreHoriz
 }
 

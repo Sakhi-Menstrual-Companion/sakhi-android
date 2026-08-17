@@ -51,6 +51,8 @@ import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.onboarding.OnboardingFlowCompletion
 import team.sakhi.onboarding.OnboardingFlowStep
 import team.sakhi.android.ui.CloseButton
+import team.sakhi.android.ui.OnboardingHeaderTopGap
+import team.sakhi.android.ui.OnboardingNavBarMinHeight
 import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
@@ -567,28 +569,4 @@ private fun OnboardingFlowStep.isParityHealthStep(): Boolean = when (this) {
     else -> false
 }
 
-/**
- * iOS reserves a 44pt chrome row on every onboarding step **plus** 20pt of padding above it:
- * `regularShell`'s `HStack { … Color.clear.frame(width: 44, height: 44) }` carries
- * `.padding(.top, DS.Spacing.ml)`, so the header occupies 64pt before the title's own
- * `.padding(.top, DS.Spacing.xl)` starts.
- *
- * This must be 64, not 44, because of how Compose composes the two modifiers. `SakhiNavBar`
- * applies `.padding(top = 20.dp, bottom = 8.dp)` *inside* the `heightIn` this value feeds, so
- * the constraint resolves as `max(min, contentHeight + 28)`. On the first step there is no
- * back or close button, so content height is 0 and the whole bar collapsed to `max(44, 28)`
- * = 44 — the 20pt that iOS adds *above* the row was being swallowed by the 44 instead of
- * stacking with it, leaving every onboarding step 20dp higher than iOS. Reported on a real
- * device as the intro screen's title sitting too close to the status bar.
- */
-private val OnboardingNavBarMinHeight = 64.dp
 
-/**
- * DELIBERATE DEVIATION FROM iOS -- do not "restore parity" by deleting this.
- *
- * Extra gap ABOVE the shared onboarding header, so the back/close button clears the status
- * bar. Android-only, at Karan's request after a real-device review. It was first placed
- * below the header, which pushed the title down but left the button jammed at the top; moved
- * above so the same total offset buys button clearance instead.
- */
-private val OnboardingHeaderTopGap = 32.dp
