@@ -34,7 +34,7 @@ import team.sakhi.access.AppFeature
 import team.sakhi.access.BlockReason
 import team.sakhi.access.FeatureAccessResolver
 import team.sakhi.access.FeatureAccessState
-import team.sakhi.sync.SyncEngine
+import team.sakhi.sync.SyncPauseState
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
@@ -103,7 +103,7 @@ fun FeatureAccessBlocked(
     modifier: Modifier = Modifier,
 ) {
     val accessState = koinInject<FeatureAccessState>()
-    val syncEngine = koinInject<SyncEngine>()
+    val syncPauseState = koinInject<SyncPauseState>()
     val copy = blockedCopyFor(reason)
 
     Column(
@@ -153,10 +153,10 @@ fun FeatureAccessBlocked(
                 if (reason == BlockReason.OFFLINE_NEEDS_INTERNET) {
                     // Mirrors iOS `resumeOnline()`: release the held sync queue FIRST,
                     // then clear the flag. Clearing the flag alone (which is all this
-                    // did before `SyncEngine.pause()` existed) would have re-opened the
+                    // did before the pause flag existed) would have re-opened the
                     // feature while sync stayed paused forever — writes would queue up
                     // silently and never leave the device.
-                    syncEngine.resume()
+                    syncPauseState.resume()
                     accessState.setOnlineAccountPaused(false)
                 } else {
                     onBack()

@@ -55,6 +55,7 @@ class SakhiApplication : Application() {
         BuildConfigProvider.SUPABASE_ANON_KEY = BuildConfig.SUPABASE_ANON_KEY
         BuildConfigProvider.CLAUDE_API_KEY = BuildConfig.CLAUDE_API_KEY
         BuildConfigProvider.GOOGLE_PLACES_API_KEY = BuildConfig.GOOGLE_PLACES_API_KEY
+        BuildConfigProvider.GOOGLE_MAPS_API_KEY = BuildConfig.GOOGLE_MAPS_API_KEY
         BuildConfigProvider.EXOTEL_SID = BuildConfig.EXOTEL_SID
         BuildConfigProvider.EXOTEL_TOKEN = BuildConfig.EXOTEL_TOKEN
         BuildConfigProvider.SANITY_PROJECT_ID = BuildConfig.SANITY_PROJECT_ID

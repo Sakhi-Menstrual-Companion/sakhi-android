@@ -9,6 +9,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.map
+import team.sakhi.models.EmergencyRequestStatus
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -63,9 +68,123 @@ class EmergencyViewModel(
     private val locationProvider: AndroidLocationProvider,
     private val hapticManager: AndroidHapticManager,
     private val sessionManager: SessionManager,
+    private val appContext: android.content.Context,
 ) : ViewModel() {
 
-    val state: StateFlow<EmergencyState> = store.state
+    // ── Demo mode (debug only) ───────────────────────────────────────────────
+    // Past the ask, these transitions are this file's, not `EmergencyStore`'s. See
+    // `EmergencyDemoMode` for what that means and what it does not prove.
+    private val _demoState = MutableStateFlow<EmergencyState?>(null)
+    private var demoRequirement: EmergencyRequirement? = null
+    private var demoSpotLabel: String? = null
+    private var demoJob: Job? = null
+
+    /** True once the demo has taken the flow over, so store pushes are ignored. */
+    private val isDemoDriving: Boolean get() = demoRequirement != null
+
+    private val demoEnabled: Boolean get() = EmergencyDemoMode.isEnabled(appContext)
+
+    /**
+     * The store's state, with the demo Sakhi added to the picker, and fully replaced once
+     * the demo has taken over.
+     *
+     * iOS does the same in `demoAugmented`: only the list is touched, so the store still
+     * decides that a requirement leads to a spot and a spot leads to the picker. This just
+     * puts one extra name in the picker so there is somebody to ask.
+     */
+    val state: StateFlow<EmergencyState> =
+        combine(store.state, _demoState) { storeState, demo -> demo ?: demoAugmented(storeState) }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, store.state.value)
+
+    private fun demoAugmented(newState: EmergencyState): EmergencyState {
+        if (!demoEnabled) return newState
+        val choosing = newState as? EmergencyState.ChoosingSakhi ?: return newState
+        // Guard against doubling her up if the store re-emits the same step.
+        if (choosing.sakhis.any { it.userId == EmergencyDemoMode.USER_ID }) return newState
+        return EmergencyState.ChoosingSakhi(
+            requirement = choosing.requirement,
+            spotLabel = choosing.spotLabel,
+            sakhis = choosing.sakhis + EmergencyDemoMode.sakhi,
+            isRefreshing = choosing.isRefreshing,
+        )
+    }
+
+    /** Sends nothing. Shows the waiting screen, then accepts on a timer. */
+    private fun beginDemoRequest() {
+        val choosing = state.value as? EmergencyState.ChoosingSakhi ?: return
+        demoRequirement = choosing.requirement
+        demoSpotLabel = choosing.spotLabel
+        _demoState.value = EmergencyDemoMode.waiting(choosing.requirement, choosing.spotLabel)
+
+        demoJob?.cancel()
+        demoJob = viewModelScope.launch {
+            delay(EmergencyDemoMode.ACCEPT_DELAY_MILLIS)
+            if (!isDemoDriving) return@launch
+            acceptDemoRequest()
+        }
+    }
+
+    private fun acceptDemoRequest() {
+        val requirement = demoRequirement ?: return
+        val here = _uiState.value.userLatLng
+        _demoState.value = EmergencyState.InSession(
+            session = EmergencyDemoMode.session(
+                requirement = requirement,
+                spotLabel = demoSpotLabel,
+                latitude = here?.latitude,
+                longitude = here?.longitude,
+            ),
+            messages = listOf(
+                EmergencyDemoMode.message(EmergencyDemoMode.OPENING_MESSAGE, fromHelper = true),
+            ),
+        )
+    }
+
+    /**
+     * Locally handled counterparts to the session actions, so the flow can be walked to its
+     * end instead of stopping at the first call that would hit the server.
+     */
+    private fun demoSend(body: String) {
+        val current = _demoState.value as? EmergencyState.InSession ?: return
+        _demoState.value = EmergencyState.InSession(
+            session = current.session,
+            messages = current.messages + EmergencyDemoMode.message(body, fromHelper = false),
+        )
+    }
+
+    private fun demoComplete() {
+        val requirement = demoRequirement ?: return
+        demoJob?.cancel()
+        val here = _uiState.value.userLatLng
+        _demoState.value = EmergencyState.Completed(
+            session = EmergencyDemoMode.session(
+                requirement = requirement,
+                spotLabel = demoSpotLabel,
+                latitude = here?.latitude,
+                longitude = here?.longitude,
+                status = EmergencyRequestStatus.COMPLETED,
+            ),
+        )
+    }
+
+    /**
+     * Hands the flow back to the store. Called on exit and on any action that ends the demo
+     * request, so nothing is left pinned once she is out of it.
+     */
+    private fun endDemo() {
+        demoJob?.cancel()
+        demoJob = null
+        demoRequirement = null
+        demoSpotLabel = null
+        _demoState.value = null
+    }
+
+    fun isDemoModeEnabled(): Boolean = demoEnabled
+
+    fun setDemoModeEnabled(enabled: Boolean) {
+        EmergencyDemoMode.setEnabled(appContext, enabled)
+        if (!enabled) endDemo()
+    }
     val responderState: StateFlow<ResponderState> = store.responderState
 
     /** Spot names she has used before, newest first. Owned by the shared store. */
@@ -75,10 +194,24 @@ class EmergencyViewModel(
      * How many Sakhis are discoverable around her. `null` means not checked yet, which is
      * not the same as zero — the original only showed its empty state once it knew.
      */
-    val nearbyAvailableCount: StateFlow<Int?> = store.nearbyAvailableCount
+    /**
+     * How many Sakhis are around, with the demo Sakhi counted in.
+     *
+     * The flow gates its own entry on this: at zero it shows "No Nearby Sakhis" and never
+     * reaches the requirement step, so without counting her the demo could not be walked at
+     * all -- which is the one thing it exists for. Real counts always win; this only ever
+     * raises a zero to one, and only in debug.
+     */
+    val nearbyAvailableCount: StateFlow<Int?> =
+        store.nearbyAvailableCount
+            .map { real -> if (demoEnabled) maxOf(real ?: 0, 1) else real }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, store.nearbyAvailableCount.value)
 
     /** The profile card she opens before deciding who to ask. */
-    val profileDetail: StateFlow<EmergencyProfileDetail?> = store.profileDetail
+    private val _demoProfile = MutableStateFlow<EmergencyProfileDetail?>(null)
+    val profileDetail: StateFlow<EmergencyProfileDetail?> =
+        combine(store.profileDetail, _demoProfile) { real, demo -> demo ?: real }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /**
      * Whether the three introduction screens have already been shown once. Owned by the
@@ -265,6 +398,11 @@ class EmergencyViewModel(
     fun ask(sakhi: NearbySakhi) {
         if (_uiState.value.isSubmitting) return
         hapticManager.impact(HapticImpact.MEDIUM)
+        // Nothing is sent for the demo Sakhi -- see `EmergencyDemoMode`.
+        if (demoEnabled && sakhi.userId == EmergencyDemoMode.USER_ID) {
+            beginDemoRequest()
+            return
+        }
         _uiState.update { it.copy(isSubmitting = true) }
         viewModelScope.launch {
             refreshLocation()
@@ -281,10 +419,17 @@ class EmergencyViewModel(
 
     fun openProfile(userId: String) {
         hapticManager.impact(HapticImpact.LIGHT)
+        if (demoEnabled && userId == EmergencyDemoMode.USER_ID) {
+            _demoProfile.value = EmergencyDemoMode.profile
+            return
+        }
         viewModelScope.launch { runCatching { store.openProfile(userId) } }
     }
 
-    fun closeProfile() = store.closeProfile()
+    fun closeProfile() {
+        _demoProfile.value = null
+        store.closeProfile()
+    }
 
     fun setBlocked(userId: String, blocked: Boolean) {
         hapticManager.impact(HapticImpact.MEDIUM)
@@ -380,11 +525,13 @@ class EmergencyViewModel(
         val body = _uiState.value.messageDraft.trim()
         if (body.isEmpty()) return
         _uiState.update { it.copy(messageDraft = "") }
+        if (isDemoDriving) { demoSend(body); return }
         viewModelScope.launch { runCatching { store.sendMessage(body) } }
     }
 
     fun completeSession() {
         hapticManager.impact(HapticImpact.MEDIUM)
+        if (isDemoDriving) { demoComplete(); return }
         viewModelScope.launch { runCatching { store.completeSession() } }
     }
 

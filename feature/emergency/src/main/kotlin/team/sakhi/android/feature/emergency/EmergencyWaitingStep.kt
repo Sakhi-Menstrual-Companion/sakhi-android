@@ -48,6 +48,10 @@ import androidx.compose.ui.draw.clip
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.emergency.EmergencyState
 import team.sakhi.models.EmergencyFormatting
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemGray5
+import team.sakhi.android.designsystem.sakhiSeparator
+import team.sakhi.android.designsystem.sakhiSystemBackground
 
 /**
  * Step 4 — she has asked one Sakhi and is waiting on the answer.
@@ -114,7 +118,7 @@ internal fun EmergencyWaitingStep(
             Text(
                 text = stringResource(R.string.emergency_waiting_body),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .padding(horizontal = SakhiSpacing.space5)
@@ -153,7 +157,11 @@ internal fun EmergencyWaitingStep(
             // name. Two facts belong together and read as a summary.
             Surface(
                 shape = RoundedCornerShape(SakhiRadius.lg),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                // iOS wraps this in `EmergencyCard`, which fills with
+                // `DS.Colors.systemBackground` -- white. A translucent grey read as a panel
+                // on the pink ground rather than a card on it, and it did not match the
+                // white cards every other step in the flow uses.
+                color = sakhiSystemBackground(),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = SakhiSpacing.space5)
@@ -168,7 +176,7 @@ internal fun EmergencyWaitingStep(
                     step.spotLabel?.takeIf { it.isNotBlank() }?.let { spot ->
                         HorizontalDivider(
                             modifier = Modifier.padding(start = 64.dp),
-                            color = MaterialTheme.colorScheme.outlineVariant,
+                            color = sakhiSeparator(),
                         )
                         WaitingSummaryRow(
                             icon = Icons.Filled.PinDrop,
@@ -192,7 +200,7 @@ internal fun EmergencyWaitingStep(
         // is to say "hold on, she is coming". The confirmation behind it guards the decision.
         Surface(
             shape = RoundedCornerShape(14.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+            color = sakhiSystemGray5().copy(alpha = 0.4f),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
@@ -331,7 +339,7 @@ internal fun EmergencyRejectedStep(
         Text(
             text = stringResource(R.string.emergency_declined_privacy_note),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
         )
 

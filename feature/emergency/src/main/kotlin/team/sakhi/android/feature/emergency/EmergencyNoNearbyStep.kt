@@ -35,6 +35,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiDeepRose
+import team.sakhi.android.designsystem.sakhiLabel
 
 /**
  * "No Nearby Sakhis" — the Android half of `NoNearByViewController`.
@@ -68,7 +71,8 @@ internal fun EmergencyNoNearbyStep(
     }
 
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = SakhiSpacing.space5),
+        // iOS `.padding(.horizontal, DS.Spacing.screenHorizontal)` = 24.
+        modifier = Modifier.fillMaxSize().padding(horizontal = SakhiSpacing.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Column(
@@ -79,19 +83,24 @@ internal fun EmergencyNoNearbyStep(
             Icon(
                 imageVector = Icons.Filled.PersonOff,
                 contentDescription = null,
-                modifier = Modifier.size(54.dp).alpha(alpha).scale(scale),
-                tint = MaterialTheme.colorScheme.primary,
+                // iOS `.font(.system(size: 40))` with `DS.Colors.deepRose` -- the muted rose,
+                // not the brand pink. At 54dp in full pink this read as an alert; iOS keeps
+                // it quieter, because "nobody is around" is not an error.
+                modifier = Modifier.size(40.dp).alpha(alpha).scale(scale),
+                tint = sakhiDeepRose(),
             )
             Spacer(modifier = Modifier.height(SakhiSpacing.space3))
             Text(
                 text = stringResource(R.string.emergency_no_nearby_title),
                 style = MaterialTheme.typography.titleLarge,
+                color = sakhiLabel(),
             )
-            Spacer(modifier = Modifier.height(SakhiSpacing.space2))
+            // iOS `VStack(spacing: DS.Spacing.s)` = 12 throughout, not 8 here.
+            Spacer(modifier = Modifier.height(SakhiSpacing.space3))
             Text(
                 text = stringResource(R.string.emergency_no_nearby_body),
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
                 textAlign = TextAlign.Center,
             )
         }

@@ -71,12 +71,34 @@ data class SakhiBrandColors(
     val error: androidx.compose.ui.graphics.Color,
 )
 
+/**
+ * Every Material slot the app actually draws with, filled from Sakhi's own values.
+ *
+ * Only `primary`, `onPrimary`, `background`, `surface` and `error` used to be set. Every
+ * other slot fell through to Material's defaults, which are purple-tinted: `onSurface`
+ * #1C1B1F, `onSurfaceVariant` #49454F, `surfaceVariant` #E7E0EC, and the outlines to match.
+ * Any composable reaching for `colorScheme.onSurface` -- and most do, it is the default for
+ * `Text` inside a `Surface` -- was drawing Material's grey-purple where iOS draws a plain
+ * label, which is why Android screens read subtly lilac against the same iOS screen.
+ *
+ * These mirror the `sakhi*()` helpers below one for one, so a composable gets the same
+ * colour whether it asks Material or asks Sakhi directly. iOS's names are in the comments.
+ */
 private fun materialColorScheme(brand: SakhiBrandColors, isDark: Boolean) = if (isDark) {
     darkColorScheme(
         primary = brand.pink,
         onPrimary = androidx.compose.ui.graphics.Color.White,
         background = brand.background,
+        // iOS `DS.Colors.label`
+        onBackground = androidx.compose.ui.graphics.Color.White,
         surface = brand.lightPink,
+        onSurface = androidx.compose.ui.graphics.Color.White,
+        // iOS `DS.Colors.fill` / `secondaryLabel`
+        surfaceVariant = androidx.compose.ui.graphics.Color(0xFF2C2C2E),
+        onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFFEBEBF5).copy(alpha = 0.60f),
+        // iOS `DS.Colors.separator`
+        outline = androidx.compose.ui.graphics.Color(0xFF545458).copy(alpha = 0.65f),
+        outlineVariant = androidx.compose.ui.graphics.Color(0xFF545458).copy(alpha = 0.65f),
         error = brand.error,
     )
 } else {
@@ -84,7 +106,13 @@ private fun materialColorScheme(brand: SakhiBrandColors, isDark: Boolean) = if (
         primary = brand.pink,
         onPrimary = androidx.compose.ui.graphics.Color.White,
         background = brand.background,
+        onBackground = androidx.compose.ui.graphics.Color.Black,
         surface = brand.lightPink,
+        onSurface = androidx.compose.ui.graphics.Color.Black,
+        surfaceVariant = androidx.compose.ui.graphics.Color(0xFFE5E5EA),
+        onSurfaceVariant = androidx.compose.ui.graphics.Color(0xFF3C3C43).copy(alpha = 0.60f),
+        outline = androidx.compose.ui.graphics.Color(0xFF3C3C43).copy(alpha = 0.36f),
+        outlineVariant = androidx.compose.ui.graphics.Color(0xFF3C3C43).copy(alpha = 0.36f),
         error = brand.error,
     )
 }

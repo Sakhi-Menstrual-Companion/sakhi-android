@@ -7,6 +7,9 @@ import team.sakhi.android.ui.FeatureAccessGate
 import team.sakhi.access.AppFeature
 import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -23,6 +26,7 @@ import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.ui.SakhiModalSheet
+import team.sakhi.android.ui.SheetSurface
 import team.sakhi.android.feature.ai.ChatScreen
 import team.sakhi.android.feature.emergency.EmergencyFlowScreen
 import team.sakhi.android.feature.calendar.CalendarScreen
@@ -241,12 +245,47 @@ fun HomeNavHost() {
         )
     }
 
-    activeOverlaySheet?.takeIf { it !is HomeOverlaySheet.Calendar }?.let { sheet ->
+    // Emergency Assistance is FULL SCREEN, not a sheet.
+    //
+    // Both of iOS's presentation sites use `.fullScreenCover` -- `RootView` for the deep
+    // link and SOS notification, and `SakhiAIChatView` for the Nearby button. Routing it
+    // through the shared modal-sheet lane left Home visible above it and gave it a sheet's
+    // rounded top, which is a different presentation from the one iOS ships. It also owns
+    // its own map-plus-sheet layout internally (`BottomSheetScaffold`), exactly as iOS's
+    // `EmergencyFlowView` owns its map and `EmergencySheetContent`; that inner sheet is the
+    // one that is meant to look like a sheet, not the screen containing it.
+    (activeOverlaySheet as? HomeOverlaySheet.Emergency)?.let { emergency ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            FeatureAccessGate(
+                feature = AppFeature.EMERGENCY_ASSISTANCE,
+                onBack = ::dismissOverlaySheet,
+            ) {
+                EmergencyFlowScreen(
+                    onClose = ::dismissOverlaySheet,
+                    deepLinkRequestId = emergency.deepLinkRequestId,
+                    openResponderInbox = emergency.openResponderInbox,
+                )
+            }
+        }
+    }
+
+    activeOverlaySheet
+        ?.takeIf { it !is HomeOverlaySheet.Calendar && it !is HomeOverlaySheet.Emergency }
+        ?.let { sheet ->
         SakhiModalSheet(
             onDismissRequest = {
                 finishOverlaySheetDismiss(sheet)
             },
             sheetState = overlaySheetState,
+            // Chat's header no longer carries a close button, because iOS's does not:
+            // `SakhiAIChatView` says outright that "the sheet has no X any more, so closing
+            // is its grabber, which is shown for exactly that reason", and warns against
+            // hiding the grabber without putting a close button back somewhere.
+            //
+            // This is the shared host for these overlay sheets, which is the same shape
+            // iOS has (`HomeView.sharedSheetView` owns the grabber for all of them), so the
+            // handle belongs here rather than inside Chat.
+            showSystemDragHandle = true,
         ) {
             // Peer sheet swaps are not full-screen pushes. Raindrop uses native modal
             // presentation plus short opacity fades for lightweight modal content
@@ -256,6 +295,8 @@ fun HomeNavHost() {
                 label = "home_overlay_sheet_transition",
             ) { targetSheet ->
                 when (targetSheet) {
+                    // Handled above as a full-screen layer, never in this sheet host.
+                    is HomeOverlaySheet.Emergency -> Unit
                     is HomeOverlaySheet.Profile -> ProfileOverlaySheet(
                         initialScreen = targetSheet.initialScreen,
                         onDismiss = ::dismissOverlaySheet,
@@ -290,16 +331,6 @@ fun HomeNavHost() {
                         ChatScreen(
                             onClose = ::dismissOverlaySheet,
                             onOpenEmergency = { activeOverlaySheet = HomeOverlaySheet.Emergency() },
-                        )
-                    }
-                    is HomeOverlaySheet.Emergency -> FeatureAccessGate(
-                        feature = AppFeature.EMERGENCY_ASSISTANCE,
-                        onBack = ::dismissOverlaySheet,
-                    ) {
-                        EmergencyFlowScreen(
-                            onClose = ::dismissOverlaySheet,
-                            deepLinkRequestId = targetSheet.deepLinkRequestId,
-                            openResponderInbox = targetSheet.openResponderInbox,
                         )
                     }
                     is HomeOverlaySheet.Logging -> LoggingSheet(

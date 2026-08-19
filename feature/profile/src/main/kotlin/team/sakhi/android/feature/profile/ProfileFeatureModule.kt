@@ -10,7 +10,7 @@ val profileFeatureModule = module {
             sessionManager = get(),
             careStore = get(),
             careRealtimeCoordinator = get(),
-            syncEngine = get(),
+            syncPauseState = get(),
             featureAccessState = get(),
         )
     }

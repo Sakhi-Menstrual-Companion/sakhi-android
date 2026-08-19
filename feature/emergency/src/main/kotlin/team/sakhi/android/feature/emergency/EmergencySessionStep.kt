@@ -58,6 +58,23 @@ import team.sakhi.emergency.EmergencyState
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyMessage
 import team.sakhi.models.EmergencySession
+import team.sakhi.android.designsystem.sakhiSystemGray5
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.unit.sp
+import team.sakhi.android.designsystem.sakhiGroupedBackground
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiSeparator
+import team.sakhi.android.designsystem.toComposeColor
+import team.sakhi.design.SakhiUIColors
+import androidx.compose.foundation.background
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.width
 
 /**
  * Step 4 — the two women are connected.
@@ -90,9 +107,13 @@ internal fun EmergencySessionStep(
     val isSeeker = session.viewerIsRequester
     val uiStateForArea by viewModel.uiState.collectAsStateWithLifecycle()
 
+    // `fillMaxWidth`, not `fillMaxSize`. Filling forced the column to the sheet's full
+    // height whatever the content was, so the sheet opened tall with a block of empty page
+    // under the last card. Wrapping means the sheet is as big as its content and the scroll
+    // only engages when there is something to scroll.
     Column(
         modifier = Modifier
-            .fillMaxSize()
+            .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
     ) {
         // ── Status card ──────────────────────────────────────────────────────
@@ -205,7 +226,7 @@ internal fun EmergencySessionStep(
                         if (isCompleting) R.string.emergency_completing else R.string.emergency_finish,
                     ),
                     contentColor = Color(0xFF34C759),
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    containerColor = sakhiSystemGray5().copy(alpha = 0.4f),
                     isBusy = isCompleting,
                     onClick = {
                         isCompleting = true
@@ -219,7 +240,7 @@ internal fun EmergencySessionStep(
                     if (isCancelling) R.string.emergency_cancelling else R.string.emergency_cancel,
                 ),
                 contentColor = sakhiSecondaryLabel(),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                containerColor = sakhiSystemGray5().copy(alpha = 0.4f),
                 isBusy = isCancelling,
                 onClick = {
                     isCancelling = true
@@ -235,8 +256,15 @@ internal fun EmergencySessionStep(
     // inline under the header, which made the session screen a chat screen and pushed the
     // requirement, destination and the two request actions off the bottom.
     if (showChat) {
-        ModalBottomSheet(onDismissRequest = { showChat = false }) {
-            EmergencyChatSheet(viewModel = viewModel, step = step)
+        // Fully expanded, as iOS opens this thread at the large detent. Left partially
+        // expanded, Compose clips the bottom of the content -- and the bottom of this
+        // content is the message field and the send button, so the thread opened with no
+        // way to reply.
+        ModalBottomSheet(
+            onDismissRequest = { showChat = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            EmergencyChatSheet(viewModel = viewModel, step = step, onBack = { showChat = false })
         }
     }
 
@@ -274,9 +302,11 @@ internal fun EmergencySessionStep(
  * session header. Port of `EmergencyChatView.swift`.
  */
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun EmergencyChatSheet(
     viewModel: EmergencyViewModel,
     step: EmergencyState.InSession,
+    onBack: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -289,6 +319,32 @@ private fun EmergencyChatSheet(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // iOS puts this thread in a NavigationStack titled with the other woman's name and
+        // a pink "Back" on the left. Android had no header at all, so the thread opened with
+        // nothing saying who it was with.
+        CenterAlignedTopAppBar(
+            title = {
+                Text(
+                    text = session.counterpartName ?: stringResource(R.string.emergency_your_sakhi),
+                )
+            },
+            navigationIcon = {
+                TextButton(onClick = onBack) {
+                    Text(
+                        text = stringResource(R.string.emergency_back),
+                        // iOS `.font(.lato(15)).foregroundColor(DS.Colors.pink)`.
+                        fontSize = 15.sp,
+                        color = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                containerColor = Color.Transparent,
+            ),
+            // Inside a sheet, so no status-bar inset -- same as the other steps.
+            windowInsets = WindowInsets(0, 0, 0, 0),
+        )
+
         Box(modifier = Modifier.weight(1f)) {
             if (messages.isEmpty()) {
                 Text(
@@ -316,34 +372,82 @@ private fun EmergencyChatSheet(
                             session.counterpartName?.substringBefore(' ')
                                 ?: stringResource(R.string.emergency_your_sakhi)
                         },
+                        avatarName = session.counterpartName,
                     )
                 }
             }
         }
 
+        // iOS `inputBar` opens with a hairline over the whole width.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(0.5.dp)
+                .background(sakhiSeparator().copy(alpha = 0.18f)),
+        )
+
+        val canSend = uiState.messageDraft.isNotBlank()
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
+                // iOS `.padding(.horizontal, DS.Spacing.m)` = 16, `.padding(.vertical, 10)`.
+                .padding(horizontal = SakhiSpacing.space4, vertical = 10.dp),
             verticalAlignment = Alignment.Bottom,
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+            // iOS `HStack(alignment: .bottom, spacing: DS.Spacing.s)` = 12.
+            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
         ) {
-            OutlinedTextField(
-                value = uiState.messageDraft,
-                onValueChange = viewModel::onMessageDraftChanged,
-                placeholder = { Text(stringResource(R.string.emergency_message_hint)) },
-                maxLines = 4,
-                shape = RoundedCornerShape(22.dp),
-                modifier = Modifier.weight(1f),
+            // iOS fills the field with `groupedBackground` and draws no border at all. An
+            // `OutlinedTextField` brought Material's hard outline, its underline indicator
+            // and a 56dp minimum height -- the same three things that were wrong on the
+            // Location step's spot field.
+            val fieldStyle = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 15.sp,
+                color = sakhiLabel(),
             )
-            IconButton(
-                onClick = viewModel::sendMessage,
-                enabled = uiState.messageDraft.isNotBlank(),
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(22.dp))
+                    .background(sakhiGroupedBackground())
+                    // iOS `.padding(.horizontal, 14).padding(.vertical, 10)`.
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                BasicTextField(
+                    value = uiState.messageDraft,
+                    onValueChange = viewModel::onMessageDraftChanged,
+                    textStyle = fieldStyle,
+                    cursorBrush = SolidColor(SakhiUIColors.BRAND_PINK.toComposeColor()),
+                    maxLines = 4,
+                    modifier = Modifier.fillMaxWidth(),
+                    decorationBox = { inner ->
+                        if (uiState.messageDraft.isEmpty()) {
+                            Text(
+                                text = stringResource(R.string.emergency_message_hint),
+                                style = fieldStyle.copy(color = sakhiSecondaryLabel()),
+                            )
+                        }
+                        inner()
+                    },
+                )
+            }
+
+            // iOS: a 36pt circle, pink when there is something to send and `gray5` when not,
+            // carrying a white arrow-up. Android had a bare icon button with a Send glyph.
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(if (canSend) SakhiUIColors.BRAND_PINK.toComposeColor() else sakhiSystemGray5())
+                    .clickable(enabled = canSend) { viewModel.sendMessage() },
+                contentAlignment = Alignment.Center,
             ) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Send,
+                    imageVector = Icons.Filled.ArrowUpward,
                     contentDescription = stringResource(R.string.emergency_send),
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = Color.White,
+                    modifier = Modifier.size(15.dp),
                 )
             }
         }
@@ -440,38 +544,52 @@ private fun destinationText(
  * bubbles pink for the current user, gray for the other person.
  */
 @Composable
-private fun MessageBubble(message: EmergencyMessage, isMine: Boolean, senderName: String) {
-    Column(
+private fun MessageBubble(
+    message: EmergencyMessage,
+    isMine: Boolean,
+    senderName: String,
+    avatarName: String?,
+) {
+    // iOS: `HStack(alignment: .bottom, spacing: DS.Spacing.xs)` with a 30pt avatar beside
+    // every bubble (MessageKit's `configureAvatarView`) and a 50pt spacer on the far side so
+    // a bubble never runs the full width. Android drew a bare column with neither.
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
+        verticalAlignment = Alignment.Bottom,
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
     ) {
+        if (isMine) Spacer(modifier = Modifier.width(50.dp))
+        if (!isMine) EmergencyAvatar(name = avatarName, photoUrl = null, size = 30.dp)
+
+        Column(
+            modifier = Modifier.weight(1f, fill = false),
+            horizontalAlignment = if (isMine) Alignment.End else Alignment.Start,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
     Text(
         text = senderName,
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = sakhiSecondaryLabel(),
         modifier = Modifier.height(16.dp),
     )
     Row(
-        modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (isMine) Arrangement.End else Arrangement.Start,
     ) {
         Surface(
             shape = RoundedCornerShape(18.dp),
+            // iOS: `isMine ? DS.Colors.pink : DS.Colors.groupedBackground`.
             color = if (isMine) {
-                MaterialTheme.colorScheme.primary
+                SakhiUIColors.BRAND_PINK.toComposeColor()
             } else {
-                MaterialTheme.colorScheme.surfaceVariant
+                sakhiGroupedBackground()
             },
-            modifier = Modifier.fillMaxWidth(0.8f),
         ) {
             Text(
                 text = message.body,
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (isMine) {
-                    MaterialTheme.colorScheme.onPrimary
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
+                // iOS `.font(.lato(15))`, and the incoming colour is `DS.Colors.label`, not
+                // a secondary grey -- her words are the content, not a caption.
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 15.sp),
+                color = if (isMine) Color.White else sakhiLabel(),
                 modifier = Modifier.padding(
                     horizontal = SakhiSpacing.space3,
                     vertical = SakhiSpacing.space2,
@@ -479,6 +597,12 @@ private fun MessageBubble(message: EmergencyMessage, isMine: Boolean, senderName
             )
         }
     }
+        }
+
+        // iOS puts the viewer's own avatar on the trailing side of her own bubbles, and a
+        // 50pt spacer on the far side of an incoming one so it never runs the full width.
+        if (isMine) EmergencyAvatar(name = null, photoUrl = null, size = 30.dp)
+        if (!isMine) Spacer(modifier = Modifier.width(50.dp))
     }
 }
 

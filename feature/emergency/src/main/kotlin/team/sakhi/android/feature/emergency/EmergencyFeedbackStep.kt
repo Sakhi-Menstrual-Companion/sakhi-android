@@ -33,6 +33,7 @@ import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.models.EmergencyRequestStatus
 import team.sakhi.models.EmergencySession
+import androidx.compose.foundation.layout.height
 
 /**
  * The outcome screen. Port of iOS `EmergencyFeedbackView.swift`.
@@ -62,7 +63,11 @@ internal fun EmergencyFeedbackStep(
     val outcome = rememberOutcome(session)
 
     Column(
-        modifier = Modifier.fillMaxSize(),
+        // Wraps its content rather than filling. iOS's `Spacer(minLength: 0)` collapses when
+        // there is no slack, so on a short sheet its buttons sit straight under the text; a
+        // filling column with `weight(1f)` always expands instead, which pushed "She Helped"
+        // and "No" below the sheet's peek height where she could not reach them.
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Spacer(modifier = Modifier.size(SakhiSpacing.space10))
@@ -83,8 +88,10 @@ internal fun EmergencyFeedbackStep(
                 style = MaterialTheme.typography.headlineSmall,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
-                    .padding(horizontal = SakhiSpacing.space5)
-                    .padding(top = SakhiSpacing.space4),
+                    // iOS `.padding(.horizontal, DS.Spacing.l)` = 24,
+                    // `.padding(.top, DS.Spacing.ml)` = 20.
+                    .padding(horizontal = SakhiSpacing.space6)
+                    .padding(top = SakhiSpacing.space5),
             )
         }
 
@@ -94,18 +101,24 @@ internal fun EmergencyFeedbackStep(
             color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
             modifier = Modifier
-                .padding(horizontal = SakhiSpacing.space5)
-                .padding(top = SakhiSpacing.space1),
+                // iOS `.padding(.horizontal, DS.Spacing.l)` = 24,
+                // `.padding(.top, DS.Spacing.xs)` = 8.
+                .padding(horizontal = SakhiSpacing.space6)
+                .padding(top = SakhiSpacing.space2),
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        // iOS `Spacer(minLength: 0)` -- takes slack when there is some, collapses when not.
+        Spacer(modifier = Modifier.height(SakhiSpacing.space6))
 
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SakhiSpacing.space5)
-                .padding(bottom = SakhiSpacing.space5),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+                // iOS `.padding(.horizontal, DS.Spacing.l)` = 24,
+                // `.padding(.bottom, DS.Spacing.l)` = 24.
+                .padding(horizontal = SakhiSpacing.space6)
+                .padding(bottom = SakhiSpacing.space6),
+            // iOS `VStack(spacing: DS.Spacing.s)` = 12.
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
         ) {
             outcome.primaryTitle?.let { title ->
                 Button(

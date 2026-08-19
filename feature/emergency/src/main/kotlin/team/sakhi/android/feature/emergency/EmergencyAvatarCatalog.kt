@@ -17,9 +17,9 @@ import androidx.annotation.DrawableRes
 internal object EmergencyAvatarCatalog {
 
     private val faces = intArrayOf(
-        R.drawable.nearby_sakhi_1,
-        R.drawable.nearby_sakhi_2,
-        R.drawable.nearby_sakhi_3,
+        team.sakhi.android.ui.R.drawable.nearby_sakhi_1,
+        team.sakhi.android.ui.R.drawable.nearby_sakhi_2,
+        team.sakhi.android.ui.R.drawable.nearby_sakhi_3,
     )
 
     @DrawableRes

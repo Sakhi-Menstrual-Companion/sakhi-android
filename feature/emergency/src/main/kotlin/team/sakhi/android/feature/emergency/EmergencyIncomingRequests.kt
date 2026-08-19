@@ -48,6 +48,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.IncomingRequest
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemGray5
+import team.sakhi.android.designsystem.sakhiLightPink
 
 /**
  * The other side of the network — being the Sakhi someone asked.
@@ -126,11 +129,13 @@ internal fun EmergencyResponderInbox(viewModel: EmergencyViewModel) {
 private fun AvailabilityToggle(isAvailable: Boolean, onToggle: (Boolean) -> Unit) {
     Surface(
         shape = RoundedCornerShape(SakhiRadius.lg),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+        // iOS `.fill(DS.Colors.groupedBackground.opacity(0.6))`.
+        color = sakhiGroupedBackground().copy(alpha = 0.6f),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.padding(SakhiSpacing.space3),
+            // iOS `.padding(DS.Spacing.cardHorizontal)` = 18.
+            modifier = Modifier.padding(18.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
         ) {
@@ -139,22 +144,22 @@ private fun AvailabilityToggle(isAvailable: Boolean, onToggle: (Boolean) -> Unit
                     .size(40.dp)
                     .clip(RoundedCornerShape(SakhiRadius.md))
                     .background(
-                        if (isAvailable) {
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                        } else {
-                            MaterialTheme.colorScheme.surfaceVariant
-                        },
+                        // iOS `.fill(responder.isAvailable ? DS.Colors.lightPink
+                        // : DS.Colors.groupedBackground)` -- the brand pink card fill when
+                        // she is on, not a translucent primary.
+                        if (isAvailable) sakhiLightPink() else sakhiGroupedBackground(),
                     ),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
                     imageVector = if (isAvailable) Icons.Filled.LocationOn else Icons.Filled.LocationOff,
                     contentDescription = null,
-                    modifier = Modifier.size(20.dp),
+                    // iOS `.font(.system(size: 16))`.
+                    modifier = Modifier.size(16.dp),
                     tint = if (isAvailable) {
                         MaterialTheme.colorScheme.primary
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        sakhiSecondaryLabel()
                     },
                 )
             }
@@ -170,7 +175,7 @@ private fun AvailabilityToggle(isAvailable: Boolean, onToggle: (Boolean) -> Unit
                         stringResource(R.string.emergency_location_not_shared)
                     },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
             Switch(checked = isAvailable, onCheckedChange = onToggle)
@@ -194,7 +199,7 @@ private fun OffState() {
         Text(
             text = stringResource(R.string.emergency_turn_on_to_see),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
         )
     }
@@ -217,12 +222,12 @@ private fun EmptyNearby(isRefreshing: Boolean) {
         Text(
             text = stringResource(R.string.emergency_no_one_needs_help),
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
         Text(
             text = stringResource(R.string.emergency_we_will_keep_checking),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = sakhiSecondaryLabel(),
         )
     }
 }
@@ -310,7 +315,7 @@ private fun IncomingRequestCard(
                 text = "${EmergencyFormatting.approximateDistance(request.distanceBucketMeters)} · " +
                     EmergencyFormatting.walkingTime(request.etaMinutes),
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
 
             // main: ProgressButtonView's helper UI — Reject in red on the left, Accept in

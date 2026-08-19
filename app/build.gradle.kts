@@ -70,6 +70,9 @@ android {
         buildConfigField("String", "SUPABASE_ANON_KEY", "\"${secret("SUPABASE_ANON_KEY")}\"")
         buildConfigField("String", "CLAUDE_API_KEY", "\"${secret("CLAUDE_API_KEY")}\"")
         buildConfigField("String", "GOOGLE_PLACES_API_KEY", "\"${secret("GOOGLE_PLACES_API_KEY")}\"")
+        // Static Maps runs as a WEB SERVICE call, so it needs the key at runtime, not just
+        // the manifest placeholder the Maps SDK reads.
+        buildConfigField("String", "GOOGLE_MAPS_API_KEY", "\"${secret("GOOGLE_MAPS_API_KEY", secret("GOOGLE_PLACES_API_KEY"))}\"")
         buildConfigField("String", "EXOTEL_SID", "\"${secret("EXOTEL_SID")}\"")
         buildConfigField("String", "EXOTEL_TOKEN", "\"${secret("EXOTEL_TOKEN")}\"")
         buildConfigField("String", "SANITY_PROJECT_ID", "\"${secret("SANITY_PROJECT_ID")}\"")

@@ -21,6 +21,9 @@ android {
     }
     buildFeatures {
         compose = true
+        // The Nearby badge mirrors iOS's `#if DEBUG` stand-in count, so it needs
+        // `BuildConfig.DEBUG` in this module.
+        buildConfig = true
     }
 
     // `ChatUiState.sharePdfUri` is `android.net.Uri`, same as `ReportsUiState`'s -- merely

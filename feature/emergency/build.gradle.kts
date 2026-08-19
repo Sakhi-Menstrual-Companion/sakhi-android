@@ -21,6 +21,9 @@ android {
     }
     buildFeatures {
         compose = true
+        // `EmergencyDemoMode` guards itself on `BuildConfig.DEBUG` so no release build can
+        // ever put a made-up Sakhi in front of a woman who needs help.
+        buildConfig = true
     }
 }
 

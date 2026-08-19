@@ -50,6 +50,7 @@ import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiLabel
 
 /**
  * The map the whole flow sits on, matching iOS.
@@ -94,7 +95,7 @@ internal fun EmergencyMap(
     // MaterialTheme inside a `Marker` block is not allowed anyway.
     val accent = MaterialTheme.colorScheme.primary
     val surface = sakhiSystemBackground()
-    val onSurface = MaterialTheme.colorScheme.onSurface
+    val onSurface = sakhiLabel()
     val onSurfaceVariant = sakhiSecondaryLabel()
     val separator = sakhiSeparator()
 
@@ -246,7 +247,7 @@ internal fun EmergencyMapOverlay(
             modifier = Modifier
                 .size(35.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f)),
+                .background(sakhiLabel().copy(alpha = 0.45f)),
             contentAlignment = Alignment.Center,
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(35.dp)) {
@@ -275,12 +276,12 @@ internal fun EmergencyMapOverlay(
                     imageVector = Icons.Filled.Group,
                     contentDescription = null,
                     modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = sakhiSecondaryLabel(),
                 )
                 Text(
                     text = stringResource(R.string.emergency_nearby_sakhis_count, nearbyCount),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }

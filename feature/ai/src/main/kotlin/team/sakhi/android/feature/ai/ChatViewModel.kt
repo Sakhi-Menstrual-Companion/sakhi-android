@@ -33,6 +33,8 @@ import team.sakhi.android.feature.reports.ReportPdfExporter
 import team.sakhi.android.feature.reports.ReportSection
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.AndroidLocationProvider
+import team.sakhi.android.platform.DeviceLocation
+import team.sakhi.emergency.EmergencyStore
 import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.ToastManager
@@ -127,6 +129,7 @@ class ChatViewModel(
     private val reportPdfExporter: ReportPdfExporter,
     private val safePlaceRanker: SafePlaceRanker,
     private val locationProvider: AndroidLocationProvider,
+    private val emergencyStore: EmergencyStore,
     private val hapticManager: AndroidHapticManager,
     private val widgetSnapshotManager: AndroidWidgetSnapshotManager,
     private val localStore: SakhiPhaseALocalStore,
@@ -243,6 +246,49 @@ class ChatViewModel(
      * assistant's permission-needed reply, so the original user bubble does
      * not stay stuck in its optimistic sending state.
      */
+    /**
+     * How many Sakhis are nearby, for the chat header's Nearby button.
+     *
+     * Read straight off the shared `EmergencyStore` rather than through an
+     * `EmergencyViewModel`: that object subscribes to six flows, owns the request state
+     * machine and starts polling, and a second one alive alongside the real one inside the
+     * Emergency flow would be two owners of the same shared state. This watches the one
+     * value and nothing else, mirroring iOS's `NearbySakhiCountProbe`.
+     *
+     * `null` means not known yet, which is not the same as zero — the button draws its
+     * fallback glyph rather than "0".
+     */
+    val nearbyAvailableCount: StateFlow<Int?> = emergencyStore.nearbyAvailableCount
+
+    /**
+     * Refreshes that count, but **only if location was already granted**.
+     *
+     * Returns immediately otherwise, so opening the AI chat can never raise a location
+     * prompt on a screen that has no reason to want one. iOS says the same thing on its own
+     * copy of this: location is asked for in the Emergency introduction, where the reason is
+     * on screen; a count in a header is not a good enough reason to ask, and being asked out
+     * of nowhere is how a health app loses trust.
+     */
+    private val _nearbyCoordinate = MutableStateFlow<DeviceLocation?>(null)
+
+    /**
+     * Where she is, once a fix has landed, for the map behind the Nearby capsule.
+     *
+     * `null` until then, and forever if location was never granted — the capsule falls back
+     * to a plain fill, which is also what anyone who never granted it sees.
+     */
+    val nearbyCoordinate: StateFlow<DeviceLocation?> = _nearbyCoordinate.asStateFlow()
+
+    fun refreshNearbyCountIfAlreadyAllowed() {
+        if (!locationProvider.hasPermission()) return
+        viewModelScope.launch {
+            val fix = runCatching { locationProvider.currentLocation() }.getOrNull() ?: return@launch
+            _nearbyCoordinate.value = fix
+            emergencyStore.updateDeviceLocation(fix.latitude, fix.longitude)
+            runCatching { emergencyStore.refreshNearbyAvailableCount() }
+        }
+    }
+
     fun onLocationPermissionResult(granted: Boolean) {
         val session = sessionManager.current
         val requestedSessionKey = activeSessionKey(session)

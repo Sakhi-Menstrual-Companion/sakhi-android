@@ -30,6 +30,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import team.sakhi.design.SakhiUIColors
+import team.sakhi.android.designsystem.toComposeColor
+import team.sakhi.android.designsystem.sakhiSystemGray5
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -57,6 +62,8 @@ import androidx.compose.ui.graphics.Color
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyRequirement
+import team.sakhi.android.designsystem.sakhiSystemBackground
+import androidx.compose.foundation.layout.WindowInsets
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 1 — what does she need
@@ -78,7 +85,10 @@ internal fun EmergencyRequirementStep(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = SakhiSpacing.space5),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+        // iOS is a `VStack(spacing: 0)`: the title and the first section sit flush, and the
+        // only gap is `.padding(.bottom, DS.Spacing.l)` = 24 under the first section.
+        // Android's uniform 16 put a gap under the title that iOS does not have and made
+        // the two sections read as one run.
     ) {
         // iOS: `EmergencySheetTitle(title: "Select Requirement")` -- centred, no subtitle.
         EmergencySheetTitle(title = stringResource(R.string.emergency_select_requirement))
@@ -87,6 +97,7 @@ internal fun EmergencyRequirementStep(
             title = stringResource(R.string.emergency_section_right_now),
             items = EmergencyRequirement.urgent,
             onSelect = viewModel::chooseRequirement,
+            modifier = Modifier.padding(bottom = SakhiSpacing.space6),
         )
         RequirementSection(
             title = stringResource(R.string.emergency_section_something_else),
@@ -119,29 +130,30 @@ internal fun EmergencyRequirementStep(
 
 @Composable
 private fun RequirementSection(
+    modifier: Modifier = Modifier,
     title: String,
     items: List<EmergencyRequirement>,
     onSelect: (EmergencyRequirement) -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        items.forEach { requirement ->
-            RequirementRow(requirement = requirement, onClick = { onSelect(requirement) })
+    Column(modifier = modifier) {
+        EmergencySectionHeader(title = title)
+        // One card for the whole section, rows split by hairlines -- iOS's `EmergencyCard`
+        // wrapping a `ForEach` that inserts an `EmergencyRowDivider` before every row but
+        // the first.
+        EmergencyCard {
+            items.forEachIndexed { index, requirement ->
+                if (index > 0) EmergencyRowDivider()
+                RequirementRow(requirement = requirement, onClick = { onSelect(requirement) })
+            }
         }
     }
 }
 
 @Composable
 private fun RequirementRow(requirement: EmergencyRequirement, onClick: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(SakhiRadius.lg),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-    ) {
+    // No Surface of its own: the section's `EmergencyCard` is the card, and this is a row
+    // inside it. iOS `requirementRow` is likewise just a Button wrapping an `EmergencyRow`.
+    Box(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Row(
             modifier = Modifier.padding(SakhiSpacing.space3),
             verticalAlignment = Alignment.CenterVertically,
@@ -172,7 +184,7 @@ private fun RequirementRow(requirement: EmergencyRequirement, onClick: () -> Uni
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = sakhiSecondaryLabel(),
             )
         }
     }
@@ -233,18 +245,30 @@ internal fun EmergencySpotStep(
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = Color.Transparent,
             ),
+            // Material's TopAppBar reserves the STATUS BAR inset by default. That is right
+            // for a bar at the top of a window and wrong for one inside a bottom sheet: it
+            // added a status bar's worth of dead space between the grabber and "Location",
+            // which is the gap that made this step look nothing like iOS's.
+            windowInsets = WindowInsets(0, 0, 0, 0),
         )
 
+    // iOS is `VStack(alignment: .leading, spacing: 0)` with no outer horizontal padding:
+    // every element carries `DS.Spacing.ml` = 20 itself. Android had an outer 20 on top of
+    // the shared components' own padding, so the headers and the recent-spots card sat 36dp
+    // in while the field and the area line stayed at 20. The uniform 12 between children
+    // was wrong too -- iOS puts 12 above the area line and 28 above Recent Spots.
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = SakhiSpacing.space5),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+            .verticalScroll(rememberScrollState()),
     ) {
         EmergencySectionHeader(title = stringResource(R.string.emergency_spot_name))
 
-        OutlinedTextField(
+        // iOS draws no border here at all: the field is
+        // `.background(RoundedRectangle(cornerRadius: DS.Radius.systemCard).fill(DS.Colors.fill.opacity(0.35)))`
+        // -- a soft fill and nothing else. Android used an `OutlinedTextField`, whose hard
+        // grey outline is the one element on this step that does not exist on iOS.
+        TextField(
             value = uiState.spotDraft,
             onValueChange = { value ->
                 // `Constants.maxLocationLength` on `main`, enforced by truncation as iOS does.
@@ -254,7 +278,17 @@ internal fun EmergencySpotStep(
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             maxLines = 4,
             shape = RoundedCornerShape(SakhiRadius.lg),
-            modifier = Modifier.fillMaxWidth(),
+            colors = TextFieldDefaults.colors(
+                // iOS `DS.Colors.fill.opacity(0.35)`, over the sheet's own background.
+                unfocusedContainerColor = sakhiSystemGray5().copy(alpha = 0.35f),
+                focusedContainerColor = sakhiSystemGray5().copy(alpha = 0.35f),
+                // Material's underline indicator has no iOS counterpart either.
+                unfocusedIndicatorColor = Color.Transparent,
+                focusedIndicatorColor = Color.Transparent,
+                disabledIndicatorColor = Color.Transparent,
+                cursorColor = SakhiUIColors.BRAND_PINK.toComposeColor(),
+            ),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space5),
         )
 
         // main showed "{spot} at {locationName}". The "at" prefix is what makes the two read
@@ -270,13 +304,20 @@ internal fun EmergencySpotStep(
                 // whether the app has her in the right place.
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .padding(horizontal = SakhiSpacing.space5)
+                    .padding(top = SakhiSpacing.space3),
             )
         }
 
         val recentSpots by viewModel.recentSpots.collectAsStateWithLifecycle()
         if (recentSpots.isNotEmpty()) {
             // `main`'s "Recent Spots" section: clock icon, the name, and an x to forget it.
-            EmergencySectionHeader(title = stringResource(R.string.emergency_recent_spots))
+            EmergencySectionHeader(
+                title = stringResource(R.string.emergency_recent_spots),
+                // iOS `.padding(.top, DS.Spacing.xl)` = 28.
+                modifier = Modifier.padding(top = 28.dp),
+            )
             EmergencyCard {
                 recentSpots.forEachIndexed { index, spot ->
                     if (index > 0) EmergencyRowDivider(leadingInset = 58.dp)
@@ -322,7 +363,7 @@ internal fun EmergencySpotStep(
                 Text(
                     text = stringResource(R.string.emergency_location_required),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                 )
             }
         }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +57,7 @@ import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyProfileDetail
 import team.sakhi.models.NearbySakhi
+import androidx.compose.foundation.layout.fillMaxHeight
 
 /**
  * Replica of `ProfielDetailViewController` — the card a woman opens before deciding to let
@@ -85,10 +87,27 @@ internal fun EmergencyProfileDetailSheet(
     val trust = EmergencyFormatting.trustLevel(profile.ratingCount)
     val context = LocalContext.current
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    // `fillMaxSize`, not `fillMaxWidth`, and the scroller takes the remaining space with a
+    // filling weight.
+    //
+    // The Ask button was already outside the scroll, but with a wrap-height column and
+    // `weight(1f, fill = false)` there was no bottom for it to pin to: it simply sat after
+    // the content wherever that ended. iOS pins it with `VStack(spacing: 0) { ScrollView;
+    // askButton }` inside a sheet that has a height, so the scroller absorbs the slack and
+    // the one action on the screen stays put.
+    // A medium detent, as iOS has: `.presentationDetents([.medium, .large])` opens on the
+    // first one. Compose has no detents, so the height goes on the CONTENT instead -- the
+    // sheet wraps it, so a 60% column produces a 60% sheet with the Ask button pinned to its
+    // bottom. `fillMaxSize` gave a full-height sheet; leaving the sheet partially expanded
+    // instead would have clipped the content's bottom, which is exactly where that button is.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .fillMaxHeight(MEDIUM_DETENT_FRACTION),
+    ) {
         Column(
             modifier = Modifier
-                .weight(1f, fill = false)
+                .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .fillMaxWidth(),
         ) {
@@ -326,3 +345,6 @@ private fun lastActiveText(context: android.content.Context, iso: String?): Stri
 // `ProfileSection` and `ProfileRow` lived here. Both are now the shared
 // `EmergencySectionHeader` / `EmergencyCard` / `EmergencyRow` from `EmergencyComponents.kt`,
 // which is what iOS uses across the whole flow.
+
+/** iOS's `.medium` presentation detent, near enough at this size. */
+private const val MEDIUM_DETENT_FRACTION = 0.6f

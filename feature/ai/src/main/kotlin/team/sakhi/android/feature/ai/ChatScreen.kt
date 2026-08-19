@@ -1,14 +1,10 @@
 package team.sakhi.android.feature.ai
 
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.Image
-import team.sakhi.android.ui.CloseButton
 import android.content.Intent
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
@@ -40,12 +36,18 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -88,7 +90,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -123,14 +127,20 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSystemGray5
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.designsystem.sakhiDeepRose
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
+import team.sakhi.android.designsystem.sakhiSeparator
+import team.sakhi.android.designsystem.sakhiGroupedBackground
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.KeyboardSafeScaffold
-import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.design.SakhiColors
 import team.sakhi.design.SakhiUIColors
@@ -231,18 +241,27 @@ fun ChatScreen(
         viewModel.consumeSharePdf()
     }
 
-    val locationPermissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-        onResult = viewModel::onLocationPermissionResult,
-    )
-    LaunchedEffect(uiState.needsLocationPermission) {
-        if (uiState.needsLocationPermission) {
-            locationPermissionLauncher.launch(android.Manifest.permission.ACCESS_COARSE_LOCATION)
-        }
-    }
+    // Feeds the count on the header's Nearby button. Mirrors iOS's
+    // `await nearbyCount.refreshIfAlreadyAllowed()` in the chat's `.task`: a no-op unless
+    // location is already granted, so it cannot raise a prompt from here.
+    val nearbyCount by viewModel.nearbyAvailableCount.collectAsStateWithLifecycle()
+    val nearbyCoordinate by viewModel.nearbyCoordinate.collectAsStateWithLifecycle()
+    LaunchedEffect(Unit) { viewModel.refreshNearbyCountIfAlreadyAllowed() }
 
-    // iOS presents this as `.sheet(...).presentationDragIndicator(.hidden)` --
-    // no drag handle, relying on the in-header close button instead.
+    // No location permission request from this screen, matching iOS.
+    //
+    // iOS only ever calls `nearbyCount.refreshIfAlreadyAllowed()` here and says why on the
+    // line itself: "No-op unless location is already granted, so this cannot raise a
+    // permission prompt from the chat screen." Android was launching an
+    // ACCESS_COARSE_LOCATION request straight out of the chat, which is a permission dialog
+    // iOS never shows here — a woman opening the AI chat to ask a question was being asked
+    // for her location before she had typed anything.
+    //
+    // If nearby places are ever needed again, the permission must be asked for where the
+    // user chose that feature, not on entry to chat.
+
+    // The sheet's drag handle is the close affordance, as on iOS -- see
+    // `HomeNavHost`'s `showSystemDragHandle`.
     Box(modifier = Modifier.fillMaxSize()) {
     SheetSurface {
         when (destination) {
@@ -251,7 +270,10 @@ fun ChatScreen(
                     topBar = {
                         ChatHeader(
                             uiState = uiState,
+                            nearbyCount = nearbyCount,
+                            nearbyCoordinate = nearbyCoordinate,
                             onInfoClick = { destination = ChatDestination.Info },
+                            onOpenEmergency = onOpenEmergency,
                             onClose = onClose,
                         )
                     },
@@ -286,7 +308,16 @@ fun ChatScreen(
                                             starredStore.toggle(message.id)
                                         },
                                         isLastInGroup = next?.isUser != message.isUser,
-                                        groupTopPadding = if (previous?.isUser == message.isUser) SakhiSpacing.space1 else SakhiSpacing.space3,
+                                        // iOS `SakhiAIMessageBubble.topPadding`: 4 for the very
+                                        // first bubble, 2 inside a run by the same speaker, 10
+                                        // when the speaker changes. Android used 4/12, so runs
+                                        // did not cluster and the gap between speakers was too
+                                        // wide.
+                                        groupTopPadding = when {
+                                            previous == null -> 4.dp
+                                            previous.isUser == message.isUser -> 2.dp
+                                            else -> 10.dp
+                                        },
                                         showReadTick = index < messages.lastIndex || uiState.isSending,
                                         onExpandPlaces = {
                                             hapticManager.impact(HapticImpact.LIGHT)
@@ -313,7 +344,11 @@ fun ChatScreen(
                         }
                     },
                     footer = {
-                        HorizontalDivider()
+                        // No divider here. `ChatInputBar` draws iOS's own hairline as the
+                        // first child of its column — 0.5dp at `separator` 18%. A Material
+                        // `HorizontalDivider` on top of it added a second, much harder line
+                        // at full `outlineVariant` (#CAC4D0), which is what made the bottom
+                        // of the chat read as a heavy ruled edge instead of iOS's hairline.
                         ChatInputBar(
                             text = uiState.inputText,
                             isPartnerMode = uiState.session?.isViewingOwnData == false,
@@ -700,7 +735,14 @@ private fun openWalkingDirections(
 }
 
 @Composable
-private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: () -> Unit) {
+private fun ChatHeader(
+    uiState: ChatUiState,
+    nearbyCount: Int?,
+    nearbyCoordinate: team.sakhi.android.platform.DeviceLocation?,
+    onInfoClick: () -> Unit,
+    onOpenEmergency: () -> Unit,
+    onClose: () -> Unit,
+) {
     val isOnline = uiState.isSending
     val headerAccessibilityLabel = stringResource(R.string.chat_header_accessibility_label)
     val headerAccessibilityState = if (isOnline) {
@@ -709,12 +751,22 @@ private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: (
         stringResource(R.string.chat_header_accessibility_last_seen_today_at, chatHeaderLastSeenTime())
     }
     Column {
-        // Same nav bar as every other sheet; Chat's identity block goes in its `leading`
-        // slot rather than the bar being rebuilt around it, which is what left this close
-        // button sized and inset differently from Profile's.
-        SakhiNavBar(
-            onClose = onClose,
-            leading = {
+        // Ported straight from iOS `SakhiAIChatView.headerBar`. It is a plain Row, not
+        // `SakhiNavBar`: iOS builds this row itself and does NOT put a close button in it
+        // ("The sheet has no X any more, so closing is its grabber"). The sheet's drag
+        // handle is the close affordance, which is why the chat sheet now asks for one.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                // iOS `.padding(.horizontal, DS.Spacing.screenHorizontal)` = 24.
+                .padding(horizontal = SakhiSpacing.space6)
+                // iOS `.padding(.top, DS.Spacing.ml)` / `.padding(.bottom, DS.Spacing.ml)` = 20.
+                // Roomier than the content below, and it keeps the row clear of the grabber.
+                .padding(top = SakhiSpacing.space5, bottom = SakhiSpacing.space5),
+            verticalAlignment = Alignment.CenterVertically,
+            // iOS outer `HStack(spacing: DS.Spacing.s)` = 12.
+            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+        ) {
             Row(
                 modifier = Modifier
                     .weight(1f)
@@ -724,30 +776,36 @@ private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: (
                         stateDescription = headerAccessibilityState
                     },
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                // iOS inner `HStack(spacing: 10)`.
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                // The real Sakhi mark, matching iOS's
-                // `Image("BrandMedia/AppLogo").frame(40, 40).clipShape(Circle())`.
-                // Android was drawing a generic Material `AutoAwesome` sparkle here, so
-                // the assistant Karan's users see had no brand identity at all — the one
-                // place in Chat where the product actually introduces itself.
+                // iOS: `Image("BrandMedia/sakhiSymbolAccent").resizable().scaledToFit()
+                // .frame(width: 36, height: 36)` — the same mark `SakhiLoadingView` puts at
+                // the centre of its rings.
+                //
+                // Deliberately NOT clipped to a circle and NOT `Crop`. iOS spells out why:
+                // this is a symbol with its own transparent margins, not the square AppLogo
+                // artwork, so a circular mask cuts its edges off. Android was drawing the
+                // square app logo cropped into a circle at 40dp, which is the old design.
                 Image(
-                    painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_app_logo),
+                    painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_symbol_accent),
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .size(40.dp)
-                        .clip(CircleShape),
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier.size(36.dp),
                 )
 
-                Column(modifier = Modifier.weight(1f)) {
+                // iOS `VStack(alignment: .leading, spacing: 1)`.
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(1.dp),
+                ) {
                     Text(
                         text = stringResource(R.string.chat_title),
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontSize = 17.sp,
                             fontWeight = FontWeight.Bold,
                         ),
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = sakhiLabel(),
                     )
                     if (isOnline) {
                         // iOS `presenceLabel`: `Circle().fill(DS.Colors.permissionSuccess)
@@ -783,11 +841,39 @@ private fun ChatHeader(uiState: ChatUiState, onInfoClick: () -> Unit, onClose: (
                 }
             }
 
-            },
+            // iOS puts this where a close button would sit: `headerBar` is
+            // `[identity block] Spacer nearbySakhiButton`, and the sheet closes by its
+            // grabber instead. This is the way into Emergency Assistance from chat — the
+            // input bar deliberately carries no location action of its own.
+            NearbySakhiButton(
+                count = nearbyCount,
+                coordinate = nearbyCoordinate,
+                onClick = onOpenEmergency,
+            )
+        }
+
+        // iOS draws this as `Rectangle().fill(DS.Colors.opaqueSeparator).frame(height: 0.5)`
+        // in a bottom overlay, applied AFTER the padding so it spans the full width rather
+        // than stopping at the content margins. A Material `HorizontalDivider` was wrong on
+        // both counts: it brings its own inset and its own thickness, which is what left the
+        // old rule sitting a hair off the edges.
+        //
+        // `opaqueSeparator` is a UIKit system colour, and iOS picks it over `separator`
+        // specifically because the translucent one washes out over the page's pink tint —
+        // so this is the opaque value, not a themed outline slot.
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(0.5.dp)
+                .background(chatHeaderSeparatorColor()),
         )
-        HorizontalDivider()
     }
 }
+
+/** iOS `DS.Colors.opaqueSeparator`, i.e. `UIColor.opaqueSeparator`. */
+@Composable
+private fun chatHeaderSeparatorColor(): Color =
+    if (LocalSakhiDarkTheme.current) Color(0xFF38383A) else Color(0xFFC6C6C8)
 
 @Composable
 private fun chatHeaderLastSeenTime(): String =
@@ -796,16 +882,32 @@ private fun chatHeaderLastSeenTime(): String =
 
 @Composable
 private fun TodaySeparator() {
-    Box(modifier = Modifier.fillMaxWidth().padding(vertical = SakhiSpacing.space4), contentAlignment = Alignment.Center) {
+    Box(
+        // iOS applies `.padding(.vertical, DS.Spacing.ml)` = 20 to this in the scroll view.
+        modifier = Modifier.fillMaxWidth().padding(vertical = SakhiSpacing.space5),
+        contentAlignment = Alignment.Center,
+    ) {
         Surface(
             shape = RoundedCornerShape(SakhiRadius.full),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            // iOS `Capsule().fill(DS.Colors.lightPink)`, the brand card fill — not a
+            // translucent primary, which read lilac here the same way the user bubble did.
+            color = if (LocalSakhiDarkTheme.current) {
+                SakhiUIColors.BRAND_LIGHT_PINK_DARK.toComposeColor()
+            } else {
+                SakhiUIColors.BRAND_LIGHT_PINK_LIGHT.toComposeColor()
+            },
         ) {
             Text(
                 text = stringResource(R.string.chat_today),
-                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(horizontal = SakhiSpacing.space3, vertical = SakhiSpacing.space1),
+                // iOS `.font(.lato(12, .bold))` with `.foregroundColor(DS.Colors.pink)`.
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                ),
+                color = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                // iOS `.padding(.horizontal, DS.Spacing.s)` = 12,
+                // `.padding(.vertical, DS.Spacing.xs)` = 8. Android used 4 vertically.
+                modifier = Modifier.padding(horizontal = SakhiSpacing.space3, vertical = SakhiSpacing.space2),
             )
         }
     }
@@ -818,8 +920,11 @@ private fun SuggestedChipsRow(chips: List<String>, onChipClick: (String) -> Unit
         modifier = Modifier
             .fillMaxWidth()
             .horizontalScroll(rememberScrollState())
+            // iOS `.padding(.horizontal, DS.Spacing.screenHorizontal)` = 24,
+            // `.padding(.vertical, DS.Spacing.xs)` = 8.
             .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+        // iOS `HStack(spacing: DS.Spacing.s)` = 12, not 8.
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
         chips.forEach { chip ->
             SuggestedChip(label = chip, onClick = { onChipClick(chip) })
@@ -832,24 +937,47 @@ private fun SuggestedChip(label: String, onClick: () -> Unit) {
     val icon = iconForChip(label)
     Surface(
         shape = RoundedCornerShape(SakhiRadius.full),
-        color = MaterialTheme.colorScheme.surface,
+        // iOS `.background(DS.Colors.systemBackground)` — white. The theme maps
+        // `colorScheme.surface` to brand.lightPink, so this was drawing a pink pill.
+        color = sakhiSystemBackground(),
         modifier = Modifier
             .semantics(mergeDescendants = true) {}
             .clickable(onClick = onClick),
     ) {
         Row(
             modifier = Modifier
+                // iOS fills the chip with `DS.Colors.systemBackground` before stroking it.
+                // Android drew the border on nothing, so the chips were transparent holes on
+                // the pink page instead of the raised white pills iOS shows.
                 .border(
                     width = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
+                    // iOS `.strokeBorder(DS.Colors.separator, lineWidth: 0.5)`.
+                    color = sakhiSeparator(),
                     shape = RoundedCornerShape(SakhiRadius.full),
                 )
-                .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space2),
+                // iOS `.padding(.horizontal, DS.Spacing.m)` = 16,
+                // `.padding(.vertical, DS.Spacing.s)` = 12. Android used 8 vertically, which
+                // made the pills noticeably squatter than iOS's.
+                .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+            // iOS `HStack(spacing: 6)`.
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Icon(imageVector = icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(14.dp))
-            Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurface)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                // iOS `.foregroundColor(DS.Colors.pink)` at `.lato(12)`.
+                tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                modifier = Modifier.size(12.dp),
+            )
+            Text(
+                text = label,
+                // iOS `.font(.lato(13))` with `.lineLimit(1)`.
+                style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = sakhiLabel(),
+            )
         }
     }
 }
@@ -866,6 +994,37 @@ private fun iconForChip(chip: String): androidx.compose.ui.graphics.vector.Image
         l.contains("partner") || l.contains("care") -> Icons.Filled.People
         else -> Icons.Filled.Spa
     }
+}
+
+/**
+ * The width cap iOS puts on each side's bubbles.
+ *
+ * User: iOS reserves a `Spacer(minLength: 64)` to its left and the row is already inset by
+ * `screenHorizontal` (24) on both sides, so the widest a user bubble gets is
+ * `screenWidth - 64 - 48`. AI: iOS caps it at `screenWidth * 0.78` outright.
+ *
+ * Both are caps, not fixed widths — a short message stays short.
+ */
+@Composable
+private fun bubbleMaxWidth(isUser: Boolean): androidx.compose.ui.unit.Dp {
+    val screenWidth = LocalConfiguration.current.screenWidthDp.dp
+    return if (isUser) {
+        screenWidth - 64.dp - (SakhiSpacing.space6 * 2)
+    } else {
+        screenWidth * 0.78f
+    }
+}
+
+/**
+ * The invisible tail iOS appends so the last line leaves room for the overlaid timestamp.
+ *
+ * iOS uses `"   \(formattedTime)  ✓✓"`. The ticks are only reserved for the user's own
+ * messages, because only those carry a receipt.
+ */
+@Composable
+private fun timeReservation(message: ConversationMessage, showReadTick: Boolean): String {
+    val time = formattedTime(message.timestamp)
+    return if (message.isUser) "   $time  ✓✓" else "   $time"
 }
 
 @Composable
@@ -894,10 +1053,39 @@ private fun MessageBubble(
         )
     }
 
+    val isDark = LocalSakhiDarkTheme.current
+
+    // iOS `userBg` / `userText`: the user bubble is a fixed light hex in light mode and a
+    // deep rose-tinted surface in dark, NOT a translucent primary. Android was drawing
+    // `colorScheme.primary.copy(alpha = 0.12f)`, which is a washed-out lilac over this
+    // theme and nothing like the pink iOS ships.
+    val userBg = if (isDark) {
+        SakhiUIColors.BRAND_LIGHT_PINK_DARK.toComposeColor()
+    } else {
+        SakhiUIColors.AI_USER_BUBBLE.toComposeColor()
+    }
+    val userText = if (isDark) {
+        sakhiLabel()
+    } else {
+        SakhiUIColors.AI_USER_TEXT.toComposeColor()
+    }
+    // iOS `userTimeColor` / the AI bubble's `timeColor`.
+    val brandPink = SakhiUIColors.BRAND_PINK.toComposeColor()
+    val timeColor = if (message.isUser) {
+        brandPink.copy(alpha = if (isDark) 0.65f else 0.55f)
+    } else {
+        brandPink.copy(alpha = 0.45f)
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space6, vertical = groupTopPadding / 4),
+            // iOS applies the group gap as `.padding(.top, topPadding)` only. Android was
+            // spreading `groupTopPadding / 4` across top AND bottom, which both quartered
+            // the intended gap and added one below, so grouped and ungrouped runs looked
+            // nearly identical instead of clustering.
+            .padding(top = groupTopPadding)
+            .padding(horizontal = SakhiSpacing.space6),
         horizontalArrangement = if (message.isUser) Arrangement.End else Arrangement.Start,
     ) {
         val speakerYou = stringResource(R.string.chat_speaker_you)
@@ -909,14 +1097,18 @@ private fun MessageBubble(
         )
         Surface(
             shape = bubbleShape,
-            color = if (message.isUser) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-            } else {
-                MaterialTheme.colorScheme.surface
-            },
-            tonalElevation = if (message.isUser) 0.dp else SakhiSpacing.space1,
+            color = if (message.isUser) userBg else sakhiSystemBackground(),
+            // iOS fills the AI bubble with a flat `systemBackground` and no elevation.
+            // Material's tonal elevation tints the surface toward the primary, which is
+            // what gave Android's AI bubbles a grey-lilac cast iOS does not have.
+            tonalElevation = 0.dp,
             modifier = Modifier
-                .fillMaxWidth(0.78f)
+                // iOS sizes bubbles to their content and only caps the width: the user
+                // bubble via `Spacer(minLength: 64)` and the AI bubble via
+                // `maxWidth: screenWidth * 0.78`. Android was pinning EVERY bubble to
+                // exactly 78% with `fillMaxWidth(0.78f)`, so a two-word reply drew the same
+                // wide block as a paragraph and the thread lost all its rhythm.
+                .widthIn(max = bubbleMaxWidth(isUser = message.isUser))
                 .semantics(mergeDescendants = true) {
                     contentDescription = messageAccessibilityLabel
                 }
@@ -925,33 +1117,57 @@ private fun MessageBubble(
                     onLongClick = onToggleStar,
                 ),
         ) {
-            Column(modifier = Modifier.padding(horizontal = SakhiSpacing.space3, vertical = SakhiSpacing.space2)) {
+            Box {
                 Text(
-                    text = message.content,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    // iOS appends an invisible `"   \(time)  ✓✓"` at 10pt so the final line
+                    // reserves room for the timestamp that is overlaid on top of it. That is
+                    // what produces the WhatsApp layout where short messages put the time on
+                    // the same line and long ones wrap around it. Android was stacking the
+                    // time in a Row underneath, which made every bubble a line taller.
+                    text = buildAnnotatedString {
+                        append(message.content)
+                        withStyle(SpanStyle(color = Color.Transparent, fontSize = 10.sp)) {
+                            append(timeReservation(message, showReadTick))
+                        }
+                    },
+                    // iOS `.font(.lato(17, relativeTo: .body))` with `.lineSpacing(4)`.
+                    // `bodyLarge` is 16sp with Material's own line height.
+                    // Derived from a Material style, not a bare fontSize: nothing provides
+                    // `LocalTextStyle`, so a bare size falls back to the default font family
+                    // and the bubbles would have rendered in Roboto instead of Lato.
+                    style = MaterialTheme.typography.bodyLarge.copy(
+                        fontSize = 17.sp,
+                        lineHeight = 21.sp,
+                    ),
+                    color = if (message.isUser) userText else sakhiLabel(),
+                    // iOS `.padding(.horizontal, 12).padding(.top, 9).padding(.bottom, 8)`.
+                    modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 9.dp, bottom = 8.dp),
                 )
+
+                // iOS `.overlay(alignment: .bottomTrailing)` with `.padding(.trailing, 10)`
+                // and `.padding(.bottom, 7)`.
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(end = 10.dp, bottom = 7.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (isStarred) {
                         Icon(
                             imageVector = Icons.Filled.Star,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(12.dp),
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                            modifier = Modifier.size(9.dp),
                         )
-                        Spacer(modifier = Modifier.width(SakhiSpacing.space1))
                     }
                     Text(
                         text = formattedTime(message.timestamp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = sakhiSecondaryLabel(),
+                        // iOS `.font(.lato(10, relativeTo: .caption2))`.
+                        style = MaterialTheme.typography.bodySmall.copy(fontSize = 10.sp),
+                        color = timeColor,
                     )
                     if (message.isUser) {
-                        Spacer(modifier = Modifier.width(SakhiSpacing.space1))
                         MessageTick(message = message, showRead = showReadTick)
                     }
                 }
@@ -1243,10 +1459,16 @@ private fun TypingIndicator() {
     ) {
         Surface(
             shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp, bottomEnd = 18.dp, bottomStart = 3.dp),
-            tonalElevation = SakhiSpacing.space1,
+            // iOS fills this with a flat `DS.Colors.systemBackground` and no elevation, the
+            // same as its AI bubble. Material's tonal elevation tinted it toward the primary,
+            // so the typing bubble did not match the bubble it turns into.
+            color = sakhiSystemBackground(),
+            tonalElevation = 0.dp,
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = SakhiSpacing.space3, vertical = SakhiSpacing.space3),
+                // iOS `.padding(.horizontal, 14).padding(.vertical, 12)`. Android used 12 on
+                // both, so the bubble was a touch narrow for its dots.
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 repeat(3) { index ->
@@ -1270,11 +1492,10 @@ private fun TypingIndicator() {
                                 scaleY = dotScale
                             }
                             .background(
-                                color = if (isActive) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                                },
+                                // iOS `DS.Colors.pink` / `.opacity(0.25)`, which is the brand
+                                // pink itself rather than the Material primary slot.
+                                color = SakhiUIColors.BRAND_PINK.toComposeColor()
+                                    .copy(alpha = if (isActive) 1f else 0.25f),
                                 shape = CircleShape,
                             ),
                     )
@@ -1330,43 +1551,101 @@ private fun ChatInputBar(
         }
     }
 
+    val isDark = LocalSakhiDarkTheme.current
+    // iOS `inputFill` / `inputStroke`. Android was filling the field with
+    // `primary.copy(alpha = 0.06f)` and drawing no stroke at all.
+    val inputFill = if (isDark) {
+        sakhiGroupedBackground()
+    } else {
+        SakhiUIColors.BRAND_LIGHT_PINK_LIGHT.toComposeColor()
+    }
+    val inputStroke = if (isDark) {
+        sakhiSeparator().copy(alpha = 0.18f)
+    } else {
+        SakhiUIColors.BRAND_DEEP_ROSE_LIGHT.toComposeColor().copy(alpha = 0.12f)
+    }
+    // iOS `inputTextColor` / `inputPlaceholderColor`: deep rose in light mode, not the
+    // Material default grey.
+    val inputTextColor = if (isDark) sakhiLabel() else sakhiDeepRose()
+    val inputPlaceholderColor = if (isDark) {
+        sakhiTertiaryLabel()
+    } else {
+        sakhiDeepRose().copy(alpha = 0.55f)
+    }
+
+    // iOS wraps the whole bar in a `VStack(spacing: 0)` whose first child is a hairline:
+    // `Rectangle().fill(DS.Colors.separator.opacity(0.18)).frame(height: 0.5)`. Android had
+    // no rule here at all, so the bar floated against the thread with nothing separating them.
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(0.5.dp)
+                .background(sakhiSeparator().copy(alpha = 0.18f)),
+        )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
+            // iOS `.padding(.horizontal, DS.Spacing.m)` = 16, `.padding(.vertical, 10)`.
+            .padding(horizontal = SakhiSpacing.space4, vertical = 10.dp),
         verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+        // iOS `HStack(alignment: .bottom, spacing: DS.Spacing.s)` = 12, not 8.
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
-        // Emergency Assistance entry point. iOS puts the same control in the same place
-        // (`SakhiAIInputBar`'s `mappin.circle.fill`); Android had no equivalent until now.
-        IconButton(
-            onClick = onOpenEmergency,
-            modifier = Modifier.minimumInteractiveComponentSize(),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Place,
-                contentDescription = stringResource(R.string.chat_open_emergency),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-        }
+        // No Emergency / location control here, because iOS has none.
+        //
+        // Android carried an `Icons.Filled.Place` IconButton opening Emergency Assistance,
+        // with a comment claiming iOS "puts the same control in the same place
+        // (`SakhiAIInputBar`'s `mappin.circle.fill`)". That is not so: iOS's
+        // `SakhiAIInputBar.swift` contains a text field and a send button and nothing else —
+        // it has no `mappin`, no Place icon and no Emergency entry point anywhere in the
+        // file. On iOS, Emergency is reached from the header, not the input bar.
+        //
+        // Do not add it back here without checking the iOS file first.
 
-        Surface(
-            shape = RoundedCornerShape(22.dp),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
-            modifier = Modifier.weight(1f),
+        // iOS builds this as a ZStack over a RoundedRectangle, not a Material TextField.
+        // That difference is the whole size problem: Material's `TextField` carries a 56dp
+        // minimum height and its own internal padding, so the field towered over the 36dp
+        // send button beside it. iOS's is 15pt text with 10pt of padding — about 38pt tall.
+        // `BasicTextField` is the only way to hit that exactly.
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(22.dp))
+                .background(inputFill)
+                .border(1.dp, inputStroke, RoundedCornerShape(22.dp))
+                // iOS `.padding(.horizontal, 14).padding(.vertical, 10)`.
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            contentAlignment = Alignment.CenterStart,
         ) {
-            TextField(
+            // iOS `.font(.lato(15))` for both the field and its placeholder.
+            val fieldTextStyle = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = 15.sp,
+                color = inputTextColor,
+            )
+
+            BasicTextField(
                 value = text,
                 onValueChange = onTextChanged,
                 enabled = !isLocked,
                 modifier = Modifier.fillMaxWidth(),
                 interactionSource = interactionSource,
-                placeholder = {
-                    when {
-                        text.isEmpty() && isFocused -> {
-                            Text(text = focusedPlaceholder)
-                        }
-                        text.isEmpty() -> {
+                textStyle = fieldTextStyle,
+                // iOS `.tint(DS.Colors.pink)` — the caret is brand pink, not the Material default.
+                cursorBrush = SolidColor(SakhiUIColors.BRAND_PINK.toComposeColor()),
+                // iOS `.lineLimit(1...5)`: it grows to five lines and then scrolls.
+                maxLines = 5,
+                decorationBox = { innerTextField ->
+                    if (text.isEmpty()) {
+                        if (isFocused) {
+                            Text(
+                                text = focusedPlaceholder,
+                                style = fieldTextStyle.copy(color = inputPlaceholderColor),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        } else {
                             AnimatedContent(
                                 targetState = placeholderIndex,
                                 transitionSpec = {
@@ -1385,18 +1664,17 @@ private fun ChatInputBar(
                                 contentAlignment = Alignment.CenterStart,
                                 label = "chat-placeholder",
                             ) { index ->
-                                Text(text = stringResource(placeholders[index % placeholders.size]))
+                                Text(
+                                    text = stringResource(placeholders[index % placeholders.size]),
+                                    style = fieldTextStyle.copy(color = inputPlaceholderColor),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
                         }
                     }
+                    innerTextField()
                 },
-                colors = TextFieldDefaults.colors(
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                ),
-                maxLines = 5,
             )
         }
 
@@ -1436,6 +1714,7 @@ private fun ChatInputBar(
                 }
             }
         }
+    }
     }
 }
 

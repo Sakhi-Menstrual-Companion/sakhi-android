@@ -23,10 +23,15 @@ import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +63,7 @@ import team.sakhi.emergency.EmergencyState
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.NearbySakhi
 import team.sakhi.models.TrustLevel
+import androidx.compose.foundation.layout.WindowInsets
 
 /**
  * Step 3 — who is around, and the screen where she picks one.
@@ -95,6 +101,10 @@ internal fun EmergencyNearbySakhisStep(
             colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
                 containerColor = Color.Transparent,
             ),
+            // Same fix as the Location step: Material's TopAppBar reserves the STATUS BAR
+            // inset, which inside a bottom sheet is pure dead space between the grabber and
+            // the title.
+            windowInsets = WindowInsets(0, 0, 0, 0),
         )
 
         Spacer(modifier = Modifier.size(SakhiSpacing.space3))
@@ -110,7 +120,7 @@ internal fun EmergencyNearbySakhisStep(
                         Text(
                             text = stringResource(R.string.emergency_looking_for_sakhis),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                         )
                     } else {
                         Icon(
@@ -126,7 +136,7 @@ internal fun EmergencyNearbySakhisStep(
                         Text(
                             text = stringResource(R.string.emergency_no_nearby_body),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = sakhiSecondaryLabel(),
                             textAlign = TextAlign.Center,
                         )
                         Button(
@@ -141,9 +151,21 @@ internal fun EmergencyNearbySakhisStep(
         } else {
             // iOS wraps the list in `.refreshable { refreshNearbySakhis() }`. Android had no
             // pull-to-refresh, so the only way to re-check was to leave and come back.
+            // The indicator tracks the PULL, not the store's refreshing flag.
+            //
+            // iOS uses `.refreshable`, which only draws a spinner for the gesture. Binding
+            // this to `step.isRefreshing` instead meant any background refresh -- the one
+            // that runs on arrival, for instance -- parked a spinner in the middle of the
+            // list, on top of the first Sakhi's distance line.
+            var userRefreshing by remember { mutableStateOf(false) }
+            LaunchedEffect(step.isRefreshing) { if (!step.isRefreshing) userRefreshing = false }
+
             PullToRefreshBox(
-                isRefreshing = step.isRefreshing,
-                onRefresh = viewModel::refreshNearbySakhis,
+                isRefreshing = userRefreshing,
+                onRefresh = {
+                    userRefreshing = true
+                    viewModel.refreshNearbySakhis()
+                },
                 modifier = Modifier.weight(1f),
             ) {
             LazyColumn(
@@ -166,7 +188,13 @@ internal fun EmergencyNearbySakhisStep(
 
     val profile by viewModel.profileDetail.collectAsStateWithLifecycle()
     if (profile != null) {
-        ModalBottomSheet(onDismissRequest = viewModel::closeProfile) {
+        // Always fully expanded. iOS offers `[.medium, .large]`, but a partially expanded
+        // Compose sheet clips the bottom of its content, which is exactly where the Ask
+        // button lives -- the one action on this screen would have been off-screen on open.
+        ModalBottomSheet(
+            onDismissRequest = viewModel::closeProfile,
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
             EmergencyProfileDetailSheet(
                 viewModel = viewModel,
                 profile = profile!!,

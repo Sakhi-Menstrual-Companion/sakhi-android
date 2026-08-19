@@ -11,7 +11,7 @@ import team.sakhi.care.CareRealtimeCoordinator
 import team.sakhi.care.CareRuntimeState
 import team.sakhi.care.CareStore
 import team.sakhi.session.SessionManager
-import team.sakhi.sync.SyncEngine
+import team.sakhi.sync.SyncPauseState
 
 /**
  * Backs "Use Sakhi offline" — the Android counterpart of iOS's `OfflineModeView` /
@@ -26,7 +26,7 @@ class OfflineModeViewModel(
     private val sessionManager: SessionManager,
     private val careStore: CareStore,
     private val careRealtimeCoordinator: CareRealtimeCoordinator,
-    private val syncEngine: SyncEngine,
+    private val syncPauseState: SyncPauseState,
     private val featureAccessState: FeatureAccessState,
 ) : ViewModel() {
 
@@ -61,7 +61,7 @@ class OfflineModeViewModel(
             runCatching { careRealtimeCoordinator.stop() }
 
             // 3. Hold the durable queue and suppress every push and pull.
-            syncEngine.pause()
+            syncPauseState.pause()
 
             // 4. Finally flag the account as paused, which is what the feature gate
             //    reads. Last on purpose: if any step above failed we would rather be

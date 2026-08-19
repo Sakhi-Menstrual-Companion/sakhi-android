@@ -14,6 +14,7 @@ val aiFeatureModule = module {
             reportPdfExporter = get(),
             safePlaceRanker = get(),
             locationProvider = get(),
+            emergencyStore = get(),
             hapticManager = get(),
             widgetSnapshotManager = get(),
             localStore = get(),

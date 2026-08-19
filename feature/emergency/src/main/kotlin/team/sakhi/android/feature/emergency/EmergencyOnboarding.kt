@@ -42,6 +42,8 @@ import team.sakhi.android.ui.OnboardingIntroScaffold
 import team.sakhi.android.ui.OnboardingNavBarMinHeight
 import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SakhiSwitch
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.WindowInsetsSides
 
 /**
  * The three-page introduction shown the first time she opens Emergency Assistance.
@@ -82,7 +84,13 @@ internal fun EmergencyOnboarding(
             // Insets applied once here for all three pages, matching `OnboardingFlowHost`.
             // Consuming them afterwards stops `SakhiFooter`'s own `navigationBarsPadding`
             // from applying the bottom inset a second time.
-            .windowInsetsPadding(WindowInsets.safeDrawing)
+            // No TOP inset. `OnboardingIntroScaffold` is built for a full-screen page where
+            // reserving the status bar is right; Emergency shows it inside a bottom sheet,
+            // where that inset is pure dead space -- it sat on top of the scaffold's own
+            // 32dp header gap and pushed the close button a long way below the grabber.
+            .windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
+            )
             .consumeWindowInsets(WindowInsets.safeDrawing),
     ) {
         Spacer(modifier = Modifier.height(OnboardingHeaderTopGap))
@@ -189,7 +197,10 @@ private fun PermissionsPage(
     ) {
         Surface(
             shape = RoundedCornerShape(SakhiRadiusLg),
-            color = MaterialTheme.colorScheme.surface,
+            // iOS fills this card with `DS.Colors.systemBackground` -- white. The theme maps
+            // `colorScheme.surface` to brand.lightPink, which is the sheet's own ground, so
+            // the card had no edge against the page behind it.
+            color = sakhiSystemBackground(),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column {

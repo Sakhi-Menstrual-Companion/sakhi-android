@@ -66,6 +66,8 @@ import team.sakhi.android.designsystem.SakhiSpacing
 import androidx.compose.ui.graphics.Color
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyRequirement
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiSystemGray5
 
 /**
  * Maps the shared requirement to a Material icon.
@@ -109,7 +111,7 @@ internal fun EmergencyHeader(title: String, subtitle: String? = null) {
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = sakhiSecondaryLabel(),
             )
         }
     }
@@ -204,7 +206,8 @@ internal fun EmergencySectionHeader(title: String, modifier: Modifier = Modifier
         color = sakhiSecondaryLabel(),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space4)
+            // iOS `EmergencySectionHeader`: `.padding(.horizontal, DS.Spacing.ml)` = 20.
+            .padding(horizontal = SakhiSpacing.space5)
             .padding(bottom = SakhiSpacing.space1),
     )
 }
@@ -222,7 +225,8 @@ internal fun EmergencyCard(modifier: Modifier = Modifier, content: @Composable C
         color = sakhiSystemBackground(),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space4),
+            // iOS `EmergencyCard`: `.padding(.horizontal, DS.Spacing.ml)` = 20.
+            .padding(horizontal = SakhiSpacing.space5),
     ) {
         Column(content = content)
     }
@@ -254,7 +258,7 @@ internal fun EmergencyRow(
     title: String,
     leading: @Composable () -> Unit,
     modifier: Modifier = Modifier,
-    titleColor: Color = MaterialTheme.colorScheme.onSurface,
+    titleColor: Color = sakhiLabel(),
     accessory: @Composable () -> Unit = {},
 ) {
     Row(
@@ -305,7 +309,7 @@ internal fun EmergencyTrustChip(
     }
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        color = sakhiSystemGray5().copy(alpha = 0.5f),
         modifier = modifier,
     ) {
         Row(
@@ -341,7 +345,7 @@ internal fun EmergencySheetTitle(title: String, modifier: Modifier = Modifier) {
     Text(
         text = title,
         style = MaterialTheme.typography.titleLarge,
-        color = MaterialTheme.colorScheme.onSurface,
+        color = sakhiLabel(),
         textAlign = TextAlign.Center,
         modifier = modifier
             .fillMaxWidth()
