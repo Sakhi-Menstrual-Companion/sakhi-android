@@ -18,10 +18,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.DirectionsWalk
-import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,6 +40,19 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import team.sakhi.android.designsystem.SakhiRadius
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AssistantDirection
+import androidx.compose.material3.ModalBottomSheet
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.ui.graphics.Color
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.emergency.EmergencyState
 import team.sakhi.models.EmergencyFormatting
@@ -63,16 +73,213 @@ import team.sakhi.models.EmergencySession
  * What she gets instead: who is coming, how far, how long that walk takes, the spot label
  * in plain words, and a way to talk.
  */
+// `ModalBottomSheet` is still an experimental Material3 API; opted in next to its one use.
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EmergencySessionStep(
     viewModel: EmergencyViewModel,
     step: EmergencyState.InSession,
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val listState = rememberLazyListState()
     var showCompleteConfirm by remember { mutableStateOf(false) }
+    var showChat by remember { mutableStateOf(false) }
+    var isCompleting by remember { mutableStateOf(false) }
+    var isCancelling by remember { mutableStateOf(false) }
 
+    val session = step.session
+    val isSeeker = session.viewerIsRequester
+    val uiStateForArea by viewModel.uiState.collectAsStateWithLifecycle()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
+    ) {
+        // ── Status card ──────────────────────────────────────────────────────
+        // iOS `statusCard`: the mark, her name, what she is doing, and the walking time.
+        // Android had a photo avatar, "on her way" / "needs your help", a Done link in the
+        // header, and a pair of metric tiles carrying the exact distance as well.
+        Surface(
+            shape = RoundedCornerShape(SakhiRadius.xl),
+            color = sakhiSystemBackground(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space4)
+                .padding(top = SakhiSpacing.space4),
+        ) {
+            Row(
+                modifier = Modifier.padding(SakhiSpacing.space3),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+            ) {
+                EmergencyMarkAvatar()
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = session.counterpartName ?: stringResource(R.string.emergency_your_sakhi),
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    // configureSeekerInterface / configureHelperInterface.
+                    Text(
+                        text = stringResource(
+                            if (isSeeker) R.string.emergency_is_coming else R.string.emergency_is_waiting,
+                        ),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = sakhiSecondaryLabel(),
+                    )
+                }
+                // timeLabel: "< 1 min" below a minute, "N min" otherwise.
+                Text(
+                    text = sessionTimeText(context, session.etaMinutes),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+        }
+
+        EmergencySectionHeader(
+            title = stringResource(R.string.emergency_section_requirement),
+            modifier = Modifier.padding(top = SakhiSpacing.space6),
+        )
+        EmergencyCard {
+            EmergencyRow(
+                title = EmergencyFormatting.requirementShortName(session.requirement),
+                leading = {
+                    EmergencyBadgeIcon(session.requirement.icon(), session.requirement.accentColor())
+                },
+            )
+        }
+
+        EmergencySectionHeader(
+            title = stringResource(R.string.emergency_section_destination),
+            modifier = Modifier.padding(top = SakhiSpacing.space6),
+        )
+        EmergencyCard {
+            Row(
+                modifier = Modifier.padding(SakhiSpacing.space3),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = destinationText(context, session.spotLabel, uiStateForArea.areaDescription),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                // Sakhi shows a number; the maps app is the right place for turn-by-turn,
+                // and it is honest about its own accuracy. Shown to both women now: iOS
+                // gives the seeker this row too, and Android hid it from her.
+                IconButton(onClick = { openWalkingDirections(context, session) }) {
+                    Icon(
+                        imageVector = Icons.Filled.AssistantDirection,
+                        contentDescription = stringResource(R.string.emergency_open_in_maps),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+        }
+
+        // ── Actions ──────────────────────────────────────────────────────────
+        Column(
+            modifier = Modifier
+                .padding(horizontal = SakhiSpacing.space4)
+                .padding(top = SakhiSpacing.space6),
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+        ) {
+            // Blue rather than brand pink, as the mockup has it: this is the one action on
+            // the screen that reaches the other person rather than acting on the request,
+            // and it reads as a different kind of thing.
+            SessionAction(
+                title = stringResource(R.string.emergency_contact),
+                icon = Icons.AutoMirrored.Filled.VolumeUp,
+                contentColor = Color.White,
+                containerColor = Color(0xFF007AFF),
+                onClick = { showChat = true },
+            )
+
+            // completeRequestButton -- hidden for the seeker on `main`. The woman who
+            // walked over is the one who says the help happened.
+            if (!isSeeker) {
+                SessionAction(
+                    title = stringResource(
+                        if (isCompleting) R.string.emergency_completing else R.string.emergency_finish,
+                    ),
+                    contentColor = Color(0xFF34C759),
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                    isBusy = isCompleting,
+                    onClick = {
+                        isCompleting = true
+                        showCompleteConfirm = true
+                    },
+                )
+            }
+
+            SessionAction(
+                title = stringResource(
+                    if (isCancelling) R.string.emergency_cancelling else R.string.emergency_cancel,
+                ),
+                contentColor = sakhiSecondaryLabel(),
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                isBusy = isCancelling,
+                onClick = {
+                    isCancelling = true
+                    viewModel.cancelRequest(session.requestId)
+                },
+            )
+        }
+
+        Spacer(modifier = Modifier.size(SakhiSpacing.space10))
+    }
+
+    // iOS opens the thread as a sheet from Contact, at the large detent. Android had it
+    // inline under the header, which made the session screen a chat screen and pushed the
+    // requirement, destination and the two request actions off the bottom.
+    if (showChat) {
+        ModalBottomSheet(onDismissRequest = { showChat = false }) {
+            EmergencyChatSheet(viewModel = viewModel, step = step)
+        }
+    }
+
+    if (showCompleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showCompleteConfirm = false; isCompleting = false },
+            title = {
+                Text(
+                    if (session.viewerIsRequester) {
+                        stringResource(R.string.emergency_did_she_reach_you)
+                    } else {
+                        stringResource(R.string.emergency_all_done)
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showCompleteConfirm = false
+                    viewModel.completeSession()
+                }) {
+                    Text(stringResource(R.string.emergency_yes_we_are_done))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCompleteConfirm = false; isCompleting = false }) {
+                    Text(stringResource(R.string.emergency_not_yet))
+                }
+            },
+        )
+    }
+}
+
+/**
+ * The thread, as iOS presents it: a sheet opened from Contact, not a panel welded under the
+ * session header. Port of `EmergencyChatView.swift`.
+ */
+@Composable
+private fun EmergencyChatSheet(
+    viewModel: EmergencyViewModel,
+    step: EmergencyState.InSession,
+) {
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
     val session = step.session
     val messages = step.messages
     val currentUserId = if (session.viewerIsRequester) session.requesterId else session.responderId
@@ -82,74 +289,12 @@ internal fun EmergencySessionStep(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-
-        // ── Header ───────────────────────────────────────────────────────────
-        Column(
-            modifier = Modifier.padding(
-                horizontal = SakhiSpacing.space5,
-                vertical = SakhiSpacing.space3,
-            ),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-            ) {
-                EmergencyAvatar(
-                    name = session.counterpartName,
-                    photoUrl = session.counterpartPhotoUrl,
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = session.counterpartName
-                            ?: stringResource(R.string.emergency_your_sakhi),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        text = if (session.viewerIsRequester) {
-                            stringResource(R.string.emergency_on_her_way)
-                        } else {
-                            stringResource(R.string.emergency_needs_your_help)
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TextButton(onClick = { showCompleteConfirm = true }) {
-                    Text(stringResource(R.string.emergency_done))
-                }
-            }
-
-            // Two plain numbers. This is what replaced the route.
-            Row(horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
-                Metric(
-                    icon = Icons.Filled.LocationOn,
-                    value = EmergencyFormatting.exactDistance(session.distanceMeters),
-                    caption = stringResource(R.string.emergency_apart),
-                    modifier = Modifier.weight(1f),
-                )
-                Metric(
-                    icon = Icons.Filled.DirectionsWalk,
-                    value = EmergencyFormatting.walkingTime(session.etaMinutes),
-                    caption = stringResource(R.string.emergency_roughly),
-                    modifier = Modifier.weight(1f),
-                )
-            }
-
-            if (!session.viewerIsRequester) {
-                WhereToGo(session = session, onOpenMaps = { openWalkingDirections(context, session) })
-            }
-        }
-
-        HorizontalDivider()
-
-        // ── Thread ───────────────────────────────────────────────────────────
         Box(modifier = Modifier.weight(1f)) {
             if (messages.isEmpty()) {
                 Text(
                     text = stringResource(R.string.emergency_say_hello),
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = sakhiSecondaryLabel(),
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .padding(top = SakhiSpacing.space6),
@@ -159,9 +304,7 @@ internal fun EmergencySessionStep(
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(horizontal = SakhiSpacing.space5),
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-                contentPadding = androidx.compose.foundation.layout.PaddingValues(
-                    vertical = SakhiSpacing.space3,
-                ),
+                contentPadding = PaddingValues(vertical = SakhiSpacing.space3),
             ) {
                 items(messages, key = { it.id }) { message ->
                     MessageBubble(
@@ -178,7 +321,6 @@ internal fun EmergencySessionStep(
             }
         }
 
-        // ── Input ────────────────────────────────────────────────────────────
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -206,111 +348,90 @@ internal fun EmergencySessionStep(
             }
         }
     }
+}
 
-    if (showCompleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showCompleteConfirm = false },
-            title = {
-                Text(
-                    if (session.viewerIsRequester) {
-                        stringResource(R.string.emergency_did_she_reach_you)
-                    } else {
-                        stringResource(R.string.emergency_all_done)
-                    },
+/** iOS `secondaryAction` / the Contact button: one 56dp bar, label carrying the colour. */
+@Composable
+private fun SessionAction(
+    title: String,
+    contentColor: Color,
+    containerColor: Color,
+    icon: ImageVector? = null,
+    isBusy: Boolean = false,
+    onClick: () -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = containerColor,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(56.dp)
+            .clickable(enabled = !isBusy, onClick = onClick),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (isBusy) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    color = contentColor,
+                    strokeWidth = 2.dp,
                 )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showCompleteConfirm = false
-                    viewModel.completeSession()
-                }) {
-                    Text(stringResource(R.string.emergency_yes_we_are_done))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCompleteConfirm = false }) {
-                    Text(stringResource(R.string.emergency_not_yet))
-                }
-            },
+                Spacer(modifier = Modifier.size(SakhiSpacing.space1))
+            } else if (icon != null) {
+                Icon(imageVector = icon, contentDescription = null, tint = contentColor, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.size(SakhiSpacing.space1))
+            }
+            Text(text = title, style = MaterialTheme.typography.titleSmall, color = contentColor)
+        }
+    }
+}
+
+/** iOS `timeText`: "< 1 min" below a minute, "N min" otherwise. */
+private fun sessionTimeText(context: android.content.Context, etaMinutes: Int?): String =
+    if (etaMinutes == null || etaMinutes == 0) {
+        context.getString(R.string.emergency_under_a_minute)
+    } else {
+        context.getString(R.string.emergency_n_min, etaMinutes)
+    }
+
+/**
+ * iOS `destinationText`: `"{spot} at {area}".capitalized`.
+ *
+ * The spot label is what she typed; the area comes from reverse geocoding on this device,
+ * never from the server.
+ */
+private fun destinationText(
+    context: android.content.Context,
+    spotLabel: String?,
+    area: String?,
+): String {
+    val spot = spotLabel?.trim().orEmpty()
+    return when {
+        spot.isEmpty() && area == null -> context.getString(R.string.emergency_location_shared)
+        spot.isEmpty() -> area!!
+        area == null -> spot.replaceFirstChar { it.uppercase() }
+        else -> context.getString(
+            R.string.emergency_spot_at_area_full,
+            spot.replaceFirstChar { it.uppercase() },
+            area,
         )
     }
 }
 
-@Composable
-private fun Metric(
-    icon: ImageVector,
-    value: String,
-    caption: String,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        shape = RoundedCornerShape(SakhiRadius.md),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = modifier,
-    ) {
-        Row(
-            modifier = Modifier.padding(SakhiSpacing.space2),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Column {
-                Text(text = value, style = MaterialTheme.typography.labelLarge)
-                Text(
-                    text = caption,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    }
-}
+// `Metric` drew the pair of tiles carrying exact distance and walking time. iOS puts the
+// walking time in the status card and shows no exact distance on this screen at all.
+
 
 /**
  * The responder's actual instructions. The spot label does more work here than any map
  * would: it is the part GPS cannot give you.
  */
-@Composable
-private fun WhereToGo(session: EmergencySession, onOpenMaps: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(SakhiRadius.md),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(SakhiSpacing.space3)) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-            ) {
-                Icon(
-                    imageVector = session.requirement.icon(),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = stringResource(
-                        R.string.emergency_she_needs,
-                        EmergencyFormatting.requirementLabel(session.requirement).lowercase(),
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            session.spotLabel?.takeIf { it.isNotBlank() }?.let { spot ->
-                Text(text = spot, style = MaterialTheme.typography.bodyMedium)
-            }
-            TextButton(onClick = onOpenMaps, contentPadding = androidx.compose.foundation.layout.PaddingValues(0.dp)) {
-                Text(stringResource(R.string.emergency_open_in_maps))
-            }
-        }
-    }
-}
+// `WhereToGo` was the helper-only destination block. iOS shows the DESTINATION section to
+// both women, so this is now `EmergencyCard` in the body above.
+
 
 /**
  * Bubble plus the sender name above it.

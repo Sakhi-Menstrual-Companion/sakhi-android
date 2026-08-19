@@ -34,6 +34,11 @@ data class EmergencyUiState(
     val messageDraft: String = "",
     val isSubmitting: Boolean = false,
     val hasLocationPermission: Boolean = false,
+    /**
+     * The resolved area, shown under the spot field so she can tell the app has her in
+     * roughly the right place. Resolved on device and never sent anywhere.
+     */
+    val areaDescription: String? = null,
     val hasNotificationPermission: Boolean = false,
     /**
      * The last device fix, kept so the map can centre on her and place approximate pins
@@ -195,6 +200,12 @@ class EmergencyViewModel(
         val fix = locationProvider.currentLocation() ?: return false
         store.updateDeviceLocation(fix.latitude, fix.longitude)
         _uiState.update { it.copy(userLatLng = LatLng(fix.latitude, fix.longitude)) }
+        // Off the critical path: the fix is already in, and the spot screen shows the area
+        // only as reassurance, so a slow or failed geocode must not hold up the flow.
+        viewModelScope.launch {
+            val area = locationProvider.areaDescription(fix)
+            if (area != null) _uiState.update { it.copy(areaDescription = area) }
+        }
         return true
     }
 

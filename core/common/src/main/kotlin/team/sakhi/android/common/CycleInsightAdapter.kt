@@ -6,6 +6,7 @@ import kotlinx.datetime.LocalDate
 import team.sakhi.config.AppConfig
 import team.sakhi.cycle.CalendarMarker
 import team.sakhi.cycle.CycleGeometry
+import team.sakhi.cycle.CycleLengthPreference
 import team.sakhi.cycle.CyclePhaseInsight
 import team.sakhi.models.CycleData
 import team.sakhi.models.CyclePhase
@@ -53,12 +54,15 @@ object CycleInsightAdapter {
      * @param periodLogDates every date the user logged period flow on.
      * @param stats learned averages, used only as the fallback when a cycle carries no
      *   length of its own — the same role iOS's `periodStore.getAvg…Length()` plays.
+     * @param userId whose numbers to resolve. A care partner viewing her calendar passes
+     *   *her* id, so his own edited cycle length can never bleed into her windows.
      */
     fun insightFor(
         date: LocalDate,
         cycles: List<CycleData>,
         periodLogDates: Set<LocalDate>,
         stats: CycleStatistics?,
+        userId: String?,
     ): Insight {
         val engineEntries = periodLogDates.map { PeriodLogEntry(it.toEpochDays().toLong(), isPresent = true) }
         val todayEpochDay = date.toEpochDays().toLong()
@@ -71,8 +75,18 @@ object CycleInsightAdapter {
         // averages. Since ovulation sits at `cycleLength - 14`, one day of disagreement
         // moved the whole window: Home said ovulation on days the calendar left plain.
         // iOS had the identical bug and was fixed the same way.
-        val geometry = phaseGeometry(engineEntries, todayEpochDay)
+        val geometry = phaseGeometry(engineEntries, todayEpochDay, userId)
         val cycleForPhase = cycles.firstOrNull { it.isTrustworthyCompleteCycle() } ?: cycles.firstOrNull()
+
+        // The cycle [date] actually sits in. `cycles` is newest-first, so the first row
+        // starting on or before the date is its own cycle. Passing the newest row instead
+        // made a tapped past date answer with the *current* cycle's next period.
+        val cycleForDate = cycles.firstOrNull { it.cycleStartDate <= date } ?: cycles.firstOrNull()
+        val resolvedForPrediction = resolveLengths(
+            userId,
+            normalizedCycleLength(cycleForDate?.cycleLength, stats),
+            normalizedPeriodLength(null, stats),
+        )
         val phase = CyclePhaseInsight.phaseInsight(
             periodLogEpochDays = logEpochDays,
             cycleForPhaseStartEpochDay = geometry?.cycleStartEpochDay
@@ -87,11 +101,11 @@ object CycleInsightAdapter {
         // and normalises period length from the learned average rather than the cycle.
         val prediction = CyclePhaseInsight.predictionSnapshot(
             periodLogEpochDays = logEpochDays,
-            firstCycleStartEpochDay = cycles.firstOrNull()?.cycleStartDate?.toEpochDays()?.toLong(),
+            firstCycleStartEpochDay = cycleForDate?.cycleStartDate?.toEpochDays()?.toLong(),
             cyclesEmpty = cycles.isEmpty(),
             anyCycleComplete = cycles.any { it.isComplete },
-            cycleLength = normalizedCycleLength(cycles.firstOrNull()?.cycleLength, stats),
-            periodLength = normalizedPeriodLength(null, stats),
+            cycleLength = resolvedForPrediction.cycleLength,
+            periodLength = resolvedForPrediction.periodLength,
             todayEpochDay = todayEpochDay,
         )
 
@@ -120,6 +134,7 @@ object CycleInsightAdapter {
         to: LocalDate,
         periodLogDates: Set<LocalDate>,
         today: LocalDate,
+        userId: String?,
     ): Map<LocalDate, CalendarMarker.DayMark> {
         if (periodLogDates.isEmpty()) return emptyMap()
         val entries = periodLogDates.map { PeriodLogEntry(it.toEpochDays().toLong(), isPresent = true) }
@@ -131,7 +146,7 @@ object CycleInsightAdapter {
         // the same engine and count within them. Still no local cycle maths: the
         // boundaries are the detector's.
         val detected = SakhiPredictionEngine.detectCycles(entries)
-        val markGeometry = phaseGeometry(entries, today.toEpochDays().toLong())
+        val markGeometry = phaseGeometry(entries, today.toEpochDays().toLong(), userId)
         val marks = mutableMapOf<LocalDate, CalendarMarker.DayMark>()
         var day = from
         while (day <= to) {
@@ -201,16 +216,39 @@ object CycleInsightAdapter {
      * other window is derived from. Null when there is not enough history to describe a
      * cycle, in which case callers fall back to what they did before.
      */
-    private fun phaseGeometry(entries: List<PeriodLogEntry>, todayEpochDay: Long): CycleGeometry? {
+    private fun phaseGeometry(
+        entries: List<PeriodLogEntry>,
+        todayEpochDay: Long,
+        userId: String?,
+    ): CycleGeometry? {
         if (entries.isEmpty()) return null
         val analysis = SakhiPredictionEngine.analyzePhase(entries, todayEpochDay)
         val start = analysis.cycleStartEpochDay ?: return null
+        // Her own edited lengths win over the engine's averages, resolved through the one
+        // shared store. The engine still owns *where* the cycle starts; only the lengths
+        // are hers. iOS resolves identically in `PeriodManager.computePhaseGeometry`.
+        val resolved = resolveLengths(userId, analysis.avgCycleLength, analysis.avgPeriodLength)
         return CycleGeometry(
             cycleStartEpochDay = start,
-            cycleLength = analysis.avgCycleLength,
-            periodLength = analysis.avgPeriodLength,
+            cycleLength = resolved.cycleLength,
+            periodLength = resolved.periodLength,
         )
     }
+
+    /**
+     * Her edits layered over derived averages. A null [userId] means we have no one to
+     * resolve for (nothing is signed in), so the engine's own numbers stand.
+     */
+    private fun resolveLengths(
+        userId: String?,
+        derivedCycleLength: Int,
+        derivedPeriodLength: Int,
+    ): CycleLengthPreference.Resolved =
+        CycleLengthPreference.shared.resolve(
+            userId = userId ?: "",
+            derivedCycleLength = derivedCycleLength,
+            derivedPeriodLength = derivedPeriodLength,
+        )
 
     /**
      * iOS `effectivePeriodLength`: an explicitly recorded period start→end wins when it

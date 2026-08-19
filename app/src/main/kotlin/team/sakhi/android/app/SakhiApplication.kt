@@ -98,6 +98,17 @@ class SakhiApplication : Application() {
         // observation are all real startup work, but none are required to draw
         // the first signed-out/home frame. Move them off the cold-start critical
         // path so `Application.onCreate()` only does DI/bootstrap wiring.
+        // Remote config. Nothing on Android ever called `refresh()`, so every flag sat on
+        // its compiled-in default and the kill switch did nothing here. Started off the
+        // critical path: every feature reads defaults until the first fetch lands, so no
+        // frame waits on it.
+        AndroidRemoteConfigController(
+            application = this,
+            store = koin.get(),
+            sessionManager = koin.get(),
+            versionName = BuildConfig.VERSION_NAME,
+        ).start()
+
         Choreographer.getInstance().postFrameCallback {
             koin.get<AndroidLocaleManager>().syncPersistedLanguageWithActiveLocale()
             deferredStartupScope.launch {

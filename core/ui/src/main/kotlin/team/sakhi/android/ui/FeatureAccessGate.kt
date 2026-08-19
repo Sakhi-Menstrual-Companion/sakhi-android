@@ -4,6 +4,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.annotation.DrawableRes
+import team.sakhi.config.RemoteConfigStore
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -76,8 +77,12 @@ fun FeatureAccessGate(
     val isGuest by accessState.isGuest.collectAsStateWithLifecycle()
     val cloudAvailable by accessState.cloudAvailable.collectAsStateWithLifecycle()
     val onlinePaused by accessState.isOnlineAccountPaused.collectAsStateWithLifecycle()
+    // The resolver checks remote config before every other rule, so a flag flipping on the
+    // server has to re-run this. Without the snapshot in the key, a feature switched off
+    // mid-session stayed on screen until something else happened to recompose the gate.
+    val configValues by koinInject<RemoteConfigStore>().values.collectAsStateWithLifecycle()
 
-    val decision = remember(feature, isGuest, cloudAvailable, onlinePaused) {
+    val decision = remember(feature, isGuest, cloudAvailable, onlinePaused, configValues) {
         resolver.resolve(feature)
     }
     if (decision.granted) {

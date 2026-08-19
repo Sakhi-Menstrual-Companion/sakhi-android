@@ -599,6 +599,7 @@ class LoggingViewModel(
                 cycles = cycles,
                 periodLogDates = logDates,
                 stats = null,
+                userId = targetUserId,
             )
         }.getOrNull() ?: return
         _uiState.update { it.copy(phaseName = phaseDisplayName(insight.phase.kind)) }

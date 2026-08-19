@@ -38,6 +38,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import android.content.Intent
+import android.net.Uri
+import android.text.format.DateUtils
+import androidx.compose.foundation.Image
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.draw.clip
+import team.sakhi.android.designsystem.sakhiLightPink
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyProfileDetail
@@ -69,88 +83,154 @@ internal fun EmergencyProfileDetailSheet(
     var showBlockDuringRequest by remember { mutableStateOf(false) }
     val alreadyAsked = askable?.alreadyAsked == true
     val trust = EmergencyFormatting.trustLevel(profile.ratingCount)
-    val trustColor = Color(0xFF000000 or (trust.colorHex.removePrefix("#").toLongOrNull(16) ?: 0))
+    val context = LocalContext.current
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = SakhiSpacing.space5),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        EmergencyAvatar(name = profile.name, photoUrl = profile.photoUrl, size = 72.dp)
-
-        Text(
-            text = profile.name ?: stringResource(R.string.emergency_a_sakhi_nearby),
-            style = MaterialTheme.typography.headlineSmall,
-        )
-        Text(text = trust.displayName, style = MaterialTheme.typography.labelLarge, color = trustColor)
-
-        ProfileSection(stringResource(R.string.emergency_profile_requests)) {
-            // "Request Received" is every request addressed to her, answered or not
-            // (receivedCount). requestedCount is how many times *she* asked someone
-            // else, which is a fact about her own need rather than her reliability, and
-            // labelling it "received" would mislead the woman reading this screen.
-            ProfileRow(Icons.Filled.Group, stringResource(R.string.emergency_profile_received), profile.receivedCount.toString())
-            HorizontalDivider(modifier = Modifier.padding(start = 52.dp))
-            ProfileRow(Icons.Filled.Group, stringResource(R.string.emergency_profile_helped), profile.helpedCount.toString())
-        }
-
-        ProfileSection(stringResource(R.string.emergency_profile_last_active)) {
-            ProfileRow(
-                Icons.Filled.Schedule,
-                stringResource(R.string.emergency_profile_last_active),
-                profile.lastActiveIso ?: stringResource(R.string.emergency_profile_unknown),
-            )
-        }
-
-        ProfileSection(stringResource(R.string.emergency_profile_block)) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .verticalScroll(rememberScrollState())
+                .fillMaxWidth(),
+        ) {
+            // Header. Left-aligned with the face beside the name, as iOS lays it out.
+            // Android centred a column here, which read as a profile *page* rather than
+            // the card you glance at before deciding to let someone walk over to you.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable {
+                    .padding(horizontal = SakhiSpacing.space4)
+                    .padding(top = SakhiSpacing.space3),
+                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+            ) {
+                // Her face, the same one on her map pin, from the shared catalogue. The
+                // profile was the one screen showing no picture of the person it is
+                // entirely about. Deliberately *not* `photoUrl`: a real face has no
+                // business on screen before anyone has accepted.
+                Box(
+                    modifier = Modifier.size(60.dp).clip(CircleShape).background(sakhiLightPink()),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Image(
+                        painter = painterResource(EmergencyAvatarCatalog.drawableFor(profile.userId)),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(60.dp).clip(CircleShape),
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = profile.name ?: stringResource(R.string.emergency_a_sakhi_nearby),
+                        style = MaterialTheme.typography.headlineSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+                    ) {
+                        // main: ctaButton -- the trust level, tinted by level, opening the
+                        // site so she can read what it means. `tinted` because the one thing
+                        // on this screen about trustworthiness should not be the dullest.
+                        EmergencyTrustChip(
+                            trust = trust,
+                            tinted = true,
+                            modifier = Modifier.clickable {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse("https://sakhi.rachna.co/")),
+                                )
+                            },
+                        )
+                        askable?.etaMinutes?.let { eta ->
+                            Text(
+                                text = EmergencyFormatting.etaBadge(eta),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = sakhiSecondaryLabel(),
+                            )
+                        }
+                    }
+                }
+
+                IconButton(onClick = onDismiss) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.emergency_close),
+                    )
+                }
+            }
+
+            EmergencySectionHeader(
+                title = stringResource(R.string.emergency_profile_requests),
+                modifier = Modifier.padding(top = SakhiSpacing.space6),
+            )
+            EmergencyCard {
+                // "Request Received" is every request addressed to her, answered or not
+                // (receivedCount). requestedCount is how many times *she* asked someone
+                // else, which is a fact about her own need rather than her reliability.
+                ProfileCountRow(stringResource(R.string.emergency_profile_received), profile.receivedCount)
+                EmergencyRowDivider()
+                ProfileCountRow(stringResource(R.string.emergency_profile_helped), profile.helpedCount)
+            }
+
+            EmergencySectionHeader(
+                title = stringResource(R.string.emergency_profile_last_active),
+                modifier = Modifier.padding(top = SakhiSpacing.space6),
+            )
+            EmergencyCard {
+                EmergencyRow(
+                    title = stringResource(R.string.emergency_profile_last_active),
+                    leading = {
+                        EmergencyBadgeIcon(Icons.Filled.Schedule, MaterialTheme.colorScheme.primary)
+                    },
+                    accessory = {
+                        Text(
+                            // Android printed the raw ISO string here -- a Postgres
+                            // timestamp shown to a woman deciding whether to trust someone.
+                            text = lastActiveText(context, profile.lastActiveIso),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = sakhiSecondaryLabel(),
+                        )
+                    },
+                )
+            }
+
+            // No section header above this one, matching iOS. "BLOCK" over a row that
+            // already says Block was Android's own addition.
+            EmergencyCard(modifier = Modifier.padding(top = SakhiSpacing.space6)) {
+                EmergencyRow(
+                    title = stringResource(
+                        if (profile.isBlocked) R.string.emergency_unblock else R.string.emergency_block,
+                    ),
+                    titleColor = MaterialTheme.colorScheme.error,
+                    leading = {
+                        EmergencyBadgeIcon(Icons.Filled.Block, MaterialTheme.colorScheme.error)
+                    },
+                    modifier = Modifier.clickable {
                         // main: performUserBlocking refused while a request was live,
                         // because blocking mid-request strands the woman walking to you.
                         if (alreadyAsked) showBlockDuringRequest = true else showBlockConfirm = true
-                    }
-                    .padding(SakhiSpacing.space3),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Block,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(20.dp),
-                )
-                Text(
-                    text = if (profile.isBlocked) {
-                        stringResource(R.string.emergency_unblock)
-                    } else {
-                        stringResource(R.string.emergency_block)
                     },
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyLarge,
                 )
             }
+
+            Spacer(modifier = Modifier.size(SakhiSpacing.space10))
         }
 
-        // main: ProgressButtonView's seeker button, and the actual Ask. Full width, 60dp
-        // tall, 12dp corners. `EAManager.sendNewRequest(helperId:)` was called from this
-        // screen, so it is sent from here too.
+        // Outside the scroll, pinned to the bottom, as iOS pins it. Android had this inside
+        // the scroll, so on a short sheet the one action on the screen scrolled away.
         if (askable != null) {
-            Button(
-                onClick = {
-                    viewModel.ask(askable)
-                    onDismiss()
-                },
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth().height(60.dp),
-            ) {
-                Text(stringResource(R.string.emergency_request_help))
-            }
-            Spacer(modifier = Modifier.size(SakhiSpacing.space4))
+            EmergencyAskButton(
+                alreadyAsked = alreadyAsked,
+                onAsk = { viewModel.ask(askable) },
+                onWindowElapsed = onDismiss,
+                modifier = Modifier
+                    .padding(horizontal = SakhiSpacing.space4)
+                    .padding(top = SakhiSpacing.space3, bottom = SakhiSpacing.space4),
+            )
         }
     }
 
@@ -207,43 +287,42 @@ internal fun EmergencyProfileDetailSheet(
     }
 }
 
+
+
+/** iOS `countRow`: the shared row with the count as its trailing value. */
 @Composable
-private fun ProfileSection(title: String, content: @Composable () -> Unit) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-    ) {
-        Text(
-            text = title.uppercase(),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Surface(
-            shape = RoundedCornerShape(11.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column { content() }
-        }
-    }
+private fun ProfileCountRow(title: String, value: Int) {
+    EmergencyRow(
+        title = title,
+        leading = { EmergencyBadgeIcon(Icons.Filled.Group, MaterialTheme.colorScheme.primary) },
+        accessory = {
+            Text(
+                text = value.toString(),
+                style = MaterialTheme.typography.bodyLarge,
+                color = sakhiSecondaryLabel(),
+            )
+        },
+    )
 }
 
-@Composable
-private fun ProfileRow(icon: ImageVector, label: String, value: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(SakhiSpacing.space3),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-    ) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-        }
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Text(value, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
+/**
+ * iOS `lastActiveText`: "Just now" under a minute, matching the original's wording,
+ * otherwise a relative phrase. Android was showing the raw ISO-8601 string.
+ */
+private fun lastActiveText(context: android.content.Context, iso: String?): String {
+    val instant = EmergencyIso8601.instant(iso)
+        ?: return context.getString(R.string.emergency_profile_unknown)
+    val millis = instant.toEpochMilliseconds()
+    val elapsed = System.currentTimeMillis() - millis
+    if (elapsed < 60_000) return context.getString(R.string.emergency_just_now)
+    return DateUtils.getRelativeTimeSpanString(
+        millis,
+        System.currentTimeMillis(),
+        DateUtils.MINUTE_IN_MILLIS,
+        DateUtils.FORMAT_ABBREV_RELATIVE,
+    ).toString()
 }
+
+// `ProfileSection` and `ProfileRow` lived here. Both are now the shared
+// `EmergencySectionHeader` / `EmergencyCard` / `EmergencyRow` from `EmergencyComponents.kt`,
+// which is what iOS uses across the whole flow.

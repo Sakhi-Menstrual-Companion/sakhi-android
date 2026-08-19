@@ -40,6 +40,19 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import team.sakhi.android.designsystem.SakhiRadius
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSystemBackground
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.emergency.EmergencyState
 import team.sakhi.models.EmergencyFormatting
@@ -68,48 +81,21 @@ internal fun EmergencyNearbySakhisStep(
 ) {
     val sakhis = step.sakhis
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = SakhiSpacing.space5),
-    ) {
-        EmergencyHeader(
-            title = stringResource(R.string.emergency_who_can_help),
-            subtitle = stringResource(R.string.emergency_who_can_help_subtitle),
-        )
-
-        // What she is asking for and from where, so the request is never a surprise.
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-        ) {
-            Row(
-                modifier = Modifier.padding(
-                    horizontal = SakhiSpacing.space3,
-                    vertical = SakhiSpacing.space1,
-                ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-            ) {
-                Icon(
-                    imageVector = step.requirement.icon(),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                    tint = MaterialTheme.colorScheme.primary,
-                )
-                Text(
-                    text = EmergencyFormatting.requirementShortName(step.requirement),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-                step.spotLabel?.takeIf { it.isNotBlank() }?.let { spot ->
-                    Text(
-                        text = "· $spot",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
-                    )
+    Column(modifier = Modifier.fillMaxSize()) {
+        // iOS: `.navigationTitle("Nearby Friends")` inline with a Back item, and nothing
+        // else above the list. Android had a heading with a subtitle plus a chip repeating
+        // the requirement and spot she had just chosen on the previous two screens.
+        CenterAlignedTopAppBar(
+            title = { Text(stringResource(R.string.emergency_nearby_friends)) },
+            navigationIcon = {
+                TextButton(onClick = viewModel::backToSpot) {
+                    Text(stringResource(R.string.emergency_back))
                 }
-            }
-        }
+            },
+            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                containerColor = Color.Transparent,
+            ),
+        )
 
         Spacer(modifier = Modifier.size(SakhiSpacing.space3))
 
@@ -153,25 +139,29 @@ internal fun EmergencyNearbySakhisStep(
                 }
             }
         } else {
-            LazyColumn(
+            // iOS wraps the list in `.refreshable { refreshNearbySakhis() }`. Android had no
+            // pull-to-refresh, so the only way to re-check was to leave and come back.
+            PullToRefreshBox(
+                isRefreshing = step.isRefreshing,
+                onRefresh = viewModel::refreshNearbySakhis,
                 modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                contentPadding = PaddingValues(
+                    start = SakhiSpacing.space4,
+                    end = SakhiSpacing.space4,
+                    bottom = SakhiSpacing.space10,
+                ),
             ) {
                 items(sakhis, key = { it.userId }) { sakhi ->
                     // main: didSelectItemAt opened the profile. The Ask lives there.
                     SakhiCard(sakhi = sakhi, onOpenProfile = { viewModel.openProfile(sakhi.userId) })
                 }
             }
+            }
         }
 
-        TextButton(
-            onClick = viewModel::backToSpot,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        ) {
-            Text(stringResource(R.string.emergency_go_back))
-        }
-
-        Spacer(modifier = Modifier.size(SakhiSpacing.space3))
     }
 
     val profile by viewModel.profileDetail.collectAsStateWithLifecycle()
@@ -191,77 +181,97 @@ internal fun EmergencyNearbySakhisStep(
 private fun SakhiCard(sakhi: NearbySakhi, onOpenProfile: () -> Unit) {
     val trust = EmergencyFormatting.trustLevel(sakhi.ratingCount)
     val trustColor = Color(0xFF000000 or (trust.colorHex.removePrefix("#").toLongOrNull(16) ?: 0))
+    val asked = sakhi.alreadyAsked
 
     Surface(
-        shape = RoundedCornerShape(11.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = Modifier.fillMaxWidth().height(100.dp).clickable(onClick = onOpenProfile),
+        shape = RoundedCornerShape(SakhiRadius.xl),
+        color = sakhiSystemBackground(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onOpenProfile)
+            // Dimmed once asked, as iOS dims the whole card, so the row reads as spent
+            // rather than as another option.
+            .alpha(if (asked) 0.6f else 1f),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = SakhiSpacing.space3),
+            modifier = Modifier.padding(SakhiSpacing.space3),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
         ) {
-            EmergencyAvatar(name = sakhi.name, photoUrl = sakhi.photoUrl)
+            // The brand mark, not her photograph. See `EmergencyMarkAvatar`.
+            EmergencyMarkAvatar()
 
-            Column(modifier = Modifier.weight(1f)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
                 Text(
                     text = sakhi.name ?: stringResource(R.string.emergency_a_sakhi_nearby),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
+
+                // Trust and distance on one quiet line, rather than a filled chip stacked
+                // over a filled pill. Two capsules per row, times four rows, was most of
+                // what made this list feel heavy -- and neither was the thing she chooses on.
+                // Android was also missing the distance entirely.
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     Icon(
-                        imageVector = trust.badgeIcon(),
+                        // Always the check seal, as iOS draws it. Android varied the glyph
+                        // by level (spa, heart, sparkle), so the same fact looked like four
+                        // different facts.
+                        imageVector = Icons.Filled.Verified,
                         contentDescription = null,
-                        modifier = Modifier.size(12.dp),
+                        modifier = Modifier.size(11.dp),
+                        // The seal keeps the trust colour, so the level still reads at a
+                        // glance without a chip around it.
                         tint = trustColor,
                     )
                     Text(
                         text = trust.displayName,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = trustColor,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = sakhiSecondaryLabel(),
+                        maxLines = 1,
+                    )
+                    Text("·", style = MaterialTheme.typography.bodySmall, color = sakhiSecondaryLabel())
+                    Text(
+                        text = EmergencyFormatting.approximateDistance(sakhi.distanceBucketMeters),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = sakhiSecondaryLabel(),
+                        maxLines = 1,
                     )
                 }
             }
 
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(4.dp),
-            ) {
-                Surface(
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                ) {
-                    Text(
-                        text = EmergencyFormatting.etaBadge(sakhi.etaMinutes),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(
-                            horizontal = SakhiSpacing.space3,
-                            vertical = SakhiSpacing.space1,
-                        ),
-                    )
-                }
-                if (sakhi.alreadyAsked) {
-                    Text(
-                        text = stringResource(R.string.emergency_asked),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            if (asked) {
+                // Surfaced on the row, not just inside the profile. Without it she taps in,
+                // reaches the Ask button, and only then finds out the request is already out.
+                Text(
+                    text = stringResource(R.string.emergency_asked),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Bold,
+                    color = sakhiSecondaryLabel(),
+                )
+            } else {
+                // Plain pink text, not a filled pill.
+                Text(
+                    text = EmergencyFormatting.etaBadge(sakhi.etaMinutes),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
             }
+
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = sakhiTertiaryLabel(),
+            )
         }
     }
 }
 
-/** Material equivalents of the original's SF Symbol badges. */
-@Composable
-internal fun TrustLevel.badgeIcon(): ImageVector = when (this) {
-    TrustLevel.CARING -> Icons.Filled.Spa
-    TrustLevel.KIND -> Icons.Outlined.FavoriteBorder
-    TrustLevel.VERY_KIND -> Icons.Filled.Favorite
-    TrustLevel.ANGEL -> Icons.Filled.AutoAwesome
-}
+// `badgeIcon` mapped each trust level to a different glyph (spa, heart, sparkle). iOS
+// always draws the check seal and lets the colour carry the level, so the same fact stopped
+// looking like four different facts -- and this had no callers left.

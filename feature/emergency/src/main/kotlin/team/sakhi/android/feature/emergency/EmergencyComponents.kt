@@ -42,6 +42,26 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
+import team.sakhi.android.designsystem.SakhiRadius
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiSeparator
+import team.sakhi.android.designsystem.sakhiSystemBackground
+import team.sakhi.models.TrustLevel
+import androidx.compose.ui.res.painterResource
+import team.sakhi.android.designsystem.sakhiLightPink
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Spa
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import team.sakhi.android.designsystem.SakhiSpacing
 import androidx.compose.ui.graphics.Color
 import team.sakhi.models.EmergencyFormatting
@@ -95,79 +115,18 @@ internal fun EmergencyHeader(title: String, subtitle: String? = null) {
     }
 }
 
-@Composable
-internal fun SecondaryPill(icon: ImageVector, label: String, onClick: () -> Unit) {
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-    ) {
-        Row(
-            modifier = Modifier.padding(SakhiSpacing.space3),
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-    }
-}
+// `SecondaryPill` drew the two secondary actions iOS removed from the requirement
+// picker. With both gone it had no callers left.
+
 
 /**
  * A slow pulse rather than a spinner. She may be standing somewhere uncomfortable, so the
  * screen should read calm rather than urgent.
  */
-@Composable
-internal fun EmergencyPulse() {
-    val transition = rememberInfiniteTransition(label = "emergency-pulse")
+// `EmergencyPulse` drew expanding rings with no avatar on the waiting screen, so that
+// screen never said who was being waited on. iOS draws `EmergencyRequestedProfile`
+// there instead, and Android now does too.
 
-    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(150.dp)) {
-        repeat(3) { index ->
-            val progress by transition.animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 2400, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart,
-                    // Staggered so the three rings read as one outward pulse rather than
-                    // three rings expanding in lockstep.
-                    initialStartOffset = StartOffset(index * 800),
-                ),
-                label = "pulse-$index",
-            )
-            Box(
-                modifier = Modifier
-                    .size(70.dp)
-                    .scale(0.7f + progress * 1.3f)
-                    .alpha((1f - progress) * 0.5f)
-                    .border(1.5.dp, MaterialTheme.colorScheme.primary, CircleShape),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(70.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Favorite,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(28.dp),
-            )
-        }
-    }
-}
 
 /**
  * Initials only.
@@ -224,4 +183,251 @@ internal fun EmergencyError(message: String, onRetry: () -> Unit) {
             }
         }
     }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// The shared vocabulary from iOS `EmergencyComponents.swift`.
+//
+// Ported as one set rather than per screen. Three Android screens were each building
+// their own trust chip and their own card rows, so the same fact rendered three ways --
+// which is how the profile ended up with a plain grey trust label while the nearby list
+// had a tinted one.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** iOS `EmergencySectionHeader`: 12sp bold, uppercase, secondary ink, leading aligned. */
+@Composable
+internal fun EmergencySectionHeader(title: String, modifier: Modifier = Modifier) {
+    Text(
+        text = title.uppercase(),
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.Bold,
+        color = sakhiSecondaryLabel(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = SakhiSpacing.space4)
+            .padding(bottom = SakhiSpacing.space1),
+    )
+}
+
+/**
+ * iOS `EmergencyCard`: the rounded container rows sit in.
+ *
+ * The system background, not `surfaceVariant`, so it lifts off the sheet's pink-tinted
+ * ground the way the mockups show.
+ */
+@Composable
+internal fun EmergencyCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(SakhiRadius.xl),
+        color = sakhiSystemBackground(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = SakhiSpacing.space4),
+    ) {
+        Column(content = content)
+    }
+}
+
+/**
+ * iOS `EmergencyBadgeIcon`: the tinted circular glyph on a row.
+ *
+ * `main`'s RequirementTableViewCell drew exactly this -- a circle filled with the row's own
+ * colour at 0.2 alpha behind the glyph at full strength.
+ */
+@Composable
+internal fun EmergencyBadgeIcon(
+    icon: ImageVector,
+    color: Color,
+    size: Dp = 30.dp,
+) {
+    Box(
+        modifier = Modifier.size(size).clip(CircleShape).background(color.copy(alpha = 0.2f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(size * 0.5f))
+    }
+}
+
+/** iOS `EmergencyRow`: leading glyph, title, optional trailing accessory. */
+@Composable
+internal fun EmergencyRow(
+    title: String,
+    leading: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    titleColor: Color = MaterialTheme.colorScheme.onSurface,
+    accessory: @Composable () -> Unit = {},
+) {
+    Row(
+        modifier = modifier.fillMaxWidth().padding(
+            horizontal = SakhiSpacing.space3,
+            vertical = SakhiSpacing.space2,
+        ),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+    ) {
+        leading()
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = titleColor,
+            modifier = Modifier.weight(1f),
+        )
+        accessory()
+    }
+}
+
+/** iOS `EmergencyRowDivider`: hairline inset past the leading glyph, as a grouped table insets. */
+@Composable
+internal fun EmergencyRowDivider(leadingInset: Dp = 62.dp) {
+    HorizontalDivider(
+        modifier = Modifier.padding(start = leadingInset),
+        color = sakhiSeparator(),
+    )
+}
+
+/**
+ * iOS `EmergencyTrustChip`.
+ *
+ * [tinted] carries the trust level's own colour; untinted it falls back to secondary ink.
+ * The profile passes `tinted = true`, because the one thing on that screen about
+ * trustworthiness should not be the dullest thing on it.
+ */
+@Composable
+internal fun EmergencyTrustChip(
+    trust: TrustLevel,
+    tinted: Boolean = false,
+    modifier: Modifier = Modifier,
+) {
+    val ink = if (tinted) {
+        Color(0xFF000000 or (trust.colorHex.removePrefix("#").toLongOrNull(16) ?: 0L))
+    } else {
+        sakhiSecondaryLabel()
+    }
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        modifier = modifier,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = SakhiSpacing.space2, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Verified,
+                contentDescription = null,
+                tint = ink,
+                modifier = Modifier.size(11.dp),
+            )
+            Text(
+                text = trust.displayName,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = ink,
+            )
+        }
+    }
+}
+
+/**
+ * iOS `EmergencySheetTitle`: one centred title, no subtitle.
+ *
+ * The requirement picker uses this rather than [EmergencyHeader]. iOS's version is a
+ * centred "Select Requirement" and nothing else; Android had a left-aligned heading with a
+ * subtitle under it, which made a four-row picker look like a page of instructions.
+ */
+@Composable
+internal fun EmergencySheetTitle(title: String, modifier: Modifier = Modifier) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleLarge,
+        color = MaterialTheme.colorScheme.onSurface,
+        textAlign = TextAlign.Center,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(top = SakhiSpacing.space4, bottom = SakhiSpacing.space5),
+    )
+}
+
+/**
+ * iOS `EmergencyMarkAvatar`: the circular Sakhi mark used on the nearby list and the
+ * session card.
+ *
+ * Not her photograph. Android's nearby list rendered `photoUrl`, which puts the real faces
+ * of women nearby on screen before anyone has accepted -- where a glance over her shoulder
+ * catches them. iOS shows the brand mark here on purpose.
+ */
+@Composable
+internal fun EmergencyMarkAvatar(size: Dp = 44.dp, modifier: Modifier = Modifier) {
+    Box(
+        modifier = modifier.size(size).clip(CircleShape).background(sakhiLightPink()),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(
+            // The mark lives in `core:ui`, so it comes from that module's R, not this one's.
+            painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_symbol),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(size * 0.52f),
+        )
+    }
+}
+
+/**
+ * iOS `EmergencyDottedRingMark`: the mark on the outcome screen -- the Sakhi symbol on a
+ * pale disc, ringed by pink dots.
+ *
+ * `main`'s `RequestedProfile` drew a dashed ring that pulsed while it waited. Here the wait
+ * is over and she is being asked a question, so the ring is still and finer: the same visual
+ * family, without the "still going" motion that would now be telling her the wrong thing.
+ */
+@Composable
+internal fun EmergencyDottedRingMark(size: Dp = 128.dp, modifier: Modifier = Modifier) {
+    val accent = MaterialTheme.colorScheme.primary
+    val disc = sakhiLightPink().copy(alpha = 0.55f)
+
+    Box(modifier = modifier.size(size), contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.size(size * 0.84f).clip(CircleShape).background(disc))
+
+        Canvas(modifier = Modifier.size(size)) {
+            val stroke = 3.dp.toPx()
+            drawCircle(
+                color = accent,
+                radius = (this.size.minDimension - stroke) / 2f,
+                style = Stroke(
+                    width = stroke,
+                    cap = StrokeCap.Round,
+                    // Dash [1, 8]: dots rather than dashes, which is what makes this read
+                    // as still where the waiting ring reads as moving.
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(1.dp.toPx(), 8.dp.toPx()), 0f),
+                ),
+            )
+        }
+
+        Icon(
+            painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_symbol),
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(size * 0.40f),
+        )
+    }
+}
+
+/**
+ * Material equivalents of the SF Symbols in shared `TrustLevel.badgeIcon`.
+ *
+ * Deliberately *not* used by [EmergencyTrustChip] or the nearby list: iOS draws
+ * `checkmark.seal.fill` in both of those and lets the colour carry the level. The per-level
+ * glyph appears in exactly one place, the incoming-request card, where the helper is being
+ * told who is asking rather than comparing several people.
+ *
+ * Mapped from the shared strings so the two platforms cannot pick different glyphs:
+ * `leaf.fill`, `heart`, `heart.fill`, `sparkles`.
+ */
+@Composable
+internal fun TrustLevel.badgeIcon(): ImageVector = when (this) {
+    TrustLevel.CARING -> Icons.Filled.Spa
+    TrustLevel.KIND -> Icons.Outlined.FavoriteBorder
+    TrustLevel.VERY_KIND -> Icons.Filled.Favorite
+    TrustLevel.ANGEL -> Icons.Filled.AutoAwesome
 }

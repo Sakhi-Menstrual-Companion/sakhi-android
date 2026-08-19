@@ -395,6 +395,7 @@ class CalendarViewModel(
                 to = monthGridEnd(month),
                 periodLogDates = cachedPeriodLogDates,
                 today = DateConverter.today(),
+                userId = session.targetUserId,
             )
             rawMarks.mapValues { (_, mark) ->
                 filterMarkForSession(mark, session)

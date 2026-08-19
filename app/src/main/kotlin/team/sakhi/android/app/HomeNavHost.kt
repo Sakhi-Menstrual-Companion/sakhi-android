@@ -292,13 +292,16 @@ fun HomeNavHost() {
                             onOpenEmergency = { activeOverlaySheet = HomeOverlaySheet.Emergency() },
                         )
                     }
-                    is HomeOverlaySheet.Emergency -> EmergencyFlowScreen(
-                        onClose = ::dismissOverlaySheet,
-                        // Hands back to Chat, which already owns the nearby safe-places
-                        // overlay, rather than duplicating that surface here.
-                        deepLinkRequestId = targetSheet.deepLinkRequestId,
-                        openResponderInbox = targetSheet.openResponderInbox,
-                    )
+                    is HomeOverlaySheet.Emergency -> FeatureAccessGate(
+                        feature = AppFeature.EMERGENCY_ASSISTANCE,
+                        onBack = ::dismissOverlaySheet,
+                    ) {
+                        EmergencyFlowScreen(
+                            onClose = ::dismissOverlaySheet,
+                            deepLinkRequestId = targetSheet.deepLinkRequestId,
+                            openResponderInbox = targetSheet.openResponderInbox,
+                        )
+                    }
                     is HomeOverlaySheet.Logging -> LoggingSheet(
                         hasPeriodData = homeUiState.hasCycleData || homeUiState.cyclesAnalyzed > 0,
                         initialDate = targetSheet.initialDate,

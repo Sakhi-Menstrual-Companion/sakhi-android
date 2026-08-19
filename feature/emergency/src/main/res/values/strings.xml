@@ -9,28 +9,61 @@
 <resources>
 
     <!-- Shared -->
-    <string name="emergency_close">Close</string>
     <string name="emergency_dismiss">Dismiss</string>
     <string name="emergency_one_moment">One moment…</string>
     <string name="emergency_try_again">Try again</string>
     <string name="emergency_send">Send</string>
-    <string name="emergency_done">Done</string>
-    <string name="emergency_go_back">Go back</string>
     <string name="emergency_your_sakhi">Your Sakhi</string>
     <string name="emergency_a_sakhi_nearby">A Sakhi nearby</string>
 
     <!-- Step 1 — requirement -->
-    <string name="emergency_what_do_you_need">What do you need?</string>
-    <string name="emergency_what_do_you_need_subtitle">Next you will pick one Sakhi to ask. No one hears anything until you choose her.</string>
     <string name="emergency_section_right_now">Urgent Needs</string>
     <string name="emergency_section_something_else">Other</string>
 
     <!-- Step 2 — spot -->
-    <string name="emergency_where_should_she_come">Where should she come?</string>
-    <string name="emergency_where_should_she_come_subtitle">A short note helps her find you quickly. Only the Sakhi you choose will see it, and only after she says yes.</string>
+    <string name="emergency_select_requirement">Select Requirement</string>
+    <string name="emergency_location_title">Location</string>
+    <string name="emergency_ok">OK</string>
+    <string name="emergency_next">Next</string>
+    <string name="emergency_spot_required_title">Spot Name Required</string>
+    <string name="emergency_spot_required_body">Please enter a spot name to proceed.</string>
+    <string name="emergency_nearby_friends">Nearby Friends</string>
+    <string name="emergency_is_coming">is Coming</string>
+    <string name="emergency_is_waiting">is Waiting</string>
+    <string name="emergency_section_requirement">Requirement</string>
+    <string name="emergency_section_destination">Destination</string>
+    <string name="emergency_contact">Contact</string>
+    <string name="emergency_finish">Finish</string>
+    <string name="emergency_completing">Completing\u2026</string>
+    <string name="emergency_under_a_minute">&lt; 1 min</string>
+    <string name="emergency_n_min">%1$d min</string>
+    <string name="emergency_location_shared">Location shared</string>
+    <string name="emergency_spot_at_area_full">%1$s at %2$s</string>
+    <string name="emergency_user">User</string>
+    <string name="emergency_outcome_need_feedback">Need Your Feedback</string>
+    <string name="emergency_outcome_did_help">Did %1$s Help You?</string>
+    <string name="emergency_outcome_she_helped">She Helped</string>
+    <string name="emergency_outcome_no">No</string>
+    <string name="emergency_outcome_cancelled">Request Cancelled</string>
+    <string name="emergency_outcome_you_cancelled">You cancelled the request</string>
+    <string name="emergency_outcome_expired">Request Expired</string>
+    <string name="emergency_outcome_timed_out_15">Request timed out after 15 minutes</string>
+    <string name="emergency_outcome_try_again">Try Again</string>
+    <string name="emergency_outcome_closed">Request Closed</string>
+    <string name="emergency_outcome_no_response">No response from %1$s</string>
+    <string name="emergency_outcome_help_coming">Help is Coming!</string>
+    <string name="emergency_outcome_accepted">%1$s accepted your request</string>
+    <string name="emergency_outcome_help_completed">Help Completed</string>
+    <string name="emergency_outcome_you_helped">You successfully helped %1$s!</string>
+    <string name="emergency_outcome_ended">Request ended</string>
+    <string name="emergency_outcome_she_cancelled">%1$s cancelled the request</string>
+    <string name="emergency_outcome_their_request_timed_out">Request from %1$s timed out</string>
+    <string name="emergency_outcome_waiting_feedback">Waiting for %1$s feedback</string>
+    <string name="emergency_outcome_thank_you">Thank you for your assistance!</string>
+    <string name="emergency_spot_name">Spot Name</string>
+    <string name="emergency_spot_at_area">at %1$s</string>
     <string name="emergency_spot_placeholder">e.g. 2nd floor washroom, near the library</string>
     <string name="emergency_location_required">Sakhi needs location access to find someone near you. You can turn it on in Settings.</string>
-    <string name="emergency_ask_for_help">Find a Sakhi</string>
     <string name="emergency_recent_spots">Recent Spots</string>
     <string name="emergency_forget_spot">Forget %1$s</string>
 
@@ -40,22 +73,17 @@
     <string name="emergency_search_again">Search Again</string>
 
     <!-- Step 3 — waiting -->
-    <string name="emergency_waiting_for">Waiting for %1$s</string>
-    <string name="emergency_waiting_for_subtitle">She has been asked and her phone has been alerted. You will know as soon as she answers.</string>
-    <string name="emergency_who_can_help">Who can help?</string>
-    <string name="emergency_who_can_help_subtitle">Pick one Sakhi to ask. She will only see your exact spot if she says yes.</string>
     <string name="emergency_asked">Asked</string>
-    <string name="emergency_rating_summary">%1$s · helped %2$d times</string>
+    <string name="emergency_her">her</string>
+    <string name="emergency_waiting_body">has been asked. Her phone is alerted, and you will know the moment she answers.</string>
+    <string name="emergency_left_to_answer">%1$s left to answer</string>
+    <string name="emergency_cancelling">Cancelling\u2026</string>
     <string name="emergency_cancel_request">Cancel request</string>
     <string name="emergency_cancel_confirm_title">Cancel this request?</string>
     <string name="emergency_cancel_confirm_body">%1$s will stop seeing it.</string>
     <string name="emergency_keep_waiting">Keep waiting</string>
 
     <!-- Step 4 — session -->
-    <string name="emergency_on_her_way">is on her way to you</string>
-    <string name="emergency_needs_your_help">needs your help</string>
-    <string name="emergency_apart">apart</string>
-    <string name="emergency_roughly">roughly</string>
     <string name="emergency_she_needs">She needs %1$s</string>
     <string name="emergency_open_in_maps">Open in Maps</string>
     <string name="emergency_say_hello">Say hello so she knows you are there.</string>
@@ -67,25 +95,16 @@
     <string name="emergency_not_yet">Not yet</string>
 
     <!-- Step 5 — feedback (main: FeedbackViewController.configureForStatus, copy verbatim) -->
-    <string name="emergency_status_did_she_help">Did She Help?</string>
-    <string name="emergency_status_thank_you">Thank You</string>
-    <string name="emergency_feedback_did_help">Did %1$s help you?</string>
-    <string name="emergency_feedback_you_helped">You helped %1$s successfully</string>
 
-    <string name="emergency_thank_you_for_helping">Thank you for helping</string>
-    <string name="emergency_rating_helps_others">Your rating helps other women know who to trust.</string>
-    <string name="emergency_tell_us_how_it_went">Tell us how it went. This stays between you and Sakhi.</string>
-    <string name="emergency_note_hint">Anything you would like to add? (optional)</string>
-    <string name="emergency_skip_for_now">Skip for now</string>
-    <string name="emergency_star_rating">%1$d stars</string>
 
     <!-- Profile detail (main: ProfielDetailViewController) -->
     <string name="emergency_profile_requests">Requests</string>
     <string name="emergency_profile_helped">Finished Request</string>
     <string name="emergency_profile_received">Request Received</string>
     <string name="emergency_profile_last_active">Last Active</string>
+    <string name="emergency_just_now">Just now</string>
+    <string name="emergency_close">Close</string>
     <string name="emergency_profile_unknown">Unknown</string>
-    <string name="emergency_profile_block">Block</string>
     <string name="emergency_block">Block</string>
     <string name="emergency_unblock">Unblock</string>
     <string name="emergency_block_body">Neither of you will see the other\'s requests. She is not told.</string>
@@ -104,7 +123,6 @@
     <string name="emergency_decline">Decline</string>
 
     <!-- Chat entry point -->
-    <string name="emergency_open_from_chat">Ask a Sakhi nearby for help</string>
 
     <!-- Directed request-accept model (migration 036) -->
     <string name="emergency_looking_for_sakhis">Looking for Sakhis around you…</string>
@@ -114,6 +132,9 @@
     <string name="emergency_declined_privacy_note">Nothing about where you are was shared with her.</string>
     <string name="emergency_find_someone_else">Find Someone Else</string>
     <string name="emergency_exit">Exit</string>
+    <string name="emergency_sending_request">Sending Request\u2026</string>
+    <string name="emergency_waiting_for_answer">Waiting for an answer</string>
+    <string name="emergency_request_again">Request Again</string>
     <string name="emergency_request_help">Request Help</string>
     <string name="emergency_hold_on">Hold On</string>
     <string name="emergency_end_request_first">Please end the current request first, then you\'ll be able to block this user.</string>

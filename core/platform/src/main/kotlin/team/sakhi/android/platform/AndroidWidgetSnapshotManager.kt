@@ -111,6 +111,7 @@ class AndroidWidgetSnapshotManager(
             cycles = allCycles.ifEmpty { listOf(cycle) },
             periodLogDates = periodLogDates,
             stats = CycleMath.computeStatistics(allCycles.filter { it.isComplete }),
+            userId = targetUserId,
         )
         val phase = when (insight.phase.kind) {
             CyclePhaseInsight.PhaseKind.MENSTRUAL -> CyclePhase.MENSTRUAL

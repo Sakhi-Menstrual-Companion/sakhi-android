@@ -1259,6 +1259,9 @@ private fun CycleDetailsCard(
             to = end,
             periodLogDates = periodLogDates,
             today = DateConverter.today(),
+            // The cycle's own owner, so a care partner viewing her strip resolves her
+            // edited lengths rather than his.
+            userId = cycle.userId,
         )
     }
     val days = remember(cycle, cycleLength) {

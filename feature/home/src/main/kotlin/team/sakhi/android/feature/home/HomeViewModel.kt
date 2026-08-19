@@ -284,6 +284,7 @@ class HomeViewModel(
                 cycles = cycles,
                 periodLogDates = periodLogDates,
                 stats = stats,
+                userId = targetUserId,
             )
             homeLog.i {
                 "insight for ${it.selectedDate}: phase=${insight.phase.kind}, " +
@@ -429,6 +430,7 @@ class HomeViewModel(
             cycles = cachedCycles,
             periodLogDates = cachedPeriodLogDates,
             stats = cachedStats,
+            userId = session.targetUserId,
         )
         _uiState.update {
             it.copy(

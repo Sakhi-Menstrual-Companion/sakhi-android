@@ -41,6 +41,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import team.sakhi.android.designsystem.SakhiRadius
+import androidx.compose.ui.text.font.FontWeight
+import team.sakhi.android.designsystem.sakhiDeepRose
+import team.sakhi.android.designsystem.sakhiGroupedBackground
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.IncomingRequest
@@ -93,16 +97,25 @@ internal fun EmergencyResponderInbox(viewModel: EmergencyViewModel) {
         } else if (responder.incoming.isEmpty()) {
             EmptyNearby(isRefreshing = responder.isRefreshing)
         } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-                modifier = Modifier.padding(bottom = SakhiSpacing.space5),
+            // iOS: `.refreshable { await viewModel.refreshIncoming() }`. The list is polled
+            // on a timer -- she has no read on a request row until she accepts, so there is
+            // nothing the server could push her -- and without a pull she had no way to ask
+            // for a check herself.
+            PullToRefreshBox(
+                isRefreshing = responder.isRefreshing,
+                onRefresh = viewModel::refreshIncoming,
             ) {
-                items(responder.incoming, key = { it.requestId }) { request ->
-                    IncomingRequestCard(
-                        request = request,
-                        onAccept = { viewModel.acceptIncoming(request) },
-                        onDecline = { viewModel.declineIncoming(request) },
-                    )
+                LazyColumn(
+                    verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                    modifier = Modifier.padding(bottom = SakhiSpacing.space5),
+                ) {
+                    items(responder.incoming, key = { it.requestId }) { request ->
+                        IncomingRequestCard(
+                            request = request,
+                            onAccept = { viewModel.acceptIncoming(request) },
+                            onDecline = { viewModel.declineIncoming(request) },
+                        )
+                    }
                 }
             }
         }
@@ -229,8 +242,10 @@ private fun IncomingRequestCard(
     val trustColor = Color(0xFF000000 or (trust.colorHex.removePrefix("#").toLongOrNull(16) ?: 0))
 
     Surface(
-        shape = RoundedCornerShape(SakhiRadius.lg),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(SakhiRadius.xl),
+        // iOS fills this with `groupedBackground`, a step off the sheet rather than a
+        // translucent variant of it.
+        color = sakhiGroupedBackground(),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
@@ -249,27 +264,36 @@ private fun IncomingRequestCard(
                             ?: stringResource(R.string.emergency_a_sakhi_nearby),
                         style = MaterialTheme.typography.titleSmall,
                     )
-                    Text(
-                        text = trust.displayName,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = trustColor,
-                    )
+                    // iOS pairs the level with `trust.badgeIcon` here -- the per-level
+                    // glyph, not the check seal it uses on the nearby list. Android showed
+                    // the words alone.
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
+                        Icon(
+                            imageVector = trust.badgeIcon(),
+                            contentDescription = null,
+                            modifier = Modifier.size(11.dp),
+                            tint = trustColor,
+                        )
+                        Text(
+                            text = trust.displayName,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = trustColor,
+                        )
+                    }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = request.requirement.icon(),
-                        contentDescription = null,
-                        modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
+                // The requirement's own colour at 0.2, as everywhere else in the flow.
+                // Android tinted this with the brand accent, so pads and medicine looked
+                // identical on the one screen where what she needs is the whole point.
+                EmergencyBadgeIcon(
+                    icon = request.requirement.icon(),
+                    color = request.requirement.accentColor(),
+                    size = 44.dp,
+                )
             }
 
             Text(
@@ -278,7 +302,8 @@ private fun IncomingRequestCard(
                     EmergencyFormatting.requirementLabel(request.requirement).lowercase(),
                 ),
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary,
+                // iOS uses `deepRose` for this line, a step darker than the accent.
+                color = sakhiDeepRose(),
             )
 
             Text(

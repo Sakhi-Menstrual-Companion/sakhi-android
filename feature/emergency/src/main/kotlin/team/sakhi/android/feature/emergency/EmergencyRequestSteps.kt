@@ -47,6 +47,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import team.sakhi.android.designsystem.SakhiRadius
+import androidx.compose.ui.text.style.TextOverflow
+import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.Color
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyRequirement
@@ -73,10 +80,8 @@ internal fun EmergencyRequirementStep(
             .padding(horizontal = SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
-        EmergencyHeader(
-            title = stringResource(R.string.emergency_what_do_you_need),
-            subtitle = stringResource(R.string.emergency_what_do_you_need_subtitle),
-        )
+        // iOS: `EmergencySheetTitle(title: "Select Requirement")` -- centred, no subtitle.
+        EmergencySheetTitle(title = stringResource(R.string.emergency_select_requirement))
 
         RequirementSection(
             title = stringResource(R.string.emergency_section_right_now),
@@ -184,27 +189,67 @@ private fun RequirementRow(requirement: EmergencyRequirement, onClick: () -> Uni
  * floor washroom" is a location in its own right, so the server does not return it in
  * discovery results.
  */
+// `CenterAlignedTopAppBar` is still an experimental Material3 API. Opted in here rather
+// than module-wide, so the annotation stays next to the one call that needs it.
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EmergencySpotStep(
     viewModel: EmergencyViewModel,
     requirement: EmergencyRequirement,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var showSpotRequired by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = SakhiSpacing.space5),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-    ) {
-        EmergencyHeader(
-            title = stringResource(R.string.emergency_where_should_she_come),
-            subtitle = stringResource(R.string.emergency_where_should_she_come_subtitle),
+    // iOS is the only step in the flow that uses the *real* navigation bar: `Location` as
+    // an inline title with Back and Next, un-hidden by `EmergencySheetContent` for this
+    // step alone (`stepUsesNativeNavBar`). Android's flow lives in a bottom sheet with no
+    // nav host per step, so the equivalent is a bar at the top of this step's own content.
+    // Next moves up here with it; the bottom Ask button and Go back link are gone.
+    Column(modifier = Modifier.fillMaxSize()) {
+        CenterAlignedTopAppBar(
+            title = { Text(stringResource(R.string.emergency_location_title)) },
+            navigationIcon = {
+                TextButton(onClick = viewModel::backToRequirement) {
+                    Text(stringResource(R.string.emergency_back))
+                }
+            },
+            actions = {
+                TextButton(
+                    onClick = {
+                        // main: an empty field raised "Spot Name Required" and went no
+                        // further. A request with no spot label is the one thing GPS cannot
+                        // make up for, so it stays a hard stop.
+                        if (uiState.spotDraft.trim().isEmpty()) showSpotRequired = true
+                        else viewModel.confirmSpot()
+                    },
+                    enabled = !uiState.isSubmitting,
+                ) {
+                    Text(
+                        text = stringResource(R.string.emergency_next),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            },
+            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                containerColor = Color.Transparent,
+            ),
         )
 
-        RequirementChip(requirement)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = SakhiSpacing.space5),
+        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+    ) {
+        EmergencySectionHeader(title = stringResource(R.string.emergency_spot_name))
 
         OutlinedTextField(
             value = uiState.spotDraft,
-            onValueChange = viewModel::onSpotDraftChanged,
+            onValueChange = { value ->
+                // `Constants.maxLocationLength` on `main`, enforced by truncation as iOS does.
+                viewModel.onSpotDraftChanged(value.take(MAX_SPOT_LENGTH))
+            },
             placeholder = { Text(stringResource(R.string.emergency_spot_placeholder)) },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
             maxLines = 4,
@@ -212,42 +257,56 @@ internal fun EmergencySpotStep(
             modifier = Modifier.fillMaxWidth(),
         )
 
+        // main showed "{spot} at {locationName}". The "at" prefix is what makes the two read
+        // as one sentence once she has typed her spot. Android showed nothing here at all,
+        // so she had no way to tell whether the app had her in the right place.
+        uiState.areaDescription?.let { area ->
+            Text(
+                text = stringResource(R.string.emergency_spot_at_area, area),
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+                // Two lines: the resolved name leads with the building or street, and a
+                // truncated address is worse than a short one because she cannot tell
+                // whether the app has her in the right place.
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
         val recentSpots by viewModel.recentSpots.collectAsStateWithLifecycle()
         if (recentSpots.isNotEmpty()) {
             // `main`'s "Recent Spots" section: clock icon, the name, and an x to forget it.
-            Text(
-                text = stringResource(R.string.emergency_recent_spots).uppercase(),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            recentSpots.forEach { spot ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(50.dp)
-                        .clickable { viewModel.useRecentSpot(spot) },
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Schedule,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            EmergencySectionHeader(title = stringResource(R.string.emergency_recent_spots))
+            EmergencyCard {
+                recentSpots.forEachIndexed { index, spot ->
+                    if (index > 0) EmergencyRowDivider(leadingInset = 58.dp)
+                    EmergencyRow(
+                        title = spot.replaceFirstChar { it.uppercase() },
+                        leading = {
+                            Box(
+                                modifier = Modifier.size(34.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Schedule,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = sakhiSecondaryLabel(),
+                                )
+                            }
+                        },
+                        modifier = Modifier.clickable { viewModel.useRecentSpot(spot) },
+                        accessory = {
+                            IconButton(onClick = { viewModel.forgetRecentSpot(spot) }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Cancel,
+                                    contentDescription = stringResource(R.string.emergency_forget_spot, spot),
+                                    modifier = Modifier.size(18.dp),
+                                    tint = sakhiSecondaryLabel().copy(alpha = 0.55f),
+                                )
+                            }
+                        },
                     )
-                    Text(
-                        text = spot.replaceFirstChar { it.uppercase() },
-                        style = MaterialTheme.typography.bodyLarge,
-                        modifier = Modifier.weight(1f),
-                    )
-                    IconButton(onClick = { viewModel.forgetRecentSpot(spot) }) {
-                        Icon(
-                            imageVector = Icons.Filled.Cancel,
-                            contentDescription = stringResource(R.string.emergency_forget_spot, spot),
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        )
-                    }
                 }
             }
         }
@@ -268,33 +327,21 @@ internal fun EmergencySpotStep(
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.size(SakhiSpacing.space10))
+    }
+    }
 
-        Button(
-            onClick = viewModel::confirmSpot,
-            enabled = !uiState.isSubmitting,
-            shape = CircleShape,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (uiState.isSubmitting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    strokeWidth = 2.dp,
-                )
-            } else {
-                Text(stringResource(R.string.emergency_ask_for_help))
-            }
-        }
-
-        TextButton(
-            onClick = viewModel::backToRequirement,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
-        ) {
-            Text(stringResource(R.string.emergency_go_back))
-        }
-
-        Spacer(modifier = Modifier.size(SakhiSpacing.space4))
+    if (showSpotRequired) {
+        AlertDialog(
+            onDismissRequest = { showSpotRequired = false },
+            title = { Text(stringResource(R.string.emergency_spot_required_title)) },
+            text = { Text(stringResource(R.string.emergency_spot_required_body)) },
+            confirmButton = {
+                TextButton(onClick = { showSpotRequired = false }) {
+                    Text(stringResource(R.string.emergency_ok))
+                }
+            },
+        )
     }
 }
 
@@ -326,3 +373,6 @@ internal fun RequirementChip(requirement: EmergencyRequirement) {
         }
     }
 }
+
+/** `Constants.maxLocationLength` on `main`, and `maxLocationLength` on iOS. */
+private const val MAX_SPOT_LENGTH = 45

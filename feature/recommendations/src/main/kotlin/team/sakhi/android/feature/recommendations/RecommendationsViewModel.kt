@@ -196,6 +196,7 @@ class RecommendationsViewModel(
             cycles = allCycles,
             periodLogDates = periodLogDates,
             stats = CycleMath.computeStatistics(allCycles.filter { it.isComplete }),
+            userId = requestedTargetUserId,
         ).phase.kind.let { kind ->
             when (kind) {
                 CyclePhaseInsight.PhaseKind.MENSTRUAL -> CyclePhase.MENSTRUAL
