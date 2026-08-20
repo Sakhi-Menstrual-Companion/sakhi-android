@@ -86,6 +86,7 @@
     <string name="feature_gate_not_signed_in_message">This needs a Sakhi account. Everything you have logged so far stays with you when you sign in.</string>
     <string name="feature_gate_no_permission_title">Not shared with you yet</string>
     <string name="feature_gate_no_permission_message">Your Sakhi hasn\'t shared this part with you. That is completely her choice, and that\'s okay.</string>
+    <string name="feature_gate_notify_me">Notify me</string>
     <string name="feature_gate_paused_title">Paused for now</string>
     <string name="feature_gate_paused_message">We have paused this part of Sakhi for a little while so we can fix something. It will come back on its own, and nothing you have logged is affected.</string>
     <string name="feature_gate_unknown_title">Not available right now</string>

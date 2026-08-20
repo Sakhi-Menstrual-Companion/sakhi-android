@@ -4,6 +4,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.annotation.DrawableRes
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import team.sakhi.config.RemoteConfigStore
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
@@ -35,6 +37,8 @@ import team.sakhi.access.BlockReason
 import team.sakhi.access.FeatureAccessResolver
 import team.sakhi.access.FeatureAccessState
 import team.sakhi.sync.SyncPauseState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.draw.clipToBounds
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
@@ -88,7 +92,13 @@ fun FeatureAccessGate(
     if (decision.granted) {
         content()
     } else {
-        FeatureAccessBlocked(reason = decision.reason, onBack = onBack, modifier = modifier)
+        FeatureAccessBlocked(
+            reason = decision.reason,
+            onBack = onBack,
+            modifier = modifier,
+            // `AppFeature.name` is the same string the server keys on.
+            featureKey = feature.name,
+        )
     }
 }
 
@@ -101,9 +111,13 @@ fun FeatureAccessBlocked(
     reason: BlockReason?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** The `remote_config` key, for the paused state's "Notify me". */
+    featureKey: String? = null,
 ) {
     val accessState = koinInject<FeatureAccessState>()
     val syncPauseState = koinInject<SyncPauseState>()
+    val remoteConfigStore = koinInject<RemoteConfigStore>()
+    val scope = rememberCoroutineScope()
     val copy = blockedCopyFor(reason)
 
     Column(
@@ -123,21 +137,34 @@ fun FeatureAccessBlocked(
 
         Spacer(modifier = Modifier.weight(1f))
 
-        Image(
-            painter = painterResource(copy.image),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
-            // iOS: `.frame(height: 250)`.
+        // The image leads, drawn taller than the box that shows it so it reads large
+        // without pushing the copy down. Metrics are `IntroCarouselStep.Layout` on iOS --
+        // a 235 container over a 300 visual -- which `SakhiIllustratedActionView` now uses
+        // too, so this screen and the onboarding carousel sit at the same heights on both
+        // platforms rather than at approximately the same heights.
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(250.dp),
-        )
+                .height(235.dp)
+                .clipToBounds(),
+            contentAlignment = Alignment.Center,
+        ) {
+            Image(
+                painter = painterResource(copy.image),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(300.dp),
+            )
+        }
 
         Text(
             text = stringResource(copy.title),
             style = MaterialTheme.typography.headlineSmall,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space5),
+            // iOS `Layout.titleTopGap`.
+            modifier = Modifier.padding(top = 52.dp),
         )
         Text(
             text = stringResource(copy.message),
@@ -158,6 +185,15 @@ fun FeatureAccessBlocked(
                     // silently and never leave the device.
                     syncPauseState.resume()
                     accessState.setOnlineAccountPaused(false)
+                } else if (reason == BlockReason.REMOTELY_DISABLED && featureKey != null) {
+                    // Registers her interest, then leaves. The push is sent by the
+                    // `notify-feature-available` Edge Function when the flag is switched
+                    // back on. A failure is deliberately silent: she is already on a
+                    // screen saying something is unavailable.
+                    scope.launch {
+                        remoteConfigStore.requestNotification(featureKey)
+                        onBack()
+                    }
                 } else {
                     onBack()
                 }
@@ -201,10 +237,16 @@ private fun blockedCopyFor(reason: BlockReason?): BlockedCopy = when (reason) {
     BlockReason.REMOTELY_DISABLED -> BlockedCopy(
         title = R.string.feature_gate_paused_title,
         message = R.string.feature_gate_paused_message,
-        primaryLabel = R.string.feature_gate_go_back,
-        // The maintenance illustration, not the offline one: nothing is wrong with her
-        // connection and the screen should not suggest otherwise.
-        image = R.drawable.condition_upgrade,
+        // "Notify me", not "Go back" -- this one records a request and then leaves.
+        primaryLabel = R.string.feature_gate_notify_me,
+        // Not the offline illustration: nothing is wrong with her connection and the
+        // screen should not suggest otherwise.
+        //
+        // This pointed at `condition_upgrade`, which despite its name is a drawing of a
+        // woman having her hair blow-dried in a salon. It has been deleted. `join_family`
+        // is the nearest thing the asset set has to "we are working on it", because of the
+        // gears behind it.
+        image = R.drawable.condition_join_family,
     )
     // iOS treats an unmapped reason as `.unknown` with its own copy, and uses the same
     // care-partner illustration as `.noPermission`.
