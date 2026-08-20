@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.compose) apply false
     alias(libs.plugins.kotlin.serialization) apply false
+    alias(libs.plugins.play.publisher) apply false
     alias(libs.plugins.ksp) apply false
     // Screenshot-test durability lane (2026-07-15) -- applied per-module (currently
     // just feature:auth, the first slice), not project-wide, so it stays opt-in.

@@ -6,6 +6,7 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.play.publisher)
 }
 
 // google-services.json is git-ignored (Firebase project config, see .gitignore) and
@@ -57,8 +58,12 @@ android {
         applicationId = "com.rachna.mysakhi"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"   // matches iOS MARKETING_VERSION; one launch, one number
+        // Bumped for the first API upload: versionCode 1 went to Play with the manual
+        // upload on 2026-08-13, and Play rejects a repeat of any code it has already seen.
+        versionCode = 2
+        // NOTE: iOS `MARKETING_VERSION` is still 1.0, so the two platforms no longer carry
+        // the same number. Bring iOS to 2.0 as well if they are meant to stay in step.
+        versionName = "2.0"
         // Temporary fallback keeps clean checkouts buildable, but the new
         // Nearby Places map surfaces still need a Maps-authorized runtime key.
         manifestPlaceholders["googleMapsApiKey"] = secret(
@@ -187,4 +192,39 @@ baselineProfile {
     // builds consume it automatically; actual generation still requires a
     // bootable test device/emulator.
     saveInSrc = true
+}
+
+// ── Google Play publishing ──────────────────────────────────────────────────
+//
+// Uploads the signed AAB to a Play track without opening the Console:
+//
+//   ./gradlew :app:publishReleaseBundle          # to the configured track
+//   ./gradlew :app:bundleRelease                 # build only, no upload
+//
+// Needs a Play Developer API service-account JSON, path in secrets.properties as
+// PLAY_SERVICE_ACCOUNT_JSON. Without it every publish task is disabled rather than
+// failing the build, so a clean checkout still builds and `bundleRelease` still works.
+//
+// Google requires the FIRST bundle for a package to be uploaded by hand in the Console.
+// Until that has happened once, the API rejects uploads for this package no matter how
+// the credentials are set up.
+play {
+    val credentialsPath = secret("PLAY_SERVICE_ACCOUNT_JSON")
+    val credentialsFile = if (credentialsPath.isNotBlank()) rootProject.file(credentialsPath) else null
+
+    enabled.set(credentialsFile?.exists() == true)
+    if (credentialsFile?.exists() == true) {
+        serviceAccountCredentials.set(credentialsFile)
+    }
+
+    // Safe default: nothing reaches the public store by accident. Override per run with
+    // `-Pplay.track=production`.
+    track.set(providers.gradleProperty("play.track").orElse("internal"))
+    defaultToAppBundles.set(true)
+    // "completed" publishes the release outright; "draft" leaves it for review in the
+    // Console. Draft by default, because a store release is not a thing to do by typo.
+    releaseStatus.set(
+        providers.gradleProperty("play.status").map { com.github.triplet.gradle.androidpublisher.ReleaseStatus.valueOf(it.uppercase()) }
+            .orElse(com.github.triplet.gradle.androidpublisher.ReleaseStatus.DRAFT),
+    )
 }

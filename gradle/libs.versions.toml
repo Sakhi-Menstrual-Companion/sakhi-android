@@ -9,6 +9,8 @@
 kotlin = "2.1.20"
 ksp = "2.1.20-2.0.1"
 agp = "8.6.1"
+# Gradle Play Publisher: uploads the signed AAB to a Play track from the command line.
+playPublisher = "3.11.0"
 googleServices = "4.4.2"
 
 # compose-bom itself has no steep AGP floor; kept at latest. The libraries below
@@ -151,6 +153,7 @@ androidx-test-ext-junit = { group = "androidx.test.ext", name = "junit", version
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+play-publisher = { id = "com.github.triplet.play", version.ref = "playPublisher" }
 android-library = { id = "com.android.library", version.ref = "agp" }
 android-test = { id = "com.android.test", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
