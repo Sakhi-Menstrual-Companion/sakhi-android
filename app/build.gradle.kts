@@ -36,7 +36,16 @@ android {
     // intentionally NOT renamed (would mean renaming every package declaration across
     // the whole Kotlin source tree for no functional benefit).
     namespace = "team.sakhi.android"
-    compileSdk = 35
+    // 36 since 2026-08-25, to satisfy the Play target API rule below. compileSdk must be
+    // at least targetSdk, so these two move together.
+    //
+    // AGP 8.6.1 was only tested up to compileSdk 35 and prints a warning about 36. That is
+    // a warning, not a failure, and it is silenced by android.suppressUnsupportedCompileSdk
+    // in gradle.properties. Bumping AGP instead would drag the Gradle wrapper, SakhiCore and
+    // PredictionSDK along with it, because Gradle hard-rejects mixed AGP versions across a
+    // composite build (see SakhiCore's plugins block). That is a separate piece of work and
+    // it is not what the Play deadline needs.
+    compileSdk = 36
 
     defaultConfig {
         // Renamed 2026-08-13 to com.rachna.mysakhi. The earlier com.rachna.sakhi Play
@@ -57,7 +66,18 @@ android {
         // 2B:03:38:B6:BC:91:15:06:1E:39:4E:A6:2E:45:5A:8B:C1:42:FE:89.
         applicationId = "com.rachna.mysakhi"
         minSdk = 26
-        targetSdk = 35
+        // Android 16. Raised from 35 on 2026-08-25 because Play blocks updates from
+        // 2026-08-31 for anything targeting more than one release behind, and Play Console
+        // had already flagged this app as non-compliant at 35.
+        // https://support.google.com/googleplay/android-developer/answer/11926878
+        //
+        // The three targetSdk-36 behaviour changes that could have bitten were checked and
+        // none of them apply: edge-to-edge is already opted into properly via
+        // enableEdgeToEdge() in MainActivity rather than the opt-out flag Android 16 ignores;
+        // predictive back is already on via enableOnBackInvokedCallback in the manifest; and
+        // no activity pins android:screenOrientation, so the large-screen orientation rule
+        // has nothing to override.
+        targetSdk = 36
         // ── Versioning rule, follow this on every upload ────────────────────────
         //
         // versionCode is Play's own integer and the user never sees it. It goes up by one
