@@ -80,17 +80,17 @@
     <!-- Feature access gate. Copy transcribed verbatim from iOS
          `FeatureAccessGate.swift` so both platforms say the same thing. -->
     <string name="feature_gate_offline_title">You\'re using Sakhi offline</string>
-    <string name="feature_gate_offline_message">This part needs the internet. You can resume online whenever you like, and nothing you have logged is lost.</string>
+    <string name="feature_gate_offline_message">This part needs the internet. Nothing you have written down is lost, it is all safe on your phone. Come back online whenever you are ready.</string>
     <string name="feature_gate_resume_online">Resume online</string>
-    <string name="feature_gate_not_signed_in_title">Sign in to use this</string>
-    <string name="feature_gate_not_signed_in_message">This needs a Sakhi account. Everything you have logged so far stays with you when you sign in.</string>
+    <string name="feature_gate_not_signed_in_title">This part needs an account</string>
+    <string name="feature_gate_not_signed_in_message">This part of Sakhi lives with your account. Everything you have logged so far stays with you and comes along the moment you sign in.</string>
     <string name="feature_gate_no_permission_title">Not shared with you yet</string>
-    <string name="feature_gate_no_permission_message">Your Sakhi hasn\'t shared this part with you. That is completely her choice, and that\'s okay.</string>
-    <string name="feature_gate_notify_me">Notify me</string>
-    <string name="feature_gate_paused_title">Paused for now</string>
-    <string name="feature_gate_paused_message">We have paused this part of Sakhi for a little while so we can fix something. It will come back on its own, and nothing you have logged is affected.</string>
+    <string name="feature_gate_no_permission_message">She hasn\'t shared this part of Sakhi with you, and that is completely her choice. Whatever she decides is okay, and she can change it any time.</string>
+    <string name="feature_gate_notify_me">Tell me when it\'s back</string>
+    <string name="feature_gate_paused_title">We\'ve paused this for now</string>
+    <string name="feature_gate_paused_message">Nothing is wrong on your side. We have turned this off for a little while so we can fix it properly. Everything you have logged is safe, and it will come back.</string>
     <string name="feature_gate_unknown_title">Not available right now</string>
-    <string name="feature_gate_unknown_message">Please try again in a moment.</string>
+    <string name="feature_gate_unknown_message">We couldn\'t open this just now. Everything you have logged is safe. Please try again in a little while.</string>
     <string name="feature_gate_go_back">Go back</string>
     <string name="close">Close</string>
 </resources>

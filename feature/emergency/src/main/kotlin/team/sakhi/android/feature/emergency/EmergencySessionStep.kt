@@ -39,6 +39,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import team.sakhi.android.designsystem.AppleSystemColors
 import team.sakhi.android.designsystem.SakhiRadius
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.PaddingValues
@@ -214,7 +215,8 @@ internal fun EmergencySessionStep(
                 title = stringResource(R.string.emergency_contact),
                 icon = Icons.AutoMirrored.Filled.VolumeUp,
                 contentColor = Color.White,
-                containerColor = Color(0xFF007AFF),
+                // iOS `Color(UIColor.systemBlue)` -- dynamic, #0A84FF in dark.
+                containerColor = AppleSystemColors.blue,
                 onClick = { showChat = true },
             )
 
@@ -225,7 +227,8 @@ internal fun EmergencySessionStep(
                     title = stringResource(
                         if (isCompleting) R.string.emergency_completing else R.string.emergency_finish,
                     ),
-                    contentColor = Color(0xFF34C759),
+                    // iOS `tint: Color(UIColor.systemGreen)` -- dynamic, #30D158 in dark.
+                    contentColor = AppleSystemColors.green,
                     containerColor = sakhiSystemGray5().copy(alpha = 0.4f),
                     isBusy = isCompleting,
                     onClick = {

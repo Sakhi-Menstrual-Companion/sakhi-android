@@ -13,6 +13,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -123,6 +124,13 @@ import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSeparator
+import team.sakhi.android.designsystem.sakhiSystemBackground
+import team.sakhi.android.designsystem.SakhiPhasePalette
+import team.sakhi.android.designsystem.rememberPhasePalette
+import team.sakhi.android.designsystem.phaseCardFill
+import team.sakhi.android.designsystem.phaseCardStroke
+import team.sakhi.android.designsystem.phasePageBackgroundBrush
 import team.sakhi.android.designsystem.sakhiLabel
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.phasePrimaryColor
@@ -206,7 +214,7 @@ fun HomeScreen(
     val recoState by recommendationsViewModel.uiState.collectAsStateWithLifecycle()
     val quickLogUiState by quickLogViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val phasePalette = rememberHomePhasePalette(uiState.phase)
+    val phasePalette = rememberPhasePalette(uiState.phase)
     // Taken from the Home phase palette, NOT `phasePrimaryColor(...)`. The latter
     // returns the raw `PhaseVisualStyle.colorHex` (#E85787 for menstrual), which
     // bypasses the white-in-period-mode override iOS applies when it builds this same
@@ -268,7 +276,7 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(homeBackgroundBrush(phasePalette = phasePalette, hasCycleData = uiState.hasCycleData)),
+            .background(phasePageBackgroundBrush(phase = uiState.phase, hasCycleData = uiState.hasCycleData)),
     ) {
         Column(
             modifier = Modifier
@@ -433,7 +441,7 @@ fun HomeScreen(
                         )
                     }
                     partnerHeadsUpText(context, uiState.phase, uiState.dayInCycle, uiState.daysUntilNextPeriod)?.let { headsUp ->
-                        PartnerHeadsUpCard(text = headsUp, accentColor = accentColor)
+                        PartnerHeadsUpCard(text = headsUp, accentColor = accentColor, phase = uiState.phase)
                     }
                     PhaseInfoCard(
                         phase = uiState.phase,
@@ -535,7 +543,7 @@ fun HomeScreen(
                 // button rendered completely blank. Same defect as the period-day case,
                 // just in the cell nothing had rendered until the follicular/dark
                 // screenshot existed.
-                logFill = homeCardFill(
+                logFill = phaseCardFill(
                     phase = uiState.phase,
                     hasCycleData = uiState.hasCycleData,
                 ),
@@ -742,7 +750,7 @@ private fun heroText(context: Context, uiState: HomeUiState): HeroText {
 private fun HeroSection(
     uiState: HomeUiState,
     accentColor: Color,
-    phasePalette: HomePhasePalette,
+    phasePalette: SakhiPhasePalette,
     scrollProgress: Float,
     onTipClick: () -> Unit = {},
 ) {
@@ -755,7 +763,7 @@ private fun HeroSection(
     // primary for the big number unconditionally, which on the menstrual background is
     // pink-on-pink and effectively invisible -- the "Day 1" that could barely be read.
     // `accentColor` is the phase primary, which iOS already forces to white in period
-    // mode (see rememberHomePhasePalette), so no special case is needed here.
+    // mode (see rememberPhasePalette), so no special case is needed here.
     val bigColor = accentColor
     val subColor = homeSecondaryTextColor(
         phasePalette = phasePalette,
@@ -963,20 +971,13 @@ private fun HomeGlassCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val refreshLabel = stringResource(R.string.home_refresh_content_description)
-    val palette = rememberHomePhasePalette(phase)
-    val isDark = LocalSakhiDarkTheme.current
+    val palette = rememberPhasePalette(phase)
     val isMenstrual = phase == CyclePhase.MENSTRUAL
-    val cardFill = when {
-        !hasCycleData -> MaterialTheme.colorScheme.surface
-        isMenstrual -> palette.surface
-        isDark -> palette.tileFill
-        else -> palette.tileFill.copy(alpha = 0.14f)
-    }
-    val cardStroke = when {
-        !hasCycleData -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.25f)
-        isMenstrual -> palette.secondary.copy(alpha = 0.30f)
-        else -> palette.tileStroke.copy(alpha = 0.50f)
-    }
+    // Both of these used to be recomputed inline here, duplicating `phaseCardFill` /
+    // `phaseCardStroke` (which the log button already used via iOS's `logFill: cardFill`
+    // rule). Two copies of one iOS value is exactly how the two drifted apart before.
+    val cardFill = phaseCardFill(phase = phase, hasCycleData = hasCycleData)
+    val cardStroke = phaseCardStroke(phase = phase, hasCycleData = hasCycleData)
     val dividerColor = when {
         !hasCycleData -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.18f)
         isMenstrual -> palette.primary.copy(alpha = 0.16f)
@@ -1510,7 +1511,7 @@ private fun CycleStatTile(
     // `tonalElevation`, which ignores the phase entirely -- on a period day that left a
     // pale tile with dark text sitting on the saturated card. iOS tints it from the phase
     // secondary and uses the same text ladder as everything else in the card.
-    val palette = rememberHomePhasePalette(phase)
+    val palette = rememberPhasePalette(phase)
     val cardText = LocalHomeCardText.current
     val isPeriodMode = phase == CyclePhase.MENSTRUAL
     val softFill = palette.secondary.copy(alpha = if (isPeriodMode) 0.20f else 0.08f)
@@ -1572,7 +1573,7 @@ private fun CycleStatusTile(
     longestCycle: Int,
     accentColor: Color,
 ) {
-    val phasePalette = rememberHomePhasePalette(phase)
+    val phasePalette = rememberPhasePalette(phase)
     val context = LocalContext.current
     val hasMeasuredStats = cyclesAnalyzed > 0
     val isRegular = (longestCycle - shortestCycle) <= 7
@@ -1860,12 +1861,23 @@ private fun PartnerChecklistLoadingState(
     }
 }
 
-/** Port of iOS `partnerNoDataCard` (`+EmptyState.swift`). */
+/**
+ * Port of iOS `partnerNoDataCard` (`+EmptyState.swift`).
+ *
+ * This `Surface` carried a `tonalElevation` and **no `color`**, so it fell through to
+ * `colorScheme.surface` and was then tinted further toward `primary` by the elevation --
+ * in dark that is brand `lightPink` (#2C1A22) pulled pink, floating on a dark page.
+ * iOS passes `fill: cardFill`, and this card only ever renders on the
+ * `!hasPeriodData` branch, where `cardFill` returns `DS.Colors.systemBackground`
+ * (white / #1C1C1E) with `stroke: cardStroke` = `DS.Colors.separator.opacity(0.25)`.
+ */
 @Composable
 private fun PartnerNoDataCard() {
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xxl),
-        tonalElevation = SakhiSpacing.space1,
+        color = sakhiSystemBackground(),
+        contentColor = sakhiLabel(),
+        border = BorderStroke(0.5.dp, sakhiSeparator().copy(alpha = 0.25f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
@@ -1892,12 +1904,22 @@ private fun PartnerNoDataCard() {
     }
 }
 
-/** Port of iOS `partnerHeadsUpCard`. Shown only when [text] resolves non-null. */
+/**
+ * Port of iOS `partnerHeadsUpCard`. Shown only when [text] resolves non-null.
+ *
+ * Same defect as [PartnerNoDataCard]: `tonalElevation` with no `color`. iOS backs this one
+ * with `.background(cardFill)` and a `0.5` stroke of `cardStroke` at radius 22, and it only
+ * renders on the branch where there IS cycle data -- so it takes the phase-tinted fill,
+ * which is what [phaseCardFill] already computes for every other Home card. [phase] is
+ * threaded in for that; it cannot be derived from `accentColor` alone.
+ */
 @Composable
-private fun PartnerHeadsUpCard(text: PartnerHeadsUpCardText, accentColor: Color) {
+private fun PartnerHeadsUpCard(text: PartnerHeadsUpCardText, accentColor: Color, phase: CyclePhase) {
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xxl),
-        tonalElevation = SakhiSpacing.space1,
+        color = phaseCardFill(phase = phase, hasCycleData = true),
+        contentColor = rememberHomeCardTextColors(phase = phase, hasCycleData = true).primary,
+        border = BorderStroke(0.5.dp, phaseCardStroke(phase = phase, hasCycleData = true)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -2447,7 +2469,7 @@ private fun NutritionCard(
                 // Hoisted out of the row loop on purpose: `remember` inside an
                 // unkeyed `forEach` is a recomposition hazard, and the palette is
                 // constant for the whole card anyway.
-                val foodTilePalette = rememberHomePhasePalette(phase)
+                val foodTilePalette = rememberPhasePalette(phase)
                 val cardContext = LocalContext.current
                 val pages = remember(foods) { foods.chunked(4) }
                 val pagerState = rememberPagerState(pageCount = { pages.size })
@@ -2730,17 +2752,6 @@ private fun SakhiInsightCard(
     }
 }
 
-private data class HomePhasePalette(
-    val primary: Color,
-    val secondary: Color,
-    val surface: Color,
-    val bgTop: Color,
-    val bgMid: Color,
-    val bgBot: Color,
-    val tileFill: Color,
-    val tileStroke: Color,
-)
-
 /**
  * Card text colours, ported from iOS's `HomeDayDetailGlassView+GlassCard.swift` ladder
  * (`textPrimary` / `textSecondary` / `textSection` / `textTertiary`).
@@ -2761,24 +2772,6 @@ private val LocalHomeCardText = compositionLocalOf {
     HomeCardTextColors(Color.Unspecified, Color.Unspecified, Color.Unspecified, Color.Unspecified)
 }
 
-/**
- * iOS's `cardFill`, extracted so the bottom bar's log button can use the same value the
- * cards do — which is what iOS does (`logFill: cardFill`). Kept in one place so the two
- * cannot drift again.
- */
-@Composable
-private fun homeCardFill(phase: CyclePhase, hasCycleData: Boolean): Color {
-    val palette = rememberHomePhasePalette(phase)
-    val isDark = LocalSakhiDarkTheme.current
-    val surface = MaterialTheme.colorScheme.surface
-    return when {
-        !hasCycleData -> surface
-        phase == CyclePhase.MENSTRUAL -> palette.surface
-        isDark -> palette.tileFill
-        else -> palette.tileFill.copy(alpha = 0.14f)
-    }
-}
-
 private data class HomeCardTextColors(
     val primary: Color,
     val secondary: Color,
@@ -2791,7 +2784,7 @@ private fun rememberHomeCardTextColors(
     phase: CyclePhase,
     hasCycleData: Boolean,
 ): HomeCardTextColors {
-    val palette = rememberHomePhasePalette(phase)
+    val palette = rememberPhasePalette(phase)
     val neutralPrimary = sakhiLabel()
     val neutralSecondary = sakhiSecondaryLabel()
     val isPeriodMode = phase == CyclePhase.MENSTRUAL
@@ -2824,59 +2817,8 @@ private fun rememberHomeCardTextColors(
 }
 
 @Composable
-private fun rememberHomePhasePalette(phase: CyclePhase): HomePhasePalette {
-    val isDark = LocalSakhiDarkTheme.current
-    return remember(phase, isDark) {
-        val resolved = SakhiColors.resolved(isDark).forPhase(
-            if (phase == CyclePhase.UNKNOWN) CyclePhase.FOLLICULAR else phase,
-        )
-        HomePhasePalette(
-            // iOS `PhaseColorManager.swift:94`:
-            //   `let primary: Color = phase == .menstrual ? .white : c.primary`
-            // The menstrual background is a saturated pink, so its raw primary token
-            // (#E85787) sits almost on top of the background (#D9406F..#E85787) and
-            // every text/icon/accent drawn with it disappeared. Android was using the
-            // raw token unconditionally -- this is the single reason the menstrual
-            // phase read as "wrong colours everywhere" rather than one bad surface.
-            primary = if (phase == CyclePhase.MENSTRUAL) {
-                Color.White
-            } else {
-                resolved.primary.toComposeColor()
-            },
-            secondary = resolved.secondary.toComposeColor(),
-            surface = resolved.surface.toComposeColor(),
-            bgTop = resolved.bgTop.toComposeColor(),
-            bgMid = resolved.bgMid.toComposeColor(),
-            bgBot = resolved.bgBot.toComposeColor(),
-            tileFill = resolved.tileFill.toComposeColor(),
-            tileStroke = resolved.tileStroke.toComposeColor(),
-        )
-    }
-}
-
-@Composable
-private fun homeBackgroundBrush(phasePalette: HomePhasePalette, hasCycleData: Boolean): Brush {
-    return if (!hasCycleData) {
-        Brush.verticalGradient(
-            colors = listOf(
-                MaterialTheme.colorScheme.background,
-                MaterialTheme.colorScheme.surface,
-            ),
-        )
-    } else {
-        Brush.verticalGradient(
-            colors = listOf(
-                phasePalette.bgTop,
-                phasePalette.bgMid,
-                phasePalette.bgBot,
-            ),
-        )
-    }
-}
-
-@Composable
 private fun homeSecondaryTextColor(
-    phasePalette: HomePhasePalette,
+    phasePalette: SakhiPhasePalette,
     hasCycleData: Boolean,
     isMenstrual: Boolean,
 ): Color = when {
@@ -2889,7 +2831,7 @@ private fun homeSecondaryTextColor(
 private fun HomeTopBar(
     uiState: HomeUiState,
     heroScrollProgress: Float,
-    phasePalette: HomePhasePalette,
+    phasePalette: SakhiPhasePalette,
     onOpenProfile: () -> Unit,
     onOpenCare: () -> Unit,
     onOpenCalendar: () -> Unit,

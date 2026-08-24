@@ -8,6 +8,94 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-08-21, Claude: dark-mode sweep against iOS, view by view, plus the colour
+  single-source-of-truth Karan asked for. App + all unit tests green; NOT yet verified on a
+  real device -- this needs a live light/dark pass before it ships.**
+  **ROOT CAUSE, one thing not many.** iOS's dark mode is not a colour swap, it is a
+  different structure: `PhaseBackground.swift` puts a *phase gradient* behind every page in
+  dark and a flat `DS.Colors.background` in light, and iOS applies one of its two modifiers
+  (`phasePageBackground()` / `profileStaticPageBackground()`) on essentially every screen it
+  draws. Android had ported that gradient exactly twice -- Home, and the Profile detail
+  sheets -- and both copies were private to their own file. Every other screen fell through
+  to `colorScheme.background`, which in dark is `BRAND_BG_DARK` = pure **#000000**. So
+  Profile, Care, all of onboarding, Auth, Calendar, Emergency, Recommendations, Chat and the
+  logging sheet were a flat black app where iOS shows a soft rose gradient. No individual
+  value was wrong; most of the app simply could not reach the values.
+  **THE FIX IS ARCHITECTURAL, not per-screen.** New `:core:designsystem/SakhiPhasePalette.kt`
+  is now the one place phase colour resolves, mirroring where iOS keeps it
+  (`DesignSystem/PhaseColorManager.swift`, not `HomeView.swift`): `SakhiPhasePalette`,
+  `rememberPhasePalette`, `phaseCardFill`, `phaseCardStroke`, `phasePageBackgroundBrush`
+  (live phase, Home) and `sakhiPageBackgroundBrush` (follicular reference phase, everything
+  else). `SakhiTheme`'s root now paints it, so every screen that does not paint its own is
+  fixed at once. `HomeScreen.kt`'s private `HomePhasePalette` / `rememberHomePhasePalette` /
+  `homeCardFill` / `homeBackgroundBrush` and `:core:ui/ProfilePageBackground.kt` are deleted
+  and both now read the shared one. Net -692/+378 lines.
+  **Sheets had to be done separately** -- a sheet is its own window and does not inherit the
+  root -- so `SheetSurface` paints the same brush, and the five screens that hand-painted
+  `colorScheme.background` (`FeatureAccessGate`, `SakhiLoadingView`, `CountryPicker`, the
+  onboarding pickers, `ReportsScreen`) now use the brush too. Each of those files already
+  had a comment saying it was matching `profileStaticPageBackground()`; they were matching
+  its light half only.
+  **`SakhiUIColorBridge.kt` is the second half of the ask.** iOS has had
+  `Core/KMM/KMMDesignBridge.swift` since the KMM migration -- it is why an iOS feature never
+  types a hex. Android had no such bridge, so features typed them, and they drifted. Now
+  `SakhiTokens.*`. Real, shipping mismatches this found: the toast capsule was `#1C1C1E` vs
+  KMM `#121214`; toast success `#34C759` vs `#38E06B`; error `#FF3B30` vs `#FF5B6B`; warning
+  `#FF9F0A` vs `#FFB74C`; info `#FF5A8A` vs brand pink. `MyDataScreen`'s invitation row was
+  amber where iOS uses `categoryMessages` (blue) and its cycles row used brand pink where
+  iOS uses `categoryCycles` (purple). All six `LeaveReason` tints were invented -- `privacy`
+  was a pink where iOS's `DataResetView.swift` uses `categoryCycles`, a purple.
+  **`AppleSystemColors.kt`, third piece.** iOS uses `UIColor.system*` directly in a few
+  places and those are *dynamic*. Android had pinned their light values (and twice not even
+  those: `#5C6BC0` for indigo, `#2E9E7E` for green). Emergency's call button, its
+  safe-arrival tick, the feedback severities, the health cards' sleep/steps icons and the
+  nearby face pile are all dynamic now.
+  **Individually fixed, each verified against the Swift line first:**
+  1. `GlassCircle` -- the back/close chrome on nearly every screen -- was white at **70%**
+     with a white stroke in *both* themes. iOS's `_GlassCircleBackground` has a real dark
+     branch: white `0.07`, stroke gradient `0.22 -> 0.06`. In dark those two buttons were
+     the brightest objects in the app. Karan's light-mode tuning is preserved untouched.
+  2. `GlassCard` filled at `colorScheme.surface.copy(alpha = 0.16f)` -- in dark that is 16%
+     of `#2C1A22` on a dark page, so the cards vanished. Despite the name it is not a port
+     of iOS's `glassCard()` (which has **zero** call sites -- `GlassCard.swift` is dead code
+     there); its real counterparts all use `DS.Colors.systemBackground`. Home's aurora cards
+     are `HomeGlassCard`, untouched.
+  3. Five `Surface(tonalElevation = ...)` with **no `color`** -- Home's two partner cards,
+     Recommendations' `SectionCard`, and Chat's places row and places card. Material3 tints
+     toward `primary` only when the colour is exactly `colorScheme.surface`, so these drew
+     a pink-tinted brand surface. The 46 reported on 2026-08-07 are otherwise all fixed;
+     these five were what was left.
+  4. `HomeCalendarOverlay` -- **got this wrong first time, corrected same day after Karan
+     asked why the calendar background does not change with date selection.** The sheet had
+     been pink (`colorScheme.surface`), then a hand-rolled light/dark `if` whose dark branch
+     went back to pink, and my first fix flattened it to `sakhiSystemBackground()`. That
+     ported only the *light* half of iOS's `HomeCalendarSheet.sheetBackground`. The real
+     function is asymmetric: flat `systemBackground` in light, but in dark one of three KMM
+     tokens picked by phase -- `CAL_SHEET_MENSTRUAL_DARK` #260310, `CAL_SHEET_OVULATION_DARK`
+     #003236, `CAL_SHEET_DEFAULT_DARK` #262628. Those three tokens existed in KMM and had
+     **no Android call site at all**, which was the tell I missed. And the phase iOS passes
+     is `snapshot.displayPhase` off a `HomeSelectedDaySnapshot` -- the SELECTED day's phase,
+     not the current one -- so tapping a period day genuinely re-tints the sheet under it.
+     Now ported whole as `calendarSheetBackground(phase)` in `SakhiPhasePalette.kt`, with
+     `phase = homeUiState.phase` threaded through `HomeCalendarOverlay` from `HomeNavHost`
+     (`HomeViewModel.selectDate` already recomputes that per selected date, so Home's own
+     gradient was tracking selection correctly all along -- only the sheet was not).
+     **Lesson for the next pass: a KMM token with zero call sites on one platform is a
+     missing port, not dead code. Grep the token list for orphans.**
+  5. The `trustColor` hex shift was hand-rolled in three Emergency files even though
+     `HexColor.kt` says it is "the one and only place a hex string becomes a Compose Color".
+     All three funnel through it now.
+  **CHECKED AND CORRECTLY LEFT ALONE** (verified against iOS, not skipped): `SakhiSwitch`'s
+  off-track pair, `SakhiCalendar`'s white-on-filled-period labels, `SakhiAlertSheet`'s white
+  CTA label, the `onGradient` back/close variants, the nearby capsule's 2.5dp white ring
+  (iOS uses a literal `Color.white` there), and the quick-log menu's neutral black shadow.
+  **REPORTED, NOT CHANGED -- needs Karan's call.** `HomeGlassCard`'s `!hasCycleData` branch
+  fills with `colorScheme.surface` (brand lightPink) where iOS's `cardFill` returns
+  `DS.Colors.systemBackground`. In dark the two are close (`#2C1A22` vs `#1C1C1E`); in light
+  it is pink vs white, a visible difference. Left alone because it is a light-mode change on
+  the empty state, outside what this pass was asked to do, and it is a screen this pass did
+  not visually verify.
+
 - **2026-08-07, Claude (22nd round): drove ALL THREE onboarding paths on real Supabase
   test accounts (online new-user, online returning, offline, partner). Found and fixed a
   bug that made Be Her Sakhi unreachable from Home entirely, plus two UI-consistency

@@ -154,6 +154,10 @@ class AndroidLocationProviderTest {
         sdkInt: Int = Build.VERSION_CODES.R,
     ): AndroidLocationProvider = AndroidLocationProvider.forTesting(
         AndroidLocationProvider.Dependencies(
+            // appContext was added to Dependencies when the Geocoder lookup landed. Only
+            // the Geocoder reads it, and none of these tests geocode, so a relaxed mock
+            // is enough to satisfy the constructor.
+            appContext = mockk(relaxed = true),
             fusedClient = lazy(LazyThreadSafetyMode.NONE) { fusedClientFactory() },
             permissionChecker = { permission ->
                 permissionStatus[permission] ?: PackageManager.PERMISSION_DENIED

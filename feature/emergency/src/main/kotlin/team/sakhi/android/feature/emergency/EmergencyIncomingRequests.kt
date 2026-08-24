@@ -244,7 +244,7 @@ private fun IncomingRequestCard(
     onDecline: () -> Unit,
 ) {
     val trust = EmergencyFormatting.trustLevel(request.ratingCount)
-    val trustColor = Color(0xFF000000 or (trust.colorHex.removePrefix("#").toLongOrNull(16) ?: 0))
+    val trustColor = trust.accentColor()
 
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xl),

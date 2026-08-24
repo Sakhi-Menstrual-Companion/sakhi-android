@@ -41,6 +41,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.delay
+import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -94,7 +95,9 @@ fun CountryPicker(
                     Modifier
                 }
             )
-            .background(MaterialTheme.colorScheme.background)
+            // iOS `CountryPickerSheet` ends in `.profileStaticPageBackground()`: flat
+            // `DS.Colors.background` in light, the follicular gradient in dark.
+            .background(sakhiPageBackgroundBrush())
             .padding(horizontal = SakhiSpacing.space6),
     ) {
         Row(

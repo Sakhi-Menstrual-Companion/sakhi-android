@@ -37,6 +37,7 @@ import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.foundation.gestures.detectTapGestures
 import kotlinx.coroutines.delay
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.SakhiTokens
 
 /**
  * Renders `ToastManager.current` as a floating capsule pinned to the top of the
@@ -85,11 +86,15 @@ private object TopCenterPositionProvider : PopupPositionProvider {
 
 @Composable
 private fun ToastCapsule(message: ToastMessage) {
+    // Every one of these was a hand-typed Apple system colour that did not match the KMM
+    // token iOS resolves (`ToastManager.swift` -> `DS.Colors.toast*`): success was
+    // #34C759 vs #38E06B, error #FF3B30 vs #FF5B6B, warning #FF9F0A vs #FFB74C, and info
+    // #FF5A8A vs the brand pink #F61887. Wrong in both themes, not just dark.
     val accent = when (message.type) {
-        ToastType.SUCCESS -> Color(0xFF34C759)
-        ToastType.ERROR -> Color(0xFFFF3B30)
-        ToastType.WARNING -> Color(0xFFFF9F0A)
-        ToastType.INFO -> Color(0xFFFF5A8A)
+        ToastType.SUCCESS -> SakhiTokens.ToastSuccess
+        ToastType.ERROR -> SakhiTokens.ToastError
+        ToastType.WARNING -> SakhiTokens.ToastWarning
+        ToastType.INFO -> SakhiTokens.Pink
     }
     val icon = when (message.type) {
         ToastType.SUCCESS -> Icons.Filled.CheckCircle
@@ -101,7 +106,10 @@ private fun ToastCapsule(message: ToastMessage) {
     Box(
         modifier = Modifier
             .wrapContentSize()
-            .background(Color(0xFF1C1C1E), CircleShape)
+            // iOS `capsuleFill = DS.Colors.toastDarkCapsule` -> KMM `TOAST_DARK_BG`
+            // (#121214). The capsule is deliberately dark in BOTH themes -- it is a HUD,
+            // not a surface -- so this correctly does not flip; it was just the wrong dark.
+            .background(SakhiTokens.ToastDarkCapsule, CircleShape)
             .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space2)
             .pointerInput(Unit) { detectTapGestures(onTap = { ToastManager.dismiss() }) },
     ) {

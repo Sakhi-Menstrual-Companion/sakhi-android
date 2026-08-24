@@ -58,12 +58,22 @@ android {
         applicationId = "com.rachna.mysakhi"
         minSdk = 26
         targetSdk = 35
-        // Bumped for the first API upload: versionCode 1 went to Play with the manual
-        // upload on 2026-08-13, and Play rejects a repeat of any code it has already seen.
-        versionCode = 2
+        // ── Versioning rule, follow this on every upload ────────────────────────
+        //
+        // versionCode is Play's own integer and the user never sees it. It goes up by one
+        // on EVERY upload and can never repeat, because Play refuses a code it has already
+        // seen, so this only ever goes up, whether or not versionName moves.
+        //
+        // History: 1 went up by hand on 2026-08-13. 2 went up through the API. 3 is on the
+        // internal track now. So the next upload is 4, which is what this is set to.
+        //
+        // versionName is the string the user reads. It changes only when the release means
+        // something different: 2.0.1 to 2.0.2 for a fix, to 2.1.0 for a feature. The two
+        // numbers are independent and are not meant to match each other.
+        versionCode = 4
         // NOTE: iOS `MARKETING_VERSION` is still 1.0, so the two platforms no longer carry
-        // the same number. Bring iOS to 2.0 as well if they are meant to stay in step.
-        versionName = "2.0"
+        // the same number. Bring iOS into step if they are meant to match.
+        versionName = "2.0.1"
         // Temporary fallback keeps clean checkouts buildable, but the new
         // Nearby Places map surfaces still need a Maps-authorized runtime key.
         manifestPlaceholders["googleMapsApiKey"] = secret(
@@ -107,6 +117,32 @@ android {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+
+            // Native crash reports are unreadable without these.
+            //
+            // We ship no C++ of our own, but three dependencies bring prebuilt .so files:
+            // libsqliteJni (Room), libtensorflowlite_jni (the prediction engine) and
+            // libandroidx.graphics.path. A crash or ANR inside any of them arrives in Play
+            // Console as raw addresses, which cannot be acted on. Play warns about exactly
+            // this on upload.
+            //
+            // SYMBOL_TABLE rather than FULL, because FULL only adds line-number data that
+            // prebuilt libraries do not carry anyway.
+            //
+            // Note for whoever chases Play's "you've not uploaded debug symbols" warning
+            // next: as of versionCode 3 this setting produces nothing, and that is not a
+            // misconfiguration. All three libraries arrive fully stripped. `file` reports
+            // them as "stripped" and `nm` reports "no symbols", so there is no symbol table
+            // to extract and the AAB gets no BUNDLE-METADATA debugsymbols entry. Play shows
+            // that warning whenever a bundle contains any native code, whether or not we
+            // could have done anything about it. Building SQLite and TensorFlow Lite from
+            // source purely to symbolicate their frames is not worth it.
+            //
+            // The setting stays because it costs nothing and starts working by itself the
+            // day any of these ships an unstripped build.
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
+            }
             signingConfig = if (releaseKeystoreFile.exists()) {
                 signingConfigs.getByName("release")
             } else {

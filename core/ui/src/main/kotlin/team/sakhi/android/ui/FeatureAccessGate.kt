@@ -39,6 +39,7 @@ import team.sakhi.access.FeatureAccessState
 import team.sakhi.sync.SyncPauseState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.ui.draw.clipToBounds
+import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
@@ -111,7 +112,7 @@ fun FeatureAccessBlocked(
     reason: BlockReason?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
-    /** The `remote_config` key, for the paused state's "Notify me". */
+    /** The `remote_config` key, for the paused state's notify button. */
     featureKey: String? = null,
 ) {
     val accessState = koinInject<FeatureAccessState>()
@@ -125,8 +126,10 @@ fun FeatureAccessBlocked(
             .fillMaxSize()
             // Opaque, matching iOS's `.profileStaticPageBackground()`. Without it the
             // explainer drew straight over whatever screen it replaced, so Home's
-            // hero and cards showed through the copy and it was unreadable.
-            .background(MaterialTheme.colorScheme.background)
+            // hero and cards showed through the copy and it was unreadable. It has to be
+            // the page BRUSH, not the flat background role: in dark that role is pure
+            // black, while iOS's modifier paints the follicular phase gradient.
+            .background(sakhiPageBackgroundBrush())
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .padding(horizontal = SakhiSpacing.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -237,7 +240,7 @@ private fun blockedCopyFor(reason: BlockReason?): BlockedCopy = when (reason) {
     BlockReason.REMOTELY_DISABLED -> BlockedCopy(
         title = R.string.feature_gate_paused_title,
         message = R.string.feature_gate_paused_message,
-        // "Notify me", not "Go back" -- this one records a request and then leaves.
+        // The notify button, not "Go back" -- this one records a request and then leaves.
         primaryLabel = R.string.feature_gate_notify_me,
         // Not the offline illustration: nothing is wrong with her connection and the
         // screen should not suggest otherwise.

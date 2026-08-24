@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.delay
+import team.sakhi.android.designsystem.AppleSystemColors
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
@@ -97,8 +98,9 @@ internal fun NearbySakhiButton(
             // around the whole thing — the way a sticker sits on a photo. One ring alone
             // gave either a soft edge or a hard line with no separation from the page.
             .clip(capsule)
-            .background(sakhiSystemBackground())
-            .clickable(onClick = onClick),
+            .background(sakhiSystemBackground()),
+        // The click deliberately does NOT live here. See the overlay at the end of this
+        // Box for why.
     ) {
         // Her surroundings behind the capsule, once there is a fix. Falls back to the plain
         // fill with no location, which is also what anyone who never granted it sees.
@@ -159,11 +161,23 @@ internal fun NearbySakhiButton(
 
         // Drawn last so they sit over the map, exactly as iOS's two `.overlay(Capsule()
         // .strokeBorder(...))` do.
+        //
+        // This overlay also carries the click, and that is not a style choice.
+        //
+        // NearbyMapThumbnail is a lite mode GoogleMap. A lite mode map is a static bitmap
+        // whose built-in tap handler launches the Google Maps app, and none of the
+        // MapUiSettings gesture flags turn that off, because it is not a gesture. Being a
+        // child of this Box, the map is hit tested before any clickable on the parent, so
+        // it swallowed the tap and opened Google Maps instead of Emergency Assistance.
+        //
+        // Putting the click on the topmost child fixes it: this Box is hit first, consumes
+        // the tap, and the map never sees one.
         Box(
             modifier = Modifier
                 .matchParentSize()
                 .border(2.5.dp, Color.White, capsule)
-                .border(0.5.dp, nearbyCapsuleOutline(), capsule),
+                .border(0.5.dp, nearbyCapsuleOutline(), capsule)
+                .clickable(onClick = onClick),
         )
     }
 }
@@ -257,7 +271,7 @@ private fun NearbyFacePile(count: Int, modifier: Modifier = Modifier) {
                     // colour as the camera drifts. The faces bring their own colour, so
                     // the tint sits under the artwork at a fraction of its strength.
                     .background(sakhiSystemBackground())
-                    .background(FACE_TINTS[index % FACE_TINTS.size].copy(alpha = 0.16f))
+                    .background(faceTints.let { it[index % it.size] }.copy(alpha = 0.16f))
                     // Ring in the capsule's own fill, so each disc reads as punched out of
                     // the one behind it rather than outlined on top of it.
                     .border(1.5.dp, sakhiSystemBackground(), CircleShape),
@@ -282,12 +296,19 @@ private val FACE_SIZE = 24.dp
 /** iOS: 24pt disc less the 9pt overlap. */
 private val FACE_SLOT_STEP = 15.dp
 
-/** iOS `NearbyFacePile.tints`: systemPurple, systemTeal, systemOrange. */
-private val FACE_TINTS = listOf(
-    Color(0xFFAF52DE),
-    Color(0xFF30B0C7),
-    Color(0xFFFF9500),
-)
+/**
+ * iOS `NearbyFacePile.tints`: `systemPurple`, `systemTeal`, `systemOrange`.
+ *
+ * Those are dynamic UIKit colours, so the pile shifts in dark mode on iOS. This was a
+ * plain `val` holding their three *light* hexes, which is why it could not: a top-level
+ * `val` has nowhere to read the theme from. It is a `@Composable` now for that reason.
+ */
+private val faceTints: List<Color>
+    @Composable get() = listOf(
+        AppleSystemColors.purple,
+        AppleSystemColors.teal,
+        AppleSystemColors.orange,
+    )
 
 private val FACE_AVATARS = listOf(
     team.sakhi.android.ui.R.drawable.nearby_sakhi_1,
@@ -369,4 +390,16 @@ private const val NEARBY_MAP_STYLE = """
  * one enormous word -- and it keeps her street well below legible size, which is iOS's own
  * stated rule for this thumbnail.
  */
-private const val NEARBY_MAP_ZOOM = 9f
+/**
+ * Street level, so the thumbnail actually shows where she is.
+ *
+ * This was 9f, which is roughly a hundred kilometres across. Inside a capsule barely
+ * 38dp tall that is not a map of her surroundings, it is a beige smudge, and it made the
+ * whole pill look broken rather than informative.
+ *
+ * 9f was never a design choice. The comment on NEARBY_MAP_STYLE explains it: Google keeps
+ * drawing labels at low zooms where MapKit does not, and the camera kept getting pulled
+ * back to shake them off. Turning the labels off in the style was the real fix, but the
+ * pulled-back zoom was left behind. With labels already off, the camera can come back in.
+ */
+private const val NEARBY_MAP_ZOOM = 15f

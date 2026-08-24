@@ -78,6 +78,7 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.designsystem.SakhiTokens
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.DetailSheetScaffold
@@ -110,35 +111,38 @@ private enum class LeaveReason(
     val icon: ImageVector,
     val tint: Color,
 ) {
+    // Tints are iOS `DataResetView.swift`'s `LeaveReason.color`, one for one. Every one of
+    // these was a different hand-typed hex before -- `privacy` in particular was a pink
+    // (#E16A8F) where iOS uses `categoryCycles`, a purple. None had a token behind it.
     Overwhelmed(
         labelRes = R.string.profile_manage_account_leave_reason_overwhelmed,
         icon = Icons.Filled.Cloud,
-        tint = Color(0xFF4B7BE5),
+        tint = SakhiTokens.LeaveReasonBlue,
     ),
     Privacy(
         labelRes = R.string.profile_manage_account_leave_reason_privacy,
         icon = Icons.Filled.Lock,
-        tint = Color(0xFFE16A8F),
+        tint = SakhiTokens.CategoryCycles,
     ),
     NotForMe(
         labelRes = R.string.profile_manage_account_leave_reason_not_for_me,
         icon = Icons.Filled.Favorite,
-        tint = Color(0xFFE85D75),
+        tint = SakhiTokens.Pink,
     ),
     Switching(
         labelRes = R.string.profile_manage_account_leave_reason_switching,
         icon = Icons.Filled.SyncAlt,
-        tint = Color(0xFF3AA17E),
+        tint = SakhiTokens.SectionGreen,
     ),
     Technical(
         labelRes = R.string.profile_manage_account_leave_reason_technical,
         icon = Icons.Filled.WarningAmber,
-        tint = Color(0xFFF39C48),
+        tint = SakhiTokens.ActivityOther,
     ),
     Personal(
         labelRes = R.string.profile_manage_account_leave_reason_personal,
         icon = Icons.Filled.Person,
-        tint = Color(0xFFB86C8B),
+        tint = SakhiTokens.LeaveReasonRose,
     ),
 }
 
@@ -575,11 +579,11 @@ private fun ResetContent(
                     Column {
                         LossRow(Icons.AutoMirrored.Filled.Logout, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_reset_signs_out))
                         IndentedDivider()
-                        LossRow(Icons.Filled.Lock, Color(0xFF6B7CE3), stringResource(R.string.profile_manage_account_reset_pin_cleared))
+                        LossRow(Icons.Filled.Lock, SakhiTokens.ActivityNotes, stringResource(R.string.profile_manage_account_reset_pin_cleared))
                         IndentedDivider()
-                        LossRow(Icons.Filled.Widgets, Color(0xFFF0A144), stringResource(R.string.profile_manage_account_reset_widget_cleared))
+                        LossRow(Icons.Filled.Widgets, SakhiTokens.SectionAmber, stringResource(R.string.profile_manage_account_reset_widget_cleared))
                         IndentedDivider()
-                        LossRow(Icons.Filled.CloudDone, Color(0xFF2E9E7E), stringResource(R.string.profile_manage_account_reset_nothing_deleted))
+                        LossRow(Icons.Filled.CloudDone, SakhiTokens.SectionGreen, stringResource(R.string.profile_manage_account_reset_nothing_deleted))
                     }
                 }
             }
@@ -661,7 +665,7 @@ private fun DeleteContent(
                     Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
                         BigLossCard(
                             icon = Icons.Filled.WaterDrop,
-                            iconTint = Color(0xFFDD5B6A),
+                            iconTint = SakhiTokens.CategoryPeriod,
                             title = if (stats.logCount > 0) {
                                 pluralStringResource(
                                     R.plurals.profile_manage_account_period_data_count,
@@ -689,7 +693,7 @@ private fun DeleteContent(
                         )
                         BigLossCard(
                             icon = Icons.Filled.People,
-                            iconTint = Color(0xFF2E9E7E),
+                            iconTint = SakhiTokens.CategoryCare,
                             title = if (stats.careConnectionCount > 0) {
                                 pluralStringResource(
                                     R.plurals.profile_manage_account_care_connections_count,
@@ -746,7 +750,7 @@ private fun DeleteContent(
                             if (stats.logCount > 0) {
                                 StatPill(
                                     icon = Icons.Filled.WaterDrop,
-                                    iconTint = Color(0xFFDD5B6A),
+                                    iconTint = SakhiTokens.CategoryPeriod,
                                     value = stats.logCount.toString(),
                                     label = pluralStringResource(
                                         R.plurals.profile_manage_account_days_logged,
@@ -781,9 +785,9 @@ private fun DeleteContent(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column {
-                                LossRow(Icons.Filled.Person, Color(0xFFB86C8B), stringResource(R.string.profile_manage_account_loss_account_profile))
+                                LossRow(Icons.Filled.Person, SakhiTokens.LeaveReasonRose, stringResource(R.string.profile_manage_account_loss_account_profile))
                                 IndentedDivider()
-                                LossRow(Icons.Filled.WaterDrop, Color(0xFFDD5B6A), stringResource(R.string.profile_manage_account_loss_cycle_data))
+                                LossRow(Icons.Filled.WaterDrop, SakhiTokens.CategoryPeriod, stringResource(R.string.profile_manage_account_loss_cycle_data))
                                 IndentedDivider()
                                 LossRow(Icons.Filled.AutoAwesome, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_loss_learned_about_you))
                             }

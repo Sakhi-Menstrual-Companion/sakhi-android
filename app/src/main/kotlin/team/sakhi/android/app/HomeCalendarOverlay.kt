@@ -28,11 +28,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
-import team.sakhi.android.designsystem.LocalSakhiDarkTheme
+import team.sakhi.android.designsystem.calendarSheetBackground
+import team.sakhi.models.CyclePhase
 
 private enum class CalendarDetent { Compact, Expanded }
 
@@ -65,6 +65,12 @@ private enum class CalendarDetent { Compact, Expanded }
 fun HomeCalendarOverlay(
     visible: Boolean,
     onDismiss: () -> Unit,
+    /**
+     * The **selected day's** phase, which tints the sheet in dark mode. iOS passes
+     * `snapshot.displayPhase` from a `HomeSelectedDaySnapshot`, so this re-tints as the
+     * user taps around the grid. See [calendarSheetBackground].
+     */
+    phase: CyclePhase,
     /**
      * Receives whether the sheet is at the expanded detent, and a setter so the content
      * can drive it (iOS's month-header chevron calls `snapToExpanded()`).
@@ -118,18 +124,20 @@ fun HomeCalendarOverlay(
                 .fillMaxWidth()
                 .height((screenHeight - sheetTop).coerceAtLeast(0.dp))
                 .clip(RoundedCornerShape(topStart = SHEET_CORNER, topEnd = SHEET_CORNER))
-                // iOS uses `DS.Colors.systemBackground` here, which is plain white in
-                // light mode — deliberately NOT the phase-tinted surface. Android was
-                // using `colorScheme.surface`, which in the Sakhi palette is pink, so
-                // the sheet blended into the phase background instead of reading as a
-                // separate white card the way it does on iOS.
-                .background(
-                    if (LocalSakhiDarkTheme.current) {
-                        MaterialTheme.colorScheme.surface
-                    } else {
-                        Color.White
-                    },
-                ),
+                // iOS `HomeCalendarSheet.sheetBackground`: plain `systemBackground` in
+                // light -- deliberately NOT the phase-tinted surface -- and one of three
+                // phase tokens in dark, chosen by the SELECTED day's phase.
+                //
+                // Android has had three different wrong answers here. First
+                // `colorScheme.surface` (pink), so the sheet blended into the phase
+                // background. Then a hand-rolled light/dark `if` whose dark branch went
+                // back to `colorScheme.surface`, reintroducing that bug in dark only.
+                // Then a flat `sakhiSystemBackground()`, which fixed the pink but ported
+                // only the light half of `sheetBackground` -- so the sheet never re-tinted
+                // on date selection, which is what Karan spotted. The whole function is
+                // ported now and lives in the design system with the rest of the phase
+                // colour, not inline here.
+                .background(calendarSheetBackground(phase)),
         ) {
             // Drag handle. Owns the gesture, like iOS's `dragHandle` + `panGesture`,
             // so dragging inside the month grid still scrolls the grid rather than

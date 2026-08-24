@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.koin.compose.koinInject
+import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -654,7 +655,11 @@ private fun DaysInfoSheet(info: DaysInfo, onDismiss: () -> Unit) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(MaterialTheme.colorScheme.background),
+                // The page brush, not the flat `background` role: iOS's
+                // `.profileStylePresentationBackground()` resolves to `DS.Colors.background`
+                // in light but to `.clear` in dark, letting the page's phase gradient show
+                // through. A flat fill here is pure black in dark.
+                .background(sakhiPageBackgroundBrush()),
         ) {
             Row(
                 modifier = Modifier

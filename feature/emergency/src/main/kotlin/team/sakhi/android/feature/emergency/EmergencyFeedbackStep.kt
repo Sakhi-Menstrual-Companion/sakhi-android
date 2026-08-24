@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import team.sakhi.android.designsystem.AppleSystemColors
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.models.EmergencyRequestStatus
@@ -191,9 +192,11 @@ private fun rememberOutcome(session: EmergencySession): FeedbackOutcome {
     val remoteName = session.counterpartName?.trim()?.split(" ")?.firstOrNull()?.takeIf { it.isNotEmpty() }
         ?: stringResource(R.string.emergency_user)
 
-    val red = Color(0xFFFF3B30)
-    val orange = Color(0xFFFF9500)
-    val green = Color(0xFF34C759)
+    // iOS uses SwiftUI `.red` / `Color(UIColor.systemGreen)` here, which are dynamic --
+    // they lift to #FF453A / #30D158 in dark. These were pinned to the light values.
+    val red = AppleSystemColors.red
+    val orange = AppleSystemColors.orange
+    val green = AppleSystemColors.green
     val pink = MaterialTheme.colorScheme.primary
 
     return if (session.viewerIsRequester) {

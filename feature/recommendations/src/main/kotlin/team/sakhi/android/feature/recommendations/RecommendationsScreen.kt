@@ -30,6 +30,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
+import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.phasePrimaryColor
@@ -137,7 +138,7 @@ fun RecommendationsScreen(
                     Text(
                         text = insight,
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
+                        color = sakhiLabel(),
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -189,9 +190,15 @@ private fun SectionCard(
     accent: Color,
     items: List<String>,
 ) {
+    // `tonalElevation` with no `color` fell through to `colorScheme.surface` and was then
+    // tinted toward `primary` by the elevation -- a pink-on-pink card in light and a
+    // washed rose blur on a dark page in dark. iOS has no standalone Recommendations
+    // view (the feature surfaces inside Home cards there), so this follows the same card
+    // token every other ported card uses: `DS.Colors.systemBackground`.
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xxl),
-        tonalElevation = SakhiSpacing.space1,
+        color = sakhiSystemBackground(),
+        contentColor = sakhiLabel(),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
@@ -207,7 +214,7 @@ private fun SectionCard(
                 Text(
                     text = stringResource(R.string.recommendations_bullet_item, item),
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = sakhiLabel(),
                 )
             }
         }

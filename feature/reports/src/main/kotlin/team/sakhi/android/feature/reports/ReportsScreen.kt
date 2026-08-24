@@ -65,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.format.TextStyle
 import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
+import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiGroupedBackground
@@ -385,7 +386,8 @@ private fun ReportsPreviewScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            // Page brush, so dark mode gets iOS's phase gradient rather than flat black.
+            .background(sakhiPageBackgroundBrush()),
     ) {
         Row(
             modifier = Modifier

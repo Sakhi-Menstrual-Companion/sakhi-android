@@ -43,6 +43,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import team.sakhi.android.designsystem.AppleSystemColors
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.AndroidHealthConnectManager
@@ -141,7 +142,9 @@ fun AppIntegrationScreen(
                     title = stringResource(R.string.profile_app_integration_title_avg_sleep),
                     value = stringResource(R.string.profile_app_integration_value_hours, average(uiState.sleepEntries)),
                     summaryIcon = Icons.Filled.Hotel,
-                    summaryIconTint = Color(0xFF5C6BC0),
+                    // iOS `iconColor: Color(UIColor.systemIndigo)`. #5C6BC0 was neither
+                    // Apple's light indigo (#5856D6) nor its dark one (#5E5CE6).
+                    summaryIconTint = AppleSystemColors.indigo,
                     rows = uiState.sleepEntries,
                     formatter = { value -> context.getString(R.string.profile_app_integration_value_hours, value) },
                 )
@@ -152,7 +155,8 @@ fun AppIntegrationScreen(
                     title = stringResource(R.string.profile_app_integration_title_avg_steps),
                     value = average(uiState.stepEntries).toInt().toString(),
                     summaryIcon = Icons.AutoMirrored.Filled.DirectionsWalk,
-                    summaryIconTint = Color(0xFF2E9E7E),
+                    // iOS `iconColor: Color(UIColor.systemGreen)`.
+                    summaryIconTint = AppleSystemColors.green,
                     rows = uiState.stepEntries,
                     formatter = { it.toInt().toString() },
                 )

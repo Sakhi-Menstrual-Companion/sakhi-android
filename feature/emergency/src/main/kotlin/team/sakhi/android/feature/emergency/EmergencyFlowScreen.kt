@@ -17,14 +17,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.draw.clip
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
@@ -45,8 +38,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -287,39 +280,6 @@ fun EmergencyFlowScreen(
                     .padding(top = padding.calculateTopPadding()),
             )
 
-            // Debug-only demo switch. Deliberately plain and slightly ugly: it must never be
-            // mistaken for product UI in a screenshot. Turning it off mid-request hands the
-            // flow straight back to the store.
-            //
-            // It lives over the MAP rather than in the sheet, and that is the whole point.
-            // iOS can put it at the sheet's top-trailing because its Back/Next sit in the
-            // real navigation bar, above the content the overlay attaches to. Android draws
-            // each step's bar inside the sheet, and every step's bar is a different height,
-            // so any fixed offset inside the sheet covers a real control on some step -- it
-            // sat on "Next" on Location, then on the first Sakhi's row on the picker. The
-            // map is the one surface that is identical on every step.
-            if (BuildConfig.DEBUG) {
-                var demoOn by remember { mutableStateOf(viewModel.isDemoModeEnabled()) }
-                Text(
-                    text = if (demoOn) "DEMO ON" else "DEMO OFF",
-                    fontSize = 9.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .statusBarsPadding()
-                        // Below the Nearby-count chip that `EmergencyMapOverlay` draws.
-                        .padding(top = padding.calculateTopPadding() + 76.dp, end = 12.dp)
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(if (demoOn) Color(0xFF34C759) else Color(0xFFAEAEB2))
-                        .clickable {
-                            demoOn = !demoOn
-                            viewModel.setDemoModeEnabled(demoOn)
-                            if (!demoOn) viewModel.refreshNearbySakhis()
-                        }
-                        .padding(horizontal = 7.dp, vertical = 4.dp),
-                )
-            }
         }
     }
 }

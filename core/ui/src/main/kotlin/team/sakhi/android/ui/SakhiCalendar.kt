@@ -170,8 +170,13 @@ private fun SakhiMiniMonthDayCell(
         isMultiSelectMode && isInSelection && isPeriod -> Color.Transparent
         isMultiSelectMode && (isInSelection || isPeriod) -> periodColor
         isMultiSelectMode -> Color.Transparent
-        day.markerType == SakhiCalendarMarkerType.PERIOD -> periodColor
-        day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor.copy(alpha = 0.16f)
+        // Future days are dimmed here exactly as the compact grid dims them. Without
+        // these two branches a predicted period in a coming month drew at full strength
+        // and read as something that had already happened.
+        day.markerType == SakhiCalendarMarkerType.PERIOD ->
+            if (day.isFuture) periodColor.copy(alpha = 0.12f) else periodColor
+        day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD ->
+            periodColor.copy(alpha = if (day.isFuture) 0.12f else 0.16f)
         else -> Color.Transparent
     }
     val labelColor = when {
@@ -185,6 +190,16 @@ private fun SakhiMiniMonthDayCell(
         // which merged fertile/ovulation days into the same hue as today and selection
         // and lost the distinction the year grid exists to show. Using the resolved
         // pair so it still adapts to dark.
+        // The year grid had no isFuture branch at all, so a future date rendered at full
+        // strength onSurface, identical to a day that had already happened, and nothing
+        // on screen said it could not be logged. These mirror the compact cell.
+        day.isFuture && day.markerType == SakhiCalendarMarkerType.OVULATION ->
+            ovulationRingColor.copy(alpha = disabledSemanticOpacity)
+        day.isFuture && day.markerType == SakhiCalendarMarkerType.FERTILE ->
+            ovulationRingColor.copy(alpha = disabledSemanticOpacity)
+        day.isFuture && day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD ->
+            periodColor.copy(alpha = disabledSemanticOpacity)
+        day.isFuture -> sakhiSecondaryLabel()
         day.markerType == SakhiCalendarMarkerType.OVULATION -> ovulationRingColor
         day.markerType == SakhiCalendarMarkerType.FERTILE -> ovulationRingColor
         day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor
@@ -196,8 +211,12 @@ private fun SakhiMiniMonthDayCell(
         modifier = modifier
             .height(yearGridCellHeight)
             .let { base ->
+                // `enabled = !day.isFuture` matters more here than the colours do. Without
+                // it, multi-select in the year grid let a future date be tapped and saved
+                // as a period day, which is a log for something that has not happened. The
+                // compact grid has always guarded this; the year grid never did.
                 if (isMultiSelectMode && onToggle != null) {
-                    base.clickable { onToggle(day.date) }
+                    base.clickable(enabled = !day.isFuture) { onToggle(day.date) }
                 } else {
                     base
                 }

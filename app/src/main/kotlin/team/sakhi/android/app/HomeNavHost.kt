@@ -226,6 +226,10 @@ fun HomeNavHost() {
     HomeCalendarOverlay(
         visible = showCalendar && activeOverlaySheet == null,
         onDismiss = { showCalendar = false },
+        // `homeUiState.phase` is recomputed for `selectedDate` on every day tap
+        // (`HomeViewModel.selectDate`), so this is iOS's `snapshot.displayPhase` -- the
+        // selected day's phase -- and the sheet re-tints with the selection in dark mode.
+        phase = homeUiState.phase,
     ) { expanded, setExpanded ->
         CalendarScreen(
             onAskSakhi = { presentOverlaySheet(HomeOverlaySheet.Chat) },

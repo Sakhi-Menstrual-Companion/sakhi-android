@@ -208,7 +208,7 @@ internal fun EmergencyNearbySakhisStep(
 @Composable
 private fun SakhiCard(sakhi: NearbySakhi, onOpenProfile: () -> Unit) {
     val trust = EmergencyFormatting.trustLevel(sakhi.ratingCount)
-    val trustColor = Color(0xFF000000 or (trust.colorHex.removePrefix("#").toLongOrNull(16) ?: 0))
+    val trustColor = trust.accentColor()
     val asked = sakhi.alreadyAsked
 
     Surface(

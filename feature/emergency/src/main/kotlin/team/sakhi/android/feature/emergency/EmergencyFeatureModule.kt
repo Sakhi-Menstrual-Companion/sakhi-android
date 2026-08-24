@@ -19,7 +19,6 @@ val emergencyFeatureModule = module {
             locationProvider = get(),
             hapticManager = get(),
             sessionManager = get(),
-            appContext = get(),
         )
     }
 }

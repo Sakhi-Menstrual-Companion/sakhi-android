@@ -11,15 +11,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import team.sakhi.android.designsystem.SakhiRadius
+import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
 import team.sakhi.android.designsystem.SakhiSpacing
 
 /**
@@ -29,36 +28,19 @@ import team.sakhi.android.designsystem.SakhiSpacing
  * the one exception that wants the indicator visible (`HomeView.swift`
  * `makeLoggingSheetConfiguration`), so it passes `showDragHandle = true`.
  *
- * `backgroundBrush` is an escape hatch for the one real caller that needs a
- * non-solid fill (`DetailSheetScaffold`'s profile-family phase gradient,
- * matching iOS's `profileStaticPageBackground()`) without touching every
- * other caller's plain `colorScheme.surface` fill (Chat, Logging, the Home
- * overlay sheet). Defaults to `null`, which reproduces the exact prior
- * behavior byte for byte.
+ * The background is `sakhiPageBackgroundBrush()`, the port of iOS's
+ * `profileStaticPageBackground()`: flat `DS.Colors.background` in light, the follicular
+ * phase gradient in dark. A sheet is presented in its own window above the app, so it
+ * does NOT inherit the page background `SakhiTheme` paints at the root -- it has to paint
+ * it again itself, which is exactly what iOS does (`SakhiAIChatView`, `HomeLoggingSheet`
+ * and every `ProfileSettingsDetailView` each apply a page-background modifier of their
+ * own). Before this, sheets fell back to a flat fill and so were pure black in dark.
  */
 @Composable
 fun SheetSurface(
     modifier: Modifier = Modifier,
     showDragHandle: Boolean = false,
-    /**
-     * Solid fill, when [backgroundBrush] is not used.
-     *
-     * `colorScheme.background` is `#F8F2F4`, the same value every one of these pages
-     * resolves to on iOS in light mode. Both of iOS's page-background modifiers --
-     * `phasePageBackground()` (Logging, Activity, the AI sheets) and
-     * `profileStaticPageBackground()` (Profile, Chat, Care, the onboarding steps) -- fall
-     * back to `DS.Colors.background` in light mode and differ only in dark, where they
-     * paint a phase gradient. See `PhaseBackground.swift`, whose header states exactly
-     * that.
-     *
-     * This defaulted to `colorScheme.surface` (brand `lightPink`, `#F8E5EC`) on the belief
-     * that iOS filled these sheets that way. It does not: the Logging sheet in particular
-     * read visibly pinker than iOS's, and white cards on it barely separated from the
-     * page. Profile had already been given the correct value by hand; making it the
-     * default fixes Logging and Chat too.
-     */
-    color: Color = MaterialTheme.colorScheme.background,
-    backgroundBrush: Brush? = null,
+    backgroundBrush: Brush = sakhiPageBackgroundBrush(),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(topStart = SakhiRadius.bottomSheet, topEnd = SakhiRadius.bottomSheet)
@@ -84,23 +66,13 @@ fun SheetSurface(
         }
     }
 
-    if (backgroundBrush != null) {
-        Box(
-            modifier = modifier
-                .fillMaxSize()
-                .clip(shape)
-                .background(backgroundBrush),
-        ) {
-            sheetBody()
-        }
-    } else {
-        Surface(
-            modifier = modifier.fillMaxSize(),
-            shape = shape,
-            color = color,
-        ) {
-            sheetBody()
-        }
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .clip(shape)
+            .background(backgroundBrush),
+    ) {
+        sheetBody()
     }
 }
 

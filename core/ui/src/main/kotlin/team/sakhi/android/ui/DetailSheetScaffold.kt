@@ -61,7 +61,6 @@ fun DetailSheetScaffold(
     SheetSurface(
         modifier = modifier,
         showDragHandle = showDragHandle,
-        backgroundBrush = profilePageBackgroundBrush(),
     ) {
         // One nav bar for every sheet (iOS `DSNavBar`), replacing the hand-rolled header
         // row this used to draw. That row used its own paddings (24/20/8 here vs the nav

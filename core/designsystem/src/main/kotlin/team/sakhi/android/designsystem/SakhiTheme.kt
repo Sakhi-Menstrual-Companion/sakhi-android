@@ -1,6 +1,8 @@
 package team.sakhi.android.designsystem
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -391,11 +393,30 @@ fun SakhiTheme(
             // titles and stat numbers). This root `Surface` is fully painted over by
             // every screen's own background (verified), so it changes nothing visually
             // except correctly seeding `LocalContentColor` from `colorScheme.onBackground`.
-            Surface(
-                modifier = Modifier.fillMaxSize(),
-                color = MaterialTheme.colorScheme.background,
-                content = content,
-            )
+            // The page background itself. iOS paints it per screen via
+            // `profileStaticPageBackground()`; drawing it once here reaches every screen
+            // that does not paint its own (Profile, Care, Onboarding, Auth, Calendar,
+            // Emergency, Recommendations -- i.e. most of the app), and the two screens
+            // that DO paint their own (Home's live-phase brush, `DetailSheetScaffold`'s
+            // sheet brush) simply cover it, exactly as they cover a flat fill.
+            //
+            // The `Surface` stays -- it is what seeds `LocalContentColor`, which is the
+            // reason this root exists at all -- but it is now transparent, so the brush
+            // behind it shows through. A transparent `color` makes Material's
+            // `contentColorFor` return `Unspecified`, so `contentColor` is passed
+            // explicitly rather than inferred.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(sakhiPageBackgroundBrush()),
+            ) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = androidx.compose.ui.graphics.Color.Transparent,
+                    contentColor = MaterialTheme.colorScheme.onBackground,
+                    content = content,
+                )
+            }
             }
         }
     }

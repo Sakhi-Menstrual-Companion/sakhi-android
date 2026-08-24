@@ -48,6 +48,7 @@ import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSeparator
@@ -94,11 +95,27 @@ internal fun EmergencyRequirement.icon(): ImageVector = when (this) {
  * from shared code rather than hardcoding it here is what stops the two platforms tinting
  * the same requirement differently.
  */
-internal fun EmergencyRequirement.accentColor(): Color {
-    val hex = EmergencyFormatting.requirementColorHex(this).removePrefix("#")
-    val value = hex.toLongOrNull(16) ?: return Color.Unspecified
-    return Color(0xFF000000 or value)
-}
+internal fun EmergencyRequirement.accentColor(): Color =
+    EmergencyFormatting.requirementColorHex(this).toEmergencyColor()
+
+/**
+ * A KMM colour hex to a Compose [Color], via the design system's `toComposeColor()`.
+ *
+ * `HexColor.kt` says it is "the one and only place a hex string becomes a Compose Color",
+ * and it is right to -- but this feature had hand-rolled the same
+ * `Color(0xFF000000 or hex.toLongOrNull(16))` shift in three separate files instead of
+ * calling it. That is the same drift that let feature code type raw hexes in the first
+ * place, so they all funnel through here now.
+ *
+ * `toComposeColor()` throws on a malformed hex, which is right for a compile-time token
+ * but not for [TrustLevel.colorHex] / `requirementColorHex`, which arrive as data. The
+ * catch preserves each call site's previous "fall back rather than crash" behaviour.
+ */
+internal fun String.toEmergencyColor(): Color =
+    runCatching { toComposeColor() }.getOrDefault(Color.Unspecified)
+
+/** [TrustLevel]'s KMM-owned accent, so all three call sites resolve it identically. */
+internal fun TrustLevel.accentColor(): Color = colorHex.toEmergencyColor()
 
 @Composable
 internal fun EmergencyHeader(title: String, subtitle: String? = null) {
@@ -303,7 +320,7 @@ internal fun EmergencyTrustChip(
     modifier: Modifier = Modifier,
 ) {
     val ink = if (tinted) {
-        Color(0xFF000000 or (trust.colorHex.removePrefix("#").toLongOrNull(16) ?: 0L))
+        trust.accentColor()
     } else {
         sakhiSecondaryLabel()
     }

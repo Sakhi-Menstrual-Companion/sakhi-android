@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
+import team.sakhi.android.designsystem.SakhiTokens
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.EmptyState
@@ -393,12 +394,17 @@ private fun LocalSnapshotSections(
         }
     }
 
+    // Every tint below is iOS `MyDataView.swift`'s, one row for one row. They were six
+    // hand-typed hexes with no token behind them, and two rows were the wrong *kind* of
+    // colour entirely: the invitations envelope was an amber where iOS uses
+    // `categoryMessages` (blue), and cycles used the brand pink where iOS uses
+    // `categoryCycles` (purple).
     if (snapshot.periodLogs.isNotEmpty()) {
         DataGroup(title = stringResource(R.string.profile_my_data_section_period_logs)) {
             snapshot.periodLogs.take(40).forEach { log ->
                 DataRow(
                     icon = Icons.Filled.WaterDrop,
-                    tint = if (log.periodPresent) Color(0xFFDD5B6A) else sakhiSecondaryLabel(),
+                    tint = if (log.periodPresent) SakhiTokens.CategoryPeriod else sakhiTertiaryLabel(),
                     label = log.logDate.formatDateLabel(),
                     value = buildLocalLogValue(log, context),
                 )
@@ -412,7 +418,7 @@ private fun LocalSnapshotSections(
             snapshot.cycles.take(20).forEach { cycle ->
                 DataRow(
                     icon = Icons.Filled.Autorenew,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = SakhiTokens.CategoryCycles,
                     label = cycle.cycleStartDate.formatDateLabel(),
                     value = buildCycleValue(cycle, context),
                 )
@@ -426,7 +432,7 @@ private fun LocalSnapshotSections(
             snapshot.partnerships.forEach { partnership ->
                 DataRow(
                     icon = Icons.Filled.People,
-                    tint = Color(0xFF2E9E7E),
+                    tint = SakhiTokens.CategoryCare,
                     label = partnership.partnerName.ifBlank { context.getString(R.string.profile_my_data_partner_fallback) },
                     value = partnership.status.value.replaceFirstChar(Char::titlecase),
                 )
@@ -439,7 +445,7 @@ private fun LocalSnapshotSections(
             snapshot.invitations.forEach { invitation ->
                 DataRow(
                     icon = Icons.Filled.Email,
-                    tint = Color(0xFFF0A144),
+                    tint = SakhiTokens.CategoryMessages,
                     label = invitation.inviteCode,
                     value = invitation.status.label(),
                 )
@@ -452,7 +458,7 @@ private fun LocalSnapshotSections(
             snapshot.aiMessages.take(15).forEach { message ->
                 DataRow(
                     icon = if (message.isUser) Icons.Filled.Person else Icons.Filled.AutoAwesome,
-                    tint = if (message.isUser) MaterialTheme.colorScheme.primary else Color(0xFFF0A144),
+                    tint = if (message.isUser) MaterialTheme.colorScheme.primary else SakhiTokens.CategoryAi,
                     label = message.timestamp.formatDateLabel()
                         ?: context.getString(R.string.profile_my_data_unknown_date),
                     value = message.content.preview(maxLength = 55),
@@ -547,7 +553,7 @@ private fun CloudSnapshotSections(
             snapshot.periodLogs.take(40).forEach { log ->
                 DataRow(
                     icon = Icons.Filled.WaterDrop,
-                    tint = if (log.flowIntensity != null) Color(0xFFDD5B6A) else sakhiSecondaryLabel(),
+                    tint = if (log.flowIntensity != null) SakhiTokens.CategoryPeriod else sakhiTertiaryLabel(),
                     label = log.logDate.formatDateLabel(),
                     value = buildCloudLogValue(log, context),
                 )
@@ -561,7 +567,7 @@ private fun CloudSnapshotSections(
             snapshot.cycles.take(20).forEach { cycle ->
                 DataRow(
                     icon = Icons.Filled.Autorenew,
-                    tint = MaterialTheme.colorScheme.primary,
+                    tint = SakhiTokens.CategoryCycles,
                     label = cycle.cycleStartDate.formatDateLabel(),
                     value = buildCycleValue(cycle, context),
                 )
@@ -575,7 +581,7 @@ private fun CloudSnapshotSections(
             snapshot.aiMessages.take(30).forEach { message ->
                 DataRow(
                     icon = if (message.isUser) Icons.Filled.Person else Icons.Filled.AutoAwesome,
-                    tint = if (message.isUser) MaterialTheme.colorScheme.primary else Color(0xFFF0A144),
+                    tint = if (message.isUser) MaterialTheme.colorScheme.primary else SakhiTokens.CategoryAi,
                     label = message.timestamp.formatDateLabel()
                         ?: context.getString(R.string.profile_my_data_unknown_date),
                     value = message.content.preview(maxLength = 60),
@@ -590,7 +596,7 @@ private fun CloudSnapshotSections(
             if (snapshot.partnerships.isNotEmpty()) {
                 DataRow(
                     icon = Icons.Filled.People,
-                    tint = Color(0xFF2E9E7E),
+                    tint = SakhiTokens.CategoryCare,
                     label = stringResource(R.string.profile_my_data_care_connections_label),
                     value = snapshot.partnerships.size.toString(),
                 )
@@ -598,7 +604,7 @@ private fun CloudSnapshotSections(
             if (snapshot.invitations.isNotEmpty()) {
                 DataRow(
                     icon = Icons.Filled.Email,
-                    tint = Color(0xFFF0A144),
+                    tint = SakhiTokens.CategoryMessages,
                     label = stringResource(R.string.profile_my_data_invitations_sent_label),
                     value = snapshot.invitations.size.toString(),
                 )

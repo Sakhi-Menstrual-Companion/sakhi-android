@@ -1016,14 +1016,23 @@ private fun InviteCreationContent(
                 }
             }
         }
+        // One path at a time, as on iOS.
+        //
+        // iOS sends someone who arrived through an invite link straight into
+        // `AcceptInviteSheet`: she sees the code she was given, and nothing else.
+        // Android used to render both cards in both orders, so she was also handed a
+        // full "Invite someone you trust" form, with a name field, a relationship field
+        // and a Create invite code button, directly under the one she came to use. That
+        // is the opposite flow, offered at the moment she is trying to finish this one.
+        //
+        // The no-code case does not normally reach here at all: `shouldAutoShowInviteFlow`
+        // routes a disconnected hub with no prefill into the `carePartnerInvite` flow
+        // above, which is what iOS's `InviteFlowLauncher` does. The else branch stays as
+        // the fallback for someone who clears the prefilled field.
         if (arrivedWithCode) {
             acceptCodeCard()
-            Spacer(modifier = Modifier.height(SakhiSpacing.space4))
-            createInviteCard()
         } else {
             createInviteCard()
-            Spacer(modifier = Modifier.height(SakhiSpacing.space4))
-            acceptCodeCard()
         }
 
         uiState.error?.let { error ->

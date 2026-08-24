@@ -45,6 +45,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiDeepRose
@@ -121,7 +122,9 @@ fun SakhiLoadingView(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+            // iOS `SakhiLoadingView` ends in `.profileStaticPageBackground()`, so this is
+            // the phase gradient in dark, not the flat black `background` role.
+            .background(sakhiPageBackgroundBrush()),
         contentAlignment = Alignment.Center,
     ) {
         Box(modifier = Modifier.size(200.dp), contentAlignment = Alignment.Center) {

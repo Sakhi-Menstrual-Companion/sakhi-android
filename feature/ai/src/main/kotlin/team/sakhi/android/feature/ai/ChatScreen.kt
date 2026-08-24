@@ -622,14 +622,23 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
                 ) {
                     itemsIndexed(filteredPlaces, key = { _, place -> place.placeId }) { _, place ->
                         val selected = selectedPlaceId == place.placeId
+                        // The unselected branch was `colorScheme.surface` *with* a
+                        // `tonalElevation`, and Material3 only applies its tonal tint when
+                        // the colour is exactly `colorScheme.surface` -- so this one row
+                        // hit that path and came out pink-tinted while the selected row
+                        // (a different colour) did not. iOS fills both with
+                        // `DS.Colors.background` and marks selection with the pink wash
+                        // alone, at `DS.Radius.systemCard` with a `pink.opacity(0.07)`
+                        // hairline.
                         Surface(
                             shape = RoundedCornerShape(SakhiRadius.lg),
-                            tonalElevation = SakhiSpacing.space1,
                             color = if (selected) {
                                 MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
                             } else {
-                                MaterialTheme.colorScheme.surface
+                                MaterialTheme.colorScheme.background
                             },
+                            contentColor = sakhiLabel(),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.07f)),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clickable {
@@ -1216,9 +1225,13 @@ private fun PlacesCard(
         )
     }
 
+    // iOS `SakhiAIPlacesCard` fills its container with `DS.Colors.systemBackground`
+    // (white / #1C1C1E). This had `tonalElevation` and no `color`, so it drew brand
+    // `lightPink` tinted further toward `primary`.
     Surface(
         shape = RoundedCornerShape(SakhiRadius.xl),
-        tonalElevation = SakhiSpacing.space1,
+        color = sakhiSystemBackground(),
+        contentColor = sakhiLabel(),
         modifier = modifier
             .semantics(mergeDescendants = true) {
                 contentDescription = openNearbyPlacesLabel
