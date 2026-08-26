@@ -84,16 +84,19 @@ android {
         // on EVERY upload and can never repeat, because Play refuses a code it has already
         // seen, so this only ever goes up, whether or not versionName moves.
         //
-        // History: 1 went up by hand on 2026-08-13. 2 went up through the API. 3 is on the
-        // internal track now. So the next upload is 4, which is what this is set to.
+        // History: 1 went up by hand on 2026-08-13. 2 went up through the API. 3 went to
+        // the internal track. 4 was built and signed on 2026-08-25 for the target-API-36
+        // bump; Play Console showed an update in review on 2026-08-26, so 4 has to be
+        // assumed spent whether or not that review is the one. Skipping to 5 costs
+        // nothing, and re-using a code Play has already seen is a hard upload failure.
         //
         // versionName is the string the user reads. It changes only when the release means
         // something different: 2.0.1 to 2.0.2 for a fix, to 2.1.0 for a feature. The two
         // numbers are independent and are not meant to match each other.
-        versionCode = 4
+        versionCode = 5
         // NOTE: iOS `MARKETING_VERSION` is still 1.0, so the two platforms no longer carry
         // the same number. Bring iOS into step if they are meant to match.
-        versionName = "2.0.1"
+        versionName = "2.0.2"
         // Temporary fallback keeps clean checkouts buildable, but the new
         // Nearby Places map surfaces still need a Maps-authorized runtime key.
         manifestPlaceholders["googleMapsApiKey"] = secret(
