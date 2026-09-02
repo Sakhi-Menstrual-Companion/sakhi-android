@@ -32,11 +32,11 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VerifiedUser
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -77,6 +77,9 @@ import team.sakhi.android.ui.SheetSurface
 import team.sakhi.models.CycleHealthStatus
 import team.sakhi.preferences.ThemeMode
 import team.sakhi.preferences.ThemePreferenceStore
+import team.sakhi.android.ui.SakhiAlertSheet
+import team.sakhi.android.ui.OfflineUpgradeLauncher
+import team.sakhi.android.ui.SakhiAlertKind
 import team.sakhi.android.ui.SakhiNavBar
 
 /**
@@ -138,43 +141,30 @@ fun ProfileScreen(
         onFeedbackClick = onFeedbackClick,
         onManageAccountClick = onManageAccountClick,
         onSignOutClick = viewModel::requestSignOut,
+        // Asks the app root to run the onboarding phone/OTP flow over Home. The record
+        // migration that makes this safe runs in `AuthViewModel` when that sign-in lands.
+        onCreateAccountClick = OfflineUpgradeLauncher::request,
         isOfflineUser = uiState.isOfflineUser,
     )
 
     if (uiState.showSignOutConfirm) {
-        AlertDialog(
+        // Sakhi's own alert sheet, not a raw Material3 `AlertDialog`. Leaving a system
+        // dialog in the middle of this flow is the same mismatch the onboarding
+        // data-source alert already had: it shares none of the app's styling, and it is
+        // the last thing she sees before being signed out.
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Destructive,
+            title = stringResource(R.string.profile_sign_out_title),
+            // The error is appended rather than given its own line: the sheet is a fixed
+            // height, and a second paragraph pushes the buttons off it.
+            message = uiState.signOutError
+                ?.let { "${stringResource(R.string.profile_sign_out_confirm)}\n\n$it" }
+                ?: stringResource(R.string.profile_sign_out_confirm),
+            primaryLabel = stringResource(R.string.profile_sign_out_action),
+            onPrimaryClick = viewModel::confirmSignOut,
+            secondaryLabel = stringResource(R.string.profile_cancel),
+            onSecondaryClick = viewModel::dismissSignOutConfirm,
             onDismissRequest = viewModel::dismissSignOutConfirm,
-            title = { Text(stringResource(R.string.profile_sign_out_title)) },
-            text = {
-                Column {
-                    Text(stringResource(R.string.profile_sign_out_confirm))
-                    uiState.signOutError?.let { error ->
-                        Text(
-                            text = error,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(top = SakhiSpacing.space2),
-                        )
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = viewModel::confirmSignOut, enabled = !uiState.isSigningOut) {
-                    if (uiState.isSigningOut) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp))
-                    } else {
-                        Text(
-                            text = stringResource(R.string.profile_sign_out_action),
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = viewModel::dismissSignOutConfirm, enabled = !uiState.isSigningOut) {
-                    Text(stringResource(R.string.profile_cancel))
-                }
-            },
         )
     }
 
@@ -462,6 +452,8 @@ private fun profileSettingGroups(
     onFeedbackClick: () -> Unit,
     onManageAccountClick: () -> Unit,
     onSignOutClick: () -> Unit,
+    /** Starts the offline-to-online upgrade: phone + OTP, then her records are migrated. */
+    onCreateAccountClick: () -> Unit,
     /**
      * A local-only (offline) account. iOS branches the whole Account group on this:
      * `if vm.isOfflineUser` it offers "Manage Account" + "Create a Sakhi Account", and
@@ -528,22 +520,29 @@ private fun profileSettingGroups(
             // Signing out of an account that was never signed in is meaningless, and
             // here it is the one action that could strand data living only on this
             // device.
-            //
-            // iOS also offers "Create a Sakhi Account" in this branch, and that row is
-            // deliberately NOT added yet. The offline-to-online migration it needs --
-            // `DataMigration.rewritePeriodLogIdentity`, which rewrites `offline_<id>`
-            // records onto the real user id -- exists in SakhiCore but is called from
-            // NOTHING except its own test. Local records are keyed by `ownerUserId`, so
-            // authenticating without that step leaves every offline log invisible to the
-            // new account and never uploaded. Shipping the button before the migration is
-            // wired would quietly lose someone's health history.
         ).let { items ->
-            if (isOfflineUser) items else items + ProfileSettingItem(
-                Icons.AutoMirrored.Filled.Logout,
-                context.getString(R.string.profile_item_sign_out),
-                onSignOutClick,
-                isDestructive = true,
-            )
+            if (isOfflineUser) {
+                // iOS's offline branch, matched: "Manage Account" + "Create a Sakhi Account"
+                // (`ProfileView.swift`). This row was held back until the offline-to-online
+                // migration behind it existed, because local records are keyed by
+                // `ownerUserId` and the repositories only read the local store for an
+                // `offline_` id -- authenticating without re-attributing them leaves every
+                // offline log invisible to the new account and never uploaded. That
+                // migration now runs from `AuthViewModel` on the sign-in that creates the
+                // account (`OfflineUpgradeMigrator`), so the row is safe to offer.
+                items + ProfileSettingItem(
+                    Icons.Filled.PersonAdd,
+                    context.getString(R.string.profile_item_create_account),
+                    onCreateAccountClick,
+                )
+            } else {
+                items + ProfileSettingItem(
+                    Icons.AutoMirrored.Filled.Logout,
+                    context.getString(R.string.profile_item_sign_out),
+                    onSignOutClick,
+                    isDestructive = true,
+                )
+            }
         },
     )
 

@@ -378,5 +378,8 @@ class CareViewModel(
         return session?.sentInvitations?.firstOrNull()
     }
 
-    private fun isStillCurrent(session: SessionContext?): Boolean = sessionManager.current == session
+    // isSameSubjectAs, not ==: see SessionContext.isSameSubjectAs — the session is
+    // republished with fuller detail shortly after boot, and == treats that as a change.
+    private fun isStillCurrent(session: SessionContext?): Boolean =
+        session?.isSameSubjectAs(sessionManager.current) ?: (sessionManager.current == null)
 }

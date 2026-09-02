@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -30,6 +29,8 @@ import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.HeightRulerPicker
 import team.sakhi.android.ui.PrimaryButton
@@ -350,19 +351,14 @@ private fun UnsavedChangesDialog(
     onSave: () -> Unit,
     onDiscard: () -> Unit,
 ) {
-    AlertDialog(
+    SakhiAlertSheet(
+        kind = SakhiAlertKind.Warning,
+        title = stringResource(R.string.edit_profile_discard_title),
+        message = stringResource(R.string.edit_profile_discard_message),
+        primaryLabel = stringResource(R.string.edit_profile_discard_save),
+        onPrimaryClick = onSave,
+        secondaryLabel = stringResource(R.string.edit_profile_discard_discard),
+        onSecondaryClick = onDiscard,
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.edit_profile_discard_title)) },
-        text = { Text(stringResource(R.string.edit_profile_discard_message)) },
-        confirmButton = {
-            TextButton(onClick = onSave) {
-                Text(stringResource(R.string.edit_profile_discard_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDiscard) {
-                Text(stringResource(R.string.edit_profile_discard_discard))
-            }
-        },
     )
 }

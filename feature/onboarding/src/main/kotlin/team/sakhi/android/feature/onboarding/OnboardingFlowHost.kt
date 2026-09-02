@@ -77,6 +77,12 @@ fun OnboardingFlowHost(
      * nothing there, leaving that screen with no way out except system back.
      */
     onDismiss: (() -> Unit)? = null,
+    /**
+     * Changes when the app re-enters onboarding from a real session, i.e. she signed out.
+     * See `OnboardingViewModel.restartFlowIfNewRun` for why this is a token from the route
+     * rather than something this host can work out for itself.
+     */
+    restartToken: Int = 0,
     // `key = flowId` is load-bearing, not a tidy-up. `koinViewModel` resolves out of the
     // ViewModelStore by TYPE (plus key); with no key, the second flow in a session gets
     // the FIRST flow's instance back and `parametersOf(flowId)` is silently ignored,
@@ -92,6 +98,16 @@ fun OnboardingFlowHost(
     ),
 ) {
     val context = LocalContext.current
+
+    // Ordering here is load-bearing. This runs BEFORE `navState` is read so the collector
+    // below picks up the restarted state as its initial value and step one renders on this
+    // very pass. Read first and then restarted, the stale step composes once anyway, and
+    // when that step is `SetupLoading` its `LaunchedEffect(Unit) { onSetupLoading() }`
+    // fires -- which is exactly how a sign-out ended up minting a local-only account and
+    // bouncing straight back to Home. Returning early instead of reordering was tried and
+    // left the screen blank: nothing re-triggered composition once the frame was skipped.
+    viewModel.restartFlowIfNewRun(restartToken)
+
     val navState by viewModel.navState.collectAsStateWithLifecycle()
     val healthUiState by viewModel.healthUiState.collectAsStateWithLifecycle()
     val careInviteUiState by viewModel.careInviteUiState.collectAsStateWithLifecycle()
@@ -106,6 +122,12 @@ fun OnboardingFlowHost(
             currentOnFlowCompleted(completion)
         }
     }
+
+    // Sign-out brings her back here with the SAME retained view model, still parked wherever
+    // the previous run left it. `restartToken` changes only on a real Home -> SignedOut
+    // transition, so this restarts after a sign-out and leaves a rotation mid-onboarding
+    // alone. Runs in the composition body, not an effect: an effect is dispatched a frame
+    // later, and the stale step gets to compose and re-fire its completion first.
 
     // Both back triggers (system back below, and the on-screen `SakhiNavBar` button
     // further down) route through this one handler so keyboard-aware steps only need
@@ -199,7 +221,13 @@ fun OnboardingFlowHost(
     // loading ke samay nahi aayega."
     val isFullScreenLoadingStep = navState.currentStep == OnboardingFlowStep.SetupLoading
 
-    if (!isFullScreenLoadingStep) {
+    // The invite steps draw their own close button, exactly as iOS's `.fullscreen` steps
+    // do, so the shell must not also put a back arrow on them. On iOS you cannot go back
+    // from the share screen at all: the invitation already exists, so "back" to the
+    // permissions step is meaningless.
+    val stepOwnsChrome = navState.currentStep.ownsChrome
+
+    if (!isFullScreenLoadingStep && !stepOwnsChrome) {
         Spacer(modifier = Modifier.height(OnboardingHeaderTopGap))
 
         SakhiNavBar(
@@ -285,6 +313,7 @@ fun OnboardingFlowHost(
                 onContinueToInviteWaiting = viewModel::continueToInviteWaiting,
                 onCancelInvitation = viewModel::cancelCareInvitation,
                 onDismissInviteError = viewModel::dismissCareInviteError,
+                onDismiss = onDismiss,
                 onOtpResolved = { isReturningUser ->
                     viewModel.resolveOtp(
                         isReturningUser = isReturningUser,
@@ -309,32 +338,34 @@ fun OnboardingFlowHost(
                 onHealthConnectUnavailable = viewModel::handleUnavailableHealthConnectSelection,
             )
 
+            // Fallback for a step with no dedicated screen yet. It used to render the
+            // scaffolding this host was built with: the raw flow id ("Flow: newUser"), a
+            // "Step 4 of 9" counter card, a second back button below the shell's own, a
+            // divider, and then every step of the plan listed out under a "Planned steps"
+            // heading. All of that is for whoever is building the flow, not for her, and it
+            // is what made these screens read as cluttered.
+            //
+            // What is left is what the situation actually calls for: this step's own title
+            // and line, the error if there is one, and the action. The shell above already
+            // owns the back button and the chrome, so none of it is repeated here.
+            // No `verticalScroll` here: the weight below pins the action to the bottom the
+            // way every other step does, and a weighted child inside a scrollable column is
+            // an infinite-height measure crash, not a layout choice. The content is a title
+            // and one line, so there is nothing to scroll.
             else -> Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
                     .padding(SakhiSpacing.space6),
-                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+                verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
             ) {
                 Text(
-                    text = onboardingFlowTitle(context, navState.flowKind.flowId),
+                    text = stepTitle(context, renderedStep),
                     style = MaterialTheme.typography.headlineMedium,
                 )
                 Text(
-                    text = stringResource(R.string.onboarding_host_flow_id, viewModel.flowId),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = stepDescription(context, renderedStep),
+                    style = MaterialTheme.typography.bodyMedium,
                     color = sakhiSecondaryLabel(),
-                )
-
-                LinearProgressIndicator(
-                    progress = { navState.progress.coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                StepSummaryCard(
-                    step = renderedStep,
-                    stepIndex = targetIndex,
-                    stepCount = navState.plan.size,
                 )
 
                 navState.fieldError?.let { error ->
@@ -345,33 +376,14 @@ fun OnboardingFlowHost(
                     )
                 }
 
+                Spacer(modifier = Modifier.weight(1f))
+
                 StepActions(
                     step = renderedStep,
                     onContinue = continueRenderedStep,
                     onModeSelected = viewModel::selectMode,
                     onUpgradeRequired = viewModel::startCareInviteUpgrade,
                 )
-
-                if (navState.canGoBack) {
-                    TextButton(onClick = viewModel::goBack) {
-                        Text(stringResource(R.string.onboarding_back))
-                    }
-                }
-
-                HorizontalDivider(modifier = Modifier.padding(top = SakhiSpacing.space2))
-
-                Text(
-                    text = stringResource(R.string.onboarding_host_planned_steps),
-                    style = MaterialTheme.typography.titleLarge,
-                )
-
-                navState.plan.forEachIndexed { index, step ->
-                    StepPlanRow(
-                        step = step,
-                        isCurrent = index == navState.currentIndex,
-                        context = context,
-                    )
-                }
             }
         }
     }
@@ -381,41 +393,6 @@ fun OnboardingFlowHost(
 private fun onboardingProgressForIndex(stepIndex: Int, stepCount: Int): Float {
     if (stepCount <= 0) return 0f
     return ((stepIndex + 1).toFloat() / stepCount.toFloat()).coerceIn(0f, 1f)
-}
-
-@Composable
-private fun StepSummaryCard(
-    step: OnboardingFlowStep,
-    stepIndex: Int,
-    stepCount: Int,
-) {
-    val context = LocalContext.current
-    // See `OnboardingContentStepUi`'s contact-picker card: an implicit `Surface` colour
-    // is this app's pink-tinted `colorScheme.surface`, not white.
-    Surface(
-        color = sakhiSystemBackground(),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(SakhiRadius.xl),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(SakhiSpacing.space5),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-        ) {
-            Text(
-                text = stringResource(R.string.onboarding_host_step_counter, stepIndex + 1, stepCount),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Text(
-                text = stepTitle(context, step),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                text = stepDescription(context, step),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-        }
-    }
 }
 
 @Composable
@@ -481,31 +458,6 @@ private fun StepActions(
             }
         }
     }
-}
-
-@Composable
-private fun StepPlanRow(
-    step: OnboardingFlowStep,
-    isCurrent: Boolean,
-    context: Context,
-) {
-    val color = if (isCurrent) MaterialTheme.colorScheme.primary else sakhiSecondaryLabel()
-    Text(
-        text = if (isCurrent) "• ${stepTitle(context, step)}" else stepTitle(context, step),
-        style = MaterialTheme.typography.bodyMedium,
-        color = color,
-    )
-}
-
-private fun onboardingFlowTitle(context: Context, flowId: String): String = when (flowId) {
-    "newUser" -> context.getString(R.string.onboarding_host_flow_new_user)
-    "joinFamily" -> context.getString(R.string.onboarding_host_flow_join_family)
-    "carePartnerUpgrade" -> context.getString(R.string.onboarding_host_flow_care_partner_upgrade)
-    "invitePartner" -> context.getString(R.string.onboarding_host_flow_invite_partner)
-    "partnerToUser" -> context.getString(R.string.onboarding_host_flow_partner_to_user)
-    "carePartnerInvite" -> context.getString(R.string.onboarding_host_flow_care_partner_invite)
-    "returningSync" -> context.getString(R.string.onboarding_host_flow_returning_sync)
-    else -> context.getString(R.string.onboarding_host_flow_default)
 }
 
 private fun stepTitle(context: Context, step: OnboardingFlowStep): String = when (step) {

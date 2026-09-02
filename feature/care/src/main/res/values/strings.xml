@@ -4,6 +4,11 @@
     <string name="care_fallback_your_sakhi">Your Sakhi</string>
     <string name="care_header_you_and_name">You &amp; %1$s</string>
     <string name="care_subtitle_trusted_sakhi">Your trusted Sakhi.</string>
+    <!-- Partner side of the same screen. The viewer here IS the Sakhi, so the owner
+         copy above ("Your trusted Sakhi.") described the reader to themselves. -->
+    <string name="care_subtitle_you_are_her_sakhi">You are her Sakhi.</string>
+    <!-- Header and avatar fallback when she has not set a name. -->
+    <string name="care_fallback_someone_you_care_for">Someone You Care For</string>
     <string name="care_section_details">DETAILS</string>
     <string name="care_label_days_of_care">Days of care</string>
     <string name="care_label_connected_since">Connected since</string>
@@ -61,7 +66,7 @@
     <string name="care_preparing_invite">Preparing invite...</string>
     <string name="care_create_invite_code">Create invite code</string>
     <string name="care_i_have_a_code">Enter the code</string>
-    <string name="care_enter_shared_code">Ask the person caring for you to share their Sakhi invite code.</string>
+    <string name="care_enter_shared_code">Ask her to share the invite code from her Sakhi app.</string>
     <string name="care_label_invite_code">Invite code</string>
     <string name="care_placeholder_invite_code">Partner code (e.g. AB3K7R)</string>
     <string name="care_joining">Joining...</string>
@@ -92,6 +97,9 @@
     <string name="care_error_couldnt_load_activity">Couldn\'t load activity</string>
     <string name="care_empty_no_activity_yet">No activity yet</string>
     <string name="care_empty_when_name_logs">%1$s logs something for you, it will show up here.</string>
+    <!-- Partner side: the activity list is what the partner logged FOR her, so the
+         owner sentence above reads backwards to them. -->
+    <string name="care_empty_when_you_log_for_her">When you log something for her, it will show up here.</string>
     <string name="care_section_recent_activity">RECENT ACTIVITY</string>
     <string name="care_section_connection">CONNECTION</string>
     <string name="care_period_logged">Period logged</string>

@@ -18,7 +18,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -76,6 +75,8 @@ import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 
 /**
  * Step 4 — the two women are connected.
@@ -272,30 +273,21 @@ internal fun EmergencySessionStep(
     }
 
     if (showCompleteConfirm) {
-        AlertDialog(
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Success,
+            title = if (session.viewerIsRequester) {
+                stringResource(R.string.emergency_did_she_reach_you)
+            } else {
+                stringResource(R.string.emergency_all_done)
+            },
+            primaryLabel = stringResource(R.string.emergency_yes_we_are_done),
+            onPrimaryClick = {
+                showCompleteConfirm = false
+                viewModel.completeSession()
+            },
+            secondaryLabel = stringResource(R.string.emergency_not_yet),
+            onSecondaryClick = { showCompleteConfirm = false; isCompleting = false },
             onDismissRequest = { showCompleteConfirm = false; isCompleting = false },
-            title = {
-                Text(
-                    if (session.viewerIsRequester) {
-                        stringResource(R.string.emergency_did_she_reach_you)
-                    } else {
-                        stringResource(R.string.emergency_all_done)
-                    },
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showCompleteConfirm = false
-                    viewModel.completeSession()
-                }) {
-                    Text(stringResource(R.string.emergency_yes_we_are_done))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCompleteConfirm = false; isCompleting = false }) {
-                    Text(stringResource(R.string.emergency_not_yet))
-                }
-            },
         )
     }
 }

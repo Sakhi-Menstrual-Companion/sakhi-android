@@ -2,6 +2,18 @@
     <string name="back">Back</string>
     <string name="offline_banner_default">You are offline. Sakhi will sync again when the connection returns.</string>
     <string name="sakhi_alert_dismiss">Dismiss</string>
+    <string name="sakhi_alert_ok">OK</string>
+    <!-- No-internet alert, raised through SakhiAlertManager.showNoInternet(...).
+         Copy transcribed verbatim from iOS so both platforms say the same thing:
+         title from NetworkOfflineBanner / NetworkError.noConnection, message from
+         PhoneOTPAuthService.friendlySendOTPMessage. -->
+    <string name="no_internet_alert_title">No internet connection</string>
+    <string name="no_internet_alert_message">Please check your network and try again.</string>
+    <string name="no_internet_alert_retry">Try again</string>
+    <string name="no_internet_alert_not_now">Not now</string>
+    <!-- Swapped in live by SakhiAlertHost the moment connectivity is validated again. -->
+    <string name="no_internet_alert_restored_title">You\'re back online</string>
+    <string name="no_internet_alert_restored_message">Your connection is back. Please try again.</string>
     <string name="force_update_contact_support">Contact support</string>
     <string name="force_update_update_now">Update Now</string>
     <string name="calendar_a11y_today">today</string>

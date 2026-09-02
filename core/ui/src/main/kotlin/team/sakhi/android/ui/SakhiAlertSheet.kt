@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,7 +58,7 @@ enum class SakhiAlertKind { Info, Success, Warning, Destructive }
 @Composable
 fun SakhiAlertSheet(
     title: String,
-    message: String,
+    message: String = "",
     primaryLabel: String,
     onPrimaryClick: () -> Unit,
     onDismissRequest: () -> Unit,
@@ -73,10 +74,16 @@ fun SakhiAlertSheet(
         sheetState = sheetState,
     ) {
         Column(
+            // Order matters. `background` sits OUTSIDE `navigationBarsPadding`, so the white
+            // still runs to the very bottom edge the way iOS's sheet does, while the 300dp of
+            // content is lifted clear of the gesture bar. Without this the button row was
+            // drawn underneath it and both buttons came out visually cut in half -- confirmed
+            // on the QA emulator before the fix.
             modifier = Modifier
                 .fillMaxWidth()
-                .height(AlertSheetHeight)
-                .background(sakhiSystemBackground()),
+                .background(sakhiSystemBackground())
+                .navigationBarsPadding()
+                .height(AlertSheetHeight),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(modifier = Modifier.weight(1f))
@@ -101,16 +108,21 @@ fun SakhiAlertSheet(
                         color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
                     )
-                    Text(
-                        text = message,
-                        fontSize = 15.sp,
-                        // iOS `.lineSpacing(3)` on a 15pt face.
-                        lineHeight = 21.sp,
-                        color = sakhiSecondaryLabel(),
-                        textAlign = TextAlign.Center,
-                        // iOS `.frame(maxWidth: 260)`.
-                        modifier = Modifier.widthIn(max = AlertMessageMaxWidth),
-                    )
+                    // Some confirmations are a question and nothing else. Rendering an
+                    // empty Text still costs the Column's 8dp gap, which reads as a
+                    // lopsided title.
+                    if (message.isNotBlank()) {
+                        Text(
+                            text = message,
+                            fontSize = 15.sp,
+                            // iOS `.lineSpacing(3)` on a 15pt face.
+                            lineHeight = 21.sp,
+                            color = sakhiSecondaryLabel(),
+                            textAlign = TextAlign.Center,
+                            // iOS `.frame(maxWidth: 260)`.
+                            modifier = Modifier.widthIn(max = AlertMessageMaxWidth),
+                        )
+                    }
                 }
             }
 

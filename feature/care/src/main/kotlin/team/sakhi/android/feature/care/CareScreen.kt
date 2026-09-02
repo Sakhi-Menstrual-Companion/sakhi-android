@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -37,7 +38,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -75,9 +75,11 @@ import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.feature.onboarding.OnboardingFlowHost
-import team.sakhi.android.ui.BackButton
 import team.sakhi.android.ui.GlassCard
 import team.sakhi.android.ui.PrimaryButton
+import team.sakhi.android.ui.PartnerAvatarCloud
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SakhiNavBar
@@ -145,6 +147,26 @@ fun CareScreen(
         if (autoLaunchInviteFlow && uiState.careState is CareRuntimeState.Disconnected) {
             showOwnerInviteFlow = true
         }
+        // Once she is connected the invite flow has nothing left to do, so drop the
+        // auto-launch latch.
+        //
+        // Without this she was shown a dead invite code after her partner had already
+        // joined. Care state reads Disconnected for a moment on open, before the care
+        // status resolves, which latches the flow on; `showInviteFlowRoute` then keeps
+        // rendering it because it accepts OwnerConnected too. Verified on 2026-09-02
+        // against a real partnership: the server said owner_connected while the app sat
+        // on "Share with your partner", and it survived a force-stop and relaunch.
+        //
+        // The cost is that someone sitting on the waiting step goes straight to the
+        // connected detail screen instead of seeing the connected state on the waiting
+        // step first. Being told to share a code that is already used is the worse of
+        // the two.
+        if (uiState.careState is CareRuntimeState.OwnerConnected ||
+            uiState.careState is CareRuntimeState.PartnerConnected
+        ) {
+            autoLaunchInviteFlow = false
+            showOwnerInviteFlow = false
+        }
     }
 
     // iOS presents this as a `.sheet(...).presentationDetents([.large])` with a
@@ -168,6 +190,7 @@ fun CareScreen(
         } else if (showHistory && connectedPartnership != null) {
             PartnerHistoryContent(
                 partnership = connectedPartnership,
+                isPartnerRole = partnerConnected != null,
                 onBack = { showHistory = false },
             )
         } else if (showPermissionsEdit && ownerConnected != null) {
@@ -214,6 +237,7 @@ fun CareScreen(
                         hapticManager.impact(HapticImpact.MEDIUM)
                         viewModel.removePartnership(state.partnership.id)
                     },
+                    onClose = onClose,
                 )
 
                 is CareRuntimeState.PartnerConnected -> PartnerDetailContent(
@@ -226,6 +250,7 @@ fun CareScreen(
                         hapticManager.impact(HapticImpact.MEDIUM)
                         viewModel.removePartnership(state.partnership.id)
                     },
+                    onClose = onClose,
                 )
             }
         }
@@ -252,6 +277,7 @@ private fun PartnerDetailContent(
     onHistory: () -> Unit,
     onManagePermissions: (() -> Unit)?,
     onRemove: () -> Unit,
+    onClose: () -> Unit,
 ) {
     val context = LocalContext.current
     var showConfirmRemove by remember { mutableStateOf(false) }
@@ -262,7 +288,14 @@ private fun PartnerDetailContent(
             !name.lowercase().contains("sakhi") &&
             name.lowercase() != "unknown"
     }.orEmpty()
-    val fallbackLabel = stringResource(R.string.care_fallback_your_sakhi)
+    // Both of these read from the owner's seat. A care partner opening this screen is
+    // looking at the woman she cares for, so "Your Sakhi" described the reader to
+    // themselves and the subtitle did the same.
+    val fallbackLabel = if (isPartnerRole) {
+        stringResource(R.string.care_fallback_someone_you_care_for)
+    } else {
+        stringResource(R.string.care_fallback_your_sakhi)
+    }
     val displayLabel = if (resolvedName.isEmpty()) fallbackLabel else resolvedName
     val headerTitle = if (resolvedName.isEmpty()) {
         displayLabel
@@ -281,6 +314,13 @@ private fun PartnerDetailContent(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // iOS gets its way out of this screen from the sheet's own drag indicator
+        // (`PartnerDetailView` hides the nav bar and is presented as a `.sheet`).
+        // Android pushes it into the care nav host with no indicator, so without this
+        // the connected state is a dead end -- the only way out was Remove, which
+        // deletes the partnership rather than just closing the sheet. Same fix, and
+        // same reason, as the pending-invite state above.
+        SakhiNavBar(onClose = onClose)
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -306,7 +346,11 @@ private fun PartnerDetailContent(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = stringResource(R.string.care_subtitle_trusted_sakhi),
+                    text = if (isPartnerRole) {
+                        stringResource(R.string.care_subtitle_you_are_her_sakhi)
+                    } else {
+                        stringResource(R.string.care_subtitle_trusted_sakhi)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = sakhiSecondaryLabel(),
                     modifier = Modifier.padding(top = SakhiSpacing.space1),
@@ -370,66 +414,62 @@ private fun PartnerDetailContent(
         }
 
         SakhiListDivider()
-        TextButton(
-            onClick = { showConfirmRemove = true },
-            enabled = !isRemoving,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
-        ) {
-            Text(
-                text = if (isPartnerRole) {
-                    stringResource(R.string.care_leave_her)
-                } else {
-                    stringResource(R.string.care_remove_name, displayLabel)
-                },
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-            )
-        }
-    }
-
-    if (showConfirmRemove) {
-        AlertDialog(
-            onDismissRequest = { showConfirmRemove = false },
-            title = {
-                Text(
-                    if (isPartnerRole) {
-                        stringResource(R.string.care_leave_her_title)
-                    } else {
-                        stringResource(R.string.care_remove_name_title, displayLabel)
-                    }
-                )
-            },
-            text = {
-                Text(
-                    if (isPartnerRole) {
-                        stringResource(R.string.care_leave_her_body)
-                    } else {
-                        stringResource(R.string.care_remove_name_body, displayLabel)
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showConfirmRemove = false
-                    onRemove()
-                }) {
+        // Was a bare TextButton, which is why this row sat hard against the gesture bar:
+        // it carried none of the shared footer chrome. SakhiFooter is what every other
+        // screen uses and it owns the navigation-bar inset, matching iOS's sticky bottom
+        // (`separator` + button + `.padding(.bottom, DS.Spacing.s)`).
+        SakhiFooter(
+            primaryLabel = "",
+            onPrimaryClick = {},
+            showSecondarySlot = false,
+            primarySlot = {
+                TextButton(
+                    onClick = { showConfirmRemove = true },
+                    enabled = !isRemoving,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
                     Text(
                         text = if (isPartnerRole) {
-                            stringResource(R.string.care_confirm_leave_her)
+                            stringResource(R.string.care_leave_her)
                         } else {
-                            stringResource(R.string.care_confirm_remove)
+                            stringResource(R.string.care_remove_name, displayLabel)
                         },
-                        color = MaterialTheme.colorScheme.error,
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                     )
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showConfirmRemove = false }) {
-                    Text(stringResource(R.string.care_cancel))
-                }
+        )
+    }
+
+    if (showConfirmRemove) {
+        // iOS uses `.sakhiAlert(type: .destructive, ... secondaryButton: .cancel())` here,
+        // not a system alert. A raw Material3 AlertDialog shares none of the app's styling
+        // and it is the last thing she sees before a partnership is deleted.
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Destructive,
+            title = if (isPartnerRole) {
+                stringResource(R.string.care_leave_her_title)
+            } else {
+                stringResource(R.string.care_remove_name_title, displayLabel)
             },
+            message = if (isPartnerRole) {
+                stringResource(R.string.care_leave_her_body)
+            } else {
+                stringResource(R.string.care_remove_name_body, displayLabel)
+            },
+            primaryLabel = if (isPartnerRole) {
+                stringResource(R.string.care_confirm_leave_her)
+            } else {
+                stringResource(R.string.care_confirm_remove)
+            },
+            onPrimaryClick = {
+                showConfirmRemove = false
+                onRemove()
+            },
+            secondaryLabel = stringResource(R.string.care_cancel),
+            onSecondaryClick = { showConfirmRemove = false },
+            onDismissRequest = { showConfirmRemove = false },
         )
     }
 }
@@ -493,82 +533,6 @@ private fun SparkleGlyph() {
     InfoSymbolIcon(Icons.Filled.AutoAwesome)
 }
 
-@Composable
-private fun PartnerAvatarCloud(partnerName: String) {
-    val partnerInitial = partnerName.take(1).uppercase()
-
-    Box(
-        modifier = Modifier.size(width = 196.dp, height = 144.dp),
-        contentAlignment = Alignment.TopCenter,
-    ) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .size(116.dp)
-                .background(MaterialTheme.colorScheme.surface, CircleShape),
-        )
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(116.dp)
-                .background(MaterialTheme.colorScheme.surface, CircleShape),
-        )
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 13.dp, top = 13.dp)
-                .size(90.dp)
-                .background(MaterialTheme.colorScheme.primary, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Person,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(34.dp),
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(end = 13.dp, top = 13.dp)
-                .size(90.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.18f), CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = partnerInitial,
-                style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .offset(y = (-10).dp)
-                .size(30.dp)
-                .background(MaterialTheme.colorScheme.surface, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Favorite,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(10.dp),
-                )
-            }
-        }
-    }
-}
 
 @Composable
 private fun InfoSymbolIcon(imageVector: androidx.compose.ui.graphics.vector.ImageVector) {
@@ -1129,6 +1093,8 @@ private fun PartnerPermissionsEditContent(
     var shareNotes by remember { mutableStateOf(initial.canViewNotes) }
 
     Column(modifier = Modifier.fillMaxSize()) {
+        // Had no header at all, so the only way back out of Manage Permissions was Save.
+        SakhiNavBar(onBack = onBack)
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -1273,6 +1239,7 @@ private fun PermissionToggleRow(title: String, checked: Boolean, onCheckedChange
 @Composable
 private fun PartnerHistoryContent(
     partnership: CarePartnership,
+    isPartnerRole: Boolean,
     onBack: () -> Unit,
     periodLogRepository: team.sakhi.repositories.PeriodLogRepository = org.koin.compose.koinInject(),
 ) {
@@ -1280,7 +1247,11 @@ private fun PartnerHistoryContent(
     var logs by remember { mutableStateOf<List<team.sakhi.models.PeriodLog>>(emptyList()) }
     var isLoaded by remember { mutableStateOf(false) }
     var loadError by remember { mutableStateOf<String?>(null) }
-    val fallbackLabel = stringResource(R.string.care_fallback_your_sakhi)
+    val fallbackLabel = if (isPartnerRole) {
+        stringResource(R.string.care_fallback_someone_you_care_for)
+    } else {
+        stringResource(R.string.care_fallback_your_sakhi)
+    }
     val connectedDate = formatConnectedSince(partnershipStartDate(partnership), context)
 
     androidx.compose.runtime.LaunchedEffect(partnership.userId) {
@@ -1300,18 +1271,10 @@ private fun PartnerHistoryContent(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BackButton(onClick = onBack)
-            Text(
-                text = stringResource(R.string.care_title_activity),
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-            )
-        }
+        // Was a hand-rolled Row of BackButton + Text, which is exactly the drift
+        // SakhiNavBar exists to stop: its button size and paddings did not match any
+        // other sheet header in the app.
+        SakhiNavBar(onBack = onBack, title = stringResource(R.string.care_title_activity))
         SakhiListDivider()
 
         if (!isLoaded) {
@@ -1325,6 +1288,9 @@ private fun PartnerHistoryContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    // The sheet runs to the bottom of the screen, so without this the
+                    // last row sits under the gesture bar.
+                    .navigationBarsPadding()
                     .padding(SakhiSpacing.space6),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
@@ -1354,6 +1320,7 @@ private fun PartnerHistoryContent(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .navigationBarsPadding()
                     .padding(SakhiSpacing.space6),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
@@ -1370,10 +1337,16 @@ private fun PartnerHistoryContent(
                     color = sakhiSecondaryLabel(),
                 )
                 Text(
-                    text = stringResource(
-                        R.string.care_empty_when_name_logs,
-                        partnership.partnerName.ifBlank { fallbackLabel },
-                    ),
+                    // The partner is the one doing the logging here, so the owner's
+                    // sentence ("<name> logs something for you") read backwards to them.
+                    text = if (isPartnerRole) {
+                        stringResource(R.string.care_empty_when_you_log_for_her)
+                    } else {
+                        stringResource(
+                            R.string.care_empty_when_name_logs,
+                            partnership.partnerName.ifBlank { fallbackLabel },
+                        )
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = sakhiSecondaryLabel(),
                 )
@@ -1387,6 +1360,7 @@ private fun PartnerHistoryContent(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
+                .navigationBarsPadding()
                 .padding(SakhiSpacing.space5),
         ) {
             SectionHeader(text = stringResource(R.string.care_section_recent_activity))

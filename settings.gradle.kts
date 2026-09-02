@@ -1,6 +1,11 @@
 rootProject.name = "SakhiAndroid"
 
 pluginManagement {
+    // The project's own Gradle convention plugins. Must be included HERE, in
+    // pluginManagement, not as a regular composite build: the modules apply these by id,
+    // which Gradle resolves before the normal build graph exists.
+    includeBuild("build-logic")
+
     repositories {
         gradlePluginPortal()
         google()
@@ -32,10 +37,16 @@ includeBuild("../00-Shared/02-Prediction-Engine")
 include(
     ":app",
     ":baseline-profile",
+    // Custom lint checks that enforce the design system, see lint/README or the
+    // detectors themselves for what each rule catches.
+    ":lint",
     ":core:common",
     ":core:designsystem",
     ":core:ui",
     ":core:platform",
+    // Shared test infrastructure: the main-dispatcher rule and session builders that were
+    // otherwise copy-pasted into every ViewModel test.
+    ":core:testing",
     ":feature:auth",
     ":feature:onboarding",
     ":feature:home",

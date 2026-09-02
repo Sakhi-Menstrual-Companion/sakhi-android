@@ -289,7 +289,14 @@ fun HomeNavHost() {
             // This is the shared host for these overlay sheets, which is the same shape
             // iOS has (`HomeView.sharedSheetView` owns the grabber for all of them), so the
             // handle belongs here rather than inside Chat.
-            showSystemDragHandle = true,
+            // FALSE, deliberately. `SakhiModalSheet` sets `containerColor = Color.Transparent`,
+            // so the sheet's own container is invisible and the white rounded card is drawn by
+            // `SheetSurface` INSIDE the content. Material renders `dragHandle` in that
+            // invisible container, above the card — so the grabber floated over the dimmed
+            // Home content instead of sitting on the sheet, and pushed the close button down
+            // below a gap. The grabber belongs inside `SheetSurface`, which owns the surface
+            // it should sit on.
+            showSystemDragHandle = false,
         ) {
             // Peer sheet swaps are not full-screen pushes. Raindrop uses native modal
             // presentation plus short opacity fades for lightweight modal content

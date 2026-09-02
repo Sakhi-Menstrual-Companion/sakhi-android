@@ -1,10 +1,9 @@
 import java.util.Properties
 
 plugins {
-    alias(libs.plugins.android.application)
+    id("sakhi.android.application")
+    id("sakhi.android.application.compose")
     alias(libs.plugins.androidx.baselineprofile)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.play.publisher)
 }
@@ -45,7 +44,6 @@ android {
     // PredictionSDK along with it, because Gradle hard-rejects mixed AGP versions across a
     // composite build (see SakhiCore's plugins block). That is a separate piece of work and
     // it is not what the Play deadline needs.
-    compileSdk = 36
 
     defaultConfig {
         // Renamed 2026-08-13 to com.rachna.mysakhi. The earlier com.rachna.sakhi Play
@@ -65,7 +63,6 @@ android {
         // SHA-1/SHA-256 allowlist. Release upload-key SHA-1 is
         // 2B:03:38:B6:BC:91:15:06:1E:39:4E:A6:2E:45:5A:8B:C1:42:FE:89.
         applicationId = "com.rachna.mysakhi"
-        minSdk = 26
         // Android 16. Raised from 35 on 2026-08-25 because Play blocks updates from
         // 2026-08-31 for anything targeting more than one release behind, and Play Console
         // had already flagged this app as non-compliant at 35.
@@ -77,7 +74,6 @@ android {
         // predictive back is already on via enableOnBackInvokedCallback in the manifest; and
         // no activity pins android:screenOrientation, so the large-screen orientation rule
         // has nothing to override.
-        targetSdk = 36
         // ── Versioning rule, follow this on every upload ────────────────────────
         //
         // versionCode is Play's own integer and the user never sees it. It goes up by one
@@ -174,16 +170,23 @@ android {
         }
     }
 
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlin {
-        jvmToolchain(17)
-    }
     buildFeatures {
-        compose = true
         buildConfig = true
+    }
+
+    lint {
+        // Records the lint findings that already existed when the custom checks were added,
+        // so NEW problems fail the build while the backlog stays visible instead of being
+        // silently disabled. Regenerate deliberately with:
+        //
+        //   ./gradlew :app:updateLintBaseline
+        //
+        // Today it holds 4 `MissingPermission` false positives from the PredictionSDK
+        // included build: it calls ConnectivityManager but, being a library, cannot declare
+        // ACCESS_NETWORK_STATE itself. The app DOES declare it (AndroidManifest.xml line 4),
+        // lint just cannot see across the composite-build boundary. Do not "fix" those by
+        // adding permissions to a shared KMM module.
+        baseline = file("lint-baseline.xml")
     }
 }
 
@@ -230,18 +233,12 @@ dependencies {
 
     implementation(libs.koin.core)
     implementation(libs.koin.android)
-    // Excludes org.jetbrains.compose.foundation/runtime: koin-compose(-android) pulls these
-    // in at a strict 1.8.2, a duplicate of this app's real androidx.compose 1.11.4 stack
-    // under the same package names -- caused a real compile failure (Modifier.weight()
-    // resolving against the wrong artifact) before being excluded.
-    implementation(libs.koin.compose) {
-        exclude(group = "org.jetbrains.compose.foundation")
-        exclude(group = "org.jetbrains.compose.runtime")
-    }
-    implementation(libs.koin.androidx.compose) {
-        exclude(group = "org.jetbrains.compose.foundation")
-        exclude(group = "org.jetbrains.compose.runtime")
-    }
+    // The org.jetbrains.compose.foundation/runtime exclusions these used to carry are now
+    // applied once at the configuration level, in build-logic's configureAndroidCompose.
+    // See that file for why the duplicate Compose stack is a real compile failure and not a
+    // style preference.
+    implementation(libs.koin.compose)
+    implementation(libs.koin.androidx.compose)
 
     baselineProfile(project(":baseline-profile"))
 }

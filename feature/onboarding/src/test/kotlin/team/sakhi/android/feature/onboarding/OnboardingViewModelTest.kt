@@ -20,12 +20,13 @@ import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
+import team.sakhi.android.testing.MainDispatcherRule
 import org.junit.Test
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.AndroidHealthConnectManager
@@ -63,17 +64,11 @@ import team.sakhi.repositories.CareInviteException
 @OptIn(ExperimentalCoroutinesApi::class)
 class OnboardingViewModelTest {
 
-    private val testDispatcher = StandardTestDispatcher()
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
+    private val testDispatcher get() = mainDispatcherRule.testDispatcher
 
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(testDispatcher)
-    }
 
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
 
     // Several onboarding actions (`handleSetupLoading`, `createCareInvitationAndContinue`,
     // `cancelCareInvitation`, `acceptBeHerSakhiInvite`) run their real work inside
@@ -407,6 +402,11 @@ class OnboardingViewModelTest {
         // onboarding (a real regression, caught on device). Asserting the call happens
         // pins that ordering.
         val flowStore = OnboardingFlowStore("newUser")
+        // Drive the privacy decision the way she would, so the plan carries the
+        // `OfflineWarning` step. That step IS the record of her choosing an offline
+        // account, and it is what now licenses minting a session below. Without it the
+        // fixture describes a state no real offline user is ever in.
+        flowStore.send(OnboardingFlowIntent.PrivacyDecided(authenticated = false, offline = true))
         val authRepository = mockk<AuthRepository> {
             every { currentUserId } returns null
             every { startLocalOnlySession(any()) } returns "offline_test"
@@ -420,6 +420,30 @@ class OnboardingViewModelTest {
 
         assertNull(viewModel.setupUiState.value.error)
         verify { authRepository.startLocalOnlySession(any()) }
+    }
+
+    @Test
+    fun `handleSetupLoading never mints an account when she did not choose an offline one`() = runTest {
+        // The sign-out bug, traced on the QA emulator: signing out went
+        // `Unauthenticated -> route SignedOut` and then, 28ms later,
+        // `LocalOnlyUser -> route Home`, dropping her back into the app she had just left.
+        // A stale `SetupLoading` step composed once during the transition, found no current
+        // user, and minted an account to carry on with. Creating an account is her decision;
+        // this pins that a flow with no offline step can never make it for her.
+        val flowStore = OnboardingFlowStore("newUser")
+        flowStore.send(OnboardingFlowIntent.PrivacyDecided(authenticated = false, offline = false))
+        val authRepository = mockk<AuthRepository> {
+            every { currentUserId } returns null
+            every { startLocalOnlySession(any()) } returns "offline_should_not_happen"
+        }
+        val viewModel = newViewModel(flowStore = flowStore, authRepository = authRepository)
+        advanceUntilIdle()
+
+        viewModel.handleSetupLoading()
+        advanceUntilIdle()
+
+        verify(exactly = 0) { authRepository.startLocalOnlySession(any()) }
+        assertNull(viewModel.setupUiState.value.error)
     }
 
     @Test

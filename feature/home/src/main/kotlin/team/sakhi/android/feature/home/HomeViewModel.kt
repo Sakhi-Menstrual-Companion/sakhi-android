@@ -4,7 +4,14 @@ import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import co.touchlab.kermit.Logger
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -14,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import team.sakhi.android.common.CycleDetectionCoordinator
 import team.sakhi.android.common.CycleInsightAdapter
+import team.sakhi.android.common.LastKnownPhaseStore
 import team.sakhi.cycle.CycleMath
 import team.sakhi.cycle.CyclePhaseInsight
 import team.sakhi.date.DateConverter
@@ -29,6 +37,7 @@ import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.repositories.RecommendationRepository
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
+import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.session.SessionManager
 import team.sakhi.sync.SyncRuntimeState
 import team.sakhi.sync.SyncStore
@@ -102,6 +111,74 @@ data class HomeUiState(
 )
 
 /**
+ * Exactly the nine fields the hero and the top bar render, and nothing else.
+ *
+ * `HomeUiState` carries 24 fields, and both `HeroSection` and `HomeTopBar` used to take the
+ * whole object. Compose compares what it is handed, so a change to any unrelated field
+ * recomposed both of them: a background sync moving `syncState` through Idle -> Syncing ->
+ * Success recomposed the hero twice, despite the hero showing nothing about sync. The same
+ * went for `isLoadingCycle`, `error`, `currentCycle`, `selectedLog`, `periodLogDates` and the
+ * two `partnerSnapshot*` fields.
+ *
+ * Narrowing to this object means the other fifteen no longer reach either composable. When
+ * only they change, the derived `HomeHeroState` compares equal and both surfaces skip.
+ *
+ * One state for both on purpose: the top bar renders the SAME information as the hero in a
+ * collapsed form (that is what `HeroTopBarSubtitle` fades between as you scroll), so they
+ * genuinely share one input set rather than being lumped together for convenience.
+ *
+ * Kept as a plain `data class` for its generated `equals` — that comparison IS the skip check.
+ * Every field is a stable type, so `config/compose-stability.conf` already makes this stable
+ * without an annotation.
+ */
+data class HomeHeroState(
+    val session: SessionContext? = null,
+    val selectedDate: LocalDate = DateConverter.today(),
+    val phase: CyclePhase = CyclePhase.UNKNOWN,
+    val phaseKind: CyclePhaseInsight.PhaseKind = CyclePhaseInsight.PhaseKind.UNKNOWN,
+    val hasCycleData: Boolean = false,
+    val hasLoggedForSelectedDate: Boolean = false,
+    val prediction: CyclePhaseInsight.PeriodPredictionSnapshot? = null,
+    val heroTip: String? = null,
+    /**
+     * Whether background work is in flight, so the top bar can say "Syncing" instead of
+     * showing a phase name the app is still catching up on.
+     *
+     * A Boolean rather than the full `SyncRuntimeState`: the hero only needs "is something
+     * happening", and keeping it a primitive keeps `HomeHeroState` stable, so the rest of the
+     * hero still skips recomposition when only unrelated state moves.
+     */
+    val isSyncing: Boolean = false,
+    /**
+     * True until the first local read for this session has landed.
+     *
+     * Distinguishes "she has no cycle data" from "we have not looked yet". Without it the
+     * hero rendered its not-started copy on every cold start, so a woman with six logged
+     * cycles was told to "start tracking today" for as long as the read took. Empty is a
+     * claim about her; unknown is a claim about us, and only one of them was true.
+     */
+    val isLoading: Boolean = false,
+)
+
+/**
+ * Projects the hero's slice out of the full state. Cheap enough to call on every
+ * recomposition of Home: it copies eight references and allocates one small object, and the
+ * point is the `equals` on the result, not avoiding the allocation.
+ */
+fun HomeUiState.toHeroState(): HomeHeroState = HomeHeroState(
+    session = session,
+    selectedDate = selectedDate,
+    phase = phase,
+    phaseKind = phaseKind,
+    hasCycleData = hasCycleData,
+    hasLoggedForSelectedDate = hasLoggedForSelectedDate,
+    prediction = prediction,
+    heroTip = heroTip,
+    isSyncing = syncState == SyncRuntimeState.Syncing,
+    isLoading = isLoadingCycle,
+)
+
+/**
  * Thin home-state adapter over KMM session and sync state. The only derived values
  * are the current phase and day-in-cycle, both computed through shared `CycleMath`.
  */
@@ -116,6 +193,15 @@ class HomeViewModel(
     private val cycleDetectionCoordinator: CycleDetectionCoordinator,
     private val recommendationRepository: RecommendationRepository,
     private val appContext: Context,
+    /**
+     * Where the cycle engine, the statistics and the log-set building run. Injected rather
+     * than hardcoded so tests can hand in their own dispatcher: `Dispatchers.Default` is
+     * outside the test scheduler's control, so `advanceUntilIdle()` returns before the work
+     * lands and every derived field reads as its default.
+     */
+    private val computeDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    /** Backs `HomeHeroSnapshot`, so Home can open on the values it last showed. */
+    private val kvStore: PlatformKeyValueStore = PlatformKeyValueStore(),
 ) : ViewModel() {
 
     // Cached engine inputs so `selectDate` can re-ask the SAME engine for another day
@@ -124,19 +210,75 @@ class HomeViewModel(
     private var cachedPeriodLogDates: Set<LocalDate> = emptySet()
     private var cachedStats: team.sakhi.models.CycleStatistics? = null
 
-    private val _uiState = MutableStateFlow(HomeUiState())
+    /** What one off-main cycle-insight computation produces, so the state write stays a `copy`. */
+    private data class ComputedCycleInsight(
+        val periodLogDates: Set<LocalDate>,
+        val stats: team.sakhi.models.CycleStatistics?,
+        val insight: CycleInsightAdapter.Insight,
+    )
+
+    // Seeded, not defaulted. Reading the last known state here — synchronously, during
+    // construction — is what stops Home drawing a wrong phase colour and "start tracking
+    // today" for a frame or two on every launch. See `HomeHeroSnapshot`.
+    private val _uiState = MutableStateFlow(
+        sessionManager.session.value?.userId
+            ?.let { HomeHeroSnapshot.restore(kvStore, it) }
+            ?: HomeUiState(),
+    )
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 
     init {
+        // The data path reloads on a change of WHO we are looking at, or after a sync has
+        // actually landed new rows. It used to combine `syncState` itself, so every state
+        // the sync passed through re-ran `refresh()` -- and `refresh()` re-reads every cycle
+        // and every log, which for a cloud account is two network round-trips. A single sync
+        // emits `Syncing` and then a terminal state, so one sync cost two full reloads of
+        // Home, neither of which she asked for.
+        //
+        // `Success.lastSyncedAt` is the only signal that means "there may be new data", and
+        // `distinctUntilChanged` keeps a repeated success from re-triggering. `onStart`
+        // seeds it because `combine` waits for every source to emit, and a session that
+        // never syncs must still load Home.
+        val syncLandings = syncStore.syncState
+            .filterIsInstance<SyncRuntimeState.Success>()
+            .map { it.lastSyncedAt }
+            .distinctUntilChanged()
+            .onStart { emit(0L) }
+
+        // Keyed on WHO we are looking at, not on the whole session object.
+        //
+        // `SessionContext` changes for reasons the cycle data does not care about: the local
+        // boot publishes it immediately with an empty name and no invitations, and
+        // `refreshPrimaryDetails` fills those in a moment later. Collecting the session
+        // directly meant that second, purely cosmetic emission re-ran `refresh()` — a full
+        // re-read of every cycle and every log plus a complete engine pass. Together with the
+        // sync landing that follows it, one cold start ran the whole Home load THREE times,
+        // which showed up on a real device as repeated `SakhiHome insight` lines and ~1s
+        // frames while it happened.
+        //
+        // The session is still read inside `refresh` for names and permissions; this only
+        // controls what counts as a reason to reload.
+        val dataOwner = sessionManager.session
+            .map { it?.targetUserId }
+            .distinctUntilChanged()
+
         viewModelScope.launch {
             combine(
-                sessionManager.session,
-                syncStore.syncState,
+                dataOwner,
                 syncStore.partnerHealthSnapshot,
-            ) { session, syncState, partnerSnapshot ->
-                Triple(session, syncState, partnerSnapshot)
-            }.collectLatest { (session, syncState, partnerSnapshot) ->
-                refresh(session, syncState, partnerSnapshot)
+                syncLandings,
+            ) { _, partnerSnapshot, _ ->
+                partnerSnapshot
+            }.collectLatest { partnerSnapshot ->
+                refresh(sessionManager.session.value, syncStore.syncState.value, partnerSnapshot)
+            }
+        }
+
+        // The sync indicator still follows every state, it just no longer drags a full
+        // database and network reload along with it.
+        viewModelScope.launch {
+            syncStore.syncState.collect { state ->
+                _uiState.update { it.copy(syncState = state) }
             }
         }
     }
@@ -270,29 +412,49 @@ class HomeViewModel(
         val logs = logsResult.getOrDefault(emptyList())
         if (sessionManager.current?.targetUserId != targetUserId) return
 
-        val periodLogDates = logs.filter { it.periodPresent }.mapTo(mutableSetOf()) { it.logDate }
-        val stats = CycleMath.computeStatistics(cycles.filter { it.isComplete })
+        // Everything below used to run INSIDE `_uiState.update { ... }`, on the main thread.
+        // Two problems with that. `MutableStateFlow.update` is a compare-and-set loop, so
+        // its lambda re-runs on contention -- and this lambda ran the whole prediction
+        // engine plus a full log-line interpolation, so every retry paid for both again.
+        // And `viewModelScope.launch` carries no dispatcher, which means `Dispatchers.Main`:
+        // the engine, the statistics and the set-building were all competing with drawing.
+        // Computed once, off the main thread, the state write is left as a pure `copy`.
+        //
+        // `selectedDate` is read once here rather than inside the update. A date change
+        // while this is in flight is already served by the cached recompute path
+        // (`refreshSelectedDateLog` re-asks the same engine from `cachedCycles`).
+        val selectedDate = _uiState.value.selectedDate
+        val computed = withContext(computeDispatcher) {
+            val dates = logs.filter { it.periodPresent }.mapTo(mutableSetOf()) { it.logDate }
+            val computedStats = CycleMath.computeStatistics(cycles.filter { it.isComplete })
+            ComputedCycleInsight(
+                periodLogDates = dates,
+                stats = computedStats,
+                insight = CycleInsightAdapter.insightFor(
+                    date = selectedDate,
+                    cycles = cycles,
+                    periodLogDates = dates,
+                    stats = computedStats,
+                    userId = targetUserId,
+                ),
+            )
+        }
+        val periodLogDates = computed.periodLogDates
+        val stats = computed.stats
+        val insight = computed.insight
         cachedCycles = cycles
         cachedPeriodLogDates = periodLogDates
         cachedStats = stats
 
+        homeLog.i {
+            "insight for $selectedDate: phase=${insight.phase.kind}, " +
+                "cycleDay=${insight.phase.cycleDay}, status=${insight.prediction.status}, " +
+                "daysUntil=${insight.prediction.daysUntil}, periodDay=${insight.prediction.periodDay} | " +
+                "logs=${logs.size}, present=${periodLogDates.size}, latestPresent=${periodLogDates.maxOrNull()}, " +
+                "todayIsPresent=${selectedDate in periodLogDates}, cycles=${cycles.size}"
+        }
+
         _uiState.update {
-            // Computed for `it.selectedDate`, not always today, so browsing to another
-            // day in Calendar re-answers the same questions for that day.
-            val insight = CycleInsightAdapter.insightFor(
-                date = it.selectedDate,
-                cycles = cycles,
-                periodLogDates = periodLogDates,
-                stats = stats,
-                userId = targetUserId,
-            )
-            homeLog.i {
-                "insight for ${it.selectedDate}: phase=${insight.phase.kind}, " +
-                    "cycleDay=${insight.phase.cycleDay}, status=${insight.prediction.status}, " +
-                    "daysUntil=${insight.prediction.daysUntil}, periodDay=${insight.prediction.periodDay} | " +
-                    "logs=${logs.size}, present=${periodLogDates.size}, latestPresent=${periodLogDates.maxOrNull()}, " +
-                    "todayIsPresent=${it.selectedDate in periodLogDates}, cycles=${cycles.size}"
-            }
             it.copy(
                 phase = insight.phase.kind.toCyclePhase(),
                 phaseKind = insight.phase.kind,
@@ -310,6 +472,16 @@ class HomeViewModel(
                 error = null,
             )
         }
+
+        // Record what Home is now showing, so the NEXT launch opens on these values instead
+        // of on defaults. Written only after a successful load, and `save` itself refuses to
+        // store a state with no cycle data, so a failed read can never blank the snapshot.
+        HomeHeroSnapshot.save(kvStore, targetUserId, _uiState.value)
+        // Also recorded one layer up, where the pre-Home loading screens can reach it, so the
+        // app opens in this phase's colour instead of flashing brand pink first.
+        LastKnownPhaseStore.save(kvStore, targetUserId, _uiState.value.phase)
+        // So the splash can find this phase before the auth session has loaded.
+        LastKnownPhaseStore.setLastActiveUser(kvStore, targetUserId)
     }
 
     /**

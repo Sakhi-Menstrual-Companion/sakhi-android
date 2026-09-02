@@ -13,7 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PersonOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +51,8 @@ import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemGray5
 import team.sakhi.android.designsystem.sakhiSeparator
 import team.sakhi.android.designsystem.sakhiSystemBackground
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 
 /**
  * Step 4 — she has asked one Sakhi and is waiting on the answer.
@@ -236,27 +237,19 @@ internal fun EmergencyWaitingStep(
     }
 
     if (showCancelConfirm) {
-        AlertDialog(
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Destructive,
+            title = stringResource(R.string.emergency_cancel_confirm_title),
+            message = stringResource(R.string.emergency_cancel_confirm_body, helperName),
+            primaryLabel = stringResource(R.string.emergency_cancel_request),
+            onPrimaryClick = {
+                showCancelConfirm = false
+                isCancelling = true
+                viewModel.cancelRequest(step.requestId)
+            },
+            secondaryLabel = stringResource(R.string.emergency_keep_waiting),
+            onSecondaryClick = { showCancelConfirm = false },
             onDismissRequest = { showCancelConfirm = false },
-            title = { Text(stringResource(R.string.emergency_cancel_confirm_title)) },
-            text = { Text(stringResource(R.string.emergency_cancel_confirm_body, helperName)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showCancelConfirm = false
-                    isCancelling = true
-                    viewModel.cancelRequest(step.requestId)
-                }) {
-                    Text(
-                        text = stringResource(R.string.emergency_cancel_request),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCancelConfirm = false }) {
-                    Text(stringResource(R.string.emergency_keep_waiting))
-                }
-            },
         )
     }
 }

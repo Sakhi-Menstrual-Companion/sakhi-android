@@ -11,16 +11,14 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import kotlinx.datetime.LocalDate
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
+import team.sakhi.android.testing.MainDispatcherRule
 import org.junit.Test
 import team.sakhi.date.DateConverter
 import team.sakhi.logging.LogTokenEncoder
@@ -52,17 +50,11 @@ import kotlinx.coroutines.CompletableDeferred
 @OptIn(ExperimentalCoroutinesApi::class)
 class HomeViewModelTest {
 
-    private val testDispatcher = StandardTestDispatcher()
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
+    private val testDispatcher get() = mainDispatcherRule.testDispatcher
 
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(testDispatcher)
-    }
 
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
 
     private fun permissions(
         canViewPredictions: Boolean = true,
@@ -208,6 +200,11 @@ class HomeViewModelTest {
         // unit-test classpath, and these tests assert cycle/prediction state, not tips.
         mockk<RecommendationRepository>(relaxed = true),
         appContext,
+        // The cycle engine now runs off the main thread. Handing it the test dispatcher
+        // keeps that work inside the scheduler `advanceUntilIdle()` drives; on
+        // `Dispatchers.Default` it lands after the assertions and every derived field
+        // reads as its default.
+        computeDispatcher = testDispatcher,
     )
 
     @Test

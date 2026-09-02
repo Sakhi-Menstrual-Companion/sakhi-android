@@ -16,15 +16,13 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
+import team.sakhi.android.testing.MainDispatcherRule
 import org.junit.Test
 import team.sakhi.date.DateConverter
 import team.sakhi.models.CarePartnership
@@ -57,17 +55,11 @@ import team.sakhi.session.SessionPermissions
 @OptIn(ExperimentalCoroutinesApi::class)
 class RecommendationsViewModelTest {
 
-    private val testDispatcher = StandardTestDispatcher()
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
+    private val testDispatcher get() = mainDispatcherRule.testDispatcher
 
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(testDispatcher)
-    }
 
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
 
     private fun permissions(
         canViewPredictions: Boolean = false,

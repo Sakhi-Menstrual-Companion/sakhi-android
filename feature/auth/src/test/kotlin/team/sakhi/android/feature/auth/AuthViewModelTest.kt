@@ -10,14 +10,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
+import team.sakhi.android.testing.MainDispatcherRule
 import org.junit.Test
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.appstate.AppStateInputBridge
@@ -28,7 +26,15 @@ import team.sakhi.auth.AuthResultWithAccount
 import team.sakhi.validation.PhoneCountry
 import team.sakhi.validation.PhoneValidationResult
 import team.sakhi.state.AuthError
+import team.sakhi.android.ui.SakhiAlertManager
+import team.sakhi.android.ui.R as UiR
 import team.sakhi.state.SessionState
+import kotlinx.datetime.LocalDate
+import team.sakhi.models.UserProfile
+import team.sakhi.models.CycleData
+import team.sakhi.models.PeriodLog
+import team.sakhi.sync.OfflineUpgradeDataSource
+import team.sakhi.sync.OfflineUpgradeMigrator
 
 /**
  * State-machine test for `AuthViewModel`, the Android adapter around the shared
@@ -39,17 +45,11 @@ import team.sakhi.state.SessionState
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthViewModelTest {
 
-    private val testDispatcher = StandardTestDispatcher()
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
+    private val testDispatcher get() = mainDispatcherRule.testDispatcher
 
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(testDispatcher)
-    }
 
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
 
     private fun mockContext(): Context = mockk {
         every { getString(R.string.auth_error_code_empty) } returns "Code cannot be empty, please enter the 6-digit code we sent you"
@@ -59,6 +59,11 @@ class AuthViewModelTest {
         every { getString(R.string.auth_error_phone_invalid_start_india) } returns "Indian numbers start with 6, 7, 8, or 9"
         every { getString(R.string.auth_error_too_many_attempts) } returns "Too many attempts, we sent a new code to your number."
         every { getString(R.string.auth_error_generic) } returns "Something went wrong. Please try again."
+        // Raised through SakhiAlertManager.showNoInternet(...), so these live in core:ui.
+        every { getString(UiR.string.no_internet_alert_title) } returns "No internet connection"
+        every { getString(UiR.string.no_internet_alert_message) } returns "Please check your network and try again."
+        every { getString(UiR.string.no_internet_alert_retry) } returns "Try again"
+        every { getString(UiR.string.no_internet_alert_not_now) } returns "Not now"
     }
 
     private fun authResult(
@@ -77,13 +82,21 @@ class AuthViewModelTest {
         appStateInputBridge: AppStateInputBridge = AppStateInputBridge(),
         hapticManager: AndroidHapticManager = mockk(relaxed = true),
         appContext: Context = mockContext(),
+        offlineUpgradeMigrator: OfflineUpgradeMigrator? = null,
     ) = AuthViewModel(
         authRepository = authRepository,
         accountClassifier = accountClassifier,
         appStateInputBridge = appStateInputBridge,
         hapticManager = hapticManager,
         appContext = appContext,
-    )
+        offlineUpgradeMigrator = offlineUpgradeMigrator,
+    ).also {
+        // `verifyOtp` reads the session before verifying, to know whether this sign-in is an
+        // offline account being upgraded. Stubbed to the ordinary case here; the upgrade
+        // test below re-stubs it afterwards, which wins because the read happens at call
+        // time rather than at construction.
+        every { authRepository.currentSessionState() } returns SessionState.Unauthenticated
+    }
 
     @Test
     fun `pasting a full international number auto-detects the country and keeps only local digits`() = runTest {
@@ -142,6 +155,90 @@ class AuthViewModelTest {
         assertEquals("", state.otpDigits)
         assertNull(state.error)
         assertTrue(!state.isSendingOtp)
+    }
+
+    @Test
+    fun `signing in from an offline account migrates her records onto the real one`() = runTest {
+        // The reason "Create a Sakhi Account" could not ship before. Local records are keyed
+        // by owner id and the repositories only read the local store for an `offline_` id,
+        // so authenticating without re-attributing them leaves every log she made before
+        // signing in invisible to the new account and never uploaded.
+        val offlineId = "offline_abc123"
+        val realId = "real-user-1"
+        val migratedLog = PeriodLog(
+            id = "local-1",
+            userId = offlineId,
+            logDate = LocalDate.parse("2026-08-01"),
+            periodPresent = true,
+            createdByUserId = offlineId,
+            sourceUserId = offlineId,
+        )
+        val writtenLogs = mutableListOf<PeriodLog>()
+        val dataSource = object : OfflineUpgradeDataSource {
+            override suspend fun localProfile(userId: String) = null
+            override suspend fun localPeriodLogs(userId: String) = listOf(migratedLog)
+            override suspend fun localCycles(userId: String) = emptyList<CycleData>()
+            override suspend fun cloudProfile(userId: String) = null
+            override suspend fun cloudPeriodLogs(userId: String) = emptyList<PeriodLog>()
+            override suspend fun cloudCycles(userId: String) = emptyList<CycleData>()
+            override suspend fun writeProfile(profile: UserProfile) = Unit
+            override suspend fun writePeriodLogs(logs: List<PeriodLog>) { writtenLogs += logs }
+            override suspend fun writeCycles(cycles: List<CycleData>) = Unit
+        }
+        val authRepository = mockk<AuthRepository> {
+            coEvery { verifyOtpAndClassify(any(), any(), any()) } returns authResult(userId = realId)
+        }
+        val viewModel = newViewModel(
+            authRepository = authRepository,
+            offlineUpgradeMigrator = OfflineUpgradeMigrator(dataSource),
+        )
+        every { authRepository.currentSessionState() } returns SessionState.LocalOnlyUser(offlineId)
+
+        // No `otpSentTo` is needed: `verifyOtp` falls back to the normalised phone in state.
+        viewModel.onPhoneDigitsChanged("9876543210")
+        viewModel.verifyOtp("123456")
+        advanceUntilIdle()
+
+        assertEquals(1, writtenLogs.size)
+        assertEquals(realId, writtenLogs.single().userId)
+        assertEquals(realId, writtenLogs.single().sourceUserId)
+    }
+
+    @Test
+    fun `a lost connection becomes the Sakhi alert, not red text under the phone field`() = runTest {
+        // The failure Karan hit on 2026-08-28. A lost connection is the one auth failure
+        // that is not about what she typed, so it must not land under the phone field
+        // next to "that number doesn't look right" -- it goes to Sakhi's own alert sheet,
+        // with a retry, the way iOS shows it.
+        SakhiAlertManager.dismiss()
+        val authRepository = mockk<AuthRepository>().also {
+            coEvery { it.sendOtp("+919876543210") } returnsMany listOf(
+                Result.failure(AuthError.NetworkError(RuntimeException("Unable to resolve host"))),
+                Result.success(Unit),
+            )
+        }
+        val viewModel = newViewModel(authRepository = authRepository)
+        viewModel.onPhoneDigitsChanged("9876543210")
+
+        viewModel.sendOtp()
+        advanceUntilIdle()
+
+        assertNull(viewModel.uiState.value.error)
+        val alert = SakhiAlertManager.alert.value
+        assertEquals("No internet connection", alert?.title)
+        assertEquals("Please check your network and try again.", alert?.message)
+        assertEquals("Try again", alert?.primaryButton)
+        // Lets SakhiAlertHost keep this one in step with live connectivity, so it stops
+        // saying "No internet connection" once the connection is genuinely back.
+        assertTrue(alert?.tracksConnectivity == true)
+
+        // "Try again" must actually resend, otherwise the button promises what it cannot do.
+        alert?.primaryAction?.invoke()
+        advanceUntilIdle()
+
+        assertEquals("+919876543210", viewModel.uiState.value.otpSentTo)
+        coVerify(exactly = 2) { authRepository.sendOtp("+919876543210") }
+        SakhiAlertManager.dismiss()
     }
 
     @Test

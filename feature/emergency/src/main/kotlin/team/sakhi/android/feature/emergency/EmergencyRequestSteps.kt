@@ -54,7 +54,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import team.sakhi.android.designsystem.SakhiRadius
 import androidx.compose.ui.text.style.TextOverflow
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +63,8 @@ import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyRequirement
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import androidx.compose.foundation.layout.WindowInsets
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 1 — what does she need
@@ -373,15 +374,13 @@ internal fun EmergencySpotStep(
     }
 
     if (showSpotRequired) {
-        AlertDialog(
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Warning,
+            title = stringResource(R.string.emergency_spot_required_title),
+            message = stringResource(R.string.emergency_spot_required_body),
+            primaryLabel = stringResource(R.string.emergency_ok),
+            onPrimaryClick = { showSpotRequired = false },
             onDismissRequest = { showSpotRequired = false },
-            title = { Text(stringResource(R.string.emergency_spot_required_title)) },
-            text = { Text(stringResource(R.string.emergency_spot_required_body)) },
-            confirmButton = {
-                TextButton(onClick = { showSpotRequired = false }) {
-                    Text(stringResource(R.string.emergency_ok))
-                }
-            },
         )
     }
 }

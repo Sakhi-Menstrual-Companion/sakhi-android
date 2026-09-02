@@ -1,5 +1,7 @@
 package team.sakhi.android.feature.logging
 
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.CloseButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,7 +26,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -37,6 +38,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -149,8 +152,22 @@ fun LoggingSheet(
     var showSaveFailure by remember { mutableStateOf(false) }
     var suppressedInlineError by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(uiState.saveMessage) {
-        if (uiState.saveMessage != null) onClose()
+    // Dismiss on the monotonic `savedAttemptId`, NOT on `saveMessage`.
+    //
+    // `saveMessage` is set on success and then cleared again by the `loadEntry` that follows
+    // it. Those two writes land in one `MutableStateFlow` conflation window now that the
+    // re-read is local rather than a network round trip, so this effect only ever saw the
+    // cleared value and the sheet sat open over a save that had already succeeded.
+    //
+    // `savedAttemptId` only moves forward, so the transition cannot be conflated away. The
+    // remembered baseline stops a sheet reopened on an already-saved day from closing itself
+    // immediately.
+    var lastDismissedSaveId by rememberSaveable { mutableIntStateOf(uiState.savedAttemptId) }
+    LaunchedEffect(uiState.savedAttemptId) {
+        if (uiState.savedAttemptId != lastDismissedSaveId) {
+            lastDismissedSaveId = uiState.savedAttemptId
+            onClose()
+        }
     }
 
     LaunchedEffect(uiState.isSaving, uiState.saveMessage, uiState.error, uiState.saveAttemptId) {
@@ -188,7 +205,7 @@ fun LoggingSheet(
     }
 
     if (activeDialog != null) {
-        LoggingAlertDialog(
+        LoggingPartnerAlert(
             dialogState = activeDialog,
             onDismiss = { activeDialog = null },
             onConfirm = {
@@ -204,6 +221,9 @@ fun LoggingSheet(
     // iOS's Logging sheet config is the one exception that uses
     // `.presentationDragIndicator(.visible)` (see `HomeView.swift`
     // `makeLoggingSheetConfiguration`) -- every other sheet hides it.
+    // The grabber belongs HERE, inside the visible surface. The host's Material handle
+    // rendered in the sheet's transparent container, above this card, which is why it looked
+    // like it had escaped the sheet.
     SheetSurface(showDragHandle = true) {
         KeyboardSafeScaffold(
             topBar = {
@@ -537,7 +557,7 @@ private enum class LoggingDialogState {
 }
 
 @Composable
-private fun LoggingAlertDialog(
+private fun LoggingPartnerAlert(
     dialogState: LoggingDialogState?,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
@@ -552,15 +572,13 @@ private fun LoggingAlertDialog(
         LoggingDialogState.OwnershipLocked -> stringResource(R.string.logging_partner_lock_message)
     }
 
-    AlertDialog(
+    SakhiAlertSheet(
+        kind = SakhiAlertKind.Warning,
+        title = title,
+        message = message,
+        primaryLabel = stringResource(android.R.string.ok),
+        onPrimaryClick = onConfirm,
         onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(message) },
-        confirmButton = {
-            TextButton(onClick = onConfirm) {
-                Text(text = stringResource(android.R.string.ok))
-            }
-        },
     )
 }
 

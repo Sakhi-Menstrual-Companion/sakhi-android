@@ -14,10 +14,14 @@ import team.sakhi.auth.AccountState
 import team.sakhi.auth.AuthResultWithAccount
 import team.sakhi.auth.AuthRepository
 import team.sakhi.state.AuthError
+import team.sakhi.state.SessionState
+import team.sakhi.sync.OfflineUpgradeMigrator
 import team.sakhi.validation.PhoneCountry
 import team.sakhi.validation.PhoneValidationResult
 import team.sakhi.validation.ValidationRules
 import team.sakhi.android.common.toSafeUserMessage
+import team.sakhi.android.ui.SakhiAlertManager
+import co.touchlab.kermit.Logger
 
 /**
  * Thin auth-state adapter over the shared auth repository and account classifier.
@@ -43,6 +47,11 @@ class AuthViewModel(
     private val appStateInputBridge: AppStateInputBridge,
     private val hapticManager: AndroidHapticManager,
     private val appContext: Context,
+    /**
+     * Present on Android, where the shared Room store exists. Optional so the auth tests
+     * (and any platform without a local store) construct this view model unchanged.
+     */
+    private val offlineUpgradeMigrator: OfflineUpgradeMigrator? = null,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(PhoneUiState())
@@ -106,7 +115,7 @@ class AuthViewModel(
                 .onFailure { throwable ->
                     _uiState.value = _uiState.value.copy(
                         isSendingOtp = false,
-                        error = authMessageFor(throwable),
+                        error = authMessageFor(throwable, onRetry = { sendOtp() }),
                     )
                 }
         }
@@ -136,7 +145,7 @@ class AuthViewModel(
                 .onFailure { throwable ->
                     _uiState.value = _uiState.value.copy(
                         isSendingOtp = false,
-                        otpError = authMessageFor(throwable),
+                        otpError = authMessageFor(throwable, onRetry = { resendOtp() }),
                     )
                 }
         }
@@ -170,6 +179,12 @@ class AuthViewModel(
             verifiedAuthResult = null,
         )
 
+        // Captured BEFORE verifying, because verification replaces the session and the
+        // offline id is gone the moment it succeeds. Without it there is nothing left to
+        // tell us which records need re-attributing.
+        val upgradingFromOfflineUserId =
+            (authRepository.currentSessionState() as? SessionState.LocalOnlyUser)?.userId
+
         viewModelScope.launch {
             runCatching {
                 authRepository.verifyOtpAndClassify(
@@ -178,6 +193,7 @@ class AuthViewModel(
                     classifier = accountClassifier,
                 )
             }.onSuccess { result ->
+                migrateOfflineRecordsIfUpgrading(upgradingFromOfflineUserId, result.userId)
                 hapticManager.success()
                 _uiState.value = _uiState.value.copy(
                     isVerifyingOtp = false,
@@ -198,7 +214,7 @@ class AuthViewModel(
                 hapticManager.error()
                 _uiState.value = _uiState.value.copy(
                     isVerifyingOtp = false,
-                    otpError = authMessageFor(throwable),
+                    otpError = authMessageFor(throwable, onRetry = { verifyOtp(filteredOtp) }),
                     verifiedAuthResult = null,
                 )
             }
@@ -287,13 +303,55 @@ class AuthViewModel(
         PhoneValidationResult.Valid -> null
     }
 
-    private fun authMessageFor(throwable: Throwable): String {
+    /**
+     * Returns the inline message for the field, or null when the failure has been raised
+     * as an alert instead.
+     *
+     * A lost connection is the one auth failure that is not about what she typed, so it
+     * does not belong under the phone field next to "that number doesn't look right". It
+     * goes to Sakhi's alert sheet with a retry, the same treatment iOS gives it, and the
+     * inline error is cleared so she is not told the same thing twice.
+     */
+    private fun authMessageFor(throwable: Throwable, onRetry: (() -> Unit)? = null): String? {
+        if (throwable is AuthError.NetworkError) {
+            // Keeps PhoneScreen's send-OTP trace unbroken. That trace reads `uiState.error`,
+            // which is deliberately null on this path, so without this line the failure
+            // that started all of this would leave no record at all.
+            authLog.w { "send/verify FAILED, no connectivity: ${throwable.cause}" }
+            SakhiAlertManager.showNoInternet(appContext, onRetry)
+            return null
+        }
         return when (throwable as? AuthError) {
             AuthError.TooManyAttempts -> appContext.getString(R.string.auth_error_too_many_attempts)
             is AuthError -> throwable.userMessage
             else -> throwable.toSafeUserMessage(appContext, R.string.auth_error_generic)
         }
     }
+
+    /**
+     * Moves an offline account's records onto the real one, immediately after the sign-in
+     * that created it and before the app starts reading as that account.
+     *
+     * Local records are keyed by owner id and the repositories only consult the local store
+     * for an `offline_` id, so without this every log she made before signing in stays
+     * keyed to a user nothing reads any more: not corrupted, just invisible, and never
+     * uploaded. For a health app that is her history gone, which is why Android has never
+     * shipped the "Create a Sakhi Account" entry point iOS has.
+     *
+     * A failure is logged and swallowed rather than failing the sign-in. Her records are
+     * still on the device untouched -- the migrator never deletes the local copy -- so the
+     * recoverable outcome is being signed in with a migration to retry, not being locked
+     * out of an account that now exists.
+     */
+    private suspend fun migrateOfflineRecordsIfUpgrading(offlineUserId: String?, realUserId: String) {
+        val migrator = offlineUpgradeMigrator ?: return
+        if (offlineUserId == null || offlineUserId == realUserId) return
+        migrator.migrate(offlineUserId = offlineUserId, realUserId = realUserId)
+            .onSuccess { authLog.i { "offline upgrade migrated: $it" } }
+            .onFailure { authLog.e(it) { "offline upgrade FAILED; local records are untouched" } }
+    }
+
+    private val authLog = Logger.withTag("SakhiAuth/Phone")
 }
 
 private data class ParsedPhoneInput(

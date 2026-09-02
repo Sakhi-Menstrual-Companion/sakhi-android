@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -36,10 +37,16 @@ import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.ForceUpdateScreen
 import team.sakhi.android.ui.SakhiLoadingContext
 import team.sakhi.android.ui.SakhiLoadingView
+import team.sakhi.android.ui.OfflineUpgradeLauncher
+import team.sakhi.android.ui.SakhiAlertHost
 import team.sakhi.android.ui.ToastHost
 import team.sakhi.android.ui.ToastManager
 import team.sakhi.android.ui.ToastType
 import team.sakhi.android.feature.onboarding.OnboardingFlowHost
+import team.sakhi.android.common.LastKnownPhaseStore
+import team.sakhi.onboarding.PendingInviteStore
+import team.sakhi.platform.PlatformKeyValueStore
+import team.sakhi.models.CyclePhase
 import team.sakhi.appstate.AppRoute
 import team.sakhi.appstate.AppStateInputBridge
 import team.sakhi.appstate.AppStateStore
@@ -176,6 +183,44 @@ fun RootNavHost() {
         featureAccessState.setCloudAvailable(isOnline)
     }
 
+    // Offline-to-online upgrade, asked for from Profile. Runs the onboarding phone/OTP flow
+    // OVER Home, because a local-only user is signed in and never passes through the
+    // signed-out world the deep-link path below serves. Guarded on the session actually
+    // being local-only: a real account has nothing to upgrade, and starting the flow for one
+    // would just be a sign-in prompt on top of the app she is already signed in to.
+    val offlineUpgradeRequested by OfflineUpgradeLauncher.requested.collectAsStateWithLifecycle()
+    LaunchedEffect(offlineUpgradeRequested, route) {
+        if (!offlineUpgradeRequested) return@LaunchedEffect
+        if (authRepository.currentSessionState() !is SessionState.LocalOnlyUser) {
+            OfflineUpgradeLauncher.consume()
+            return@LaunchedEffect
+        }
+        forcedOnboardingDeepLink = ForcedOnboardingDeepLink(flowId = "newUser")
+        OfflineUpgradeLauncher.consume()
+    }
+
+    // A join that is still owed outranks whatever the account state says the route should be.
+    //
+    // AccountClassifier decides purely on account state: a number that already has a profile
+    // goes straight to AppRoute.Home, a new one gets a fresh onboarding plan. Neither knows
+    // that she typed an invite code two screens ago, so verifying the OTP dropped the whole
+    // partner flow and the code with it, and the "I am here for someone else" path never
+    // actually joined anyone. Found on a device on 2026-09-02, from a clean install.
+    //
+    // PendingInviteStore keeps the code across that boundary. Here we notice it is still
+    // owed and force the accept flow instead of Home.
+    LaunchedEffect(route, forcedOnboardingDeepLink) {
+        if (forcedOnboardingDeepLink != null) return@LaunchedEffect
+        val owed = PendingInviteStore.read(PlatformKeyValueStore()) ?: return@LaunchedEffect
+        // Only once she is actually signed in. While signed out the flow still holds the
+        // code itself and the normal steps handle it.
+        if (route !is AppRoute.Home && route !is AppRoute.Onboarding) return@LaunchedEffect
+        forcedOnboardingDeepLink = ForcedOnboardingDeepLink(
+            flowId = "joinFamily",
+            pendingInviteCode = owed,
+        )
+    }
+
     LaunchedEffect(route, pendingDeepLink?.id, forcedOnboardingDeepLink) {
         val pending = pendingDeepLink ?: return@LaunchedEffect
         if (forcedOnboardingDeepLink != null || route !is AppRoute.SignedOut) return@LaunchedEffect
@@ -247,9 +292,18 @@ fun RootNavHost() {
     // which is the opposite of what was happening, and a cold start said it before there
     // was a home to set up.
     var hasBeenSignedIn by remember { mutableStateOf(false) }
+    // Bumped when the app re-enters the signed-out world from a real session, which in
+    // practice means she signed out. `OnboardingFlowHost`'s view model is retained per
+    // Activity and keyed by flow id, so without this it resumes the previous run's step
+    // instead of starting over. A rotation mid-onboarding never crosses Home, so the token
+    // does not move and her progress survives.
+    var onboardingRestartToken by remember { mutableIntStateOf(0) }
     LaunchedEffect(route) {
         if (route is AppRoute.Home) hasBeenSignedIn = true
-        if (route is AppRoute.SignedOut) hasBeenSignedIn = false
+        if (route is AppRoute.SignedOut) {
+            if (hasBeenSignedIn) onboardingRestartToken += 1
+            hasBeenSignedIn = false
+        }
     }
 
     ToastHost()
@@ -265,6 +319,9 @@ fun RootNavHost() {
             if (forcedFlow != null) {
                 OnboardingFlowHost(
                     flowId = forcedFlow.flowId,
+                    // Every OnboardingFlowHost call site must pass the SAME token. See
+                    // the note on the AppRoute.Onboarding branch below.
+                    restartToken = onboardingRestartToken,
                     pendingInviteCodeOverride = forcedFlow.pendingInviteCode,
                     onFlowCompleted = { completion ->
                         waitingForForcedOnboardingExit = handleOnboardingCompletion(
@@ -303,17 +360,43 @@ fun RootNavHost() {
                     // Previously this rendered a completely separate `SignedOutFlow()`
                     // (bare `PhoneScreen`/`OtpScreen`, no onboarding chrome, no back
                     // button) -- removed now that this is the correct route for it.
-                    is AppRoute.SignedOut -> OnboardingFlowHost(
-                        flowId = "newUser",
-                        onFlowCompleted = { completion ->
-                            handleOnboardingCompletion(
-                                completion = completion,
-                                authRepository = authRepository,
-                                onboardingCompletionBridge = onboardingCompletionBridge,
-                            )
-                        },
-                    )
+                    is AppRoute.SignedOut -> {
+                        // Signed out: forget whose phase we were showing, so the next person
+                        // to open the app on this device does not get her colour on the
+                        // splash. A phase colour says something real about her.
+                        LaunchedEffect(Unit) {
+                            LastKnownPhaseStore.clearLastActiveUser(PlatformKeyValueStore())
+                        }
+                        OnboardingFlowHost(
+                            flowId = "newUser",
+                            restartToken = onboardingRestartToken,
+                            onFlowCompleted = { completion ->
+                                handleOnboardingCompletion(
+                                    completion = completion,
+                                    authRepository = authRepository,
+                                    onboardingCompletionBridge = onboardingCompletionBridge,
+                                )
+                            },
+                        )
+                    }
                     is AppRoute.Onboarding -> OnboardingFlowHost(
+                        // MUST pass the token, and it must be the same one the SignedOut
+                        // branch passes.
+                        //
+                        // This branch used to leave it at its default of 0. Verifying the
+                        // OTP moves the route from SignedOut to Onboarding, so the host
+                        // switches from that branch to this one mid-flow. Once anyone had
+                        // signed out on this device the token was already 1, so arriving
+                        // here with 0 looked like a brand new run and fired a Restart that
+                        // threw away everything collected before the OTP.
+                        //
+                        // For the care partner path that meant the invite code she had
+                        // just typed was silently dropped and she was re-planned into the
+                        // owner's health questionnaire, so joining never happened. It also
+                        // discarded ordinary onboarding answers for anyone who signed out
+                        // and started again. Found on 2026-09-02 driving the join flow on
+                        // a device.
+                        restartToken = onboardingRestartToken,
                         flowId = current.flow.flowId,
                         onFlowCompleted = { completion ->
                             handleOnboardingCompletion(
@@ -329,6 +412,14 @@ fun RootNavHost() {
             }
         }
     }
+
+    // Mounted once at the root, after the content, mirroring where iOS attaches
+    // `.alertManager()`. Placement is for readability rather than z-order: Material3
+    // 1.4's `ModalBottomSheet` presents through `ModalBottomSheetDialogWrapper`, its own
+    // window, so it already sits above every screen that raises it -- verified on the QA
+    // emulator, alert over the onboarding nav bar and step title, content behind
+    // untouched and dimmed.
+    SakhiAlertHost()
 }
 
 private fun handleOnboardingCompletion(
@@ -382,37 +473,64 @@ private fun HomeSessionGate(
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
     LaunchedEffect(session.userId) {
-        isReady = false
-        when (val careState = runCatching {
-            careStore.refresh(session.userId)
-            careStore.careState.value
-        }.getOrNull()) {
-            is CareRuntimeState.PartnerConnected -> {
-                sessionManager.startAsPartner(
-                    userId = session.userId,
-                    userName = "",
-                    targetUserId = careState.partnership.userId,
-                    partnership = careState.partnership,
-                )
-                // `CareRealtimeCoordinator.startAsPartner(partnerId, partnerUserId)` still
-                // names both params like "partner", but the first one is the current
-                // viewer's user id (see `subscribeAsPartner(partnerId)` filtering the
-                // `care_partnerships.partner_id` column). In `PartnerConnected`, the
-                // domain partnership already exposes that as `partnership.partnerId`.
-                runCatching {
-                    careRealtimeCoordinator.startAsPartner(
-                        partnerId = careState.partnership.partnerId,
-                        partnerUserId = careState.partnership.partnerId,
+        // ── Home renders FIRST. Nothing below this line may gate the first screen. ──────
+        //
+        // This gate used to hold a full-screen spinner through up to five network round
+        // trips: two inside `startAsPrimary` (name lookup + sent invitations), the
+        // care-status Edge Function, and the realtime websocket handshake plus three channel
+        // subscriptions. In an app that stores everything locally, none of that is needed to
+        // draw Home.
+        //
+        // `startAsPrimaryLocal` publishes the same session with the same permissions, read
+        // from the local profile, with no network at all. Home mounts on the next frame.
+        sessionManager.startAsPrimaryLocal(userId = session.userId, userName = "")
+        isReady = true
+
+        // ── Everything that needs the network now happens behind the visible screen. ─────
+        //
+        // Surfaced through `SyncStore`, which Home already observes, so the top bar can show
+        // "Syncing" while this runs instead of the app pretending to be idle.
+        syncStore.markSyncing()
+        launch {
+            // Fills in the display name and pending invitations the local boot left out.
+            runCatching { sessionManager.refreshPrimaryDetails(session.userId) }
+
+            // Care status decides whether she is viewing her own data or someone else's.
+            // Starting as PRIMARY and correcting here is safe in one direction only, and this
+            // is that direction: the local boot shows HER OWN data, never another user's, so
+            // a slow or failed care lookup can never expose the wrong person's health record.
+            val careState = runCatching {
+                careStore.refresh(session.userId)
+                careStore.careState.value
+            }.getOrNull()
+
+            when (careState) {
+                is CareRuntimeState.PartnerConnected -> {
+                    sessionManager.startAsPartner(
+                        userId = session.userId,
+                        userName = "",
+                        targetUserId = careState.partnership.userId,
+                        partnership = careState.partnership,
                     )
+                    runCatching {
+                        careRealtimeCoordinator.startAsPartner(
+                            partnerId = careState.partnership.partnerId,
+                            partnerUserId = careState.partnership.partnerId,
+                        )
+                    }
+                }
+                else -> {
+                    runCatching { careRealtimeCoordinator.startAsOwner(session.userId) }
                 }
             }
-            else -> {
-                sessionManager.startAsPrimary(userId = session.userId, userName = "")
-                runCatching { careRealtimeCoordinator.startAsOwner(session.userId) }
-            }
+
+            widgetSnapshotManager.refreshAsync()
+            // markIdle, NOT markSuccess: this bootstrap settles the session and care state,
+            // it does not fetch cycle data. `markSuccess` publishes a new `lastSyncedAt`,
+            // which Home reads as "new rows may exist" and answers with a full re-read plus a
+            // complete engine pass — a second cold-start reload for nothing.
+            syncStore.markIdle()
         }
-        widgetSnapshotManager.refreshAsync()
-        isReady = true
     }
 
     // `stop()` (not `destroy()`) on leaving Home: it cancels the current
@@ -457,9 +575,26 @@ private fun HomeSessionGate(
 private fun SplashPlaceholder(
     context: SakhiLoadingContext = SakhiLoadingContext.AppLaunch,
 ) {
+    // Paints in the phase Home last showed, so the loading screen and Home are the same
+    // colour and nothing changes underneath her when Home mounts. Read synchronously from
+    // the key-value store, so it is already correct on the very first frame; null on a first
+    // launch, which correctly falls back to the brand treatment.
+    // Deliberately NOT via `AuthRepository.currentUserId`: on the first splash frame the
+    // Supabase session has not been read from storage yet, so that is null and the lookup
+    // always missed — falling back to brand pink, which is the colour change this is meant to
+    // remove. The last active user is recorded separately for exactly this moment.
+    val lastPhase = remember {
+        // FOLLICULAR when nothing is remembered yet, rather than null. Null falls back to the
+        // brand pink treatment inside SakhiLoadingView, so a first launch went pink and then
+        // changed to whatever Home settled on. FOLLICULAR is the same neutral-cycle colour
+        // Home itself shows while it has no phase, so the two agree from the first frame.
+        LastKnownPhaseStore.restoreForLastActiveUser(PlatformKeyValueStore())
+            ?: CyclePhase.FOLLICULAR
+    }
     SakhiLoadingView(
         context = context,
         modifier = Modifier.fillMaxSize(),
+        phase = lastPhase,
     )
 }
 

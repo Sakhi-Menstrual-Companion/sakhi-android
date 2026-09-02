@@ -194,6 +194,7 @@ class CalendarScreenshotTest {
                 coEvery { getAll(any()) } returns Result.success(listOf(menstrualCycle()))
                 coEvery { getLatest(any()) } returns Result.success(menstrualCycle())
             },
+            syncStore = mockk(relaxed = true),
         )
     }
 

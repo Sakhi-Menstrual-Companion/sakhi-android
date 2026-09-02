@@ -957,11 +957,24 @@ private fun MonthPanel(
     onDateSelected: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val sourceDays = days.ifEmpty { fallbackMonthCells(month) }
-    SakhiCalendarMonthGrid(
-        days = sundayFirstMonthCells(month, sourceDays).toSakhiCalendarDays(
+    // Three panels (previous/current/next) are alive at once in the pager, and this chain
+    // built two fresh 42-element lists per panel on EVERY recomposition — ~250 throwaway
+    // objects, and a brand-new `days` instance handed to `SakhiCalendarMonthGrid` each time,
+    // which meant the grid could never skip. Remembered against exactly what the result
+    // depends on.
+    //
+    // `compactToday` is a key, not just a captured value: `toSakhiCalendarDays` stamps
+    // `isToday`/`isFuture` from it, so without it in the key set a session left open across
+    // midnight would keep drawing yesterday's "today" ring.
+    val today = compactToday
+    val gridDays = remember(month, days, selectedDate, today) {
+        val sourceDays = days.ifEmpty { fallbackMonthCells(month) }
+        sundayFirstMonthCells(month, sourceDays).toSakhiCalendarDays(
             selectedDate = selectedDate,
-        ),
+        )
+    }
+    SakhiCalendarMonthGrid(
+        days = gridDays,
         onDayClick = onDateSelected,
         modifier = modifier,
     )
@@ -1112,6 +1125,10 @@ private fun CalendarYearMonthCard(
     // and the grid directly beneath. Android had wrapped each month in a rounded, tinted
     // Surface with a border on the visible month -- twelve cards iOS does not have, which
     // also boxed in the grid and ate horizontal room.
+    // Read once and reused for both the label tint and the grid's remember key, so the
+    // two can never disagree about which day is "today" within a single composition.
+    val gridToday = compactToday
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1121,7 +1138,7 @@ private fun CalendarYearMonthCard(
             text = monthLabel(month),
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
-            color = if (month.year == compactToday.year && month.month == compactToday.month) {
+            color = if (month.year == gridToday.year && month.month == gridToday.month) {
                 MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.onSurface
@@ -1131,8 +1148,14 @@ private fun CalendarYearMonthCard(
                 .padding(horizontal = 20.dp)
                 .padding(top = 12.dp, bottom = 4.dp),
         )
+        // Same reason as `MonthPanel` above, multiplied by twelve: the year view renders one
+        // of these per month, so an unremembered transform here rebuilt ~500 objects and
+        // blocked every mini-grid from skipping on any recomposition of the year screen.
+        val miniGridDays = remember(days, gridToday) {
+            days.toSakhiCalendarDays()
+        }
         SakhiMiniMonthGrid(
-            days = days.toSakhiCalendarDays(),
+            days = miniGridDays,
             isMultiSelectMode = isMultiSelectMode,
             selectionSet = yearSelection,
             onDayToggle = onToggleDate,

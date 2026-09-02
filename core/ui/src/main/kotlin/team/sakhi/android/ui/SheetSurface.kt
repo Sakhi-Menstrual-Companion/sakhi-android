@@ -24,9 +24,17 @@ import team.sakhi.android.designsystem.SakhiSpacing
 /**
  * Shared inner "presented as a sheet" surface. `SakhiModalSheet` owns the
  * outer modal behavior; this wrapper owns the rounded top corners and optional
- * in-surface drag indicator that iOS uses across Home-owned sheets. Logging is
- * the one exception that wants the indicator visible (`HomeView.swift`
- * `makeLoggingSheetConfiguration`), so it passes `showDragHandle = true`.
+ * in-surface drag indicator that iOS uses across Home-owned sheets.
+ *
+ * `showDragHandle` draws the grabber INSIDE this surface, which is where it has to be:
+ * `SakhiModalSheet` sets `containerColor = Color.Transparent`, so the sheet's own
+ * container is invisible and this composable draws the visible rounded card. Material's
+ * `dragHandle` renders in that invisible container, i.e. ABOVE this card, where it reads
+ * as a grabber floating on the dimmed background rather than belonging to the sheet.
+ *
+ * So: sheets pass `showDragHandle = true` here, and the host passes
+ * `showSystemDragHandle = false`. Turning both on gives two grabbers, one of them
+ * detached from the sheet.
  *
  * The background is `sakhiPageBackgroundBrush()`, the port of iOS's
  * `profileStaticPageBackground()`: flat `DS.Colors.background` in light, the follicular

@@ -7,14 +7,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
-import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
-import org.junit.Before
+import org.junit.Rule
+import team.sakhi.android.testing.MainDispatcherRule
 import org.junit.Test
 import team.sakhi.repositories.SanityFaq
 import team.sakhi.repositories.SanityLegalPage
@@ -34,17 +32,11 @@ import team.sakhi.repositories.SanitySiteSettings
 @OptIn(ExperimentalCoroutinesApi::class)
 class SanityContentViewModelTest {
 
-    private val testDispatcher = StandardTestDispatcher()
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
+    private val testDispatcher get() = mainDispatcherRule.testDispatcher
 
-    @Before
-    fun setUp() {
-        Dispatchers.setMain(testDispatcher)
-    }
 
-    @After
-    fun tearDown() {
-        Dispatchers.resetMain()
-    }
 
     private fun legalPage(title: String) = SanityLegalPage(title = SanityLocalizedString(en = title))
 

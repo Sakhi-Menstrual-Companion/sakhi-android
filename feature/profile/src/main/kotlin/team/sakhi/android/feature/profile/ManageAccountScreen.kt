@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.SyncAlt
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material.icons.filled.WaterDrop
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -85,6 +84,8 @@ import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.appstate.AppStateInputBridge
@@ -369,75 +370,60 @@ fun ManageAccountScreen(onBack: () -> Unit) {
         }
     }
 
+    // Sakhi's own alert sheet, not a raw Material3 `AlertDialog`. Both confirmations in this
+    // danger zone sit in the middle of an otherwise Sakhi-styled flow, and one of them is the
+    // last thing she sees before being signed out of the device.
     if (showResetConfirm) {
-        AlertDialog(
-            onDismissRequest = { showResetConfirm = false },
-            title = { Text(stringResource(R.string.profile_manage_account_reset_confirm_title)) },
-            text = {
-                Text(stringResource(R.string.profile_manage_account_reset_confirm_body))
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showResetConfirm = false
-                        isBusy = true
-                        error = null
-                        scope.launch {
-                            resetProfileData(authRepository)
-                                .onSuccess {
-                                    appStateInputBridge.setUnauthenticated()
-                                }
-                                .onFailure {
-                                    error = it.toSafeUserMessage(context, R.string.profile_manage_account_reset_failed)
-                                }
-                            isBusy = false
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Destructive,
+            title = stringResource(R.string.profile_manage_account_reset_confirm_title),
+            message = stringResource(R.string.profile_manage_account_reset_confirm_body),
+            primaryLabel = stringResource(R.string.profile_manage_account_reset_confirm_button),
+            onPrimaryClick = {
+                showResetConfirm = false
+                isBusy = true
+                error = null
+                scope.launch {
+                    resetProfileData(authRepository)
+                        .onSuccess {
+                            appStateInputBridge.setUnauthenticated()
                         }
-                    },
-                ) {
-                    Text(stringResource(R.string.profile_manage_account_reset_confirm_button), color = MaterialTheme.colorScheme.error)
+                        .onFailure {
+                            error = it.toSafeUserMessage(context, R.string.profile_manage_account_reset_failed)
+                        }
+                    isBusy = false
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showResetConfirm = false }) {
-                    Text(stringResource(R.string.profile_manage_account_keep_data))
-                }
-            },
+            secondaryLabel = stringResource(R.string.profile_manage_account_keep_data),
+            onSecondaryClick = { showResetConfirm = false },
+            onDismissRequest = { showResetConfirm = false },
         )
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(stringResource(R.string.profile_manage_account_delete_confirm_title)) },
-            text = {
-                Text(stringResource(R.string.profile_manage_account_delete_confirm_body))
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showDeleteConfirm = false
-                        isBusy = true
-                        error = null
-                        scope.launch {
-                            deleteAccountAndSignOut(accountRepository, authRepository)
-                                .onSuccess {
-                                    appStateInputBridge.setUnauthenticated()
-                                }
-                                .onFailure {
-                                    error = it.toSafeUserMessage(context, R.string.profile_manage_account_delete_failed)
-                                    isBusy = false
-                                }
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Destructive,
+            title = stringResource(R.string.profile_manage_account_delete_confirm_title),
+            message = stringResource(R.string.profile_manage_account_delete_confirm_body),
+            primaryLabel = stringResource(R.string.profile_manage_account_delete_confirm_button),
+            onPrimaryClick = {
+                showDeleteConfirm = false
+                isBusy = true
+                error = null
+                scope.launch {
+                    deleteAccountAndSignOut(accountRepository, authRepository)
+                        .onSuccess {
+                            appStateInputBridge.setUnauthenticated()
                         }
-                    },
-                ) {
-                    Text(stringResource(R.string.profile_manage_account_delete_confirm_button), color = MaterialTheme.colorScheme.error)
+                        .onFailure {
+                            error = it.toSafeUserMessage(context, R.string.profile_manage_account_delete_failed)
+                            isBusy = false
+                        }
                 }
             },
-            dismissButton = {
-                TextButton(onClick = { showDeleteConfirm = false }) {
-                    Text(stringResource(R.string.profile_manage_account_stay))
-                }
-            },
+            secondaryLabel = stringResource(R.string.profile_manage_account_stay),
+            onSecondaryClick = { showDeleteConfirm = false },
+            onDismissRequest = { showDeleteConfirm = false },
         )
     }
 }

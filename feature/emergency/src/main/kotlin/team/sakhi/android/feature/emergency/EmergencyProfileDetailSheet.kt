@@ -20,7 +20,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -58,6 +57,8 @@ import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyProfileDetail
 import team.sakhi.models.NearbySakhi
 import androidx.compose.foundation.layout.fillMaxHeight
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 
 /**
  * Replica of `ProfielDetailViewController` — the card a woman opens before deciding to let
@@ -254,54 +255,42 @@ internal fun EmergencyProfileDetailSheet(
     }
 
     if (showBlockDuringRequest) {
-        AlertDialog(
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Warning,
+            title = stringResource(R.string.emergency_hold_on),
+            message = stringResource(R.string.emergency_end_request_first),
+            primaryLabel = stringResource(R.string.emergency_got_it),
+            onPrimaryClick = { showBlockDuringRequest = false },
             onDismissRequest = { showBlockDuringRequest = false },
-            title = { Text(stringResource(R.string.emergency_hold_on)) },
-            text = { Text(stringResource(R.string.emergency_end_request_first)) },
-            confirmButton = {
-                TextButton(onClick = { showBlockDuringRequest = false }) {
-                    Text(stringResource(R.string.emergency_got_it))
-                }
-            },
         )
     }
 
     if (showBlockConfirm) {
-        AlertDialog(
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Destructive,
+            title = if (profile.isBlocked) {
+                stringResource(R.string.emergency_unblock)
+            } else {
+                stringResource(R.string.emergency_block)
+            },
+            message = if (profile.isBlocked) {
+                stringResource(R.string.emergency_unblock_body)
+            } else {
+                stringResource(R.string.emergency_block_body)
+            },
+            primaryLabel = if (profile.isBlocked) {
+                stringResource(R.string.emergency_unblock)
+            } else {
+                stringResource(R.string.emergency_block)
+            },
+            onPrimaryClick = {
+                showBlockConfirm = false
+                viewModel.setBlocked(profile.userId, !profile.isBlocked)
+                if (!profile.isBlocked) onDismiss()
+            },
+            secondaryLabel = stringResource(R.string.emergency_keep_waiting),
+            onSecondaryClick = { showBlockConfirm = false },
             onDismissRequest = { showBlockConfirm = false },
-            title = {
-                Text(
-                    if (profile.isBlocked) stringResource(R.string.emergency_unblock)
-                    else stringResource(R.string.emergency_block)
-                )
-            },
-            text = {
-                Text(
-                    if (profile.isBlocked) stringResource(R.string.emergency_unblock_body)
-                    else stringResource(R.string.emergency_block_body)
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    showBlockConfirm = false
-                    viewModel.setBlocked(profile.userId, !profile.isBlocked)
-                    if (!profile.isBlocked) onDismiss()
-                }) {
-                    Text(
-                        text = if (profile.isBlocked) {
-                            stringResource(R.string.emergency_unblock)
-                        } else {
-                            stringResource(R.string.emergency_block)
-                        },
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showBlockConfirm = false }) {
-                    Text(stringResource(R.string.emergency_keep_waiting))
-                }
-            },
         )
     }
 }

@@ -4,6 +4,9 @@ import org.koin.dsl.module
 import team.sakhi.localdb.PlatformRoomDatabaseFactory
 import team.sakhi.localdb.SakhiPhaseALocalStore
 import team.sakhi.platform.BiometricInterface
+import team.sakhi.sync.DefaultOfflineUpgradeDataSource
+import team.sakhi.sync.OfflineUpgradeDataSource
+import team.sakhi.sync.OfflineUpgradeMigrator
 
 /**
  * Android-app-level adapters that live outside SakhiCore (biometric today; Health
@@ -18,6 +21,19 @@ val androidPlatformModule = module {
         val factory = PlatformRoomDatabaseFactory().apply { init(get()) }
         SakhiPhaseALocalStore(factory = factory)
     }
+    // Offline-to-online upgrade. Registered here rather than in SakhiCore's shared module
+    // because it needs the shared Room store, and Android is the platform that has one --
+    // a Koin `single` cannot be a nullable type, so a shared registration would have to
+    // pretend the store always exists.
+    single<OfflineUpgradeDataSource> {
+        DefaultOfflineUpgradeDataSource(
+            localStore = get(),
+            userProfileRepository = get(),
+            periodLogRepository = get(),
+            cycleDataRepository = get(),
+        )
+    }
+    single { OfflineUpgradeMigrator(get()) }
     single {
         AndroidNotificationReminderManager(
             appContext = get(),

@@ -16,10 +16,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
-import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -27,6 +25,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
+import org.junit.Rule
+import team.sakhi.android.testing.MainDispatcherRule
 import org.junit.Test
 import team.sakhi.ai.AICardClassifier
 import team.sakhi.android.feature.reports.ReportDateRangePreset
@@ -72,12 +72,15 @@ import team.sakhi.sync.OfflineUpgradeDataset
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChatViewModelTest {
 
-    private val testDispatcher = StandardTestDispatcher()
+    @get:Rule
+    val mainDispatcherRule = MainDispatcherRule()
+    private val testDispatcher get() = mainDispatcherRule.testDispatcher
     private val createdViewModels = mutableListOf<ChatViewModel>()
 
     @Before
     fun setUp() {
-        Dispatchers.setMain(testDispatcher)
+        // Dispatcher swap is handled by `mainDispatcherRule`; a JUnit rule wraps @Before and
+        // @After, so Main is already installed here and is reset only after tearDown runs.
         while (ToastManager.current.value != null) {
             ToastManager.dismiss()
         }
@@ -89,7 +92,6 @@ class ChatViewModelTest {
             viewModel.javaClass.getMethod("clear\$lifecycle_viewmodel_release").invoke(viewModel)
         }
         createdViewModels.clear()
-        Dispatchers.resetMain()
     }
 
     private suspend fun TestScope.awaitUiState(

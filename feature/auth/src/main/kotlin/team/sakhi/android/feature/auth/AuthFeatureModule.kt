@@ -12,6 +12,7 @@ val authFeatureModule = module {
             appStateInputBridge = get(),
             hapticManager = get(),
             appContext = get(),
+            offlineUpgradeMigrator = get(),
         )
     }
 }

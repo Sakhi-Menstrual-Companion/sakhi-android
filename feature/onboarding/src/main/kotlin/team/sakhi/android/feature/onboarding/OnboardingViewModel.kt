@@ -1,6 +1,7 @@
 package team.sakhi.android.feature.onboarding
 
 import android.content.Context
+import co.touchlab.kermit.Logger
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
@@ -28,6 +29,8 @@ import team.sakhi.models.RelationType
 import team.sakhi.models.UserProfile
 import team.sakhi.onboarding.OnboardingFlowCompletion
 import team.sakhi.onboarding.OnboardingFlowIntent
+import team.sakhi.onboarding.PendingInviteStore
+import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.onboarding.OnboardingFlowStore
 import team.sakhi.onboarding.OnboardingNavState
 import team.sakhi.onboarding.OnboardingFlowStep
@@ -54,6 +57,8 @@ private const val ONBOARDING_CONTINUE_TRANSITION_GUARD_NANOS = 420_000_000L
  * onboarding -- a real gap this pass found and fixed at its root (the missing
  * `sessionManager.startAsPrimary` call), not something to route around here.
  */
+private val inviteLog = Logger.withTag("SakhiInvite")
+
 class OnboardingViewModel(
     val flowId: String,
     private val appContext: Context,
@@ -83,6 +88,12 @@ class OnboardingViewModel(
     )
     val dataSourceUiState: StateFlow<OnboardingDataSourceUiState> = _dataSourceUiState.asStateFlow()
 
+    /**
+     * The last restart token this instance acted on. Survives configuration changes because
+     * the view model does, which is exactly what makes a rotation mid-onboarding safe.
+     */
+    private var lastHandledRestartToken = 0
+
     init {
         viewModelScope.launch {
             careStore.careState.collectLatest { careState ->
@@ -97,6 +108,42 @@ class OnboardingViewModel(
         }
 
         refreshDataSourceCapabilities()
+
+    }
+
+    /**
+     * Starts the flow over when the app has re-entered onboarding from a real session,
+     * which in practice means she signed out.
+     *
+     * `koinViewModel(key = flowId)` resolves out of the Activity's ViewModelStore, so
+     * signing out hands the "newUser" flow back the SAME instance, still parked wherever
+     * the previous run left it. Traced on the QA emulator: after a returning-user sign-in
+     * the store sat on `otpVerification`, and re-mounting it there let the retained
+     * `AuthViewModel`'s stale verified result fire again. That emitted completion, which
+     * for NEW_OWNER appends a `SetupLoading` step, and the app parked on a full-screen
+     * spinner waiting for a setup that had already happened and now had no session.
+     *
+     * Driven by a token from `RootNavHost` rather than by watching for completion. The
+     * completion signal arrives asynchronously and lost the race: the log showed this mount
+     * check running 23ms BEFORE the previous run's completion was delivered, so a flag set
+     * from it was still false exactly when it mattered. The token changes only on a real
+     * Home -> SignedOut transition, so a rotation mid-onboarding carries the same token and
+     * her progress survives.
+     */
+    fun restartFlowIfNewRun(restartToken: Int): Boolean {
+        if (restartToken == lastHandledRestartToken) return false
+        lastHandledRestartToken = restartToken
+        flowStore.send(OnboardingFlowIntent.Restart)
+        // Cleared with it: these hold the previous user's height, weight, date of birth and
+        // care-invite details, and none of that may still be in the form when the next
+        // person starts onboarding on this device.
+        _healthUiState.value = OnboardingHealthUiState()
+        _careInviteUiState.value = OnboardingCareInviteUiState()
+        _acceptUiState.value = OnboardingAcceptUiState()
+        _conversionUiState.value = OnboardingConversionUiState()
+        _setupUiState.value = OnboardingSetupUiState()
+        refreshDataSourceCapabilities()
+        return true
     }
 
     fun continueFlow(expectedStep: OnboardingFlowStep? = null) {
@@ -152,6 +199,11 @@ class OnboardingViewModel(
     }
 
     fun submitBeHerSakhiCode(code: String) {
+        // Also remembered outside the flow store. Verifying the OTP hands routing back to
+        // AccountClassifier, which decides on account state alone and throws this flow
+        // away, so the code has to survive somewhere the app can still find it afterwards.
+        // See PendingInviteStore.
+        PendingInviteStore.save(PlatformKeyValueStore(), code)
         flowStore.send(OnboardingFlowIntent.BeHerSakhiCodeEntered(code = code))
     }
 
@@ -201,6 +253,8 @@ class OnboardingViewModel(
     // User chose to keep their own account instead of converting — matches iOS's
     // secondary "Keep My Account" action, which completes the flow as-is.
     fun keepOwnAccount() {
+        // She chose not to join, so stop owing the code.
+        PendingInviteStore.clear(PlatformKeyValueStore())
         flowStore.send(OnboardingFlowIntent.Complete)
     }
 
@@ -237,6 +291,10 @@ class OnboardingViewModel(
                     return@onSuccess
                 }
                 hapticManager.success()
+                // The join is done, so the code is no longer owed. Leaving it would drag
+                // the next person who opens the app on this device into someone else's
+                // invitation.
+                PendingInviteStore.clear(PlatformKeyValueStore())
                 _acceptUiState.value = _acceptUiState.value.copy(isAccepting = false, succeeded = true, error = null)
             }.onFailure { throwable ->
                 if (!isStillCurrentUser(userId)) {
@@ -315,8 +373,18 @@ class OnboardingViewModel(
         // The offline id it returns is a real user id, so the save below runs normally --
         // the repositories are offline-first and route an `offline_…` id to the shared
         // Room store instead of Supabase, which is how this data now actually persists.
+        // Minting a local-only session is only ever correct when she ASKED for one, which
+        // the plan records as an `OfflineWarning` step. Without that check this line quietly
+        // created an account whenever it ran with no session, and sign-out is exactly that
+        // situation: traced on the QA emulator, sign-out went
+        // `Unauthenticated -> route SignedOut` and then, 28ms later,
+        // `LocalOnlyUser -> route Home`, dropping her straight back into the app she had
+        // just left. It is also what left `sakhi_local_only_active=true` in prefs after a
+        // perfectly normal phone sign-in. Creating an account is her decision, never a
+        // side effect of a loading step finding nobody home.
+        val choseOfflineAccount = navState.value.plan.contains(OnboardingFlowStep.OfflineWarning)
         val userId = authRepository.currentUserId
-            ?: authRepository.startLocalOnlySession()
+            ?: if (choseOfflineAccount) authRepository.startLocalOnlySession() else return
         if (_setupUiState.value.isSaving) return
 
         _setupUiState.value = _setupUiState.value.copy(isSaving = true, error = null)
@@ -474,6 +542,10 @@ class OnboardingViewModel(
         val contactName = _careInviteUiState.value.selectedContactName
         val contactPhone = _careInviteUiState.value.selectedContactPhone
 
+        inviteLog.i {
+            "createInvitation -> relation='${partnerRelation}', hasContactName=${contactName.isNotBlank()}, " +
+                "hasContactPhone=${contactPhone.isNotBlank()}, userId=${userId.takeLast(4)}"
+        }
         viewModelScope.launch {
             runCatching {
                 withContext(Dispatchers.IO) {
@@ -505,6 +577,18 @@ class OnboardingViewModel(
                 if (!isStillCurrentUser(userId)) {
                     _careInviteUiState.value = _careInviteUiState.value.copy(isCreatingInvite = false)
                     return@onFailure
+                }
+                // The user-facing message is deliberately generic, and nothing was recording
+                // the real cause — so "Couldn't create invite" was unactionable for anyone
+                // debugging it, including from a logcat capture.
+                //
+                // Type and first line only, never the full message: supabase-kt puts the
+                // whole request dump in `message`, including the `Authorization: Bearer <jwt>`
+                // header and the apikey. Same rule as `SakhiLogSave` in :feature:logging,
+                // which exists because that exact leak reached logcat once.
+                inviteLog.e {
+                    "createInvitation FAILED: ${throwable::class.simpleName}: " +
+                        throwable.message.orEmpty().substringBefore('\n').take(200)
                 }
                 hapticManager.error()
                 _careInviteUiState.value = _careInviteUiState.value.copy(

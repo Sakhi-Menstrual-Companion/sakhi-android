@@ -24,7 +24,6 @@ import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.UnfoldMore
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -51,6 +50,8 @@ import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.platform.Language as AppLanguage
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.platform.PlatformKeyValueStore
@@ -299,38 +300,25 @@ private fun LanguageCard(currentLanguage: AppLanguage, onLanguageChosen: (AppLan
 
     pendingLanguage?.let { language ->
         val displayName = stringResource(language.displayNameRes)
-        AlertDialog(
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Info,
+            title = stringResource(R.string.profile_appearance_change_language_title),
+            message = stringResource(
+                R.string.profile_appearance_change_language_message,
+                displayName,
+            ),
+            primaryLabel = stringResource(
+                R.string.profile_appearance_change_language_confirm,
+                language.flag,
+                displayName,
+            ),
+            onPrimaryClick = {
+                onLanguageChosen(language)
+                pendingLanguage = null
+            },
+            secondaryLabel = stringResource(R.string.profile_appearance_cancel),
+            onSecondaryClick = { pendingLanguage = null },
             onDismissRequest = { pendingLanguage = null },
-            title = { Text(stringResource(R.string.profile_appearance_change_language_title)) },
-            text = {
-                Text(
-                    stringResource(
-                        R.string.profile_appearance_change_language_message,
-                        displayName,
-                    ),
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        onLanguageChosen(language)
-                        pendingLanguage = null
-                    },
-                ) {
-                    Text(
-                        stringResource(
-                            R.string.profile_appearance_change_language_confirm,
-                            language.flag,
-                            displayName,
-                        ),
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { pendingLanguage = null }) {
-                    Text(stringResource(R.string.profile_appearance_cancel))
-                }
-            },
         )
     }
 }

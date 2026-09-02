@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ViewCarousel
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -70,6 +69,8 @@ import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiLightPink
 import team.sakhi.android.designsystem.sakhiSystemGray5
 import team.sakhi.android.designsystem.sakhiSystemGray6
+import team.sakhi.android.ui.SakhiAlertKind
+import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.BackButton
 import team.sakhi.android.feature.reports.ReportDateRangePreset
 import team.sakhi.android.ui.EmptyState
@@ -111,23 +112,15 @@ internal fun ChatInfoScreen(
     val messageCount = remember(messages) { messages.count { it.sessionId != "welcome" } }
 
     if (showClearConfirm) {
-        AlertDialog(
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Destructive,
+            title = stringResource(R.string.chat_info_clear_title),
+            message = stringResource(R.string.chat_info_clear_message),
+            primaryLabel = stringResource(R.string.chat_info_clear_title),
+            onPrimaryClick = onConfirmClear,
+            secondaryLabel = stringResource(R.string.chat_info_clear_cancel),
+            onSecondaryClick = onDismissClearConfirm,
             onDismissRequest = onDismissClearConfirm,
-            title = { Text(stringResource(R.string.chat_info_clear_title)) },
-            text = { Text(stringResource(R.string.chat_info_clear_message)) },
-            confirmButton = {
-                TextButton(onClick = onConfirmClear) {
-                    Text(
-                        text = stringResource(R.string.chat_info_clear_title),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismissClearConfirm) {
-                    Text(stringResource(R.string.chat_info_clear_cancel))
-                }
-            },
         )
     }
 

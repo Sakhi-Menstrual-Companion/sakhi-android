@@ -30,6 +30,8 @@
     <string name="profile_item_about">About Sakhi</string>
     <string name="profile_item_feedback">Share Feedback</string>
     <string name="profile_item_manage_account">Manage Account</string>
+    <!-- iOS `ProfileView.swift` offline branch: "Create a Sakhi Account". -->
+    <string name="profile_item_create_account">Create a Sakhi Account</string>
     <string name="profile_item_sign_out">Sign Out</string>
     <string name="profile_activity_header_subtitle">Your period and health tracking timeline</string>
     <string name="profile_activity_month_year_format">MMMM uuuu</string>

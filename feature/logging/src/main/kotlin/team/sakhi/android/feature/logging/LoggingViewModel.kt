@@ -32,6 +32,7 @@ import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
+import team.sakhi.sync.SyncStore
 import team.sakhi.sync.DataMigration
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.android.common.CycleInsightAdapter
@@ -85,6 +86,20 @@ data class LoggingUiState(
     // attempt just failed" from the final state alone, regardless of whether
     // any intermediate frame was actually observed.
     val saveAttemptId: Int = 0,
+    /**
+     * The [saveAttemptId] of the last save that SUCCEEDED. Monotonic, and never cleared.
+     *
+     * The sheet used to dismiss on `saveMessage != null`, which does not survive
+     * conflation: the success path sets the message and then calls `loadEntry`, which clears
+     * it again. While `loadEntry` read from the network there was a real gap and Compose
+     * observed the message in between. Once that read became local it stopped being
+     * observable at all — both writes landed in one `MutableStateFlow` window, the collector
+     * only ever saw `null`, and the sheet stayed open over a save that had actually worked.
+     *
+     * A value that gets cleared is the wrong shape for "this happened". This one only ever
+     * moves forward, so no amount of conflation can hide it.
+     */
+    val savedAttemptId: Int = 0,
     // Matches iOS's real `LoggingViewModel.isSavingYearSelection` -- Calendar's
     // year-view multi-select "Edit Period Dates" bar reads this for its own
     // save-button spinner, independent of the single-date `isSaving` flag above.
@@ -128,6 +143,8 @@ class LoggingViewModel(
     // Needed only for the header's phase line: iOS's logging sheet shows
     // `cyclePhase.name` under the date, and the phase cannot be derived from logs alone.
     private val cycleDataRepository: CycleDataRepository,
+    /** Used to tell Home that a background cycle rebuild has landed. See `save()`. */
+    private val syncStore: SyncStore,
 ) : ViewModel() {
 
     private val selectedDate = MutableStateFlow(DateConverter.today())
@@ -392,19 +409,32 @@ class LoggingViewModel(
 
                         // Rebuild this user's cycles from the full log history, the
                         // same step iOS runs after every log change
-                        // (`CycleDetectionEngine.processLogChange`). Awaited here, not
-                        // fired and forgotten, so cycles are already persisted before
-                        // the sheet reports success and Home reloads — otherwise
-                        // closing the sheet quickly would race the recompute and Home
-                        // would show stale data.
+                        // (`CycleDetectionEngine.processLogChange`).
+                        //
+                        // NOT awaited. It used to be, so that cycles were persisted before
+                        // the sheet reported success — but measured on a real device it took
+                        // ~2.6s against ~0.4s for the write itself, so it WAS the wait she
+                        // felt after tapping save. The log row is already safe by this point;
+                        // this step only recomputes derived cycles from it.
+                        //
+                        // The race that awaiting protected against is handled instead by
+                        // telling Home when the rebuild lands: `markSuccess` publishes a new
+                        // `lastSyncedAt`, which is exactly the signal Home already treats as
+                        // "there may be new data" and reloads on. So Home shows the log
+                        // immediately and corrects to the new cycles a moment later, rather
+                        // than showing nothing until both are done.
                         //
                         // A detection failure must not fail the save: the log row is
                         // already safely written, and losing what she logged is far
                         // worse than a briefly stale cycle, which the next log or app
                         // start recomputes anyway.
-                        cycleDetectionCoordinator.processLogChange(attributedUserId)
+                        viewModelScope.launch {
+                            cycleDetectionCoordinator.processLogChange(attributedUserId)
                             .onSuccess { cycles ->
                                 logSaveLog.i { "cycle detection OK -> ${cycles.size} cycle(s)" }
+                                // Tell Home the rebuilt cycles have landed, so it reloads
+                                // now that there is genuinely new derived data to show.
+                                syncStore.markSuccess(Clock.System.now().toEpochMilliseconds())
                             }
                             .onFailure { throwable ->
                                 // Only the exception TYPE and first line. supabase-kt
@@ -420,6 +450,7 @@ class LoggingViewModel(
                                         throwable.message.orEmpty().substringBefore('\n').take(160)
                                 }
                             }
+                        }
 
                         if (isStillCurrent(session, state.selectedDate)) {
                             _uiState.update {
@@ -432,6 +463,7 @@ class LoggingViewModel(
                                     ),
                                     error = null,
                                     saveAttemptId = attemptId,
+                                    savedAttemptId = attemptId,
                                 )
                             }
                             widgetSnapshotManager.refreshAsync()
@@ -566,7 +598,7 @@ class LoggingViewModel(
                 }
         }
 
-        if (sessionManager.current == session) {
+        if (session.isSameSubjectAs(sessionManager.current)) {
             _uiState.update { it.copy(isSavingYearSelection = false) }
         }
         widgetSnapshotManager.refreshAsync()
@@ -921,7 +953,10 @@ class LoggingViewModel(
         session: SessionContext,
         date: LocalDate,
     ): Boolean {
-        return sessionManager.current == session &&
+        // isSameSubjectAs, not ==: the session object is republished once its name and
+        // invitations load, and comparing the whole data class made a save decide its own
+        // result was stale — which is what stopped the sheet dismissing.
+        return session.isSameSubjectAs(sessionManager.current) &&
             selectedDate.value == date
     }
 

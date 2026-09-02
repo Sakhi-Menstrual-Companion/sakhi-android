@@ -156,6 +156,7 @@ class HomeScreenshotTest {
             // Added when the logging sheet started showing the cycle phase under the
             // date, which cannot be derived from logs alone.
             cycleDataRepository = mockk(relaxed = true),
+            syncStore = mockk(relaxed = true),
         )
     }
 

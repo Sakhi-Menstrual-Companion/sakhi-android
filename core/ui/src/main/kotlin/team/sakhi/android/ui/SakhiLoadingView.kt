@@ -45,6 +45,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import team.sakhi.models.CyclePhase
+import team.sakhi.android.designsystem.phasePageBackgroundBrush
+import team.sakhi.android.designsystem.rememberPhasePalette
 import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -104,8 +107,28 @@ private val SakhiLoadingContext.isMinimal: Boolean
 fun SakhiLoadingView(
     context: SakhiLoadingContext = SakhiLoadingContext.AppLaunch,
     modifier: Modifier = Modifier,
+    /**
+     * The phase to paint in, when one is already known.
+     *
+     * This screen precedes Home, so painting it in the brand pink meant every launch went
+     * pink and then changed to whatever phase she is actually in — a colour change she can
+     * see, on a screen whose whole job is to look like nothing is happening. Passing the last
+     * known phase makes this and Home the same colour, so nothing changes when Home mounts.
+     *
+     * Null keeps the brand treatment, which is the right look when there is genuinely no
+     * phase yet (first launch, or signed out).
+     */
+    phase: CyclePhase? = null,
 ) {
-    val pinkColor = MaterialTheme.colorScheme.primary
+    val phasePalette = phase?.let { rememberPhasePalette(it) }
+    // Matches Home exactly: same brush, same arguments. Any divergence here reintroduces the
+    // colour change this parameter exists to remove.
+    val background = if (phase != null) {
+        phasePageBackgroundBrush(phase = phase, hasCycleData = true)
+    } else {
+        sakhiPageBackgroundBrush()
+    }
+    val pinkColor = phasePalette?.primary ?: MaterialTheme.colorScheme.primary
     val transition = rememberInfiniteTransition(label = "sakhi_loading")
     // iOS: `.easeInOut(duration: 1.2).repeatForever(autoreverses: true)` on both scale
     // (0.975 <-> 1.025) and opacity (0.78 <-> 1).
@@ -124,7 +147,7 @@ fun SakhiLoadingView(
             .fillMaxSize()
             // iOS `SakhiLoadingView` ends in `.profileStaticPageBackground()`, so this is
             // the phase gradient in dark, not the flat black `background` role.
-            .background(sakhiPageBackgroundBrush()),
+            .background(background),
         contentAlignment = Alignment.Center,
     ) {
         Box(modifier = Modifier.size(200.dp), contentAlignment = Alignment.Center) {
@@ -190,11 +213,20 @@ fun SakhiLoadingView(
             // a two-line one shifts everything above it.
             AnimatedContent(
                 targetState = messageIndex % messages.size,
+                // The incoming message waits for the outgoing one to finish leaving. Run
+                // together, both strings are drawn in the same centred box at partial
+                // opacity, so the two overlap into one unreadable line -- caught on the QA
+                // emulator during sign-out, rendering as "Getting Almost there... ready...".
+                // At a 700ms cadence that overlap was on screen almost half the time.
+                // Total is still the 0.3s iOS animates over, just sequenced rather than
+                // simultaneous, which leaves 400ms of a settled, readable message.
                 transitionSpec = {
                     (
-                        fadeIn(animationSpec = tween(MessageFadeMillis)) +
+                        fadeIn(
+                            animationSpec = tween(MessageFadeMillis, delayMillis = MessageFadeMillis),
+                        ) +
                             slideInVertically(
-                                animationSpec = tween(MessageFadeMillis),
+                                animationSpec = tween(MessageFadeMillis, delayMillis = MessageFadeMillis),
                                 initialOffsetY = { MessageRiseOffsetPx },
                             )
                         ) togetherWith fadeOut(animationSpec = tween(MessageFadeMillis))
@@ -248,6 +280,7 @@ private val MessageMinHeight = 48.dp
 /** `.padding(.bottom, 64)`. */
 private val MessageBottomPadding = 64.dp
 /** `.animation(.easeInOut(duration: 0.3))`. */
-private const val MessageFadeMillis = 300
+// Half of iOS's 0.3s each way: out, then in, so the two never share the screen.
+private const val MessageFadeMillis = 150
 /** `.offset(y: 6)` on insertion. */
 private const val MessageRiseOffsetPx = 6

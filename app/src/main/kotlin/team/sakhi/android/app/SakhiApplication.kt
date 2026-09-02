@@ -27,6 +27,7 @@ import team.sakhi.android.platform.AndroidNotificationReminderManager
 import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.platform.CurrentActivityHolder
 import team.sakhi.android.platform.androidPlatformModule
+import team.sakhi.localdb.SakhiPhaseALocalStore
 import team.sakhi.di.appModule
 import team.sakhi.di.platformModule
 import team.sakhi.platform.BuildConfigProvider
@@ -46,6 +47,15 @@ class SakhiApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+
+        // A failed DNS lookup is cached by the JVM for `networkaddress.cache.negative.ttl`
+        // seconds, and the cache is not cleared when the network changes. That is what makes
+        // "the internet is back, but Try again still does nothing" happen: the retry never
+        // reaches the resolver, it re-throws the same
+        // `Unable to resolve host ... No address associated with hostname` straight out of
+        // the cache. Zero means every retry asks the resolver again, which is what a retry
+        // button has to do to be honest.
+        java.security.Security.setProperty("networkaddress.cache.negative.ttl", "0")
 
         // Populate SakhiCore's BuildConfigProvider from this module's generated
         // BuildConfig (itself sourced from secrets.properties / CI env vars, see
@@ -109,6 +119,23 @@ class SakhiApplication : Application() {
             sessionManager = koin.get(),
             versionName = BuildConfig.VERSION_NAME,
         ).start()
+
+        // Open the Room database NOW, off the main thread, instead of leaving it to whoever
+        // queries it first.
+        //
+        // Room opens lazily on first access: it opens the file, validates the schema and runs
+        // any migration. On a cold start the first caller is Home, so that whole cost landed
+        // between the first frame and Home having anything to show — a measured ~3s hole on a
+        // real device where the app looked alive but empty, with libsqliteJni only being
+        // loaded at that point.
+        //
+        // Started before the frame callback below, deliberately: this is the one piece of
+        // startup work Home genuinely waits on, so it should begin as early as possible rather
+        // than be deferred with the things that can wait. It stays OFF the main thread, so it
+        // costs the first frame nothing and is simply already done by the time Home asks.
+        deferredStartupScope.launch {
+            runCatching { koin.get<SakhiPhaseALocalStore>().warmUp() }
+        }
 
         Choreographer.getInstance().postFrameCallback {
             koin.get<AndroidLocaleManager>().syncPersistedLanguageWithActiveLocale()

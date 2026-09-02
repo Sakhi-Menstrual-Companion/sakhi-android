@@ -1,27 +1,10 @@
 plugins {
-    alias(libs.plugins.android.library)
-    alias(libs.plugins.kotlin.android)
-    alias(libs.plugins.kotlin.compose)
+    id("sakhi.android.library")
+    id("sakhi.android.library.compose")
 }
 
 android {
     namespace = "team.sakhi.android.platform"
-    compileSdk = 35
-
-    defaultConfig {
-        minSdk = 26
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-    }
-    kotlin {
-        jvmToolchain(17)
-    }
-    buildFeatures {
-        compose = true
-    }
 }
 
 dependencies {
@@ -29,8 +12,6 @@ dependencies {
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
 
-    implementation(platform(libs.compose.bom))
-    implementation(libs.compose.ui)
     implementation(libs.koin.core)
     implementation(libs.koin.android)
     implementation(libs.androidx.core.ktx)

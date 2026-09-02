@@ -14,6 +14,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
@@ -84,6 +90,46 @@ fun SakhiWeekdayHeaderRow(
     }
 }
 
+/**
+ * The selected-day ring, guaranteed circular at whatever height the cell actually gets.
+ *
+ * `CircleShape` only draws a circle on a SQUARE box, and neither a fixed size nor a measured
+ * one worked here:
+ *
+ *  - A fixed `.size(42.dp)` renders a STADIUM whenever the cell is shorter than 42dp, because
+ *    the width survives and the height is coerced down. In the compact calendar sheet the grid
+ *    is laid out with `weight(1f)`, so six rows share the leftover space and each cell ends up
+ *    around 21dp tall — less than half the 48dp the constant implies.
+ *  - `BoxWithConstraints` + `matchParentSize()` measured the wrong box entirely, because
+ *    `BoxWithConstraints` subcomposes from its incoming constraints while `matchParentSize`
+ *    resolves in a later pass.
+ *
+ * `fillMaxHeight` + `aspectRatio(1f)` needs neither. The height is taken from the cell, the
+ * width is then forced to match it, and the result is square by construction — so it is a
+ * circle at 21dp in the compact sheet and at [diameter] wherever there is room, without either
+ * layout knowing about the other.
+ *
+ * NOTE: a tight-looking ring is this working correctly on a cramped cell, not a bug in the
+ * ring. If the calendar looks cramped, the row height is the thing to change.
+ */
+@Composable
+private fun SelectionRing(
+    diameter: Dp,
+    strokeWidth: Dp,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            // Cap first, then fill: never larger than the design size, never taller than the
+            // cell, and always exactly as wide as it is tall.
+            .heightIn(max = diameter)
+            .fillMaxHeight()
+            .aspectRatio(1f)
+            .border(strokeWidth, color, CircleShape),
+    )
+}
+
 @Composable
 fun SakhiCalendarMonthGrid(
     days: List<SakhiCalendarDay>,
@@ -92,11 +138,29 @@ fun SakhiCalendarMonthGrid(
 ) {
     val weekRows = remember(days) { SakhiCalendarWeekRows(days.chunked(7)) }
     Column(
-        modifier = modifier,
+        // Rows SHARE the height rather than each claiming `calendarCellHeight` outright.
+        //
+        // The compact sheet's grid area is laid out with `weight(1f)`, and a six-week month
+        // needs more than it gets. With fixed-height rows the first five took their full 48dp
+        // and the sixth was left with whatever remained — measured at 21dp against 48dp for
+        // the others, which squashed that row's day circles into ovals. It only showed on
+        // months whose last row is occupied, which is why it looked intermittent.
+        //
+        // Weighting makes every row the same height whatever the sheet gives, so no row is
+        // ever starved. Safe here because this grid's only caller sits in a height-bounded
+        // sheet; `weight` inside an unbounded parent would not have a height to divide.
+        modifier = modifier.fillMaxHeight(),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1 + SakhiSpacing.space1 / 2),
     ) {
         weekRows.rows.forEach { week ->
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    // Never taller than the design row height when there IS spare room —
+                    // otherwise a five-week month would stretch its rows to fill the sheet.
+                    .heightIn(max = calendarCellHeight),
+            ) {
                 week.forEach { day ->
                     SakhiCalendarDayCell(
                         day = day,
@@ -228,14 +292,10 @@ private fun SakhiMiniMonthDayCell(
         // ring in the year view at all, so the day you had picked was indistinguishable
         // from any other once the year grid was open.
         if (day.isSelected) {
-            Box(
-                modifier = Modifier
-                    .size(yearGridRingSize)
-                    .border(
-                        yearGridRingStroke,
-                        accentColor,
-                        androidx.compose.foundation.shape.CircleShape,
-                    ),
+            SelectionRing(
+                diameter = yearGridRingSize,
+                strokeWidth = yearGridRingStroke,
+                color = accentColor,
             )
         }
         if (isMultiSelectMode) {
@@ -345,21 +405,18 @@ private fun SakhiCalendarDayCell(
 
     Box(
         modifier = modifier
-            .height(calendarCellHeight)
+            // fillMaxHeight, not height(): the row above now decides the height and shares it
+            // evenly. Re-imposing a fixed 48dp here would reintroduce the starved last row.
+            .fillMaxHeight()
             .clickable(enabled = !day.isFuture) { onDayClick(day.date) }
             .semantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         if (day.isSelected) {
-            Box(
-                modifier = Modifier
-                    .size(calendarRingSize)
-                    .background(Color.Transparent, androidx.compose.foundation.shape.CircleShape)
-                    .border(
-                        width = calendarRingStroke,
-                        color = accentColor,
-                        shape = androidx.compose.foundation.shape.CircleShape,
-                    ),
+            SelectionRing(
+                diameter = calendarRingSize,
+                strokeWidth = calendarRingStroke,
+                color = accentColor,
             )
         }
         Box(
@@ -449,7 +506,9 @@ private val calendarRingStroke = SakhiSpacing.space1 / 2 + SakhiSpacing.space1 /
 // view far denser and smaller than iOS's.
 private val yearGridCellHeight = 36.dp
 private val yearGridDotSize = 32.dp
-private val yearGridRingSize = 40.dp
+// MUST stay below `yearGridCellHeight` (36.dp) or CircleShape renders a stadium.
+// Was 40.dp, i.e. larger than its own cell, on every device.
+private val yearGridRingSize = 34.dp
 private val yearGridRingStroke = 2.5.dp
 private val yearGridMultiSelectHintSize = 34.dp
 private val yearGridFontSize = 14.sp

@@ -472,6 +472,7 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
         )
     }
 
+    // Grabber inside the visible surface — see the note in `LoggingSheet`.
     SheetSurface(showDragHandle = true) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(

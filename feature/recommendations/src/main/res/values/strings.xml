@@ -1,11 +1,11 @@
 <resources>
     <string name="recommendations_title">Recommendations</string>
     <string name="recommendations_load_failed">Recommendations could not be loaded right now.</string>
-    <string name="recommendations_shared_title">Shared recommendations</string>
+    <string name="recommendations_shared_title">What might help her</string>
     <string name="recommendations_loading_summary">Loading shared recommendations</string>
     <string name="recommendations_phase_unresolved_summary">Recommendations are available, but the current phase could not be resolved right now.</string>
     <string name="recommendations_no_phase_summary">Recommendations are ready, but there is no active phase signal yet.</string>
-    <string name="recommendations_shared_phase_summary">Showing %1$s recommendations with care-role visibility applied.</string>
+    <string name="recommendations_shared_phase_summary">Ideas for her %1$s phase, from what she has chosen to share with you.</string>
     <string name="recommendations_current_phase_summary">Showing %1$s recommendations for the current phase.</string>
 
     <string name="recommendations_section_eat_more">Eat more</string>

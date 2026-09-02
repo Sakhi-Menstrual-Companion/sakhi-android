@@ -355,7 +355,9 @@ class ReportsViewModel(
         )
     }
 
-    private fun isStillCurrent(session: SessionContext?): Boolean = sessionManager.current == session
+    // isSameSubjectAs, not ==: see SessionContext.isSameSubjectAs.
+    private fun isStillCurrent(session: SessionContext?): Boolean =
+        session?.isSameSubjectAs(sessionManager.current) ?: (sessionManager.current == null)
 
     private fun clearPreparedPdf() {
         preparedSharePdfUri = null

@@ -5,6 +5,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.rounded.AutoAwesome
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -82,6 +83,12 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -93,7 +100,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -231,13 +237,34 @@ fun HomeScreen(
     var scrollColumnTop by remember { mutableFloatStateOf(0f) }
     var phaseCardOffset by remember { mutableFloatStateOf(0f) }
     val density = LocalDensity.current
-    val heroScrollProgress by remember(scrollState, density) {
+    // Deliberately NOT `by` (a delegated read). This value changes continuously across
+    // 120dp of scroll, so reading it here — in `HomeScreen`'s own composition scope —
+    // invalidated this whole 3000-line composable on essentially every scroll frame, and
+    // every card below it re-ran with it. That was the single largest source of scroll jank
+    // on this screen.
+    //
+    // Kept as a `State` and handed down as a `() -> Float` instead, so the read is recorded
+    // by whichever `graphicsLayer` block actually consumes it. That moves the invalidation
+    // from the composition phase to the draw phase: scrolling now re-draws the hero without
+    // recomposing anything at all.
+    val heroScrollProgressState = remember(scrollState, density) {
         derivedStateOf {
             with(density) {
                 ((scrollState.value.toFloat() - 20.dp.toPx()) / 120.dp.toPx()).coerceIn(0f, 1f)
             }
         }
     }
+    // Remembered so the lambda identity is stable across recompositions — an allocated-fresh
+    // lambda would be a new instance each time and would defeat skipping in the children it
+    // is passed to, which is the same trap this change exists to close.
+    val heroScrollProgress: () -> Float = remember(heroScrollProgressState) {
+        { heroScrollProgressState.value }
+    }
+
+    // The eight fields the hero and top bar actually render, projected out of the 24-field
+    // `uiState`. Recomputed whenever `uiState` changes, but it compares equal unless one of
+    // those eight moved, so a sync tick or a cycle reload no longer recomposes either of them.
+    val heroState = remember(uiState) { uiState.toHeroState() }
 
     // `refresh()`'s own triggers (session/syncState/partnerSnapshot) don't fire
     // on a plain nav pop back from the logging sheet, so
@@ -276,7 +303,20 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(phasePageBackgroundBrush(phase = uiState.phase, hasCycleData = uiState.hasCycleData)),
+            .background(
+                phasePageBackgroundBrush(
+                    phase = uiState.phase,
+                    // `|| isLoadingCycle` on purpose. The no-data branch of this brush paints
+                    // the neutral brand gradient, which is right for a woman who genuinely has
+                    // nothing logged — but it was also being used for the moment BEFORE her
+                    // data arrives, so every launch started on the brand colour and then
+                    // changed to her phase. Treating "still loading" as the phase path takes
+                    // the FOLLICULAR palette instead (rememberPhasePalette maps UNKNOWN to it),
+                    // which is the same neutral-cycle colour Home settles on, so nothing
+                    // changes underneath her.
+                    hasCycleData = uiState.hasCycleData || uiState.isLoadingCycle,
+                ),
+            ),
     ) {
         Column(
             modifier = Modifier
@@ -295,7 +335,7 @@ fun HomeScreen(
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
         ) {
             HomeTopBar(
-                uiState = uiState,
+                hero = heroState,
                 heroScrollProgress = heroScrollProgress,
                 phasePalette = phasePalette,
                 onOpenProfile = {
@@ -335,11 +375,30 @@ fun HomeScreen(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(scrollState)
+                    // Cards appear, disappear and change height as a log lands — the logged
+                    // details card arrives, the cycle strip regrows, the empty state goes.
+                    // Without this the whole column jumps to its new height in a single
+                    // frame, which is the jolt that remains once the colours are easing.
+                    //
+                    // `animateContentSize` and NOT a Crossfade on the content: this block
+                    // resolves `koinViewModel()` and runs a `LaunchedEffect` that calls
+                    // `loadOrGenerate`, and a crossfade composes BOTH states at once, so it
+                    // would fire that generation twice per transition. Easing the size gets
+                    // the smoothness without composing anything twice.
+                    .animateContentSize(animationSpec = tween(HOME_CONTENT_RESIZE_MS))
                     .onGloballyPositioned { scrollColumnTop = it.positionInRoot().y },
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
             ) {
             val canShowHero = uiState.session?.isViewingOwnData == true || uiState.canViewPredictions
-            if (!uiState.isLoadingCycle && canShowHero) {
+            // Hidden ONLY when there is genuinely nothing to show. It used to be hidden for
+            // the whole of `isLoadingCycle`, so the hero unmounted and remounted on every
+            // load — the content visibly disappearing and reappearing — and the values
+            // restored from the last session were seeded but never drawn, because loading was
+            // still true when the first frame went out.
+            //
+            // With data present the hero stays mounted and its values cross-fade underneath,
+            // which is what the `AnimatedContent` below is for.
+            if (canShowHero && (!uiState.isLoadingCycle || uiState.hasCycleData)) {
                 // iOS springs the hero when the day or phase changes rather than
                 // swapping it instantly -- `homePhaseTransition` is
                 // `.spring(response: 0.5, dampingFraction: 0.88, blendDuration: 0.14)`
@@ -351,7 +410,11 @@ fun HomeScreen(
                 // the hero's content on its own (paging to another day of the same
                 // phase, or a phase boundary on the same day).
                 AnimatedContent(
-                    targetState = uiState.selectedDate to uiState.phase,
+                    // Keyed on what the hero actually RENDERS, not just the date and phase.
+                    // Keyed on the pair alone, a sync that landed a new cycle day or a new
+                    // countdown swapped the numbers instantly while the fade sat unused,
+                    // because neither key had changed.
+                    targetState = heroState,
                     transitionSpec = {
                         fadeIn(animationSpec = spring(stiffness = HomeHeroSpringStiffness)) togetherWith
                             fadeOut(animationSpec = spring(stiffness = HomeHeroSpringStiffness))
@@ -359,7 +422,7 @@ fun HomeScreen(
                     label = "home_hero",
                 ) { _ ->
                     HeroSection(
-                        uiState = uiState,
+                        hero = heroState,
                         accentColor = accentColor,
                         phasePalette = phasePalette,
                         scrollProgress = heroScrollProgress,
@@ -396,7 +459,12 @@ fun HomeScreen(
             // partner+empty -> partnerNoDataCard; empty (own) -> learningPhaseCards;
             // partner+data -> checklist/loggedDetails/nutrition/headsUp/phaseInfo;
             // own+data -> loggedDetails/nutrition/cycleDetails/phaseInfo.
-            if (!uiState.isLoadingCycle) {
+            // Same rule as the hero above, and this is the gate that actually produced the
+            // blank screen: it hid EVERY card on Home for the whole of `isLoadingCycle`, so
+            // the values restored from the last session were seeded, the hero drew them, and
+            // then nothing else did. Loading is not a reason to show her an empty page when
+            // there is real data to show.
+            if (!uiState.isLoadingCycle || uiState.hasCycleData) {
                 if (isPartnerMode && !uiState.hasCycleData) {
                     PartnerNoDataCard()
                 } else if (!uiState.hasCycleData) {
@@ -618,6 +686,10 @@ private fun StateChip(
  */
 private fun SyncRuntimeState.isWorthShowing(): Boolean = when (this) {
     SyncRuntimeState.Idle, is SyncRuntimeState.Success -> false
+    // Routine syncing is reported next to the phase name in the top bar, with the rotating
+    // icon. Showing it here too put a second "Syncing" capsule on screen for the same event.
+    // Stale and Failed stay: those are problems she may need to act on, not routine progress.
+    SyncRuntimeState.Syncing -> false
     else -> true
 }
 
@@ -670,9 +742,9 @@ private data class HeroText(val big: String, val sub: String)
  *
  * Note in-period reads "Day 3", not "3 Days"; only the countdown cases are plural.
  */
-private fun heroText(context: Context, uiState: HomeUiState): HeroText {
-    val her = uiState.session?.isViewingOwnData == false
-    val prediction = uiState.prediction
+private fun heroText(context: Context, hero: HomeHeroState): HeroText {
+    val her = hero.session?.isViewingOwnData == false
+    val prediction = hero.prediction
 
     fun notStarted() = HeroText(
         "",
@@ -681,7 +753,12 @@ private fun heroText(context: Context, uiState: HomeUiState): HeroText {
         ),
     )
 
-    if (prediction == null || !uiState.hasCycleData) return notStarted()
+    // Say nothing rather than something wrong. Until the first read lands we do not know
+    // whether she has tracked before, and "start tracking today" is a confident claim we have
+    // not earned yet. The top bar's rotating icon already says work is in progress.
+    if (hero.isLoading && !hero.hasCycleData) return HeroText("", "")
+
+    if (prediction == null || !hero.hasCycleData) return notStarted()
 
     fun dayLabel(day: Int) = context.getString(R.string.home_hero_day_number, day)
     fun daysLabel(n: Int) = context.resources.getQuantityString(R.plurals.home_day_count, n, n)
@@ -690,7 +767,7 @@ private fun heroText(context: Context, uiState: HomeUiState): HeroText {
         CyclePhaseInsight.PredictionStatusKind.IN_PERIOD -> HeroText(
             dayLabel(prediction.periodDay),
             // Inside the predicted window but this day has no log yet -> "expected".
-            if (uiState.hasLoggedForSelectedDate) {
+            if (hero.hasLoggedForSelectedDate) {
                 context.getString(
                     if (her) R.string.home_hero_period_of_her else R.string.home_hero_period_of_your,
                 )
@@ -748,15 +825,20 @@ private fun heroText(context: Context, uiState: HomeUiState): HeroText {
 
 @Composable
 private fun HeroSection(
-    uiState: HomeUiState,
+    hero: HomeHeroState,
     accentColor: Color,
     phasePalette: SakhiPhasePalette,
-    scrollProgress: Float,
+    // A provider, not a `Float`. Taking the value would mean the caller has to read the
+    // scroll state during composition to pass it, which is exactly what used to recompose
+    // all of Home on every frame. Read inside the `graphicsLayer` block below instead.
+    scrollProgress: () -> Float,
     onTipClick: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    val text = heroText(context, uiState)
-    val isPeriodMode = uiState.phase == CyclePhase.MENSTRUAL
+    // Builds several localised strings; remembered so it only re-runs when its inputs
+    // actually change, not on every recomposition of the hero.
+    val text = remember(context, hero) { heroText(context, hero) }
+    val isPeriodMode = hero.phase == CyclePhase.MENSTRUAL
 
     // iOS `HomeDayDetailGlassView`: the hero sits on a saturated background in period
     // mode, so its text flips to white there. Android previously used the phase's
@@ -767,7 +849,7 @@ private fun HeroSection(
     val bigColor = accentColor
     val subColor = homeSecondaryTextColor(
         phasePalette = phasePalette,
-        hasCycleData = uiState.hasCycleData,
+        hasCycleData = hero.hasCycleData,
         isMenstrual = isPeriodMode,
     )
 
@@ -775,10 +857,12 @@ private fun HeroSection(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {
-                alpha = 1f - (0.38f * scrollProgress)
-                translationY = -36.dp.toPx() * scrollProgress
-                scaleX = 1f - (0.08f * scrollProgress)
-                scaleY = 1f - (0.08f * scrollProgress)
+                // Single read per draw, reused for all four properties.
+                val progress = scrollProgress()
+                alpha = 1f - (0.38f * progress)
+                translationY = -36.dp.toPx() * progress
+                scaleX = 1f - (0.08f * progress)
+                scaleY = 1f - (0.08f * progress)
             }
             // iOS `heroSection`: .padding(.horizontal, 24) / .padding(.top, .m = 16) /
             // .padding(.bottom, 32). Android had none of these, so the countdown sat
@@ -815,7 +899,7 @@ private fun HeroSection(
 
         // iOS's hero tip pill: sparkles + one-line phase tip, tappable straight into
         // Ask Sakhi. Copy comes from the shared engine's `shortTip`, not written here.
-        uiState.heroTip?.let { tip ->
+        hero.heroTip?.let { tip ->
             // iOS adds `.padding(.top, 6)` to the capsule on top of the stack's 10.
             HeroTipPill(
                 tip = tip,
@@ -2829,8 +2913,9 @@ private fun homeSecondaryTextColor(
 
 @Composable
 private fun HomeTopBar(
-    uiState: HomeUiState,
-    heroScrollProgress: Float,
+    hero: HomeHeroState,
+    // Provider, not a value — see the note on `HeroSection.scrollProgress`.
+    heroScrollProgress: () -> Float,
     phasePalette: SakhiPhasePalette,
     onOpenProfile: () -> Unit,
     onOpenCare: () -> Unit,
@@ -2839,8 +2924,8 @@ private fun HomeTopBar(
     onPhaseTap: () -> Unit = {},
 ) {
     val context = LocalContext.current
-    val hasCycleData = uiState.hasCycleData
-    val isMenstrual = uiState.phase == CyclePhase.MENSTRUAL
+    val hasCycleData = hero.hasCycleData
+    val isMenstrual = hero.phase == CyclePhase.MENSTRUAL
     val foreground = when {
         !hasCycleData -> MaterialTheme.colorScheme.primary
         isMenstrual -> Color.White
@@ -2852,23 +2937,32 @@ private fun HomeTopBar(
         phasePalette.secondary.copy(alpha = 0.12f)
     }
     val iconStroke = foreground.copy(alpha = 0.14f)
+    // While the app is catching up in the background, the top bar says so rather than showing
+    // a phase name derived from data that is still landing. Home is already fully usable
+    // underneath: this is a status line, not a gate.
+    // "Syncing" NEVER replaces a value she already had. Once there is cycle data, the phase
+    // name stays put and the rotating icon beside it carries the syncing signal instead —
+    // blanking a real value on every launch is a worse experience than a slightly stale one.
+    // The word is only used when there is genuinely nothing yet to show in its place.
     val phaseLabel = if (hasCycleData) {
-        uiState.phaseKind.displayName(context)
-    } else if (uiState.session?.isViewingOwnData == false) {
+        hero.phaseKind.displayName(context)
+    } else if (hero.isSyncing) {
+        stringResource(R.string.home_sync_syncing)
+    } else if (hero.session?.isViewingOwnData == false) {
         stringResource(R.string.home_phase_first_period_partner)
     } else {
         stringResource(R.string.home_phase_first_period_self)
     }
-    val heroSummary = heroText(context, uiState)
+    val heroSummary = remember(context, hero) { heroText(context, hero) }
 
     Box(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier.align(Alignment.Center),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            val isToday = uiState.selectedDate == DateConverter.today()
+            val isToday = hero.selectedDate == DateConverter.today()
             Text(
-                text = DateConverter.formatForDisplay(uiState.selectedDate),
+                text = DateConverter.formatForDisplay(hero.selectedDate),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = foreground,
                 // Matches iOS's real `HomeView.topBar` date label exactly: tapping
@@ -2883,6 +2977,7 @@ private fun HomeTopBar(
                 heroContentSub = heroSummary.sub,
                 foreground = foreground,
                 progress = heroScrollProgress,
+                isSyncing = hero.isSyncing,
                 onPhaseTap = onPhaseTap,
             )
         }
@@ -2939,9 +3034,18 @@ private fun HeroTopBarSubtitle(
     heroContentBig: String,
     heroContentSub: String,
     foreground: Color,
-    progress: Float,
+    // Provider, not a value — see the note on `HeroSection.scrollProgress`.
+    progress: () -> Float,
+    isSyncing: Boolean = false,
     onPhaseTap: () -> Unit = {},
 ) {
+    // The one thing on this screen that genuinely cannot be deferred to the draw phase:
+    // `clickable`'s `enabled` has to be a real Boolean at composition time. Wrapping it in
+    // `derivedStateOf` means this recomposes only on the frame the value actually crosses
+    // 0.5, rather than on all ~120 frames of the fade, which is what reading the raw float
+    // here would cost.
+    val phaseTapEnabled by remember(progress) { derivedStateOf { progress() < 0.5f } }
+
     Box(
         modifier = Modifier.height(16.dp),
         contentAlignment = Alignment.Center,
@@ -2950,32 +3054,59 @@ private fun HeroTopBarSubtitle(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(3.dp),
             modifier = Modifier
-                .alpha(1f - progress)
+                // `graphicsLayer`, not `Modifier.alpha`: alpha takes the value at
+                // composition time, graphicsLayer reads it at draw time.
+                .graphicsLayer { alpha = 1f - progress() }
                 // iOS gates the tap the same way: `.allowsHitTesting(progress < 0.5)`,
                 // so the label stops responding once it has faded into the collapsed
                 // "Day 1 · of your period" summary.
-                .clickable(enabled = progress < 0.5f, onClick = onPhaseTap),
+                .clickable(enabled = phaseTapEnabled && !isSyncing, onClick = onPhaseTap),
         ) {
             Text(
                 text = phaseName,
                 style = MaterialTheme.typography.labelMedium,
                 color = foreground.copy(alpha = 0.72f),
             )
-            // iOS: `Image(systemName: "chevron.down").font(.lato(8, .bold))`. Android was
-            // drawing a `MoreHoriz` ellipsis, which reads as "more options" rather than
-            // "this expands downward" -- and nothing happened when it was tapped.
-            Icon(
-                imageVector = Icons.Rounded.KeyboardArrowDown,
-                contentDescription = null,
-                tint = foreground.copy(alpha = 0.50f),
-                modifier = Modifier.size(12.dp),
-            )
+            if (isSyncing) {
+                // Rotation is driven entirely in the draw phase: `rotationZ` reads the
+                // animation inside `graphicsLayer`, so the spinner never recomposes anything.
+                // A spinner that recomposed its parent every frame would be the same mistake
+                // the hero scroll progress used to make.
+                val spin = rememberInfiniteTransition(label = "sync_spin")
+                val angle by spin.animateFloat(
+                    initialValue = 0f,
+                    targetValue = 360f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(SYNC_SPIN_PERIOD_MS, easing = LinearEasing),
+                        repeatMode = RepeatMode.Restart,
+                    ),
+                    label = "sync_spin_angle",
+                )
+                Icon(
+                    imageVector = Icons.Rounded.Refresh,
+                    contentDescription = null,
+                    tint = foreground.copy(alpha = 0.50f),
+                    modifier = Modifier
+                        .size(12.dp)
+                        .graphicsLayer { rotationZ = angle },
+                )
+            } else {
+                // iOS: `Image(systemName: "chevron.down").font(.lato(8, .bold))`. Android was
+                // drawing a `MoreHoriz` ellipsis, which reads as "more options" rather than
+                // "this expands downward" -- and nothing happened when it was tapped.
+                Icon(
+                    imageVector = Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = foreground.copy(alpha = 0.50f),
+                    modifier = Modifier.size(12.dp),
+                )
+            }
         }
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.alpha(progress),
+            modifier = Modifier.graphicsLayer { alpha = progress() },
         ) {
             if (heroContentBig.isNotEmpty()) {
                 Text(
@@ -3042,4 +3173,13 @@ private fun openFoodSource(context: android.content.Context, foodName: String) {
  * SwiftUI's `response` is the spring's natural period, so the Compose equivalent is
  * `stiffness = (2*pi / response)^2` -- (2*pi / 0.5)^2 which is about 158.
  */
+/**
+ * How long Home takes to settle into a new content height. Matched to the phase colour
+ * transition (`PHASE_COLOR_TRANSITION_MS`) so the layout and the colour finish together
+ * rather than the screen changing twice.
+ */
+private const val HOME_CONTENT_RESIZE_MS = 400
+
+private const val SYNC_SPIN_PERIOD_MS = 1_100
+
 private const val HomeHeroSpringStiffness = 158f

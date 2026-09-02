@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<lint>
+    <!--
+      This module DEFINES the type scale, so literal sp values here are the point, not a
+      violation. `SakhiTheme.kt` builds the Material `Typography` object and `SakhiDimens.kt`
+      wraps the shared KMM `DesignTokens` — both have to write real numbers somewhere, and
+      this is the one place that is allowed to.
+
+      The rule stays on everywhere else. If you find yourself wanting to add this file to
+      another module, that is the rule working: add a token here instead.
+    -->
+    <issue id="SakhiHardcodedFontSize">
+        <ignore path="src/main/kotlin/team/sakhi/android/designsystem/SakhiTheme.kt" />
+        <ignore path="src/main/kotlin/team/sakhi/android/designsystem/SakhiDimens.kt" />
+    </issue>
+</lint>

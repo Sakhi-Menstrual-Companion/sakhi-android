@@ -1,6 +1,11 @@
 package team.sakhi.android.designsystem
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Brush
@@ -49,7 +54,7 @@ data class SakhiPhasePalette(
 @Composable
 fun rememberPhasePalette(phase: CyclePhase): SakhiPhasePalette {
     val isDark = LocalSakhiDarkTheme.current
-    return remember(phase, isDark) {
+    val target = remember(phase, isDark) {
         val resolved = SakhiColors.resolved(isDark).forPhase(
             if (phase == CyclePhase.UNKNOWN) CyclePhase.FOLLICULAR else phase,
         )
@@ -73,6 +78,37 @@ fun rememberPhasePalette(phase: CyclePhase): SakhiPhasePalette {
             tileStroke = resolved.tileStroke.toComposeColor(),
         )
     }
+
+    // Every colour animates, so ANYTHING tinted by phase — icons, accents, card fills,
+    // strokes — moves together instead of each call site snapping on its own frame. Doing it
+    // here rather than at the eleven call sites is what keeps them in step: a phase change is
+    // one visual event, not eleven.
+    //
+    // COST, because it is not free: this returns a NEW palette on every animation frame, so
+    // anything reading it recomposes for the duration (~24 frames at 400ms). That is accepted
+    // deliberately — a phase change happens on a save or a date change, not continuously, and
+    // a transition that recomposes is the entire point. It would not be acceptable on
+    // something that changes every frame, which is why the hero's scroll progress is still
+    // read in the draw phase instead.
+    val primary by animateColorAsState(target.primary, phaseColorSpec(), label = "phase_primary")
+    val secondary by animateColorAsState(target.secondary, phaseColorSpec(), label = "phase_secondary")
+    val surface by animateColorAsState(target.surface, phaseColorSpec(), label = "phase_surface")
+    val bgTop by animateColorAsState(target.bgTop, phaseColorSpec(), label = "phase_bg_top")
+    val bgMid by animateColorAsState(target.bgMid, phaseColorSpec(), label = "phase_bg_mid")
+    val bgBot by animateColorAsState(target.bgBot, phaseColorSpec(), label = "phase_bg_bot")
+    val tileFill by animateColorAsState(target.tileFill, phaseColorSpec(), label = "phase_tile_fill")
+    val tileStroke by animateColorAsState(target.tileStroke, phaseColorSpec(), label = "phase_tile_stroke")
+
+    return SakhiPhasePalette(
+        primary = primary,
+        secondary = secondary,
+        surface = surface,
+        bgTop = bgTop,
+        bgMid = bgMid,
+        bgBot = bgBot,
+        tileFill = tileFill,
+        tileStroke = tileStroke,
+    )
 }
 
 /**
@@ -113,17 +149,47 @@ fun phaseCardStroke(phase: CyclePhase, hasCycleData: Boolean): Color {
  */
 @Composable
 fun phasePageBackgroundBrush(phase: CyclePhase, hasCycleData: Boolean): Brush {
-    if (!hasCycleData) {
-        return Brush.verticalGradient(
-            colors = listOf(
-                MaterialTheme.colorScheme.background,
-                MaterialTheme.colorScheme.surface,
-            ),
-        )
-    }
+    // Animated, not swapped. The whole page is this gradient, so changing phase — or simply
+    // finishing a load — repainted the entire screen in one frame. That reads as a jolt
+    // rather than a change, and it happens on the two moments she is most likely to be
+    // looking: right after logging, and when paging to another day.
+    //
+    // Animating the three stops rather than cross-fading two full brushes means one gradient
+    // is ever drawn, so this costs nothing extra per frame. `animateColorAsState` also handles
+    // being interrupted mid-flight, which matters when she pages through days quickly: each
+    // change continues from the current colour instead of restarting from the old phase.
+    // The palette's own stops are already animated (see `rememberPhasePalette`), so these are
+    // mid-transition values, not targets. Only the no-data theme colours need animating here,
+    // because those come from the Material scheme rather than the phase palette.
     val palette = rememberPhasePalette(phase)
-    return Brush.verticalGradient(colors = listOf(palette.bgTop, palette.bgMid, palette.bgBot))
+    val noData = !hasCycleData
+    val themeTop by animateColorAsState(
+        MaterialTheme.colorScheme.background, phaseColorSpec(), label = "page_bg_top",
+    )
+    val themeBot by animateColorAsState(
+        MaterialTheme.colorScheme.surface, phaseColorSpec(), label = "page_bg_bot",
+    )
+
+    return if (noData) {
+        Brush.verticalGradient(colors = listOf(themeTop, themeBot))
+    } else {
+        Brush.verticalGradient(colors = listOf(palette.bgTop, palette.bgMid, palette.bgBot))
+    }
 }
+
+/**
+ * Shared timing for every phase-driven colour change, so the background, the accent and
+ * anything else tinted by phase move together instead of arriving at different moments.
+ *
+ * 400ms with a standard ease: long enough to read as a transition rather than a flicker,
+ * short enough that it never delays her. Deliberately a tween and not a spring — a spring
+ * overshoots, and a colour that overshoots briefly shows a hue that belongs to no phase.
+ */
+@Composable
+fun phaseColorSpec(): AnimationSpec<Color> =
+    tween(durationMillis = PHASE_COLOR_TRANSITION_MS, easing = FastOutSlowInEasing)
+
+const val PHASE_COLOR_TRANSITION_MS = 400
 
 /**
  * The page background every screen that is *not* Home sits on -- iOS's

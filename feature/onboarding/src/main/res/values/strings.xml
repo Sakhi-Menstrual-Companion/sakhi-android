@@ -118,8 +118,8 @@
     <string name="onboarding_invite_pick_title">Choose Who to Invite</string>
     <string name="onboarding_invite_pick_subtitle">Pick someone from your contacts to be your Care Partner.</string>
     <string name="onboarding_invite_pick_placeholder">Choose a contact</string>
-    <string name="onboarding_invite_relation_title">Their Relation to You</string>
-    <string name="onboarding_invite_relation_subtitle">Who are you inviting?</string>
+    <string name="onboarding_invite_relation_title">Your Relation to Her</string>
+    <string name="onboarding_invite_relation_subtitle">How do you know her?</string>
     <string name="onboarding_invite_relation_boyfriend_title">Boyfriend</string>
     <string name="onboarding_invite_relation_boyfriend_subtitle">Your partner</string>
     <string name="onboarding_invite_relation_husband_title">Husband</string>
@@ -133,7 +133,7 @@
     <string name="onboarding_invite_relation_other_title">Other</string>
     <string name="onboarding_invite_relation_other_subtitle">Someone special</string>
     <string name="onboarding_be_her_sakhi_title">Enter the code</string>
-    <string name="onboarding_be_her_sakhi_subtitle">Ask the person caring for you to share their Sakhi invite code.</string>
+    <string name="onboarding_be_her_sakhi_subtitle">Ask her to share the invite code from her Sakhi app.</string>
     <string name="onboarding_be_her_sakhi_placeholder">Partner code (e.g. AB3K7R)</string>
     <string name="onboarding_accept_success_title">You\'re connected!</string>
     <string name="onboarding_accept_success_subtitle">You\'re now her Sakhi. She\'ll feel the difference.</string>
@@ -231,9 +231,6 @@
     <string name="onboarding_join_slide_1_subtitle">A safe space built just for you. Your cycle, your body, always protected.</string>
     <string name="onboarding_join_slide_2_title">Always Yours</string>
     <string name="onboarding_join_slide_2_subtitle">Encrypted and private. Sakhi will never share your health information with anyone.</string>
-    <string name="onboarding_host_flow_id">Flow id: %1$s</string>
-    <string name="onboarding_host_planned_steps">Planned steps</string>
-    <string name="onboarding_host_step_counter">Step %1$d of %2$d</string>
     <string name="onboarding_host_mode_myself_action">I am using Sakhi for myself</string>
     <string name="onboarding_host_mode_partner_action">I am here for someone else</string>
     <string name="onboarding_host_continue_invite_flow">Continue invite flow</string>

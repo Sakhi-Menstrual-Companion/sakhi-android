@@ -50,7 +50,6 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -105,6 +104,8 @@ import team.sakhi.android.ui.OnboardingStepTitle
 import team.sakhi.android.ui.OnboardingTitleTopPadding
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiAlert
+import team.sakhi.android.ui.PartnerAvatarCloud
+import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SakhiAlertKind
 import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.SakhiAlertTone
@@ -157,6 +158,9 @@ fun OnboardingContentStepScreen(
     onContinueToInviteWaiting: () -> Unit = {},
     onCancelInvitation: (Boolean) -> Unit = {},
     onDismissInviteError: () -> Unit = {},
+    // Only the steps that own their chrome need this: the shell no longer draws a
+    // button for them, so they draw their own close.
+    onDismiss: (() -> Unit)? = null,
     onOtpResolved: (isReturningUser: Boolean) -> Unit = {},
     acceptUiState: OnboardingAcceptUiState = OnboardingAcceptUiState(),
     onAcceptInvite: () -> Unit = {},
@@ -245,12 +249,14 @@ fun OnboardingContentStepScreen(
             onDismissError = onDismissInviteError,
         )
         OnboardingFlowStep.InviteShare -> InviteShareScreen(
+            onDismiss = onDismiss,
             uiState = careInviteUiState,
             onContinueToInviteWaiting = onContinueToInviteWaiting,
             onCancelInvitation = { onCancelInvitation(true) },
             onDismissError = onDismissInviteError,
         )
         OnboardingFlowStep.InviteWaiting -> InviteWaitingScreen(
+            onDismiss = onDismiss,
             uiState = careInviteUiState,
             onContinue = onContinue,
             onCancelInvitation = { onCancelInvitation(true) },
@@ -403,7 +409,6 @@ private fun PartnerInvitePromptScreen(
     val title = stringResource(R.string.onboarding_partner_invite_prompt_title)
     val subtitle = stringResource(R.string.onboarding_partner_invite_prompt_subtitle)
     val continueLabel = stringResource(R.string.onboarding_continue)
-    val continueAsPartnerLabel = stringResource(R.string.onboarding_partner_invite_prompt_continue_as_partner)
 
     // iOS presents this step as a two-page carousel (`PartnerInvitePromptContent`):
     // slide 0 is the CarePartner illustration, slide 1 is the three feature bullets.
@@ -488,14 +493,21 @@ private fun PartnerInvitePromptScreen(
             }
         }
 
+        // NO secondary button. iOS's `PartnerInvitePromptStep` declares
+        // `var secondaryLabel: String? { nil }` — this screen offers exactly one action.
+        //
+        // Android had added "Continue as Care Partner" here as the only trigger for
+        // `PartnerInviteUpgradeRequired`. That path is not lost: a care partner arrives by
+        // invite link, which `RootNavHost` turns into a forced `joinFamily` onboarding flow
+        // carrying the code — the same way iOS reaches its `carePartnerInvite` FlowEntry.
+        // Putting it on this screen asked every new user to self-identify as a partner on a
+        // screen that is about inviting one.
         SakhiFooter(
             primaryLabel = continueLabel,
             onPrimaryClick = {
                 hapticManager.impact(HapticImpact.MEDIUM)
                 onContinue()
             },
-            secondaryLabel = if (canGoBack) null else continueAsPartnerLabel,
-            onSecondaryClick = if (canGoBack) null else onStartCareInviteUpgrade,
         )
     }
 }
@@ -689,6 +701,7 @@ private fun InviteShareScreen(
     onContinueToInviteWaiting: () -> Unit,
     onCancelInvitation: () -> Unit,
     onDismissError: () -> Unit,
+    onDismiss: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val hapticManager = koinInject<AndroidHapticManager>()
@@ -715,6 +728,10 @@ private fun InviteShareScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
+    // iOS `InviteShareView` draws `DSNavBar(onClose:)` itself, and the shell adds nothing
+    // for a fullscreen step. There is deliberately no back button: the invitation has
+    // already been created by the time this screen is reached.
+    SakhiNavBar(onClose = onDismiss)
     Column(
         modifier = Modifier
             .weight(1f)
@@ -723,7 +740,11 @@ private fun InviteShareScreen(
     ) {
         Spacer(modifier = Modifier.weight(1f))
 
-        InviteHero(icon = Icons.Filled.Share)
+        // iOS `InviteShareView` shows `PartnerAvatarCloud(partnerName:)` here, the same
+        // two-circle avatar the Care sheet's pending state uses. Android drew a share
+        // glyph in a tinted circle instead, which is why this screen did not look like
+        // the iOS one.
+        PartnerAvatarCloud(partnerName = displayName)
 
         OnboardingStepTitle(
             text = shareTitle,
@@ -787,6 +808,7 @@ private fun InviteShareScreen(
 @Composable
 private fun InviteWaitingScreen(
     uiState: OnboardingCareInviteUiState,
+    onDismiss: (() -> Unit)? = null,
     onContinue: () -> Unit,
     onCancelInvitation: () -> Unit,
     onDismissError: () -> Unit,
@@ -811,6 +833,9 @@ private fun InviteWaitingScreen(
     var copyNotice by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.fillMaxSize()) {
+    // iOS `InviteWaitingView` draws `DSNavBar(onClose:)` itself. No back button: the
+    // invitation exists by now.
+    SakhiNavBar(onClose = onDismiss)
     Column(
         modifier = Modifier
             .weight(1f)
@@ -1912,37 +1937,32 @@ private fun InviteContactAccessScreen(onContinue: () -> Unit) {
     // "Give Access" re-requests on a soft (rationale-eligible) denial, or opens
     // this app's Settings page once the OS has permanently denied it.
     if (showDeniedSheet) {
-        AlertDialog(
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Warning,
+            title = deniedTitle,
+            message = deniedMessage,
+            primaryLabel = deniedConfirmLabel,
+            onPrimaryClick = {
+                showDeniedSheet = false
+                val activity = context as? android.app.Activity
+                val shouldShowRationale = activity?.let {
+                    androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
+                        it, android.Manifest.permission.READ_CONTACTS,
+                    )
+                } ?: false
+                if (shouldShowRationale) {
+                    permissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
+                } else {
+                    val intent = Intent(
+                        android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        android.net.Uri.fromParts("package", context.packageName, null),
+                    )
+                    context.startActivity(intent)
+                }
+            },
+            secondaryLabel = deniedDismissLabel,
+            onSecondaryClick = { showDeniedSheet = false },
             onDismissRequest = { showDeniedSheet = false },
-            title = { Text(deniedTitle) },
-            text = { Text(deniedMessage) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showDeniedSheet = false
-                    val activity = context as? android.app.Activity
-                    val shouldShowRationale = activity?.let {
-                        androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
-                            it, android.Manifest.permission.READ_CONTACTS,
-                        )
-                    } ?: false
-                    if (shouldShowRationale) {
-                        permissionLauncher.launch(android.Manifest.permission.READ_CONTACTS)
-                    } else {
-                        val intent = Intent(
-                            android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                            android.net.Uri.fromParts("package", context.packageName, null),
-                        )
-                        context.startActivity(intent)
-                    }
-                }) {
-                    Text(deniedConfirmLabel)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeniedSheet = false }) {
-                    Text(deniedDismissLabel)
-                }
-            },
         )
     }
 }
@@ -2550,21 +2570,18 @@ private fun PartnerConversionWarningScreen(
     }
 
     if (showConfirm) {
-        androidx.compose.material3.AlertDialog(
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Destructive,
+            title = confirmTitle,
+            message = confirmMessage,
+            primaryLabel = confirmButtonLabel,
+            onPrimaryClick = {
+                showConfirm = false
+                onConvert()
+            },
+            secondaryLabel = cancelLabel,
+            onSecondaryClick = { showConfirm = false },
             onDismissRequest = { showConfirm = false },
-            title = { Text(confirmTitle) },
-            text = { Text(confirmMessage) },
-            confirmButton = {
-                TextButton(onClick = {
-                    showConfirm = false
-                    onConvert()
-                }) {
-                    Text(confirmButtonLabel, color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showConfirm = false }) { Text(cancelLabel) }
-            },
         )
     }
 }

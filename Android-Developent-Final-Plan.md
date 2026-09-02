@@ -523,6 +523,117 @@ Only untagged and `(BLOCKED ON KARAN)` items count toward "ready to release."
 - [x] Core reusable components built: `PrimaryButton`, `SecondaryButton`, `SakhiTextField`,
       `OtpField`, `GlassCard`, `LoadingShimmer`, `EmptyState`, `SakhiAlert`, `OfflineBanner`,
       `ToastHost`, `SheetSurface`
+- [x] `SakhiAlertManager` + `SakhiAlertHost` — port of iOS `AlertManager.shared` and its
+      `.alertManager()` root modifier. Android already had `SakhiAlertSheet`, the 300dp
+      alert bottom sheet, but no way to raise one from outside a composable, so a failure
+      caught in a ViewModel could only ever become inline red text. `SakhiAlertHost()` is
+      mounted once in `RootNavHost` next to `ToastHost()`, exactly where iOS attaches its
+      modifier. `SakhiAlertManager.showNoInternet(context, onRetry)` is the app-wide
+      no-internet alert, with copy transcribed verbatim from iOS `NetworkOfflineBanner`
+      and `PhoneOTPAuthService.friendlySendOTPMessage` so both platforms say the same
+      thing. First adopter is the auth send/resend/verify path.
+- [x] `SakhiAlertHost` dismisses the keyboard before presenting, and waits on the real IME
+      inset rather than a fixed delay, so the keyboard's slide-out and the sheet's slide-in
+      no longer run over each other on the phone step.
+- [x] `SakhiAlertSheet` content now sits above the gesture bar (`navigationBarsPadding`
+      inside the background, so the white still runs to the bottom edge like iOS). Both
+      buttons were being drawn under the gesture bar and came out visually cut in half,
+      which also affected the existing onboarding data-source failure alert.
+- [x] Recovery when the connection comes back, three causes fixed together after Karan
+      reported "internet aa gaya but Try again pe kuch ja hi nahi raha":
+      (1) `NetworkStatus` (SakhiCore androidMain) required only `NET_CAPABILITY_INTERNET`,
+      which is true for a captive portal and for a link whose DNS is dead, and `onAvailable`
+      set online before capabilities were even known -- both now require
+      `NET_CAPABILITY_VALIDATED`, so the flag flips when traffic actually gets through.
+      (2) `SakhiApplication` sets `networkaddress.cache.negative.ttl=0`; a cached failed
+      lookup was being re-thrown at the retry without ever reaching the resolver.
+      (3) The no-internet alert now tracks live connectivity via `tracksConnectivity` and
+      swaps to "You're back online" the moment it is. It never auto-retries: that retry
+      sends a real OTP SMS and stays her decision.
+- [x] Sign-out no longer strands her on the loading view. `AuthRepository.signOut` called
+      the server revoke as the first statement of its `runCatching`, so on a dead network it
+      threw before the local session was ever dropped: session stayed authenticated, the
+      route never left Home, and the same call could hang unbounded. The revoke is now
+      best effort behind a 4s timeout, and `AuthSessionProvider.clearLocalSession()`
+      (supabase-kt `auth.clearSession()`, no network) always runs so the credentials on the
+      device go even when the revoke never landed. Covered by a regression test.
+- [x] Onboarding fallback step decluttered. It was rendering the scaffolding the host was
+      built with, raw flow id, a "Step 4 of 9" counter card, a second back button under the
+      shell's own, a divider, and the entire step plan listed under "Planned steps". Now it
+      shows only what the situation calls for: that step's title and line, the error if
+      there is one, and the action pinned at the bottom. `StepSummaryCard`, `StepPlanRow`
+      and `onboardingFlowTitle` were left with no call sites and are deleted, along with
+      their three strings.
+- [x] Sign-out stuck on the loading view, root-caused on the QA emulator with a temporary
+      trace rather than by reading. `koinViewModel(key = flowId)` resolves out of the
+      Activity's ViewModelStore, so signing out handed the "newUser" flow back the SAME
+      instance. The log showed it re-mounting at `step=otpVerification index=5`, where the
+      retained `AuthViewModel`'s stale verified result fired again; that emitted completion,
+      which for NEW_OWNER appends a `SetupLoading` step, and the app parked on a full-screen
+      spinner waiting for a setup that had already happened and no longer had a session.
+      Fixed with `OnboardingFlowIntent.Restart` (SakhiCore) driven by a `restartToken` that
+      `RootNavHost` bumps only on a real Home -> SignedOut transition, so a rotation
+      mid-onboarding keeps her progress. Watching for completion instead was tried and
+      lost the race: the trace showed the mount check running 23ms BEFORE the previous
+      run's completion arrived. Verified end to end on the emulator, sign-out now lands on
+      the first onboarding step.
+- [x] Loading messages no longer overlap. `SakhiLoadingView`'s cycling text ran a 300ms
+      fade-in and 300ms fade-out simultaneously in the same centred box, so two strings were
+      drawn on top of each other, rendering as "Getting Almost there... ready...". At the
+      700ms cadence that was on screen almost half the time. Now sequenced, 150ms out then
+      150ms in, same 0.3s total as iOS.
+- [x] Sign-out confirmation moved from a raw Material3 `AlertDialog` to `SakhiAlertSheet`.
+- [x] Manage Account's two danger-zone confirms ("Start fresh?" and delete account) moved
+      onto `SakhiAlertSheet` as well, `SakhiAlertKind.Destructive`. They sat in the middle of
+      an otherwise Sakhi-styled flow, and one of them is the last thing she sees before being
+      signed out of the device. "Start fresh?" verified on the emulator: renders as the Sakhi
+      sheet and its action still signs out and lands on the first onboarding step.
+- [x] Sign-out no longer minted an account behind her back. `handleSetupLoading` ended with
+      `currentUserId ?: startLocalOnlySession()`, so a stale `SetupLoading` step composing
+      during the sign-out transition found no user and created an offline account, which
+      routed straight back to Home. Traced on the emulator:
+      `Unauthenticated -> SignedOut` and then, 28ms later, `LocalOnlyUser -> Home`. Minting
+      now requires the plan to carry an `OfflineWarning` step, which is the record of her
+      choosing an offline account. Also explains `sakhi_local_only_active=true` appearing
+      after an ordinary phone sign-in.
+- [x] Home performance, first pass. Two real costs found by reading the trace, not guessing:
+      (1) `HomeViewModel.init` combined `syncStore.syncState` into the DATA path, so every
+      state a sync passed through re-ran `refresh()`, which re-reads every cycle and every
+      log -- two network round-trips for a cloud account, twice per sync. It now reloads on
+      session/target change or a `Success.lastSyncedAt` that actually moved, while the sync
+      indicator still follows every state.
+      (2) `CycleInsightAdapter.insightFor` plus `CycleMath.computeStatistics` and a full log
+      interpolation ran INSIDE `_uiState.update { }` on the main thread. That lambda is a
+      compare-and-set loop, so it re-runs on contention and paid for the whole engine each
+      time. Now computed once on an injected `computeDispatcher` (default
+      `Dispatchers.Default`), leaving the state write a pure `copy`. The dispatcher is
+      injected so tests keep it inside the scheduler `advanceUntilIdle()` drives.
+- [ ] Baseline profile still not generated. The wiring is complete (`:baseline-profile`
+      module, generator, `useConnectedDevices = true`, `saveInSrc = true`) and
+      `app/src/*/generated/baselineProfiles/` is empty only because
+      `:app:generateBaselineProfile` has never been run. Attempted on 2026-08-28 and it
+      failed on `No space left on device` -- the Mac is at 100%, 191MB free of 460GB, which
+      is also why the QA emulator kept dying mid-session.
+- [x] Offline-to-online upgrade, the "Create a Sakhi Account" row iOS has and Android did
+      not. The row was never the work: local records are keyed by `ownerUserId` and the
+      repositories only read the local store for an `offline_` id, so authenticating without
+      re-attributing them leaves every offline log invisible to the new account and never
+      uploaded. `DataMigration.rewritePeriodLogIdentity` existed in SakhiCore but was called
+      from nothing except its own test, and Android had no `OfflineUpgradePlatformAdapter`
+      (iOS has `IosOfflineUpgradeAdapter`).
+      Now: `OfflineUpgradeMigrator` + `OfflineUpgradeDataSource` (SakhiCore, 6 tests) rewrite
+      the three owner columns AND the stable period-log primary key, then write through the
+      repositories. Existing cloud records always win, matched by date for logs and by cycle
+      start for cycles, so signing into an account she already had never overwrites it. Local
+      records are never deleted, so a half-finished upgrade can be re-run.
+      `DefaultOfflineUpgradeDataSource` wires it to the shared Room store; registered in
+      `androidPlatformModule` because a Koin `single` cannot be a nullable type and Android
+      is the platform that has the store. `AuthViewModel` runs it on the sign-in that creates
+      the account, so every route into OTP is covered, not just the Profile row.
+      `OfflineUpgradeLauncher` (core/ui, same shape as `ToastManager`) lets Profile ask the
+      root to run the flow over Home.
+      NOT yet verified end to end on a device: the migration rules are unit tested, the full
+      offline-onboard -> create-account -> data-present path is not.
 - [x] Reusable `BackButton` component `(OPTIONAL)` — shared `:core:ui` back affordance now
       exists and is adopted by the repeated profile / care / AI detail-header paths instead
       of each screen hand-rolling its own arrow button

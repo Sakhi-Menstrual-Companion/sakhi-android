@@ -150,7 +150,8 @@ class PartnerChecklistViewModel(
         requestedSession: SessionContext,
         requestKey: String,
     ): Boolean {
-        if (sessionManager.current == requestedSession) return false
+        // isSameSubjectAs, not ==: see SessionContext.isSameSubjectAs.
+        if (requestedSession.isSameSubjectAs(sessionManager.current)) return false
         if (lastLoadedKey == requestKey) {
             lastLoadedKey = null
         }
