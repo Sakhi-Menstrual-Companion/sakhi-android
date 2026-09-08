@@ -28,6 +28,7 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import co.touchlab.kermit.Logger
 import team.sakhi.android.common.CycleDetectionCoordinator
+import team.sakhi.notifications.NotificationRepository
 import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
@@ -145,6 +146,8 @@ class LoggingViewModel(
     private val cycleDataRepository: CycleDataRepository,
     /** Used to tell Home that a background cycle rebuild has landed. See `save()`. */
     private val syncStore: SyncStore,
+    /** Wakes an active care partner's device after a save. See [notifyCarePartnerOfLogChange]. */
+    private val notificationRepository: NotificationRepository,
 ) : ViewModel() {
 
     private val selectedDate = MutableStateFlow(DateConverter.today())
@@ -407,6 +410,12 @@ class LoggingViewModel(
                     .onSuccess {
                         logSaveLog.i { "upsert OK for ${state.selectedDate}" }
 
+                        notifyCarePartnerOfLogChange(
+                            session = session,
+                            subjectUserId = requestedTargetUserId,
+                            logSource = logSource,
+                        )
+
                         // Rebuild this user's cycles from the full log history, the
                         // same step iOS runs after every log change
                         // (`CycleDetectionEngine.processLogChange`).
@@ -603,6 +612,54 @@ class LoggingViewModel(
         }
         widgetSnapshotManager.refreshAsync()
         hapticManager.success()
+    }
+
+    /**
+     * Best-effort push so an active care partner's device wakes up even while
+     * backgrounded, where Supabase Realtime websockets are suspended and cannot reach it.
+     *
+     * Port of iOS's `PeriodLog.notifyCarePartnerOfLogChange`. Android had no equivalent at
+     * all: `NotificationRepository` was called from exactly one place in the whole
+     * project, and that place was Swift. So an Android user could log her period and her
+     * partner's phone would simply never hear about it until he next opened the app.
+     *
+     * Deliberately not awaited and deliberately never surfaced as an error. The log row is
+     * already written by this point, and a failed push must not fail, roll back, or delay
+     * a save she has already been told succeeded.
+     */
+    private fun notifyCarePartnerOfLogChange(
+        session: SessionContext,
+        subjectUserId: String,
+        logSource: LogSource,
+    ) {
+        // A system-generated import is not a "she just logged" event, so it must not
+        // notify anyone. Same guard iOS applies.
+        if (logSource == LogSource.SYSTEM) return
+        if (subjectUserId.isBlank()) return
+
+        // `session.userName` is the signed-in user's name, which is the subject's name
+        // only when she is looking at her own data. When a care partner logs on her
+        // behalf it is HIS name, and sending that as `partner_name` would label the push
+        // with the wrong person. Empty is honest, and nothing renders it: the receiving
+        // notification copy is generic on both platforms now.
+        val subjectName = if (session.userId == subjectUserId) session.userName else ""
+
+        viewModelScope.launch {
+            notificationRepository.notifyCarePartner(
+                subjectUserId = subjectUserId,
+                type = "partner_logged_period",
+                payload = mapOf("user_id" to subjectUserId, "partner_name" to subjectName),
+            ).onFailure { throwable ->
+                // Type and first line only, never `message` in full: supabase-kt puts the
+                // whole request dump in there, Authorization header included. Same rule
+                // as the cycle-detection failure log above.
+                logSaveLog.w {
+                    "care partner notify FAILED (log row is saved): " +
+                        "${throwable::class.simpleName}: " +
+                        throwable.message.orEmpty().substringBefore('\n').take(160)
+                }
+            }
+        }
     }
 
     /**

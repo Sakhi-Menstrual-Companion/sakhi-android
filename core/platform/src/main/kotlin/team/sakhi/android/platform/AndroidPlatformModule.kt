@@ -3,6 +3,7 @@ package team.sakhi.android.platform
 import org.koin.dsl.module
 import team.sakhi.localdb.PlatformRoomDatabaseFactory
 import team.sakhi.localdb.SakhiPhaseALocalStore
+import team.sakhi.notifications.NotificationRepository
 import team.sakhi.platform.BiometricInterface
 import team.sakhi.sync.DefaultOfflineUpgradeDataSource
 import team.sakhi.sync.OfflineUpgradeDataSource
@@ -16,6 +17,13 @@ import team.sakhi.sync.OfflineUpgradeMigrator
  */
 val androidPlatformModule = module {
     single { CurrentActivityHolder() }
+    // Push trigger for care partners. SakhiCore's own `appModule()` never registered
+    // this, which is part of why Android had no way to send one: iOS builds its
+    // `notificationRepo` by hand in `SakhiCoreSDK`, so the gap was invisible from there.
+    // Registered on the Android side rather than in the shared module so this change
+    // needs no SakhiCore rebuild; it belongs in `team.sakhi.di.appModule()` the next time
+    // SakhiCore is rebuilt, and the iOS hand-construction can then go with it.
+    single { NotificationRepository() }
     single<BiometricInterface> { AndroidBiometricAdapter(activityHolder = get(), appContext = get()) }
     single {
         val factory = PlatformRoomDatabaseFactory().apply { init(get()) }

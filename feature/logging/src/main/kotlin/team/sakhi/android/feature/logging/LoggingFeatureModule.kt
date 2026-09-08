@@ -21,6 +21,7 @@ val loggingFeatureModule = module {
             cycleDetectionCoordinator = get(),
             cycleDataRepository = get(),
             syncStore = get(),
+            notificationRepository = get(),
         )
     }
 }

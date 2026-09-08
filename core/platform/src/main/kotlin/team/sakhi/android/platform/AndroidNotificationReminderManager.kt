@@ -284,6 +284,10 @@ class AndroidNotificationReminderManager(
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setContentIntent(contentIntent)
+                // The copy is already generic ("Open Sakhi for today's update"), but mark
+                // it private too so a locked screen set to hide sensitive content treats
+                // it the same way it treats the push lane.
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .build()
 
             manager.notify(notificationId.hashCode(), notification)
