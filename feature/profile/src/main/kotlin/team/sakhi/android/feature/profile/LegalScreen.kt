@@ -49,7 +49,7 @@ import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SakhiNavDirection
 import team.sakhi.android.ui.SakhiScreenTransition
-import team.sakhi.design.DesignTokens
+import team.sakhi.design.SakhiUIColors
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
@@ -57,7 +57,7 @@ import team.sakhi.android.designsystem.sakhiTertiaryLabel
 @Composable
 fun LegalScreen(onBack: () -> Unit) {
     var openPage by remember { mutableStateOf<ContentPageId?>(null) }
-    val legalIconBackground = DesignTokens.COLOR_LIGHT_PINK.toComposeColor()
+    val legalIconBackground = SakhiUIColors.BRAND_LIGHT_PINK_LIGHT.toComposeColor()
 
     BackHandler(enabled = openPage != null) { openPage = null }
 

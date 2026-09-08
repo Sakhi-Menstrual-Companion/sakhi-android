@@ -39,8 +39,8 @@ import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.designsystem.toComposeColor
-import team.sakhi.design.DesignTokens
 import team.sakhi.design.SakhiColors
+import team.sakhi.design.SakhiUIColors
 import team.sakhi.models.CyclePhase
 
 @Immutable
@@ -215,7 +215,7 @@ private fun SakhiMiniMonthDayCell(
         return
     }
 
-    val periodColor = DesignTokens.PERIOD_RED.toComposeColor()
+    val periodColor = SakhiUIColors.BRAND_PERIOD_RED.toComposeColor()
     val accentColor = MaterialTheme.colorScheme.primary
     val isDarkTheme = LocalSakhiDarkTheme.current
     val isPeriod = day.markerType == SakhiCalendarMarkerType.PERIOD
@@ -338,7 +338,7 @@ private fun SakhiCalendarDayCell(
         return
     }
 
-    val periodColor = DesignTokens.PERIOD_RED.toComposeColor()
+    val periodColor = SakhiUIColors.BRAND_PERIOD_RED.toComposeColor()
     val accentColor = MaterialTheme.colorScheme.primary
     val isDarkTheme = LocalSakhiDarkTheme.current
     val ovulationRingColor = remember(isDarkTheme) {

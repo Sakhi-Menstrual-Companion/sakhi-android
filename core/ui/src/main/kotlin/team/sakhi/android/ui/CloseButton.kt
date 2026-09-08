@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import team.sakhi.android.designsystem.toComposeColor
-import team.sakhi.design.DesignTokens
+import team.sakhi.design.SakhiUIColors
 
 /**
  * Port of iOS's `DSCloseButton` **including its button style**, which is where the
@@ -63,7 +63,7 @@ fun CloseButton(
             Icon(
                 imageVector = Icons.Rounded.Close,
                 contentDescription = description,
-                tint = DesignTokens.COLOR_PINK.toComposeColor(),
+                tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
                 modifier = Modifier.size(NavGlyphSize),
             )
         }

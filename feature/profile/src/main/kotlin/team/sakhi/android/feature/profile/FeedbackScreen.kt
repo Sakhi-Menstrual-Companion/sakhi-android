@@ -56,7 +56,7 @@ import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.DetailSheetScaffold
 import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.PrimaryButton
-import team.sakhi.design.DesignTokens
+import team.sakhi.design.SakhiUIColors
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
@@ -330,7 +330,7 @@ private fun FeedbackInputCard(
 
 @Composable
 private fun FeedbackSubmittedState() {
-    val confirmColor = DesignTokens.COLOR_CONFIRM.toComposeColor()
+    val confirmColor = SakhiUIColors.BRAND_CONFIRM.toComposeColor()
 
     Box(
         modifier = Modifier.fillMaxSize(),

@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import team.sakhi.android.designsystem.toComposeColor
-import team.sakhi.design.DesignTokens
+import team.sakhi.design.SakhiUIColors
 
 /**
  * Port of iOS's `DSBackButton` **including `DS.Buttons.Back`**, which is where the
@@ -64,7 +64,7 @@ fun BackButton(
                 // arrow glyph.
                 imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                 contentDescription = description,
-                tint = DesignTokens.COLOR_PINK.toComposeColor(),
+                tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
                 modifier = Modifier.size(NavGlyphSize),
             )
         }

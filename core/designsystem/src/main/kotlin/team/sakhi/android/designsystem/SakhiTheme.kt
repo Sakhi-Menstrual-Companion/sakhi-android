@@ -18,7 +18,6 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import team.sakhi.design.DesignTokens
 import team.sakhi.design.SakhiUIColors
 import team.sakhi.models.CyclePhase
 import team.sakhi.design.PhaseVisualStyle
@@ -44,12 +43,12 @@ private val SakhiFontFamily = FontFamily(
     Font(R.font.lato_bold, weight = FontWeight.Bold),
 )
 private val LightBrandColors = SakhiBrandColors(
-    background = DesignTokens.COLOR_BACKGROUND.toComposeColor(),
-    lightPink = DesignTokens.COLOR_LIGHT_PINK.toComposeColor(),
-    buttonFill = DesignTokens.COLOR_BUTTON_FILL.toComposeColor(),
-    pink = DesignTokens.COLOR_PINK.toComposeColor(),
-    deepRose = DesignTokens.COLOR_DEEP_ROSE.toComposeColor(),
-    confirm = DesignTokens.COLOR_CONFIRM.toComposeColor(),
+    background = SakhiUIColors.BRAND_BG_LIGHT.toComposeColor(),
+    lightPink = SakhiUIColors.BRAND_LIGHT_PINK_LIGHT.toComposeColor(),
+    buttonFill = SakhiUIColors.BRAND_BUTTON_FILL_LIGHT.toComposeColor(),
+    pink = SakhiUIColors.BRAND_PINK.toComposeColor(),
+    deepRose = SakhiUIColors.BRAND_DEEP_ROSE_LIGHT.toComposeColor(),
+    confirm = SakhiUIColors.BRAND_CONFIRM.toComposeColor(),
     error = SakhiUIColors.TOAST_ERROR.toComposeColor(),
 )
 
@@ -59,7 +58,7 @@ private val DarkBrandColors = SakhiBrandColors(
     buttonFill = SakhiUIColors.BRAND_BUTTON_FILL_DARK.toComposeColor(),
     pink = SakhiUIColors.BRAND_PINK.toComposeColor(),
     deepRose = SakhiUIColors.BRAND_DEEP_ROSE_DARK.toComposeColor(),
-    confirm = DesignTokens.COLOR_CONFIRM.toComposeColor(),
+    confirm = SakhiUIColors.BRAND_CONFIRM.toComposeColor(),
     error = SakhiUIColors.TOAST_ERROR.toComposeColor(),
 )
 

@@ -1,7 +1,6 @@
 package team.sakhi.android.designsystem
 
 import androidx.compose.ui.graphics.Color
-import team.sakhi.design.DesignTokens
 import team.sakhi.design.SakhiColors
 import team.sakhi.design.SakhiUIColors
 
@@ -34,7 +33,7 @@ object SakhiTokens {
 
     // ── Brand / status ───────────────────────────────────────────────────────
     val Pink: Color get() = SakhiUIColors.BRAND_PINK.toComposeColor()
-    val Confirm: Color get() = DesignTokens.COLOR_CONFIRM.toComposeColor()
+    val Confirm: Color get() = SakhiUIColors.BRAND_CONFIRM.toComposeColor()
 
     // ── Shimmer ──────────────────────────────────────────────────────────────
     val ShimmerBase: Color get() = SakhiUIColors.SHIMMER_BASE.toComposeColor()
