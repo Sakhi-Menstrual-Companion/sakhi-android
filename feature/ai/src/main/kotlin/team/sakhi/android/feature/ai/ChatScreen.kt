@@ -824,7 +824,7 @@ private fun ChatHeader(
                         // so the "online" indicator rendered in Material's default
                         // purple-brown instead of green.
                         // `PERMISSION_SUCCESS` (#33B770) deliberately differs from
-                        // `COLOR_CONFIRM` (#34C759) — SakhiUIColors says so on the line
+                        // `BRAND_CONFIRM` (#34C759) — SakhiUIColors says so on the line
                         // itself — so the nearer-looking `brand.confirm` is not a substitute.
                         val onlineColor = SakhiUIColors.PERMISSION_SUCCESS.toComposeColor()
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
