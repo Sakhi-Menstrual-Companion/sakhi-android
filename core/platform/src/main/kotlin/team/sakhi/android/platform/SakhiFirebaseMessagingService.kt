@@ -80,8 +80,8 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         if (notification == SakhiNotification.Unknown) return
 
         ensureChannel(applicationContext)
-        val (title, body) = titleAndBody(applicationContext, notification) ?: return
-        postPushNotification(applicationContext, notification, title, body, deepLinkUri(notification))
+        val presentation = presentation(applicationContext, notification) ?: return
+        postPushNotification(applicationContext, presentation, deepLinkUri(notification))
     }
 
     /**
@@ -107,50 +107,67 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         is SakhiNotification.PeriodReminder, SakhiNotification.LoggingReminder, SakhiNotification.Unknown -> null
     }
 
-    private fun titleAndBody(context: Context, notification: SakhiNotification): Pair<String, String>? = when (notification) {
-        is SakhiNotification.PartnerLoggedPeriod ->
-            context.getString(R.string.platform_notification_app_name) to
-                context.getString(R.string.platform_push_partner_logged_period, notification.partnerName)
-        is SakhiNotification.InvitationAccepted ->
-            context.getString(R.string.platform_notification_app_name) to
-                context.getString(R.string.platform_push_invitation_accepted, notification.partnerName)
-        is SakhiNotification.InvitationReceived ->
-            context.getString(R.string.platform_notification_app_name) to
-                context.getString(R.string.platform_push_invitation_received, notification.inviterName)
-        is SakhiNotification.LogRequestReceived ->
-            context.getString(R.string.platform_notification_app_name) to
-                context.getString(R.string.platform_push_log_request_received, notification.partnerName)
-        is SakhiNotification.LogRequestResponse ->
-            context.getString(R.string.platform_notification_app_name) to if (notification.approved) {
-                context.getString(R.string.platform_push_log_request_approved, notification.partnerName)
-            } else {
-                context.getString(R.string.platform_push_log_request_declined, notification.partnerName)
-            }
-        is SakhiNotification.NewCareMessage ->
-            notification.senderName to context.getString(R.string.platform_push_new_message)
-        is SakhiNotification.PeriodReminder ->
-            context.getString(R.string.platform_notification_app_name) to
-                context.resources.getQuantityString(
-                    R.plurals.platform_push_period_reminder,
-                    notification.daysUntil,
-                    notification.daysUntil,
-                )
-        is SakhiNotification.LoggingReminder ->
-            context.getString(R.string.platform_notification_app_name) to
-                context.getString(R.string.platform_push_logging_reminder)
-        is SakhiNotification.Sos ->
-            context.getString(R.string.platform_notification_app_name) to
-                context.getString(R.string.platform_push_sos)
-        // The server sends the real title and body for this one, because it knows the
-        // requester's name and this device does not. Locates nobody either way.
-        is SakhiNotification.EmergencyRequestReceived ->
-            context.getString(R.string.platform_push_emergency_nearby_title) to
-                context.getString(R.string.platform_push_emergency_nearby_body)
+    private data class PushPresentation(
+        val title: String,
+        val body: String,
+        /**
+         * Android replaces an existing notification when a new one reuses its id. Every
+         * care and cycle push now renders the same generic line, so they share one id and
+         * collapse into a single "something is waiting" row instead of stacking up as a
+         * column of identical notifications, which would leak volume even though it no
+         * longer leaks content. The two emergency cases keep their own ids: those must
+         * never replace one another, and an SOS must never be replaced by anything.
+         */
+        val notificationId: Int,
+    )
+
+    /**
+     * Everything except Emergency Assistance renders as the same generic line. See the
+     * comment on `platform_push_care_update` in strings.xml for why the per-type copy
+     * that used to live here was removed: it put the partner's name and the health fact
+     * itself on the lock screen, from a payload the server had deliberately sent silent.
+     *
+     * The type still matters, it just decides where the tap goes ([deepLinkUri]), not
+     * what a bystander gets to read.
+     */
+    private fun presentation(context: Context, notification: SakhiNotification): PushPresentation? = when (notification) {
+        is SakhiNotification.PartnerLoggedPeriod,
+        is SakhiNotification.InvitationAccepted,
+        is SakhiNotification.InvitationReceived,
+        is SakhiNotification.LogRequestReceived,
+        is SakhiNotification.LogRequestResponse,
+        is SakhiNotification.NewCareMessage,
+        is SakhiNotification.PeriodReminder,
+        SakhiNotification.LoggingReminder,
+        -> PushPresentation(
+            title = context.getString(R.string.platform_notification_app_name),
+            body = context.getString(R.string.platform_push_care_update),
+            notificationId = CARE_UPDATE_NOTIFICATION_ID,
+        )
+        is SakhiNotification.Sos -> PushPresentation(
+            title = context.getString(R.string.platform_notification_app_name),
+            body = context.getString(R.string.platform_push_sos),
+            notificationId = SOS_NOTIFICATION_ID,
+        )
+        // The one deliberate exception to the generic rule. Safe on a lock screen because
+        // the wording names nobody and locates nobody: she learns the spot after she
+        // accepts, not before.
+        is SakhiNotification.EmergencyRequestReceived -> PushPresentation(
+            title = context.getString(R.string.platform_push_emergency_nearby_title),
+            body = context.getString(R.string.platform_push_emergency_nearby_body),
+            // Keyed on the request so two women asking at once produce two rows rather
+            // than one silently replacing the other.
+            notificationId = notification.requestId.hashCode(),
+        )
         SakhiNotification.Unknown -> null
     }
 
     companion object {
         private const val CHANNEL_ID = "sakhi_push"
+
+        /** Shared by every generic care/cycle push so they collapse into one row. */
+        private const val CARE_UPDATE_NOTIFICATION_ID = 1001
+        private const val SOS_NOTIFICATION_ID = 1002
 
         internal suspend fun cacheAndMaybeRegisterToken(
             token: String,
@@ -177,7 +194,7 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
             manager.createNotificationChannel(channel)
         }
 
-        private fun postPushNotification(context: Context, notification: SakhiNotification, title: String, body: String, deepLinkUri: String?) {
+        private fun postPushNotification(context: Context, presentation: PushPresentation, deepLinkUri: String?) {
             val manager = NotificationManagerCompat.from(context)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 context.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -196,7 +213,7 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
                 } ?: Intent(Intent.ACTION_MAIN).setPackage(context.packageName)
             }
 
-            val notificationId = notification.hashCode()
+            val notificationId = presentation.notificationId
             val contentIntent = PendingIntent.getActivity(
                 context,
                 notificationId,
@@ -206,11 +223,15 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
 
             val built = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
-                .setContentTitle(title)
-                .setContentText(body)
+                .setContentTitle(presentation.title)
+                .setContentText(presentation.body)
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setContentIntent(contentIntent)
+                // Keeps the generic copy generic on a locked screen: without this, an OEM
+                // or user setting that hides sensitive content has nothing to fall back to
+                // and some launchers will still render the full text.
+                .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .build()
 
             manager.notify(notificationId, built)

@@ -7,18 +7,22 @@
     <string name="platform_reminder_open_today">Open Sakhi for today\'s update</string>
     <string name="platform_push_channel_name">Sakhi updates</string>
     <string name="platform_push_channel_description">Partner activity, invites, and care messages</string>
-    <string name="platform_push_partner_logged_period">%1$s logged their period today</string>
-    <string name="platform_push_invitation_accepted">%1$s accepted your invite</string>
-    <string name="platform_push_invitation_received">%1$s invited you to Be Her Sakhi</string>
-    <string name="platform_push_log_request_received">%1$s asked you to log today</string>
-    <string name="platform_push_log_request_approved">%1$s shared today\'s log with you</string>
-    <string name="platform_push_log_request_declined">%1$s isn\'t ready to share today\'s log</string>
-    <string name="platform_push_new_message">New message</string>
-    <plurals name="platform_push_period_reminder">
-        <item quantity="one">Your period is expected in %1$d day</item>
-        <item quantity="other">Your period is expected in %1$d days</item>
-    </plurals>
-    <string name="platform_push_logging_reminder">How are you feeling today?</string>
+    <!-- Push copy is deliberately generic, and this is a privacy rule rather than a
+         style choice. A lock screen is readable by whoever is holding the phone, and in
+         a shared-phone home that is often not the woman herself. So a care or cycle push
+         says only that something is waiting: never whose it is, never that it concerns a
+         period or a log, never that a Be Her Sakhi relationship exists at all.
+
+         These used to name the partner and state the health fact outright ("%s logged
+         their period today", "%s invited you to Be Her Sakhi", "Your period is expected
+         in 2 days"). iOS never did this, and neither did the server: `notify-care-partner`
+         sends a silent, data-only push precisely so that nothing is drawn without the app
+         being opened. Android was rebuilding a visible notification from that same silent
+         payload and putting the detail back on the lock screen.
+
+         Emergency Assistance below is the one deliberate exception, and its wording
+         identifies nobody and locates nobody. -->
+    <string name="platform_push_care_update">Something new is waiting for you in Sakhi</string>
     <string name="platform_push_sos">Emergency alert -- tap to open</string>
     <!-- Nearby-request push. Deliberately identifies nobody and locates nobody, so it is
          safe on a lock screen. The detail lives behind the responder inbox, which is

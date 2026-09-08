@@ -44,3 +44,6 @@ keystore/
 
 ## Supabase CLI local project-link cache
 supabase/.temp/
+
+# IDE build output (Eclipse-style bin/main), not part of the Gradle build
+bin/
