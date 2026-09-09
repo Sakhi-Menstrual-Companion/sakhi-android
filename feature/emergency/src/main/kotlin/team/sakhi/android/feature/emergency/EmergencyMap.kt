@@ -6,12 +6,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +43,8 @@ import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSeparator
 import team.sakhi.android.designsystem.sakhiSystemBackground
+import team.sakhi.android.designsystem.toComposeColor
+import team.sakhi.design.SakhiUIColors
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
@@ -230,60 +233,47 @@ internal fun LatLng.offset(metres: Double, bearingDegrees: Double): LatLng {
 }
 
 /**
- * The controls floating over the map: back on the left, the count pill on the right.
- * Both 35dp tall at 16dp in, matching the original's measurements.
+ * The one control floating over the map: back, top left.
+ *
+ * There used to be a "Nearby Sakhis: N" pill opposite it. iOS has no such pill and neither
+ * does Figma `13 · Emergency Assistance`, whose map carries the back control and nothing
+ * else -- Karan spotted it on a device. It was carried over from `main`. Worth knowing what
+ * iOS does have in that corner and Android still does not: a "Contact Police" capsule that
+ * dials 112 from every step of the flow.
  */
 @Composable
 internal fun EmergencyMapOverlay(
-    nearbyCount: Int,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    // Full width even though there is one control in it. The caller aligns this to
+    // `TopCenter`, so a Row that wraps its content parked the back button in the middle of
+    // the map the moment the count pill beside it was removed.
     Row(
-        modifier = modifier.padding(horizontal = 16.dp, vertical = SakhiSpacing.space2),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = SakhiSpacing.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(35.dp)
-                .clip(CircleShape)
-                .background(sakhiLabel().copy(alpha = 0.45f)),
-            contentAlignment = Alignment.Center,
+        // Figma `map control · back`: a 35 white disc with a 1/4 black-at-16% shadow and a
+        // 17 pink chevron. It was a dark scrim disc with a white arrow, carried over from
+        // `main`; against a light map that read as a system control dropped onto the
+        // screen rather than one of this flow's own.
+        Surface(
+            shape = CircleShape,
+            color = sakhiSystemBackground(),
+            shadowElevation = 2.dp,
+            modifier = Modifier.size(35.dp),
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(35.dp)) {
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                     contentDescription = stringResource(R.string.emergency_back),
-                    tint = androidx.compose.ui.graphics.Color.White,
-                    modifier = Modifier.size(18.dp),
-                )
-            }
-        }
-
-        androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
-
-        Surface(
-            shape = RoundedCornerShape(17.5.dp),
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-            modifier = Modifier.height(35.dp),
-        ) {
-            Row(
-                modifier = Modifier.padding(horizontal = SakhiSpacing.space3),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Group,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
-                    tint = sakhiSecondaryLabel(),
-                )
-                Text(
-                    text = stringResource(R.string.emergency_nearby_sakhis_count, nearbyCount),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = sakhiSecondaryLabel(),
+                    tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                    modifier = Modifier.size(17.dp),
                 )
             }
         }
     }
 }
+

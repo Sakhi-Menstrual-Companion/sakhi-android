@@ -51,6 +51,19 @@ import team.sakhi.models.IncomingRequest
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemGray5
 import team.sakhi.android.designsystem.sakhiLightPink
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.remember
+import kotlinx.datetime.Clock
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.toComposeColor
+import team.sakhi.android.ui.SakhiSwitch
+import team.sakhi.design.SakhiUIColors
 
 /**
  * The other side of the network — being the Sakhi someone asked.
@@ -77,16 +90,9 @@ internal fun EmergencyResponderInbox(viewModel: EmergencyViewModel) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space5)
             .heightIn(min = 300.dp, max = 640.dp),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
-        EmergencyHeader(
-            title = stringResource(R.string.emergency_help_someone_nearby),
-            subtitle = stringResource(R.string.emergency_help_someone_nearby_subtitle),
-        )
-
-        AvailabilityToggle(
+        AvailabilityHeader(
             isAvailable = responder.isAvailable,
             onToggle = viewModel::setAvailable,
         )
@@ -108,16 +114,27 @@ internal fun EmergencyResponderInbox(viewModel: EmergencyViewModel) {
                 isRefreshing = responder.isRefreshing,
                 onRefresh = viewModel::refreshIncoming,
             ) {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-                    modifier = Modifier.padding(bottom = SakhiSpacing.space5),
-                ) {
-                    items(responder.incoming, key = { it.requestId }) { request ->
-                        IncomingRequestCard(
-                            request = request,
-                            onAccept = { viewModel.acceptIncoming(request) },
-                            onDecline = { viewModel.declineIncoming(request) },
+                LazyColumn(modifier = Modifier.padding(bottom = SakhiSpacing.space5)) {
+                    item {
+                        EmergencySectionHeader(
+                            title = stringResource(R.string.emergency_asking_you_now),
                         )
+                    }
+                    item {
+                        EmergencyCard {
+                            responder.incoming.forEachIndexed { index, request ->
+                                if (index > 0) EmergencyRowDivider(leadingInset = 0.dp)
+                                IncomingRequestCard(
+                                    request = request,
+                                    countdownSeconds = EmergencyIso8601.secondsUntil(
+                                        request.expiresAtIso,
+                                        Clock.System.now(),
+                                    ),
+                                    onAccept = { viewModel.acceptIncoming(request) },
+                                    onDecline = { viewModel.declineIncoming(request) },
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -125,61 +142,45 @@ internal fun EmergencyResponderInbox(viewModel: EmergencyViewModel) {
     }
 }
 
+/**
+ * Figma `EA-13` -> `header`: the question, the state under it, and the switch on the right.
+ *
+ * It used to be a grey card with a 40dp location glyph inside it. Being findable is the one
+ * decision on this screen, and wrapping it in a panel made it read as a setting she had
+ * scrolled past rather than the thing the screen is for.
+ */
 @Composable
-private fun AvailabilityToggle(isAvailable: Boolean, onToggle: (Boolean) -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(SakhiRadius.lg),
-        // iOS `.fill(DS.Colors.groupedBackground.opacity(0.6))`.
-        color = sakhiGroupedBackground().copy(alpha = 0.6f),
-        modifier = Modifier.fillMaxWidth(),
+private fun AvailabilityHeader(isAvailable: Boolean, onToggle: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SakhiSpacing.space5)
+            .padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space2),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
-        Row(
-            // iOS `.padding(DS.Spacing.cardHorizontal)` = 18.
-            modifier = Modifier.padding(18.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(SakhiRadius.md))
-                    .background(
-                        // iOS `.fill(responder.isAvailable ? DS.Colors.lightPink
-                        // : DS.Colors.groupedBackground)` -- the brand pink card fill when
-                        // she is on, not a translucent primary.
-                        if (isAvailable) sakhiLightPink() else sakhiGroupedBackground(),
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = if (isAvailable) Icons.Filled.LocationOn else Icons.Filled.LocationOff,
-                    contentDescription = null,
-                    // iOS `.font(.system(size: 16))`.
-                    modifier = Modifier.size(16.dp),
-                    tint = if (isAvailable) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        sakhiSecondaryLabel()
-                    },
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.emergency_available_to_help),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-                Text(
-                    text = if (isAvailable) {
-                        stringResource(R.string.emergency_location_shared_roughly)
-                    } else {
-                        stringResource(R.string.emergency_location_not_shared)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = sakhiSecondaryLabel(),
-                )
-            }
-            Switch(checked = isAvailable, onCheckedChange = onToggle)
+            Text(
+                text = stringResource(R.string.emergency_help_someone_nearby),
+                fontSize = 20.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.Bold,
+                color = sakhiLabel(),
+            )
+            Text(
+                text = if (isAvailable) {
+                    stringResource(R.string.emergency_available_to_help)
+                } else {
+                    stringResource(R.string.emergency_location_not_shared)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+            )
         }
+        SakhiSwitch(checked = isAvailable, onCheckedChange = onToggle)
     }
 }
 
@@ -240,106 +241,136 @@ private fun EmptyNearby(isRefreshing: Boolean) {
 @Composable
 private fun IncomingRequestCard(
     request: IncomingRequest,
+    countdownSeconds: Long,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
 ) {
-    val trust = EmergencyFormatting.trustLevel(request.ratingCount)
-    val trustColor = trust.accentColor()
+    val faceIndex = remember(request.requesterId) {
+        EmergencyAvatarCatalog.dealtIndex(request.requesterId)
+    }
 
-    Surface(
-        shape = RoundedCornerShape(SakhiRadius.xl),
-        // iOS fills this with `groupedBackground`, a step off the sheet rather than a
-        // translucent variant of it.
-        color = sakhiGroupedBackground(),
-        modifier = Modifier.fillMaxWidth(),
+    // Figma `request`: `px-16 py-14`, 12 between the two halves. One white card inside the
+    // section, like every other list in the flow -- it was a grey panel with a 44dp
+    // requirement badge on the right and the two buttons in flat red and green.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SakhiSpacing.space4, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
-        Column(
-            modifier = Modifier.padding(SakhiSpacing.space3),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+            // The illustrated avatar, never her photograph: this card is on screen before
+            // anyone has accepted anything.
+            Image(
+                painter = painterResource(EmergencyAvatarCatalog.drawableAt(faceIndex)),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(44.dp)
+                    .clip(CircleShape)
+                    .scale(EmergencyAvatarCatalog.contentScaleAt(faceIndex)),
+            )
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                EmergencyAvatar(name = request.requesterName, photoUrl = request.requesterPhotoUrl)
-
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = request.requesterName
-                            ?: stringResource(R.string.emergency_a_sakhi_nearby),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    // iOS pairs the level with `trust.badgeIcon` here -- the per-level
-                    // glyph, not the check seal it uses on the nearby list. Android showed
-                    // the words alone.
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                    ) {
-                        Icon(
-                            imageVector = trust.badgeIcon(),
-                            contentDescription = null,
-                            modifier = Modifier.size(11.dp),
-                            tint = trustColor,
-                        )
-                        Text(
-                            text = trust.displayName,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = trustColor,
-                        )
-                    }
-                }
-
-                // The requirement's own colour at 0.2, as everywhere else in the flow.
-                // Android tinted this with the brand accent, so pads and medicine looked
-                // identical on the one screen where what she needs is the whole point.
-                EmergencyBadgeIcon(
-                    icon = request.requirement.icon(),
-                    color = request.requirement.accentColor(),
-                    size = 44.dp,
+                Text(
+                    text = stringResource(
+                        R.string.emergency_she_needs,
+                        EmergencyFormatting.requirementLabel(request.requirement).lowercase(),
+                    ),
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
+                    color = sakhiLabel(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = "${EmergencyFormatting.approximateDistance(request.distanceBucketMeters)} · " +
+                        EmergencyFormatting.walkingTime(request.etaMinutes),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = sakhiSecondaryLabel(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
 
-            Text(
-                text = stringResource(
-                    R.string.emergency_she_needs,
-                    EmergencyFormatting.requirementLabel(request.requirement).lowercase(),
-                ),
-                style = MaterialTheme.typography.titleSmall,
-                // iOS uses `deepRose` for this line, a step darker than the accent.
-                color = sakhiDeepRose(),
-            )
-
-            Text(
-                text = "${EmergencyFormatting.approximateDistance(request.distanceBucketMeters)} · " +
-                    EmergencyFormatting.walkingTime(request.etaMinutes),
-                style = MaterialTheme.typography.bodySmall,
-                color = sakhiSecondaryLabel(),
-            )
-
-            // main: ProgressButtonView's helper UI — Reject in red on the left, Accept in
-            // green on the right, both 50dp tall with 12dp corners and 16dp between.
-            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                Button(
-                    onClick = onDecline,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.error,
-                    ),
-                    modifier = Modifier.weight(1f).height(50.dp),
+            // How long she has to answer. Without it, Decline and a request that simply
+            // expired look identical from here.
+            countdownSeconds.takeIf { it > 0 }?.let { seconds ->
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(
+                            SakhiUIColors.BRAND_PINK.toComposeColor().copy(alpha = 0.12f),
+                        )
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                 ) {
-                    Text(stringResource(R.string.emergency_decline))
-                }
-                Button(
-                    onClick = onAccept,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.weight(1f).height(50.dp),
-                ) {
-                    Text(stringResource(R.string.emergency_accept))
+                    Text(
+                        text = "${seconds}s",
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                    )
                 }
             }
         }
+
+        // Figma `actions`: two equal pills 10 apart -- Decline a flat neutral, Accept the
+        // brand fill. `main` had them in flat red and green, which put the loudest colour
+        // in the app on the button that does nothing for the woman asking.
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            IncomingAction(
+                title = stringResource(R.string.emergency_decline),
+                container = sakhiSecondaryLabel().copy(alpha = 0.08f),
+                content = sakhiSecondaryLabel(),
+                onClick = onDecline,
+                modifier = Modifier.weight(1f),
+            )
+            IncomingAction(
+                title = stringResource(R.string.emergency_accept),
+                container = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                content = Color.White,
+                onClick = onAccept,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+/** One of the two pills on an incoming request. Figma: `py-12`, capsule, Bold 17. */
+@Composable
+private fun IncomingAction(
+    title: String,
+    container: Color,
+    content: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(percent = 50))
+            .background(container)
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = title,
+            fontSize = 17.sp,
+            lineHeight = 20.sp,
+            fontWeight = FontWeight.Bold,
+            color = content,
+        )
     }
 }
 

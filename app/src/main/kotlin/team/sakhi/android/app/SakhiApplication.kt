@@ -30,7 +30,12 @@ import team.sakhi.android.platform.androidPlatformModule
 import team.sakhi.localdb.SakhiPhaseALocalStore
 import team.sakhi.di.appModule
 import team.sakhi.di.platformModule
+import android.content.pm.PackageManager
+import android.os.Build
+import android.util.Log
+import java.security.MessageDigest
 import team.sakhi.platform.BuildConfigProvider
+import team.sakhi.platform.NetworkStatus
 
 /**
  * App entry point. Boots the single Koin graph: SakhiCore's shared `appModule()`
@@ -73,6 +78,15 @@ class SakhiApplication : Application() {
         BuildConfigProvider.RAZORPAY_KEY_ID = BuildConfig.RAZORPAY_KEY_ID
         BuildConfigProvider.USDA_API_KEY = BuildConfig.USDA_API_KEY
 
+        // Who this app is, for Google's application-restricted Maps keys. The Places web
+        // service refuses such a key outright unless the request carries `X-Android-Package`
+        // and `X-Android-Cert`, which is why Emergency Assistance's safe-places list was
+        // empty on every build while the map beside it drew fine off the same key.
+        // Read off the installed package rather than a build constant, so debug and release
+        // each send their own signature and neither can go stale.
+        BuildConfigProvider.APP_PACKAGE_NAME = packageName
+        BuildConfigProvider.APP_SIGNING_SHA1 = signingCertificateSha1().orEmpty()
+
         warnOnMissingBackendConfig()
 
         startKoin {
@@ -101,6 +115,18 @@ class SakhiApplication : Application() {
         }
 
         val koin = KoinPlatform.getKoin()
+        // Same lazy-construction trap as CurrentActivityHolder below, and worse in effect.
+        //
+        // `NetworkStatus` defaults to `MutableStateFlow(true)` and only starts telling the
+        // truth once `register()` attaches a ConnectivityManager callback. Nothing called
+        // it: two places inject the class and read `isOnline`, and no one ever registered
+        // it. So the flow was pinned to "online" for the life of the process no matter what
+        // the radio was doing -- the offline banner never appeared, the feature gate never
+        // engaged, and `setCloudAvailable` was told the cloud was reachable while calls
+        // were failing. The file's own comment predicted exactly this: it "degrades to
+        // always online, which is indistinguishable from working".
+        koin.get<NetworkStatus>().register(applicationContext)
+
         // CurrentActivityHolder must be attached to the Activity lifecycle explicitly —
         // Koin only constructs it lazily on first `get()`, it doesn't register callbacks.
         registerActivityLifecycleCallbacks(koin.get<CurrentActivityHolder>())
@@ -159,6 +185,34 @@ class SakhiApplication : Application() {
      * 2026-08-01. Keeping the graceful-degradation behaviour, but no longer keeping
      * it quiet.
      */
+    /**
+     * The SHA-1 of the certificate this APK was signed with, uppercase and colon-free --
+     * the form Google's `X-Android-Cert` header wants, and the same string the API console
+     * lists under the key's Android restrictions.
+     *
+     * Failure returns null rather than throwing: the calls that use it already degrade to
+     * an empty list, and an app that will not start because it could not read its own
+     * signature would be a far worse trade.
+     */
+    private fun signingCertificateSha1(): String? = runCatching {
+        val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            val info = packageManager.getPackageInfo(
+                packageName,
+                PackageManager.GET_SIGNING_CERTIFICATES,
+            )
+            info.signingInfo?.apkContentsSigners
+        } else {
+            @Suppress("DEPRECATION")
+            packageManager.getPackageInfo(packageName, PackageManager.GET_SIGNATURES).signatures
+        }
+        val first = signatures?.firstOrNull() ?: return@runCatching null
+        MessageDigest.getInstance("SHA-1")
+            .digest(first.toByteArray())
+            .joinToString("") { byte -> "%02X".format(byte) }
+    }.onFailure {
+        Log.w("SakhiApplication", "could not read the signing certificate: $it")
+    }.getOrNull()
+
     private fun warnOnMissingBackendConfig() {
         val missing = buildList {
             if (BuildConfig.SUPABASE_URL.isBlank()) add("SUPABASE_URL")

@@ -236,6 +236,17 @@ fun sakhiSystemGray6(): androidx.compose.ui.graphics.Color =
  * user-side avatar in chat search), not only as a page surface. Feature code previously
  * approximated those with `primary.copy(alpha = …)`, which is a different colour.
  */
+/**
+ * The brand's icon-button background — `DS.Colors.buttonFill` on iOS (#F4E4EA light).
+ *
+ * The palette documents it as "Icon button background", which is exactly what the nearby
+ * circle in the bottom bar is when there is no map to draw in it. `systemBackground` there
+ * is the page's own colour, so the control disappeared into the page.
+ */
+@Composable
+fun sakhiButtonFill(): androidx.compose.ui.graphics.Color =
+    if (LocalSakhiDarkTheme.current) DarkBrandColors.buttonFill else LightBrandColors.buttonFill
+
 @Composable
 fun sakhiLightPink(): androidx.compose.ui.graphics.Color =
     if (LocalSakhiDarkTheme.current) DarkBrandColors.lightPink else LightBrandColors.lightPink

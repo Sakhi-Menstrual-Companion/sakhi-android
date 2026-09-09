@@ -126,6 +126,15 @@ fun SakhiBottomActionBar(
     showCalendarButton: Boolean = true,
     onCalendarClick: (() -> Unit)? = null,
     /**
+     * Replaces the calendar icon in the leading slot.
+     *
+     * iOS declares this slot as `@ViewBuilder let calendarButton`, defaulting to
+     * `EmptyView()`, and the calendar sheet fills it with `HomeNearbyButton` -- the little
+     * live map that is the way into Emergency Assistance. Android had a hardcoded calendar
+     * icon there and no way to reach Emergency from the bar at all.
+     */
+    leadingSlot: (@Composable () -> Unit)? = null,
+    /**
      * Fill for the circular log button, kept separate from [accentColor] because iOS
      * keeps them separate: its action bar takes `logFill: cardFill` and
      * `logIconColor: standardAccent` as two independent values.
@@ -156,7 +165,9 @@ fun SakhiBottomActionBar(
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        if (showCalendarButton && onCalendarClick != null) {
+        if (leadingSlot != null) {
+            leadingSlot()
+        } else if (showCalendarButton && onCalendarClick != null) {
             IconButton(
                 onClick = onCalendarClick,
                 modifier = Modifier

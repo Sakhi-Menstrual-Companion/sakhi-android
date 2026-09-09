@@ -17,11 +17,14 @@
     <string name="emergency_a_sakhi_nearby">A Sakhi nearby</string>
 
     <!-- Step 1 — requirement -->
-    <string name="emergency_section_right_now">Urgent Needs</string>
+    <string name="emergency_section_right_now">Urgent</string>
     <string name="emergency_section_something_else">Other</string>
 
     <!-- Step 2 — spot -->
     <string name="emergency_select_requirement">Select Requirement</string>
+    <!-- iOS EmergencyRequirementView: the picker asks rather than labels. -->
+    <string name="emergency_requirement_title">What do you need?</string>
+    <string name="emergency_requirement_subtitle">Pick one, then choose who to ask.</string>
     <string name="emergency_location_title">Location</string>
     <string name="emergency_ok">OK</string>
     <string name="emergency_next">Next</string>
@@ -61,6 +64,11 @@
     <string name="emergency_outcome_waiting_feedback">Waiting for %1$s feedback</string>
     <string name="emergency_outcome_thank_you">Thank you for your assistance!</string>
     <string name="emergency_spot_name">Spot Name</string>
+    <!-- Figma EA-05 · Where are you. The step asks rather than labels, and the CTA says
+         what happens next instead of "Next". -->
+    <string name="emergency_spot_question">Where should she come?</string>
+    <string name="emergency_spot_hint">A landmark she can find. Only the Sakhi who accepts will see it.</string>
+    <string name="emergency_find_a_sakhi">Find a Sakhi</string>
     <string name="emergency_spot_at_area">at %1$s</string>
     <string name="emergency_spot_placeholder">e.g. 2nd floor washroom, near the library</string>
     <string name="emergency_location_required">Sakhi needs location access to find someone near you. You can turn it on in Settings.</string>
@@ -74,8 +82,13 @@
 
     <!-- Step 3 — waiting -->
     <string name="emergency_asked">Asked</string>
+    <string name="emergency_ask">Ask</string>
+    <!-- Figma EA-06 · Nearby Sakhis. -->
+    <string name="emergency_sakhis_see_only">She only learns what you need, and the spot you named.</string>
     <string name="emergency_her">her</string>
-    <string name="emergency_waiting_body">has been asked. Her phone is alerted, and you will know the moment she answers.</string>
+    <!-- Figma EA-08. Reads as a whole sentence: the headline above already names her, and
+         the old copy started mid-sentence ("has been asked…") because nothing prefixed it. -->
+    <string name="emergency_waiting_body">She has been asked. She can still say no.</string>
     <string name="emergency_left_to_answer">%1$s left to answer</string>
     <string name="emergency_cancelling">Cancelling\u2026</string>
     <string name="emergency_cancel_request">Cancel request</string>
@@ -164,4 +177,28 @@
     <string name="emergency_permission_location">Location Access</string>
     <string name="emergency_permission_notifications">Notification Access</string>
     <string name="emergency_nearby_sakhis_count">Nearby Sakhis: %1$d</string>
+
+    <plurals name="emergency_sakhis_around_you">
+        <item quantity="one">%1$d Sakhi is around you</item>
+        <item quantity="other">%1$d Sakhis are around you</item>
+    </plurals>
+    <!-- Figma EA-08 · Waiting. -->
+    <string name="emergency_waiting_for">Waiting for %1$s</string>
+    <string name="emergency_what_she_was_told">What she was told</string>
+    <string name="emergency_requirement_label">Requirement</string>
+    <string name="emergency_spot_label">Spot</string>
+    <string name="emergency_your_location_label">Your location</string>
+    <string name="emergency_not_shared">Not shared</string>
+    <!-- Figma EA-10 · Help is coming. -->
+    <string name="emergency_help_is_coming">Help is Coming!</string>
+    <string name="emergency_accepted_on_the_way">%1$s accepted. She is on her way to you.</string>
+    <string name="emergency_she_is_waiting_title">She is waiting for you</string>
+    <string name="emergency_she_is_waiting_body">%1$s is waiting where she said she would be.</string>
+    <string name="emergency_section_this_request">This request</string>
+    <string name="emergency_directions">Directions</string>
+    <string name="emergency_message_someone">Message %1$s</string>
+    <string name="emergency_end_request">End Request</string>
+    <!-- Figma EA-13 · Incoming request. -->
+    <string name="emergency_asking_you_now">Asking you now</string>
+    <string name="emergency_profile">Profile</string>
 </resources>

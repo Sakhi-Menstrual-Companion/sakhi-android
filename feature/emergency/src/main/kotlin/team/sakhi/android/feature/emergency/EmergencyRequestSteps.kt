@@ -1,6 +1,12 @@
 package team.sakhi.android.feature.emergency
 
+import androidx.compose.foundation.Image
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +56,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import team.sakhi.android.designsystem.SakhiRadius
 import androidx.compose.ui.text.style.TextOverflow
@@ -59,6 +66,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.SakhiTokens
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyRequirement
 import team.sakhi.android.designsystem.sakhiSystemBackground
@@ -75,35 +84,93 @@ import team.sakhi.android.ui.SakhiAlertSheet
 internal fun EmergencyRequirementStep(
     viewModel: EmergencyViewModel,
     startOnResponderInbox: Boolean = false,
+    /**
+     * Opens the safe-places browser, carrying what she said she needs.
+     *
+     * Every requirement leads here rather than on to the spot field and the Sakhi list,
+     * matching iOS. The requirement is passed rather than dropped so the Sakhi chip in that
+     * list can still hand it to `chooseRequirement` and take her to the people.
+     */
+    onShowPlaces: (EmergencyRequirement) -> Unit = {},
+    /** Her own face in the header, opening her profile. Null hides it. */
+    myUserId: String? = null,
+    onOpenMyProfile: () -> Unit = {},
+    /**
+     * Bumped when she picks a new face in the profile. The choice lives in
+     * SharedPreferences, which Compose cannot observe, so without a key to hang a
+     * `remember` on, the header kept the old face until the whole screen was rebuilt.
+     */
+    faceRevision: Int = 0,
 ) {
     // Opens straight onto the inbox when she arrived from a nearby-request push: she was
     // asked to help, so asking her what *she* needs would be the wrong first screen.
     var showResponderInbox by remember { mutableStateOf(startOnResponderInbox) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    // No horizontal padding here. Figma's `content` frame is full width and every child
+    // insets itself by 20 -- and `EmergencySheetTitle`, `EmergencySectionHeader` and
+    // `EmergencyCard` all already do. Padding the column as well doubled it to 40, which
+    // is what put the heading and every card an extra 20 off the leading edge.
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = SakhiSpacing.space5),
+            .verticalScroll(rememberScrollState()),
         // iOS is a `VStack(spacing: 0)`: the title and the first section sit flush, and the
         // only gap is `.padding(.bottom, DS.Spacing.l)` = 24 under the first section.
         // Android's uniform 16 put a gap under the title that iOS does not have and made
         // the two sections read as one run.
     ) {
-        // iOS: `EmergencySheetTitle(title: "Select Requirement")` -- centred, no subtitle.
-        EmergencySheetTitle(title = stringResource(R.string.emergency_select_requirement))
+        // iOS `EmergencyRequirementView`: a question with a line under it, not a label.
+        EmergencySheetTitle(
+            title = stringResource(R.string.emergency_requirement_title),
+            subtitle = stringResource(R.string.emergency_requirement_subtitle),
+            trailing = myUserId?.let { id ->
+                {
+                    val context = LocalContext.current
+                    val faceIndex = remember(id, faceRevision) {
+                        SakhiAvatarPreference.chosenIndex(context, id)
+                            ?: EmergencyAvatarCatalog.dealtIndex(id)
+                    }
+                    // A plain white disc under the face, and nothing else: the artwork is
+                    // light, so on the sheet's blush ground it had nothing to sit on.
+                    // Figma `her profile avatar`: a 40 white circle with a 1px pink
+                    // hairline at 18%, holding a 32 face inset 4. No drop shadow --
+                    // Karan's standing rule for this flow is no shadows inside views.
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Color.White)
+                            .border(1.dp, Color(0x2EF61887), CircleShape)
+                            .clickable(onClick = onOpenMyProfile),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Image(
+                            painter = painterResource(EmergencyAvatarCatalog.drawableAt(faceIndex)),
+                            contentDescription = "Your profile",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(CircleShape)
+                                .scale(EmergencyAvatarCatalog.contentScaleAt(faceIndex)),
+                        )
+                    }
+                }
+            },
+        )
 
         RequirementSection(
             title = stringResource(R.string.emergency_section_right_now),
             items = EmergencyRequirement.urgent,
-            onSelect = viewModel::chooseRequirement,
-            modifier = Modifier.padding(bottom = SakhiSpacing.space6),
+            onSelect = onShowPlaces,
+            // Figma puts a 24 gap between the two sections. 8 here plus the next section
+            // header's own 16 above its label is that 24.
+            modifier = Modifier.padding(bottom = SakhiSpacing.space2),
         )
-        RequirementSection(
+        RequirementGridSection(
             title = stringResource(R.string.emergency_section_something_else),
             items = EmergencyRequirement.other,
-            onSelect = viewModel::chooseRequirement,
+            onSelect = onShowPlaces,
         )
 
         // The two secondary pills that used to sit here are gone, matching iOS
@@ -123,6 +190,14 @@ internal fun EmergencyRequirementStep(
         ModalBottomSheet(
             onDismissRequest = { showResponderInbox = false },
             sheetState = sheetState,
+            // The same sheet as every other step: the flow's blush ground, its 40dp
+            // corners, its grabber, and no scrim. Karan's standing note on Emergency is
+            // that the map never dims behind a sheet, and this one arrived white, dimmed,
+            // and with Material's 48dp-tall handle.
+            containerColor = MaterialTheme.colorScheme.background,
+            shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
+            scrimColor = Color.Transparent,
+            dragHandle = { EmergencySheetGrabber() },
         ) {
             EmergencyResponderInbox(viewModel = viewModel)
         }
@@ -154,42 +229,111 @@ private fun RequirementSection(
 private fun RequirementRow(requirement: EmergencyRequirement, onClick: () -> Unit) {
     // No Surface of its own: the section's `EmergencyCard` is the card, and this is a row
     // inside it. iOS `requirementRow` is likewise just a Button wrapping an `EmergencyRow`.
+    //
+    // Through the shared `EmergencyRow`/`EmergencyBadgeIcon` rather than a hand-rolled Row
+    // and a hand-rolled disc. This screen was still drawing `main`'s
+    // RequirementTableViewCell badge -- a 40 circle filled at 0.2 alpha with a tinted glyph
+    // -- while every other row in the flow had moved to the flow's own 30dp rounded square
+    // with a white glyph. Its 12dp padding also made these rows 46 tall against Figma's 56.
     Box(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
+        EmergencyRow(
+            title = EmergencyFormatting.requirementShortName(requirement),
+            leading = {
+                EmergencyBadgeIcon(
+                    icon = requirement.icon(),
+                    color = requirement.accentColor(),
+                )
+            },
+            accessory = { EmergencyChevron() },
+        )
+    }
+}
+
+/**
+ * The second half of the picker: four compact tiles, two to a row.
+ *
+ * Figma `13 · Emergency Assistance` -> `grid wrap`. Android had these as one more stacked
+ * card with hairlines and chevrons, which made the screen a single run of five identical
+ * rows and cost the sheet its whole lower half. Each tile is its own card, 12 apart both
+ * ways, and carries no chevron -- the urgent row keeps that, so the eye still knows which
+ * of the two groups is the one being pushed toward.
+ */
+@Composable
+private fun RequirementGridSection(
+    title: String,
+    items: List<EmergencyRequirement>,
+    onSelect: (EmergencyRequirement) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        EmergencySectionHeader(title = title)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space5),
+            verticalArrangement = Arrangement.spacedBy(GridGap),
+        ) {
+            items.chunked(2).forEach { pair ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(GridGap),
+                ) {
+                    pair.forEach { requirement ->
+                        RequirementTile(
+                            requirement = requirement,
+                            onClick = { onSelect(requirement) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    // Keeps a lone tile on the last row half-width rather than letting it
+                    // stretch across and read as a different kind of control.
+                    if (pair.size == 1) Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RequirementTile(
+    requirement: EmergencyRequirement,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        shape = RoundedCornerShape(SakhiRadius.lg),
+        color = sakhiSystemBackground(),
+        modifier = modifier,
+    ) {
         Row(
-            modifier = Modifier.padding(SakhiSpacing.space3),
+            // Figma `tile`: `px-14 py-13` with a 12 gap, so the 30dp badge puts the label
+            // at x=56. One less than a card row's 16, because a tile has no chevron to
+            // balance against on the far side.
+            modifier = Modifier
+                .clickable(onClick = onClick)
+                .padding(horizontal = 14.dp, vertical = 13.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
         ) {
-            // `main`'s RequirementTableViewCell: a CIRCULAR badge filled with the
-            // requirement's own colour at 0.2 alpha, glyph in that colour at full strength.
-            val accent = requirement.accentColor()
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(CircleShape)
-                    .background(accent.copy(alpha = 0.2f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = requirement.icon(),
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            EmergencyBadgeIcon(
+                icon = requirement.icon(),
+                color = requirement.accentColor(),
+            )
             Text(
                 text = EmergencyFormatting.requirementShortName(requirement),
                 style = MaterialTheme.typography.bodyLarge,
+                fontSize = 15.sp,
+                lineHeight = 21.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
-            )
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = sakhiSecondaryLabel(),
             )
         }
     }
 }
+
+/** Figma `grid wrap`: 12 between tiles, both directions. */
+private val GridGap = SakhiSpacing.space3
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 2 — where exactly she is, in her own words
@@ -219,38 +363,13 @@ internal fun EmergencySpotStep(
     // nav host per step, so the equivalent is a bar at the top of this step's own content.
     // Next moves up here with it; the bottom Ask button and Go back link are gone.
     Column(modifier = Modifier.fillMaxSize()) {
-        CenterAlignedTopAppBar(
-            title = { Text(stringResource(R.string.emergency_location_title)) },
-            navigationIcon = {
-                TextButton(onClick = viewModel::backToRequirement) {
-                    Text(stringResource(R.string.emergency_back))
-                }
-            },
-            actions = {
-                TextButton(
-                    onClick = {
-                        // main: an empty field raised "Spot Name Required" and went no
-                        // further. A request with no spot label is the one thing GPS cannot
-                        // make up for, so it stays a hard stop.
-                        if (uiState.spotDraft.trim().isEmpty()) showSpotRequired = true
-                        else viewModel.confirmSpot()
-                    },
-                    enabled = !uiState.isSubmitting,
-                ) {
-                    Text(
-                        text = stringResource(R.string.emergency_next),
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                }
-            },
-            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                containerColor = Color.Transparent,
-            ),
-            // Material's TopAppBar reserves the STATUS BAR inset by default. That is right
-            // for a bar at the top of a window and wrong for one inside a bottom sheet: it
-            // added a status bar's worth of dead space between the grabber and "Location",
-            // which is the gap that made this step look nothing like iOS's.
-            windowInsets = WindowInsets(0, 0, 0, 0),
+        // The flow's own header, like every other pushed step. This was the second screen
+        // still on Material's `CenterAlignedTopAppBar`, which also carried the Next action
+        // -- Figma `EA-05` moves that to a full-width CTA at the bottom labelled with what
+        // it does ("Find a Sakhi") rather than where it goes.
+        EmergencySheetNavBar(
+            title = stringResource(R.string.emergency_spot_name),
+            onBack = viewModel::backToRequirement,
         )
 
     // iOS is `VStack(alignment: .leading, spacing: 0)` with no outer horizontal padding:
@@ -263,7 +382,27 @@ internal fun EmergencySpotStep(
             .fillMaxSize()
             .verticalScroll(rememberScrollState()),
     ) {
-        EmergencySectionHeader(title = stringResource(R.string.emergency_spot_name))
+        // Figma `intro`: `pt-4 pb-16 px-20`, 4 between the question and the line under it.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space5)
+                .padding(top = SakhiSpacing.space1, bottom = SakhiSpacing.space4),
+            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+        ) {
+            Text(
+                text = stringResource(R.string.emergency_spot_question),
+                fontSize = 20.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.Bold,
+                color = sakhiLabel(),
+            )
+            Text(
+                text = stringResource(R.string.emergency_spot_hint),
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+            )
+        }
 
         // iOS draws no border here at all: the field is
         // `.background(RoundedRectangle(cornerRadius: DS.Radius.systemCard).fill(DS.Colors.fill.opacity(0.35)))`
@@ -280,16 +419,25 @@ internal fun EmergencySpotStep(
             maxLines = 4,
             shape = RoundedCornerShape(SakhiRadius.lg),
             colors = TextFieldDefaults.colors(
-                // iOS `DS.Colors.fill.opacity(0.35)`, over the sheet's own background.
-                unfocusedContainerColor = sakhiSystemGray5().copy(alpha = 0.35f),
-                focusedContainerColor = sakhiSystemGray5().copy(alpha = 0.35f),
+                // Figma `input · spot`: a white card with a 1.5 brand-pink edge, not iOS's
+                // soft grey fill. It is the one thing on this step she has to type into, and
+                // on the blush sheet a 35%-grey fill had almost no edge at all.
+                unfocusedContainerColor = sakhiSystemBackground(),
+                focusedContainerColor = sakhiSystemBackground(),
                 // Material's underline indicator has no iOS counterpart either.
                 unfocusedIndicatorColor = Color.Transparent,
                 focusedIndicatorColor = Color.Transparent,
                 disabledIndicatorColor = Color.Transparent,
                 cursorColor = SakhiUIColors.BRAND_PINK.toComposeColor(),
             ),
-            modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space5),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space5)
+                .border(
+                    width = 1.5.dp,
+                    color = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                    shape = RoundedCornerShape(SakhiRadius.lg),
+                ),
         )
 
         // main showed "{spot} at {locationName}". The "at" prefix is what makes the two read
@@ -316,26 +464,24 @@ internal fun EmergencySpotStep(
             // `main`'s "Recent Spots" section: clock icon, the name, and an x to forget it.
             EmergencySectionHeader(
                 title = stringResource(R.string.emergency_recent_spots),
-                // iOS `.padding(.top, DS.Spacing.xl)` = 28.
-                modifier = Modifier.padding(top = 28.dp),
+                // Figma puts a 22 gap between the field and this label; the header carries
+                // 16 of it itself.
+                topPadding = 22.dp,
             )
             EmergencyCard {
                 recentSpots.forEachIndexed { index, spot ->
                     if (index > 0) EmergencyRowDivider(leadingInset = 58.dp)
                     EmergencyRow(
                         title = spot.replaceFirstChar { it.uppercase() },
+                        // The flow's own badge, in Figma's info blue. A bare grey clock in
+                        // a 34dp box was the only leading glyph in the whole flow that was
+                        // not this shape, so these rows sat 4dp out of line with every
+                        // other card.
                         leading = {
-                            Box(
-                                modifier = Modifier.size(34.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Schedule,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = sakhiSecondaryLabel(),
-                                )
-                            }
+                            EmergencyBadgeIcon(
+                                icon = Icons.Filled.Schedule,
+                                color = SakhiTokens.SectionBlue,
+                            )
                         },
                         modifier = Modifier.clickable { viewModel.useRecentSpot(spot) },
                         accessory = {
@@ -366,6 +512,25 @@ internal fun EmergencySpotStep(
                     style = MaterialTheme.typography.bodySmall,
                     color = sakhiSecondaryLabel(),
                 )
+            }
+        }
+
+        // Figma `actions`: a 24 gap, then a full-width pink pill, then 10.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space5)
+                .padding(top = SakhiSpacing.space6, bottom = 10.dp),
+        ) {
+            EmergencyPrimaryButton(
+                title = stringResource(R.string.emergency_find_a_sakhi),
+                enabled = !uiState.isSubmitting,
+            ) {
+                // main: an empty field raised "Spot Name Required" and went no further. A
+                // request with no spot label is the one thing GPS cannot make up for, so it
+                // stays a hard stop.
+                if (uiState.spotDraft.trim().isEmpty()) showSpotRequired = true
+                else viewModel.confirmSpot()
             }
         }
 

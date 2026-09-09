@@ -35,6 +35,10 @@ import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.models.EmergencyRequestStatus
 import team.sakhi.models.EmergencySession
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import team.sakhi.android.designsystem.sakhiLabel
 
 /**
  * The outcome screen. Port of iOS `EmergencyFeedbackView.swift`.
@@ -71,9 +75,19 @@ internal fun EmergencyFeedbackStep(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(modifier = Modifier.size(SakhiSpacing.space10))
+        // Figma `EA-12` -> `hero`: a 14 gap, the 88dp ring with a done tick on it, the
+        // headline, and one line under it.
+        //
+        // NOT the five-star card the frame also draws. This screen was a star prompt on
+        // Android once and it was taken out on purpose: `main`'s `FeedbackViewController`
+        // is a *status* screen, iOS's `EmergencyFeedbackView` is too, and scoring a woman
+        // out of five right after something went wrong is not a question to ask. The frame's
+        // metrics are applied; its rating card is not.
+        Spacer(modifier = Modifier.size(14.dp))
 
-        EmergencyDottedRingMark()
+        Box(modifier = Modifier.padding(top = 6.dp)) {
+            EmergencyDottedRingMark()
+        }
 
         // The mockup leads with the question and puts the status underneath, the reverse of
         // `main`, which had "Need Your Feedback" as the title button and the question as the
@@ -86,79 +100,54 @@ internal fun EmergencyFeedbackStep(
         ) { text ->
             Text(
                 text = text,
-                style = MaterialTheme.typography.headlineSmall,
+                fontSize = 20.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.Bold,
+                color = sakhiLabel(),
                 textAlign = TextAlign.Center,
                 modifier = Modifier
-                    // iOS `.padding(.horizontal, DS.Spacing.l)` = 24,
-                    // `.padding(.top, DS.Spacing.ml)` = 20.
-                    .padding(horizontal = SakhiSpacing.space6)
-                    .padding(top = SakhiSpacing.space5),
+                    .padding(horizontal = SakhiSpacing.space5)
+                    .padding(top = 9.dp),
             )
         }
 
         Text(
             text = outcome.title,
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.bodyMedium,
             color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
             modifier = Modifier
-                // iOS `.padding(.horizontal, DS.Spacing.l)` = 24,
-                // `.padding(.top, DS.Spacing.xs)` = 8.
-                .padding(horizontal = SakhiSpacing.space6)
-                .padding(top = SakhiSpacing.space2),
+                .padding(horizontal = SakhiSpacing.space5)
+                .padding(top = 9.dp),
         )
 
-        // iOS `Spacer(minLength: 0)` -- takes slack when there is some, collapses when not.
-        Spacer(modifier = Modifier.height(SakhiSpacing.space6))
-
+        // Figma `actions`: two full-width pills 10 apart, 24 below the hero and 10 above
+        // the sheet's edge.
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                // iOS `.padding(.horizontal, DS.Spacing.l)` = 24,
-                // `.padding(.bottom, DS.Spacing.l)` = 24.
-                .padding(horizontal = SakhiSpacing.space6)
-                .padding(bottom = SakhiSpacing.space6),
-            // iOS `VStack(spacing: DS.Spacing.s)` = 12.
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                .padding(horizontal = SakhiSpacing.space5)
+                .padding(top = SakhiSpacing.space6 + 20.dp, bottom = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             outcome.primaryTitle?.let { title ->
-                Button(
-                    onClick = {
-                        if (!isWorking) {
-                            isWorking = true
-                            perform(outcome.primaryAction, viewModel, onDone)
-                            isWorking = false
-                        }
-                    },
-                    enabled = !isWorking,
-                    shape = CircleShape,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    if (isWorking) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(20.dp),
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Text(text = title, modifier = Modifier.padding(vertical = SakhiSpacing.space2))
+                EmergencyPrimaryButton(title = title, enabled = !isWorking) {
+                    if (!isWorking) {
+                        isWorking = true
+                        perform(outcome.primaryAction, viewModel, onDone)
+                        isWorking = false
                     }
                 }
             }
-            // Pink text, not grey: on this screen "No" is a real answer, not a way out.
+            // An outlined pill, not a bare text link: on this screen "No" is a real answer,
+            // not a way out, and it should be as pressable as the other one.
             outcome.secondaryTitle?.let { title ->
-                TextButton(
-                    onClick = {
-                        if (!isWorking) {
-                            isWorking = true
-                            perform(outcome.secondaryAction, viewModel, onDone)
-                            isWorking = false
-                        }
-                    },
-                    enabled = !isWorking,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(text = title, color = MaterialTheme.colorScheme.primary)
+                EmergencySecondaryButton(title = title) {
+                    if (!isWorking) {
+                        isWorking = true
+                        perform(outcome.secondaryAction, viewModel, onDone)
+                        isWorking = false
+                    }
                 }
             }
         }

@@ -233,6 +233,9 @@ fun HomeNavHost() {
     ) { expanded, setExpanded ->
         CalendarScreen(
             onAskSakhi = { presentOverlaySheet(HomeOverlaySheet.Chat) },
+            // The nearby button in the calendar's bottom bar, matching iOS's
+            // `HomeCalendarSheet` -> `HomeNearbyButton` -> `.fullScreenCover`.
+            onOpenEmergency = { presentOverlaySheet(HomeOverlaySheet.Emergency()) },
             onLog = { date -> presentOverlaySheet(HomeOverlaySheet.Logging(initialDate = date)) },
             onDaySelected = homeViewModel::selectDate,
             // Detent and year mode are the same concept on iOS: dragging the sheet

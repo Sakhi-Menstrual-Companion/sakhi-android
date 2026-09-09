@@ -9,6 +9,8 @@ android {
 
 dependencies {
     implementation(project(":core:platform"))
+    // the bottom bar's leading slot is the Emergency entry point.
+    implementation(project(":feature:emergency"))
     implementation(project(":feature:logging"))
     // Screenshot-test durability lane.
     testImplementation(libs.robolectric)

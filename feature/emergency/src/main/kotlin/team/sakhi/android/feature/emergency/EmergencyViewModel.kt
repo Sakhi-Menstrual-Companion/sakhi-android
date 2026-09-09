@@ -19,6 +19,9 @@ import team.sakhi.android.platform.HapticImpact
 import team.sakhi.emergency.EmergencyRealtimeCoordinator
 import team.sakhi.emergency.EmergencyState
 import team.sakhi.emergency.EmergencyStore
+import team.sakhi.android.platform.DeviceLocation
+import team.sakhi.emergency.EmergencySafePlacesProvider
+import team.sakhi.emergency.EmergencySafePlace
 import team.sakhi.emergency.ResponderState
 import team.sakhi.models.EmergencyProfileDetail
 import team.sakhi.models.EmergencyRequirement
@@ -60,6 +63,7 @@ data class EmergencyUiState(
  */
 class EmergencyViewModel(
     private val store: EmergencyStore,
+    private val safePlaces: EmergencySafePlacesProvider,
     private val realtime: EmergencyRealtimeCoordinator,
     private val locationProvider: AndroidLocationProvider,
     private val hapticManager: AndroidHapticManager,
@@ -82,6 +86,49 @@ class EmergencyViewModel(
 
     /** The profile card she opens before deciding who to ask. */
     val profileDetail: StateFlow<EmergencyProfileDetail?> = store.profileDetail
+
+    // ── Safe places ──────────────────────────────────────────────────────────
+    //
+    // Android had no places browser at all, so nothing ever fetched these. The provider is
+    // shared with iOS in SakhiCore, so both apps get the same list for the same spot.
+    private val _places = MutableStateFlow<List<EmergencySafePlace>>(emptyList())
+    val places: StateFlow<List<EmergencySafePlace>> = _places.asStateFlow()
+
+    private val _isSearchingPlaces = MutableStateFlow(false)
+    val isSearchingPlaces: StateFlow<Boolean> = _isSearchingPlaces.asStateFlow()
+
+    private val _lastCoordinate = MutableStateFlow<DeviceLocation?>(null)
+    val lastCoordinate: StateFlow<DeviceLocation?> = _lastCoordinate.asStateFlow()
+
+    /** Her own id, for the profile behind the avatar in the picker header. */
+    val currentUserId: String? get() = sessionManager.current?.userId
+
+    /**
+     * Searches once per opening of the list.
+     *
+     * Re-running on every return from a detail would re-order the rows under her while she
+     * is deciding between two of them, which is worse than a slightly stale distance.
+     */
+    fun loadPlaces() {
+        if (_places.value.isNotEmpty() || _isSearchingPlaces.value) return
+        viewModelScope.launch {
+            if (!locationProvider.hasPermission()) return@launch
+            val fix = runCatching { locationProvider.currentLocation() }.getOrNull() ?: return@launch
+            _lastCoordinate.value = fix
+            _isSearchingPlaces.value = true
+            _places.value = runCatching {
+                safePlaces.search(fix.latitude, fix.longitude)
+            }.getOrDefault(emptyList<EmergencySafePlace>())
+            _isSearchingPlaces.value = false
+        }
+    }
+
+    fun refreshLocationOnly() {
+        viewModelScope.launch {
+            if (!locationProvider.hasPermission()) return@launch
+            _lastCoordinate.value = runCatching { locationProvider.currentLocation() }.getOrNull()
+        }
+    }
 
     /**
      * Whether the three introduction screens have already been shown once. Owned by the
@@ -224,14 +271,22 @@ class EmergencyViewModel(
 
     // ── Requester ────────────────────────────────────────────────────────────
 
+    // Both of these went suspend in SakhiCore and Android was never updated, so this module
+    // stopped compiling: `chooseRequirement` now loads the Sakhi list on the way rather than
+    // stopping at the spot field, and `backToSpot` was renamed `backToSakhis` when the spot
+    // stopped being chosen before the Sakhi. iOS took both changes; this is Android catching
+    // up. Same `viewModelScope.launch { runCatching { … } }` shape the rest of the file uses.
     fun chooseRequirement(requirement: EmergencyRequirement) {
         hapticManager.impact(HapticImpact.LIGHT)
-        store.chooseRequirement(requirement)
+        viewModelScope.launch { runCatching { store.chooseRequirement(requirement) } }
     }
 
     fun backToRequirement() = store.backToRequirement()
 
-    fun backToSpot() = store.backToSpot()
+    /** Back out of naming a spot, to the list she picked the person from. */
+    fun backToSakhis() {
+        viewModelScope.launch { runCatching { store.backToSakhis() } }
+    }
 
     fun useRecentSpot(spot: String) {
         hapticManager.impact(HapticImpact.LIGHT)

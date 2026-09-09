@@ -1,18 +1,9 @@
 package team.sakhi.android.feature.emergency
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.consumeWindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
@@ -21,6 +12,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.Spa
 import androidx.compose.material.icons.filled.WorkspacePremium
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -33,27 +25,27 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.sakhiSeparator
 import team.sakhi.android.designsystem.sakhiSystemBackground
-import team.sakhi.android.ui.CloseButton
 import team.sakhi.android.ui.FeatureBulletRow
-import team.sakhi.android.ui.OnboardingHeaderTopGap
 import team.sakhi.android.ui.OnboardingIntroScaffold
-import team.sakhi.android.ui.OnboardingNavBarMinHeight
-import team.sakhi.android.ui.SakhiNavBar
+import team.sakhi.android.ui.OnboardingShell
+import team.sakhi.android.ui.SakhiNavDirection
+import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.android.ui.SakhiSwitch
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.WindowInsetsSides
 
 /**
  * The three-page introduction shown the first time she opens Emergency Assistance.
  *
- * This is the account onboarding screen, not a lookalike. It renders through the same
- * shell every one of those ~31 steps uses: safe-area insets consumed once at the top, the
- * shared [SakhiNavBar] for back/close, [OnboardingIntroScaffold] for the title, subtitle
- * and content, and [team.sakhi.android.ui.SakhiFooter] pinned at the bottom carrying
- * Continue. Those pieces moved into `core:ui` when this screen was built, so account
- * onboarding and this one cannot drift apart.
+ * This is the account onboarding screen, not a lookalike. It renders through
+ * [OnboardingShell] -- the exact frame every one of account onboarding's ~31 steps uses --
+ * with [OnboardingIntroScaffold] for the title, subtitle and content, and
+ * [team.sakhi.android.ui.SakhiFooter] pinned at the bottom carrying Continue. Those pieces
+ * live in `core:ui` so the two flows cannot drift apart, which they had: this screen used
+ * to re-declare the shell's Column itself and had lost the top safe-area inset and the
+ * page's pink ground along the way.
  *
  * Page one is what the feature is, page two is how trust levels work, page three is the
  * permissions it needs. Shown once and then remembered -- the flag lives in the shared
@@ -75,49 +67,36 @@ internal fun EmergencyOnboarding(
 ) {
     var page by remember { mutableIntStateOf(0) }
 
-    // This is an overlay above Home rather than a route of its own, so it has to paint
-    // its own opaque ground; without a fill the home screen reads straight through it.
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(sakhiSystemBackground())
-            // Insets applied once here for all three pages, matching `OnboardingFlowHost`.
-            // Consuming them afterwards stops `SakhiFooter`'s own `navigationBarsPadding`
-            // from applying the bottom inset a second time.
-            // No TOP inset. `OnboardingIntroScaffold` is built for a full-screen page where
-            // reserving the status bar is right; Emergency shows it inside a bottom sheet,
-            // where that inset is pure dead space -- it sat on top of the scaffold's own
-            // 32dp header gap and pushed the close button a long way below the grabber.
-            .windowInsetsPadding(
-                WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom),
-            )
-            .consumeWindowInsets(WindowInsets.safeDrawing),
+    OnboardingShell(
+        onBack = if (page > 0) ({ page-- }) else null,
+        onClose = if (page == 0) onCancel else null,
+        // Presented as a full-screen cover over Home (`HomeNavHost`), so unlike the flow
+        // inside `RootNavHost` there is no themed root painting the page behind it.
+        paintsPageBackground = true,
     ) {
-        Spacer(modifier = Modifier.height(OnboardingHeaderTopGap))
-
-        SakhiNavBar(
-            modifier = Modifier.heightIn(min = OnboardingNavBarMinHeight),
-            onBack = if (page > 0) ({ page-- }) else null,
-            leading = if (page == 0) {
-                {
-                    CloseButton(onClick = onCancel)
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            } else {
-                null
+        // Account onboarding slides between its steps rather than cutting; going through
+        // the same component is what keeps the two feeling like one flow. `page` has a
+        // natural order, so direction comes from comparing the two values rather than from
+        // a separate intent flag.
+        SakhiScreenTransition(
+            modifier = Modifier.weight(1f),
+            targetState = page,
+            directionFor = { initial, target ->
+                if (target >= initial) SakhiNavDirection.Forward else SakhiNavDirection.Backward
             },
-        )
-
-        when (page) {
-            0 -> IntroPage(onContinue = { page = 1 })
-            1 -> TrustPage(onContinue = { page = 2 })
-            else -> PermissionsPage(
-                locationGranted = locationGranted,
-                notificationsGranted = notificationsGranted,
-                onRequestLocation = onRequestLocation,
-                onRequestNotifications = onRequestNotifications,
-                onContinue = onFinished,
-            )
+            label = "emergency_onboarding_page",
+        ) { rendered ->
+            when (rendered) {
+                0 -> IntroPage(onContinue = { page = 1 })
+                1 -> TrustPage(onContinue = { page = 2 })
+                else -> PermissionsPage(
+                    locationGranted = locationGranted,
+                    notificationsGranted = notificationsGranted,
+                    onRequestLocation = onRequestLocation,
+                    onRequestNotifications = onRequestNotifications,
+                    onContinue = onFinished,
+                )
+            }
         }
     }
 }
@@ -197,9 +176,9 @@ private fun PermissionsPage(
     ) {
         Surface(
             shape = RoundedCornerShape(SakhiRadiusLg),
-            // iOS fills this card with `DS.Colors.systemBackground` -- white. The theme maps
-            // `colorScheme.surface` to brand.lightPink, which is the sheet's own ground, so
-            // the card had no edge against the page behind it.
+            // iOS fills this card with `DS.Colors.systemBackground` -- white -- over the
+            // page's own pink ground. `colorScheme.surface` maps to brand.lightPink here,
+            // so reaching for that would give the card no edge against the page.
             color = sakhiSystemBackground(),
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -208,6 +187,13 @@ private fun PermissionsPage(
                     title = stringResource(R.string.emergency_permission_location),
                     isOn = locationGranted,
                     onGrant = onRequestLocation,
+                )
+                // iOS: `Divider().padding(.leading, DS.Spacing.m)`. Without it the two rows
+                // read as one tall block.
+                HorizontalDivider(
+                    modifier = Modifier.padding(start = SakhiSpacing.space4),
+                    thickness = 0.5.dp,
+                    color = sakhiSeparator(),
                 )
                 PermissionRow(
                     title = stringResource(R.string.emergency_permission_notifications),
@@ -227,20 +213,32 @@ private fun PermissionsPage(
 @Composable
 private fun PermissionRow(title: String, isOn: Boolean, onGrant: () -> Unit) {
     Row(
+        // iOS `PermissionToggleRow`: `.padding(.horizontal, DS.Spacing.m)` (16) and
+        // `.padding(.vertical, DS.Spacing.ml)` (20). Android had 16/12, which made these
+        // rows visibly shorter than the same component's on every Care screen.
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
+            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space5),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
+            // iOS: `.lato(15)`, not the 16sp `bodyLarge` this used to take.
             text = title,
-            style = MaterialTheme.typography.bodyLarge,
+            fontSize = 15.sp,
+            color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
         SakhiSwitch(
             checked = isOn,
             onCheckedChange = { wants -> if (wants) onGrant() },
             enabled = !isOn,
+            // A granted permission is ON, and it must look it. Material's disabled
+            // treatment washes the track down to 40% alpha, so the one permission she had
+            // actually granted read as the greyed-out row -- reported by Karan as "jo
+            // toggle hai vo bhi disable lag raha hai". iOS's `.disabled(isOn)` dims far
+            // more gently than this, so the closer match is not to dim at all: the switch
+            // is inert rather than unavailable.
+            dimWhenDisabled = false,
         )
     }
 }

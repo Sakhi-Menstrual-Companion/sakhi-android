@@ -50,10 +50,7 @@ import team.sakhi.android.ui.SakhiNavDirection
 import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.onboarding.OnboardingFlowCompletion
 import team.sakhi.onboarding.OnboardingFlowStep
-import team.sakhi.android.ui.CloseButton
-import team.sakhi.android.ui.OnboardingHeaderTopGap
-import team.sakhi.android.ui.OnboardingNavBarMinHeight
-import team.sakhi.android.ui.SakhiNavBar
+import team.sakhi.android.ui.OnboardingShell
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
@@ -186,12 +183,6 @@ fun OnboardingFlowHost(
     // without this, `PhoneScreen`/`OtpScreen`'s `KeyboardSafeScaffold` footer
     // (which independently calls `.navigationBarsPadding()`) would apply the
     // same nav-bar inset a second time, doubling the footer's bottom padding.
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .consumeWindowInsets(WindowInsets.safeDrawing),
-    ) {
     // Shared top bar for every onboarding step, matching iOS's `OnboardingFlowView.
     // regularShell`, whose own comment is the spec: "Always render the top bar so
     // content never touches the top edge, even when there is no back button." iOS
@@ -227,25 +218,16 @@ fun OnboardingFlowHost(
     // permissions step is meaningless.
     val stepOwnsChrome = navState.currentStep.ownsChrome
 
-    if (!isFullScreenLoadingStep && !stepOwnsChrome) {
-        Spacer(modifier = Modifier.height(OnboardingHeaderTopGap))
-
-        SakhiNavBar(
-            modifier = Modifier.heightIn(min = OnboardingNavBarMinHeight),
-            onBack = if (navState.canGoBack) handleBack else null,
-            // iOS: `else if step.showsCloseButton || isModal { DSCloseButton { ... } }` --
-            // the close shares the LEADING slot with back, which is why the Care intro's X
-            // is top-left, not top-right.
-            leading = if (!navState.canGoBack && onDismiss != null) {
-                {
-                    CloseButton(onClick = onDismiss)
-                    Spacer(modifier = Modifier.weight(1f))
-                }
-            } else {
-                null
-            },
-        )
-    }
+    // The frame itself now lives in `core:ui` as `OnboardingShell`, shared with Emergency
+    // Assistance's own three-page intro, which had quietly drifted from it while it was a
+    // Column declared here. iOS: `else if step.showsCloseButton || isModal { DSCloseButton
+    // { ... } }` -- the close shares the LEADING slot with back, which is why the Care
+    // intro's X is top-left, not top-right.
+    OnboardingShell(
+        showChrome = !isFullScreenLoadingStep && !stepOwnsChrome,
+        onBack = if (navState.canGoBack) handleBack else null,
+        onClose = onDismiss,
+    ) {
 
 
     // Directional slide, matching iOS's NavigationStack push/pop feel instead of an

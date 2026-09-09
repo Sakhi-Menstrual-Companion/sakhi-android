@@ -22,6 +22,15 @@ fun SakhiSwitch(
     onCheckedChange: ((Boolean) -> Unit)?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /**
+     * Whether `enabled = false` should also LOOK unavailable.
+     *
+     * False for the one case a switch is inert rather than unavailable: a permission
+     * toggle she taps to grant and can never tap to revoke. That switch is genuinely on,
+     * and Material's disabled wash (40% alpha on the track) made the permission she had
+     * granted read as the greyed-out row -- the opposite of what it means.
+     */
+    dimWhenDisabled: Boolean = true,
 ) {
     // iOS's off-state track is a fixed light grey (`UIColor.systemFill`-ish), not a
     // theme-derived surface -- deriving it here would drift with the pink palette.
@@ -39,10 +48,14 @@ fun SakhiSwitch(
             uncheckedTrackColor = offTrack,
             uncheckedBorderColor = Color.Transparent,
             disabledCheckedThumbColor = Color.White,
-            disabledCheckedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+            disabledCheckedTrackColor = if (dimWhenDisabled) {
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
+            } else {
+                MaterialTheme.colorScheme.primary
+            },
             disabledCheckedBorderColor = Color.Transparent,
             disabledUncheckedThumbColor = Color.White,
-            disabledUncheckedTrackColor = offTrack.copy(alpha = 0.5f),
+            disabledUncheckedTrackColor = if (dimWhenDisabled) offTrack.copy(alpha = 0.5f) else offTrack,
             disabledUncheckedBorderColor = Color.Transparent,
         ),
     )

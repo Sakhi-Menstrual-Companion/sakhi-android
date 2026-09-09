@@ -1,5 +1,12 @@
 package team.sakhi.android.feature.emergency
 
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import team.sakhi.emergency.EmergencySafePlace
+import team.sakhi.models.EmergencyRequirement
+import team.sakhi.android.designsystem.sakhiGroupedBackground
 import android.Manifest
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -14,10 +21,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
@@ -52,6 +63,13 @@ import team.sakhi.emergency.EmergencyState
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSeparator
 
+/** Where she is inside the safe-places browser. iOS `EmergencySheetContent.PlacesRoute`. */
+private sealed interface PlacesRoute {
+    data object None : PlacesRoute
+    data object List : PlacesRoute
+    data class Detail(val place: EmergencySafePlace) : PlacesRoute
+}
+
 /**
  * Root of Emergency Assistance on Android. Draws whatever step the shared
  * [team.sakhi.emergency.EmergencyStore] reports.
@@ -73,6 +91,22 @@ fun EmergencyFlowScreen(
     val nearbyCount by viewModel.nearbyAvailableCount.collectAsStateWithLifecycle()
     val hasSeenIntro by viewModel.hasSeenIntro.collectAsStateWithLifecycle()
     val responder by viewModel.responderState.collectAsStateWithLifecycle()
+    val places by viewModel.places.collectAsStateWithLifecycle()
+    val isSearchingPlaces by viewModel.isSearchingPlaces.collectAsStateWithLifecycle()
+    val lastCoordinate by viewModel.lastCoordinate.collectAsStateWithLifecycle()
+    val profileDetail by viewModel.profileDetail.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+
+    // Android-local on purpose: browsing places changes nothing about her request, and
+    // putting it in the shared state machine would mean a woman who opened the list to find
+    // a washroom had "moved" in a flow the server is tracking.
+    var placesRoute by remember { mutableStateOf<PlacesRoute>(PlacesRoute.None) }
+    var pendingRequirement by remember { mutableStateOf<EmergencyRequirement?>(null) }
+    var showMyProfile by remember { mutableStateOf(false) }
+    // Bumped when she picks a face, so the profile and the header avatar both re-read the
+    // preference. It is stored in UserDefaults-style local prefs, which Compose cannot
+    // observe on its own.
+    var faceRevision by remember { mutableIntStateOf(0) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions(),
@@ -157,22 +191,11 @@ fun EmergencyFlowScreen(
         // 48dp of dead space before any step's content starts. iOS's grabber is the same
         // 38x4 capsule with 10dp either side (see `SheetSurface`), which is half that. The
         // gap between the grabber and the content was Material's padding, not the steps'.
-        sheetDragHandle = {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                Box(
-                    modifier = Modifier
-                        .padding(vertical = 10.dp)
-                        .width(38.dp)
-                        .height(4.dp)
-                        .background(
-                            sakhiSeparator(),
-                            RoundedCornerShape(percent = 50),
-                        ),
-                )
-            }
-        },
+        sheetDragHandle = { EmergencySheetGrabber() },
         sheetContainerColor = MaterialTheme.colorScheme.background,
-        sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        // 40, from Figma. Every frame in `13 · Emergency Assistance` draws the sheet with
+        // `rounded-t-[40px]`; 28 was Material's own bottom-sheet corner carried over.
+        sheetShape = RoundedCornerShape(topStart = SheetCornerRadius, topEnd = SheetCornerRadius),
         sheetContent = {
         // The demo switch is an OVERLAY, never a sibling. iOS attaches it with
         // `.overlay(alignment: .topTrailing)`, which takes no space in the layout. As a
@@ -198,21 +221,23 @@ fun EmergencyFlowScreen(
 
                 is EmergencyState.Idle,
                 is EmergencyState.ChoosingRequirement,
-                -> if (nearbyCount == 0 && !openResponderInbox) {
-                    // main's presentNoActiveRequestBottomSheet(): empty state when nobody
-                    // is around, picker otherwise. Null keeps showing the picker rather
-                    // than flashing an empty state while the count is still loading.
-                    //
-                    // Skipped when she arrived from a push telling her someone asked her
-                    // for help: the inbox is hosted by the requirement step, so showing
-                    // the empty state here would swallow the notification entirely.
-                    EmergencyNoNearbyStep(viewModel = viewModel)
-                } else {
-                    EmergencyRequirementStep(
-                        viewModel = viewModel,
-                        startOnResponderInbox = openResponderInbox,
-                    )
-                }
+                -> EmergencyRequirementStep(
+                    // Always the picker now, matching iOS. There used to be a branch here
+                    // showing "No Nearby Sakhis" whenever `nearbyCount` was 0. That empty
+                    // state is gone: it made the app's answer depend on whether somebody
+                    // happened to be online, and it was a dead end with a Search Again
+                    // button on it. The picker leads to the places she can walk to either
+                    // way, so there is nothing it was still telling her.
+                    viewModel = viewModel,
+                    startOnResponderInbox = openResponderInbox,
+                    onShowPlaces = { requirement ->
+                        pendingRequirement = requirement
+                        placesRoute = PlacesRoute.List
+                    },
+                    myUserId = viewModel.currentUserId,
+                    onOpenMyProfile = { showMyProfile = true },
+                    faceRevision = faceRevision,
+                )
 
                 is EmergencyState.ChoosingSpot -> EmergencySpotStep(
                     viewModel = viewModel,
@@ -253,6 +278,93 @@ fun EmergencyFlowScreen(
             }
         }
 
+        // The places browser sits OVER the step it was opened from rather than replacing
+        // it, so closing it puts her back exactly where she was. Same shape as iOS's
+        // `EmergencySheetContent`, which switches on its own `placesRoute` above the steps.
+        when (val route = placesRoute) {
+            is PlacesRoute.List -> {
+                LaunchedEffect(Unit) { viewModel.loadPlaces() }
+                // The sheet's own blush ground, not `sakhiGroupedBackground()`'s grey.
+                // These two screens sit inside the same sheet as the step behind them, and
+                // pushing to them visibly changed the colour of the sheet.
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background),
+                ) {
+                    EmergencyNearbyPlaces(
+                        places = places,
+                        sakhiCount = nearbyCount,
+                        isSearching = isSearchingPlaces,
+                        hasLocation = lastCoordinate != null,
+                        onBack = { placesRoute = PlacesRoute.None },
+                        // The Sakhi chip carries her need on to the people. Now that every
+                        // requirement opens this list instead of the Sakhi flow, it is the
+                        // only remaining route to `ChoosingSakhi`.
+                        onSelectSakhis = {
+                            placesRoute = PlacesRoute.None
+                            pendingRequirement?.let(viewModel::chooseRequirement)
+                        },
+                        onSelect = { placesRoute = PlacesRoute.Detail(it) },
+                    )
+                }
+            }
+
+            is PlacesRoute.Detail -> Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background),
+            ) {
+                EmergencyPlaceDetail(
+                    place = route.place,
+                    onBack = { placesRoute = PlacesRoute.List },
+                    onDirections = { place -> openPlaceDirections(context, place) },
+                    onCall = { number -> dialPlaceNumber(context, number) },
+                )
+            }
+
+            PlacesRoute.None -> Unit
+        }
+
+        // Her own profile, opened from the avatar beside "What do you need?". The face
+        // picker lives inside it now, as Figma `EA-02` has it, rather than pushing a
+        // second sheet for a one-tap choice.
+        if (showMyProfile) {
+            val userId = viewModel.currentUserId
+            if (userId != null) {
+                ModalBottomSheet(
+                    onDismissRequest = { showMyProfile = false },
+                    // The flow's own blush ground, not `sakhiGroupedBackground()`'s grey:
+                    // this is the same sheet as every other step, opened taller.
+                    containerColor = MaterialTheme.colorScheme.background,
+                    shape = RoundedCornerShape(
+                        topStart = SheetCornerRadius,
+                        topEnd = SheetCornerRadius,
+                    ),
+                    // No scrim, matching the rest of this flow. Karan's standing note on
+                    // Emergency is that the map never dims behind a sheet, and Figma
+                    // `EA-02` shows the map at its normal weight behind this one too.
+                    scrimColor = Color.Transparent,
+                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                    // The map sheet's own grabber, so the two read as one sheet rather than
+                    // this one arriving with Material's 48dp-tall handle.
+                    dragHandle = { EmergencySheetGrabber() },
+                    contentWindowInsets = { WindowInsets(0) },
+                ) {
+                    LaunchedEffect(userId) { viewModel.openProfile(userId) }
+                    EmergencyMyProfileSheet(
+                        userId = userId,
+                        profile = profileDetail,
+                        onFaceChosen = { faceRevision++ },
+                        // Fixed, not content-sized. Material sizes a modal sheet to its
+                        // content, so this opened barely half as tall as the frame and cut
+                        // the face picker off the bottom.
+                        modifier = Modifier.height(ProfileSheetHeight - EmergencyGrabberHeight),
+                    )
+                }
+            }
+        }
+
         }
         },
     ) { padding ->
@@ -269,8 +381,18 @@ fun EmergencyFlowScreen(
                 bottomInset = SheetPeekHeight,
             )
 
+            // Figma `mute overlay`: the page background at 38% over the whole map. Google's
+            // default tiles are far more saturated than Apple's, so without this the map
+            // read as the loudest thing on a screen whose subject is the sheet in front of
+            // it. Carries no pointer modifier of its own, so it is not a hit target and
+            // panning and the pins underneath still work.
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(MapMuteOverlay),
+            )
+
             EmergencyMapOverlay(
-                nearbyCount = state.overlayCount(nearbyCount ?: 0, responder.incoming.size),
                 onBack = {
                     viewModel.dismiss()
                     onClose()
@@ -285,11 +407,33 @@ fun EmergencyFlowScreen(
 }
 
 /**
+ * Figma `EA-01 · Requirement picker` -> `mute overlay`: `rgba(248, 242, 244, 0.38)`, which
+ * is the brand page background over the map at 38%.
+ */
+private val MapMuteOverlay = Color(0x61F8F2F4)
+
+/**
  * How much of the screen the sheet occupies at rest. Shared by the scaffold and by the
  * map's camera inset, which have to agree: the map draws behind the sheet, so the camera
  * needs to know how much of it is actually visible.
  */
-private val SheetPeekHeight = 420.dp
+/**
+ * The one height every sheet in this flow opens at, taken from the Figma frame
+ * "EA-01 · Requirement picker": a 502 sheet on an 874 screen.
+ *
+ * His phone is 1080x2400 at 2.75 density, so ~873dp tall -- the same figure the frame was
+ * drawn against, which is why this is an absolute dp rather than a fraction.
+ */
+private val SheetPeekHeight = 502.dp
+
+/**
+ * The taller sheet her own profile opens at, from Figma frame "EA-02 · My profile": a 625
+ * sheet on the same 874 screen the 502 peek was measured against.
+ */
+private val ProfileSheetHeight = 625.dp
+
+/** Figma draws every sheet in this flow with `rounded-t-[40px]`. */
+private val SheetCornerRadius = 40.dp
 
 /**
  * Where each step's pins come from.
@@ -355,16 +499,6 @@ private fun EmergencyState.pulseRadiusMeters(): Double? = when (this) {
 }
 
 /**
- * What the "Nearby Sakhis: N" pill counts, which changes with the step exactly as it did
- * on `main`: the women she can pick from while choosing, the women who have asked her when
- * she is the helper, and otherwise how many Sakhis are simply around.
- */
-private fun EmergencyState.overlayCount(availableNearby: Int, incomingCount: Int): Int = when (this) {
-    is EmergencyState.ChoosingSakhi -> sakhis.size
-    else -> if (incomingCount > 0) incomingCount else availableNearby
-}
-
-/**
  * Animating on the state object itself would restart the transition every time the nearby
  * list refreshes. Keying on step identity keeps it to real step changes.
  */
@@ -396,4 +530,31 @@ internal fun EmergencyLoading() {
             )
         }
     }
+}
+
+
+/** Hands the walk to whatever maps app she uses, rather than drawing a route in-app. */
+private fun openPlaceDirections(context: android.content.Context, place: EmergencySafePlace) {
+    val uri = android.net.Uri.parse(
+        "google.navigation:q=${place.latitude},${place.longitude}&mode=w",
+    )
+    val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+    runCatching { context.startActivity(intent) }.onFailure {
+        // No maps app: fall back to a browser rather than failing silently on the one
+        // screen whose whole point is getting her somewhere.
+        val web = android.net.Uri.parse(
+            "https://www.google.com/maps/dir/?api=1&destination=" +
+                "${place.latitude},${place.longitude}&travelmode=walking",
+        )
+        runCatching { context.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, web)) }
+    }
+}
+
+/** Opens the dialler pre-filled, never places the call itself. */
+private fun dialPlaceNumber(context: android.content.Context, number: String) {
+    val intent = android.content.Intent(
+        android.content.Intent.ACTION_DIAL,
+        android.net.Uri.parse("tel:$number"),
+    )
+    runCatching { context.startActivity(intent) }
 }

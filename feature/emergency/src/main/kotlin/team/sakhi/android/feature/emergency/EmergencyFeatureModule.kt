@@ -15,6 +15,7 @@ val emergencyFeatureModule = module {
     viewModel {
         EmergencyViewModel(
             store = get(),
+            safePlaces = get(),
             realtime = get(),
             locationProvider = get(),
             hapticManager = get(),

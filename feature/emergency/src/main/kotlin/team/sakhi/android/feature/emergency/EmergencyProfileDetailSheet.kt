@@ -59,6 +59,10 @@ import team.sakhi.models.NearbySakhi
 import androidx.compose.foundation.layout.fillMaxHeight
 import team.sakhi.android.ui.SakhiAlertKind
 import team.sakhi.android.ui.SakhiAlertSheet
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.ui.unit.sp
+import team.sakhi.android.designsystem.SakhiTokens
+import team.sakhi.android.designsystem.sakhiLabel
 
 /**
  * Replica of `ProfielDetailViewController` — the card a woman opens before deciding to let
@@ -112,107 +116,114 @@ internal fun EmergencyProfileDetailSheet(
                 .verticalScroll(rememberScrollState())
                 .fillMaxWidth(),
         ) {
-            // Header. Left-aligned with the face beside the name, as iOS lays it out.
-            // Android centred a column here, which read as a profile *page* rather than
-            // the card you glance at before deciding to let someone walk over to you.
-            Row(
+            // Figma `EA-07`: the flow's nav bar, then a centred hero -- her face in an
+            // 88dp disc tinted with her own trust colour, her name, and the trust pill.
+            // It was a left-aligned row with a 60dp face and a close X of its own, which
+            // made this the one sheet in the flow whose header did not match the others.
+            EmergencySheetNavBar(
+                title = stringResource(R.string.emergency_profile),
+                onBack = onDismiss,
+            )
+
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space4)
-                    .padding(top = SakhiSpacing.space3),
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                    .padding(horizontal = SakhiSpacing.space5)
+                    .padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space1),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(9.dp),
             ) {
+                val trustColor = trust.accentColor()
+
                 // Her face, the same one on her map pin, from the shared catalogue. The
                 // profile was the one screen showing no picture of the person it is
                 // entirely about. Deliberately *not* `photoUrl`: a real face has no
                 // business on screen before anyone has accepted.
                 Box(
-                    modifier = Modifier.size(60.dp).clip(CircleShape).background(sakhiLightPink()),
+                    modifier = Modifier
+                        .size(88.dp)
+                        .clip(CircleShape)
+                        .background(trustColor.copy(alpha = 0.12f)),
                     contentAlignment = Alignment.Center,
                 ) {
                     Image(
                         painter = painterResource(EmergencyAvatarCatalog.drawableFor(profile.userId)),
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(60.dp).clip(CircleShape),
+                        modifier = Modifier.size(64.dp).clip(CircleShape),
                     )
                 }
 
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        text = profile.name ?: stringResource(R.string.emergency_a_sakhi_nearby),
-                        style = MaterialTheme.typography.headlineSmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
-                    ) {
-                        // main: ctaButton -- the trust level, tinted by level, opening the
-                        // site so she can read what it means. `tinted` because the one thing
-                        // on this screen about trustworthiness should not be the dullest.
-                        EmergencyTrustChip(
-                            trust = trust,
-                            tinted = true,
-                            modifier = Modifier.clickable {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse("https://sakhi.rachna.co/")),
-                                )
-                            },
-                        )
-                        askable?.etaMinutes?.let { eta ->
-                            Text(
-                                text = EmergencyFormatting.etaBadge(eta),
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = sakhiSecondaryLabel(),
+                Text(
+                    text = profile.name ?: stringResource(R.string.emergency_a_sakhi_nearby),
+                    fontSize = 20.sp,
+                    lineHeight = 23.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = sakhiLabel(),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                // main: ctaButton -- the trust level, tinted by level, opening the site so
+                // she can read what it means.
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(trustColor.copy(alpha = 0.12f))
+                        .clickable {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse("https://sakhi.rachna.co/")),
                             )
                         }
-                    }
-                }
-
-                IconButton(onClick = onDismiss) {
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
                     Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.emergency_close),
+                        imageVector = Icons.Filled.Verified,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = trustColor,
+                    )
+                    Text(
+                        text = trust.displayName,
+                        fontSize = 17.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = trustColor,
                     )
                 }
             }
 
+            // One card, three rows. Figma `EA-07` puts what she has done and when she was
+            // last seen together under a single label; Android had them under two headers
+            // in two one-row cards.
             EmergencySectionHeader(
                 title = stringResource(R.string.emergency_profile_requests),
-                modifier = Modifier.padding(top = SakhiSpacing.space6),
+                topPadding = 20.dp,
             )
             EmergencyCard {
                 // "Request Received" is every request addressed to her, answered or not
                 // (receivedCount). requestedCount is how many times *she* asked someone
                 // else, which is a fact about her own need rather than her reliability.
+                ProfileCountRow(stringResource(R.string.emergency_profile_helped), profile.helpedCount)
+                EmergencyRowDivider()
                 ProfileCountRow(stringResource(R.string.emergency_profile_received), profile.receivedCount)
                 EmergencyRowDivider()
-                ProfileCountRow(stringResource(R.string.emergency_profile_helped), profile.helpedCount)
-            }
-
-            EmergencySectionHeader(
-                title = stringResource(R.string.emergency_profile_last_active),
-                modifier = Modifier.padding(top = SakhiSpacing.space6),
-            )
-            EmergencyCard {
                 EmergencyRow(
                     title = stringResource(R.string.emergency_profile_last_active),
                     leading = {
-                        EmergencyBadgeIcon(Icons.Filled.Schedule, MaterialTheme.colorScheme.primary)
+                        EmergencyBadgeIcon(Icons.Filled.Schedule, SakhiTokens.SectionBlue)
                     },
                     accessory = {
                         Text(
                             // Android printed the raw ISO string here -- a Postgres
                             // timestamp shown to a woman deciding whether to trust someone.
                             text = lastActiveText(context, profile.lastActiveIso),
-                            style = MaterialTheme.typography.bodyLarge,
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
                             color = sakhiSecondaryLabel(),
+                            maxLines = 1,
                         )
                     },
                 )

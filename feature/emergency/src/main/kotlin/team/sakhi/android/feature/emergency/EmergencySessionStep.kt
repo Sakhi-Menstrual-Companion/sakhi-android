@@ -77,6 +77,16 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
 import team.sakhi.android.ui.SakhiAlertKind
 import team.sakhi.android.ui.SakhiAlertSheet
+import androidx.compose.foundation.Image
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import team.sakhi.android.designsystem.SakhiTokens
+import androidx.compose.material.icons.filled.PinDrop
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 
 /**
  * Step 4 — the two women are connected.
@@ -118,140 +128,185 @@ internal fun EmergencySessionStep(
             .fillMaxWidth()
             .verticalScroll(rememberScrollState()),
     ) {
-        // ── Status card ──────────────────────────────────────────────────────
-        // iOS `statusCard`: the mark, her name, what she is doing, and the walking time.
-        // Android had a photo avatar, "on her way" / "needs your help", a Done link in the
-        // header, and a pair of metric tiles carrying the exact distance as well.
-        Surface(
-            shape = RoundedCornerShape(SakhiRadius.xl),
-            color = sakhiSystemBackground(),
+        // ── Who is coming ────────────────────────────────────────────────────
+        //
+        // Figma `EA-10` -> `person`: a 88dp ring tinted success green at 16% around her
+        // face, the headline, one line saying what happened, and the walking time in a
+        // green pill. It was a white status card with the brand mark, her name and a bare
+        // number, which read as another row rather than as the answer to the whole screen.
+        Spacer(modifier = Modifier.size(10.dp))
+
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = SakhiSpacing.space4)
-                .padding(top = SakhiSpacing.space4),
+                .padding(horizontal = SakhiSpacing.space5)
+                .padding(top = 6.dp, bottom = SakhiSpacing.space2),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(9.dp),
         ) {
-            Row(
-                modifier = Modifier.padding(SakhiSpacing.space3),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+            val counterpart = session.counterpartName
+                ?: stringResource(R.string.emergency_your_sakhi)
+            val accepted = AppleSystemColors.green
+
+            Box(
+                modifier = Modifier
+                    .size(88.dp)
+                    .clip(CircleShape)
+                    .background(accepted.copy(alpha = 0.16f)),
+                contentAlignment = Alignment.Center,
             ) {
-                EmergencyMarkAvatar()
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    Text(
-                        text = session.counterpartName ?: stringResource(R.string.emergency_your_sakhi),
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    // configureSeekerInterface / configureHelperInterface.
-                    Text(
-                        text = stringResource(
-                            if (isSeeker) R.string.emergency_is_coming else R.string.emergency_is_waiting,
-                        ),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = sakhiSecondaryLabel(),
-                    )
+                // The face itself, not `EmergencyRequestedProfile`: that component's ring
+                // pulses because it is waiting on an answer. Here the answer has arrived,
+                // and the flat green disc around it is the thing that says so.
+                val faceIndex = remember(session.counterpartId) {
+                    EmergencyAvatarCatalog.dealtIndex(session.counterpartId.orEmpty())
                 }
-                // timeLabel: "< 1 min" below a minute, "N min" otherwise.
+                Image(
+                    painter = painterResource(EmergencyAvatarCatalog.drawableAt(faceIndex)),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(64.dp)
+                        .clip(CircleShape)
+                        .scale(EmergencyAvatarCatalog.contentScaleAt(faceIndex)),
+                )
+            }
+
+            Text(
+                text = stringResource(
+                    if (isSeeker) R.string.emergency_help_is_coming else R.string.emergency_she_is_waiting_title,
+                ),
+                fontSize = 20.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.Bold,
+                color = sakhiLabel(),
+            )
+
+            Text(
+                text = stringResource(
+                    if (isSeeker) R.string.emergency_accepted_on_the_way else R.string.emergency_she_is_waiting_body,
+                    counterpart,
+                ),
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+                textAlign = TextAlign.Center,
+            )
+
+            Row(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(accepted.copy(alpha = 0.16f))
+                    .padding(horizontal = 14.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = accepted,
+                )
                 Text(
+                    // timeLabel: "< 1 min" below a minute, "N min" otherwise.
                     text = sessionTimeText(context, session.etaMinutes),
-                    style = MaterialTheme.typography.titleMedium,
+                    fontSize = 17.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = accepted,
                 )
             }
         }
 
+        // ── This request ─────────────────────────────────────────────────────
+        //
+        // One card, three rows. Figma `EA-10` puts the requirement, the destination and the
+        // way into Maps together under a single label; Android had them as two separate
+        // one-row cards under two separate headers, which is most of what made this screen
+        // taller than its sheet.
         EmergencySectionHeader(
-            title = stringResource(R.string.emergency_section_requirement),
-            modifier = Modifier.padding(top = SakhiSpacing.space6),
+            title = stringResource(R.string.emergency_section_this_request),
+            topPadding = 20.dp,
         )
         EmergencyCard {
             EmergencyRow(
-                title = EmergencyFormatting.requirementShortName(session.requirement),
+                title = stringResource(R.string.emergency_requirement_label),
                 leading = {
                     EmergencyBadgeIcon(session.requirement.icon(), session.requirement.accentColor())
                 },
+                accessory = {
+                    SessionRowValue(EmergencyFormatting.requirementShortName(session.requirement))
+                },
             )
-        }
-
-        EmergencySectionHeader(
-            title = stringResource(R.string.emergency_section_destination),
-            modifier = Modifier.padding(top = SakhiSpacing.space6),
-        )
-        EmergencyCard {
-            Row(
-                modifier = Modifier.padding(SakhiSpacing.space3),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = destinationText(context, session.spotLabel, uiStateForArea.areaDescription),
-                    style = MaterialTheme.typography.bodyLarge,
-                    modifier = Modifier.weight(1f),
-                )
-                // Sakhi shows a number; the maps app is the right place for turn-by-turn,
-                // and it is honest about its own accuracy. Shown to both women now: iOS
-                // gives the seeker this row too, and Android hid it from her.
-                IconButton(onClick = { openWalkingDirections(context, session) }) {
-                    Icon(
-                        imageVector = Icons.Filled.AssistantDirection,
-                        contentDescription = stringResource(R.string.emergency_open_in_maps),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
+            EmergencyRowDivider()
+            EmergencyRow(
+                title = stringResource(R.string.emergency_section_destination),
+                leading = {
+                    EmergencyBadgeIcon(Icons.Filled.PinDrop, SakhiTokens.SectionBlue)
+                },
+                accessory = {
+                    SessionRowValue(
+                        destinationText(context, session.spotLabel, uiStateForArea.areaDescription),
                     )
-                }
-            }
+                },
+            )
+            EmergencyRowDivider()
+            // Sakhi shows a number; the maps app is the right place for turn-by-turn, and it
+            // is honest about its own accuracy. Shown to both women: iOS gives the seeker
+            // this row too, and Android hid it from her.
+            EmergencyRow(
+                title = stringResource(R.string.emergency_directions),
+                modifier = Modifier.clickable { openWalkingDirections(context, session) },
+                leading = {
+                    EmergencyBadgeIcon(
+                        Icons.Filled.AssistantDirection,
+                        SakhiUIColors.BRAND_PINK.toComposeColor(),
+                    )
+                },
+                accessory = { SessionRowValue(stringResource(R.string.emergency_open_in_maps)) },
+            )
         }
 
         // ── Actions ──────────────────────────────────────────────────────────
+        //
+        // Figma `actions`: two full-width pills 10 apart, the message one filled and the
+        // way out outlined. The third ("Finish") stays for the helper only -- the woman who
+        // walked over is the one who says the help happened.
         Column(
             modifier = Modifier
-                .padding(horizontal = SakhiSpacing.space4)
+                .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space5)
                 .padding(top = SakhiSpacing.space6),
-            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            // Blue rather than brand pink, as the mockup has it: this is the one action on
-            // the screen that reaches the other person rather than acting on the request,
-            // and it reads as a different kind of thing.
-            SessionAction(
-                title = stringResource(R.string.emergency_contact),
-                icon = Icons.AutoMirrored.Filled.VolumeUp,
-                contentColor = Color.White,
-                // iOS `Color(UIColor.systemBlue)` -- dynamic, #0A84FF in dark.
-                containerColor = AppleSystemColors.blue,
-                onClick = { showChat = true },
-            )
+            EmergencyPrimaryButton(
+                title = stringResource(
+                    R.string.emergency_message_someone,
+                    session.counterpartName ?: stringResource(R.string.emergency_your_sakhi),
+                ),
+            ) { showChat = true }
 
-            // completeRequestButton -- hidden for the seeker on `main`. The woman who
-            // walked over is the one who says the help happened.
             if (!isSeeker) {
-                SessionAction(
+                EmergencySecondaryButton(
                     title = stringResource(
                         if (isCompleting) R.string.emergency_completing else R.string.emergency_finish,
                     ),
-                    // iOS `tint: Color(UIColor.systemGreen)` -- dynamic, #30D158 in dark.
-                    contentColor = AppleSystemColors.green,
-                    containerColor = sakhiSystemGray5().copy(alpha = 0.4f),
-                    isBusy = isCompleting,
-                    onClick = {
-                        isCompleting = true
-                        showCompleteConfirm = true
-                    },
-                )
+                ) {
+                    isCompleting = true
+                    showCompleteConfirm = true
+                }
             }
 
-            SessionAction(
+            EmergencySecondaryButton(
                 title = stringResource(
-                    if (isCancelling) R.string.emergency_cancelling else R.string.emergency_cancel,
+                    if (isCancelling) R.string.emergency_cancelling else R.string.emergency_end_request,
                 ),
-                contentColor = sakhiSecondaryLabel(),
-                containerColor = sakhiSystemGray5().copy(alpha = 0.4f),
-                isBusy = isCancelling,
-                onClick = {
-                    isCancelling = true
-                    viewModel.cancelRequest(session.requestId)
-                },
-            )
+            ) {
+                isCancelling = true
+                viewModel.cancelRequest(session.requestId)
+            }
         }
+
+        Spacer(modifier = Modifier.size(10.dp))
 
         Spacer(modifier = Modifier.size(SakhiSpacing.space10))
     }
@@ -290,6 +345,20 @@ internal fun EmergencySessionStep(
             onDismissRequest = { showCompleteConfirm = false; isCompleting = false },
         )
     }
+}
+
+/** The quiet value on the right of a "this request" row. Figma: 13, secondary, right. */
+@Composable
+private fun SessionRowValue(text: String) {
+    Text(
+        text = text,
+        fontSize = 13.sp,
+        lineHeight = 18.sp,
+        color = sakhiSecondaryLabel(),
+        textAlign = TextAlign.End,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+    )
 }
 
 /**

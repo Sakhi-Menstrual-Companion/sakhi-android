@@ -17,6 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -53,6 +54,20 @@ import team.sakhi.android.designsystem.sakhiSeparator
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.ui.SakhiAlertKind
 import team.sakhi.android.ui.SakhiAlertSheet
+import androidx.compose.foundation.border
+import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import team.sakhi.android.designsystem.SakhiTokens
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.toComposeColor
+import team.sakhi.design.SakhiUIColors
+import androidx.compose.foundation.Image
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.res.painterResource
 
 /**
  * Step 4 — she has asked one Sakhi and is waiting on the answer.
@@ -90,30 +105,44 @@ internal fun EmergencyWaitingStep(
     // No `EmergencyHeader` here. iOS puts the name in the body under the ring and has no
     // header on this screen at all; a header repeating "Waiting for Anjali" above a ring
     // that already says so was Android's own addition.
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Scrolls. At a medium detent the ring and the actions together are taller than the
-        // sheet, and what got cut was the cancel button -- the one control on the screen.
+    // `fillMaxWidth`, not `fillMaxSize`, and the content wraps instead of taking a
+    // weighted slice.
+    //
+    // The sheet's content is measured against the whole window while only the 502dp peek is
+    // on screen, so a filling column with `weight(1f)` pushed Cancel Request -- the one
+    // control here -- to the bottom of the WINDOW, well below the fold. Wrapping means the
+    // sheet is as tall as its content and the button sits directly under the card.
+    Column(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
-                .weight(1f)
                 .verticalScroll(rememberScrollState())
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             // The ring leads, on its own, with nothing competing beside it. It is the only
             // thing on this screen that is actually happening.
+            // Figma `person`: `pt-6 pb-8`, 9 between items. The ring leads, on its own,
+            // with nothing competing beside it -- it is the only thing on this screen that
+            // is actually happening.
             EmergencyRequestedProfile(
                 name = step.helperName,
                 avatarId = step.helperId,
-                modifier = Modifier.padding(top = SakhiSpacing.space2),
+                size = 88.dp,
+                modifier = Modifier.padding(top = 6.dp),
             )
 
             Text(
-                text = step.helperName ?: stringResource(R.string.emergency_a_sakhi_nearby),
-                style = MaterialTheme.typography.headlineSmall,
+                text = stringResource(
+                    R.string.emergency_waiting_for,
+                    step.helperName ?: stringResource(R.string.emergency_a_sakhi_nearby),
+                ),
+                fontSize = 20.sp,
+                lineHeight = 23.sp,
+                fontWeight = FontWeight.Bold,
+                color = sakhiLabel(),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(top = SakhiSpacing.space1),
+                modifier = Modifier.padding(top = 9.dp),
             )
 
             Text(
@@ -123,69 +152,79 @@ internal fun EmergencyWaitingStep(
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .padding(horizontal = SakhiSpacing.space5)
-                    .padding(top = 2.dp),
+                    .padding(top = 9.dp),
             )
 
             if (remaining > 0) {
                 // Says how long the waiting actually lasts. Standing somewhere uncomfortable
                 // with no idea whether this is ten seconds or ten minutes is its own kind of
                 // awful. Android had no countdown at all.
-                Surface(
-                    shape = CircleShape,
-                    color = sakhiLightPink(),
-                    modifier = Modifier.padding(top = SakhiSpacing.space2),
+                //
+                // Figma `countdown`: brand pink at 12%, `px-14 py-6`, a 14dp clock and the
+                // time in Bold 17 pink.
+                Row(
+                    modifier = Modifier
+                        .padding(top = 9.dp)
+                        .clip(CircleShape)
+                        .background(SakhiUIColors.BRAND_PINK.toComposeColor().copy(alpha = 0.12f))
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
+                    Icon(
+                        imageVector = Icons.Filled.Schedule,
+                        contentDescription = null,
+                        modifier = Modifier.size(14.dp),
+                        tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                    )
                     Text(
                         text = stringResource(
                             R.string.emergency_left_to_answer,
                             EmergencyIso8601.countdown(remaining),
                         ),
                         // iOS uses `.monospacedDigit()` so the countdown does not jitter
-                        // as the digits change width. `tnum` is the same thing here.
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontFeatureSettings = "tnum",
-                        ),
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(
-                            horizontal = SakhiSpacing.space2,
-                            vertical = 5.dp,
-                        ),
+                        // as the digits change width. `tnum` is the same thing here, and it
+                        // only exists on `TextStyle`, not as a `Text` parameter.
+                        style = LocalTextStyle.current.copy(fontFeatureSettings = "tnum"),
+                        fontSize = 17.sp,
+                        lineHeight = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = SakhiUIColors.BRAND_PINK.toComposeColor(),
                     )
                 }
             }
 
             // What she asked for, in a card rather than as loose chips stacked under the
-            // name. Two facts belong together and read as a summary.
-            Surface(
-                shape = RoundedCornerShape(SakhiRadius.lg),
-                // iOS wraps this in `EmergencyCard`, which fills with
-                // `DS.Colors.systemBackground` -- white. A translucent grey read as a panel
-                // on the pink ground rather than a card on it, and it did not match the
-                // white cards every other step in the flow uses.
-                color = sakhiSystemBackground(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space5)
-                    .padding(top = SakhiSpacing.space4),
-            ) {
-                Column {
+            // name. Figma `EA-08` labels it and gives each fact its own row, so she can see
+            // at a glance exactly how much the woman she asked was told -- including that
+            // her live location was not part of it.
+            EmergencySectionHeader(
+                title = stringResource(R.string.emergency_what_she_was_told),
+                topPadding = 20.dp,
+            )
+            EmergencyCard {
+                WaitingSummaryRow(
+                    icon = step.requirement.icon(),
+                    accent = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                    title = stringResource(R.string.emergency_requirement_label),
+                    value = EmergencyFormatting.requirementShortName(step.requirement),
+                )
+                step.spotLabel?.takeIf { it.isNotBlank() }?.let { spot ->
+                    EmergencyRowDivider()
                     WaitingSummaryRow(
-                        icon = step.requirement.icon(),
-                        accent = step.requirement.accentColor(),
-                        title = EmergencyFormatting.requirementShortName(step.requirement),
+                        icon = Icons.Filled.PinDrop,
+                        accent = SakhiTokens.SectionBlue,
+                        title = stringResource(R.string.emergency_spot_label),
+                        value = spot,
                     )
-                    step.spotLabel?.takeIf { it.isNotBlank() }?.let { spot ->
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 64.dp),
-                            color = sakhiSeparator(),
-                        )
-                        WaitingSummaryRow(
-                            icon = Icons.Filled.PinDrop,
-                            accent = MaterialTheme.colorScheme.primary,
-                            title = spot,
-                        )
-                    }
                 }
+                EmergencyRowDivider()
+                WaitingSummaryRow(
+                    icon = Icons.Filled.MyLocation,
+                    accent = SakhiUIColors.BRAND_CONFIRM.toComposeColor(),
+                    title = stringResource(R.string.emergency_your_location_label),
+                    value = stringResource(R.string.emergency_not_shared),
+                )
             }
 
             Spacer(modifier = Modifier.size(SakhiSpacing.space4))
@@ -199,21 +238,31 @@ internal fun EmergencyWaitingStep(
         // already be walking over, so it should look pressable and deliberate -- but a
         // filled red bar is the loudest thing that could sit under a screen whose whole job
         // is to say "hold on, she is coming". The confirmation behind it guards the decision.
-        Surface(
-            shape = RoundedCornerShape(14.dp),
-            color = sakhiSystemGray5().copy(alpha = 0.4f),
+        // Outside the scroll, so it is reachable however little room there is.
+        //
+        // Figma `CTA · Cancel Request`: a white pill with a 35%-red edge and the label in
+        // red, not a filled red bar. Cancelling strands a woman who may already be walking
+        // over, so it should look pressable and deliberate -- but the loudest thing on a
+        // screen whose whole job is "hold on, she is coming" should not be the way out.
+        // The confirmation behind it guards the decision.
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(
-                    horizontal = SakhiSpacing.space4,
-                    vertical = SakhiSpacing.space3,
+                .padding(horizontal = SakhiSpacing.space5)
+                .padding(top = SakhiSpacing.space6, bottom = 10.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .background(sakhiSystemBackground())
+                .border(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.error.copy(alpha = 0.35f),
+                    shape = RoundedCornerShape(percent = 50),
                 )
-                .height(56.dp)
-                .clickable(enabled = !isCancelling) { showCancelConfirm = true },
+                .clickable(enabled = !isCancelling) { showCancelConfirm = true }
+                .padding(vertical = 15.dp),
+            contentAlignment = Alignment.Center,
         ) {
             Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.Center,
+                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (isCancelling) {
@@ -222,14 +271,15 @@ internal fun EmergencyWaitingStep(
                         color = MaterialTheme.colorScheme.error,
                         strokeWidth = 2.dp,
                     )
-                    Spacer(modifier = Modifier.size(SakhiSpacing.space2))
                 }
                 Text(
                     text = stringResource(
                         if (isCancelling) R.string.emergency_cancelling
                         else R.string.emergency_cancel_request,
                     ),
-                    style = MaterialTheme.typography.titleSmall,
+                    fontSize = 17.sp,
+                    lineHeight = 20.sp,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.error,
                 )
             }
@@ -254,26 +304,29 @@ internal fun EmergencyWaitingStep(
     }
 }
 
-/** One line of the "what she asked for" card. iOS's `EmergencyRow` + `EmergencyBadgeIcon`. */
+/** One line of the "what she was told" card, through the flow's shared row. */
 @Composable
 private fun WaitingSummaryRow(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     accent: androidx.compose.ui.graphics.Color,
     title: String,
+    value: String,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(SakhiSpacing.space3),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-    ) {
-        Box(
-            modifier = Modifier.size(40.dp).clip(CircleShape).background(accent.copy(alpha = 0.2f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(imageVector = icon, contentDescription = null, tint = accent, modifier = Modifier.size(20.dp))
-        }
-        Text(text = title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-    }
+    EmergencyRow(
+        title = title,
+        leading = { EmergencyBadgeIcon(icon = icon, color = accent) },
+        accessory = {
+            Text(
+                text = value,
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = sakhiSecondaryLabel(),
+                textAlign = TextAlign.End,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+    )
 }
 
 /**
@@ -292,71 +345,108 @@ internal fun EmergencyRejectedStep(
     val helperName = step.helperName?.trim()?.split(" ")?.firstOrNull().orEmpty()
         .ifEmpty { stringResource(R.string.emergency_she) }
 
+    // Figma `EA-09`: a 14 gap, her face in an 88dp ring, the headline, the line saying what
+    // happened, then the reassurance in a card of its own and two ways forward.
+    //
+    // It used to be a red `person.off` glyph over a red pill. Nothing went wrong here -- she
+    // was allowed to say no -- so the screen should not read like an error.
     Column(
-        modifier = Modifier.fillMaxSize().padding(horizontal = SakhiSpacing.space5),
+        modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.size(14.dp))
 
-        Icon(
-            imageVector = Icons.Filled.PersonOff,
-            contentDescription = null,
-            modifier = Modifier.size(44.dp),
-            tint = MaterialTheme.colorScheme.error,
-        )
-
-        // main: configureSeekerUI(.helperRejected) — "Request Declined" tinted red, with
-        // "{name} declined your request" underneath.
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.error.copy(alpha = 0.12f),
+        Box(
+            modifier = Modifier
+                .padding(top = 6.dp)
+                .size(88.dp)
+                .clip(CircleShape)
+                .background(sakhiSecondaryLabel().copy(alpha = 0.12f)),
+            contentAlignment = Alignment.Center,
         ) {
-            Text(
-                text = stringResource(R.string.emergency_request_declined),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(
-                    horizontal = SakhiSpacing.space4,
-                    vertical = SakhiSpacing.space2,
-                ),
+            // `Rejected` carries her name but not her id, so the face is dealt from the
+            // name. It is the same woman she was just looking at on the waiting screen, and
+            // a blank disc there would read as "someone" rather than as an answer from her.
+            val faceIndex = remember(step.helperName) {
+                EmergencyAvatarCatalog.dealtIndex(step.helperName.orEmpty())
+            }
+            Image(
+                painter = painterResource(EmergencyAvatarCatalog.drawableAt(faceIndex)),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(CircleShape)
+                    .scale(EmergencyAvatarCatalog.contentScaleAt(faceIndex)),
             )
         }
+
+        // main: configureSeekerUI(.helperRejected) — "Request Declined", with "{name}
+        // declined your request" underneath.
+        Text(
+            text = stringResource(R.string.emergency_request_declined),
+            fontSize = 20.sp,
+            lineHeight = 23.sp,
+            fontWeight = FontWeight.Bold,
+            color = sakhiLabel(),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(top = 9.dp),
+        )
 
         Text(
             text = stringResource(R.string.emergency_declined_body, helperName),
-            style = MaterialTheme.typography.titleMedium,
-            textAlign = TextAlign.Center,
-        )
-
-        Text(
-            text = stringResource(R.string.emergency_declined_privacy_note),
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
+            modifier = Modifier
+                .padding(horizontal = SakhiSpacing.space5)
+                .padding(top = 9.dp),
         )
 
-        Spacer(modifier = Modifier.weight(1f))
+        // Figma `reassurance`: the privacy note in a card of its own with a badge, not a
+        // caption under the body copy. It is the single most important thing on this screen
+        // and it was the smallest text on it.
+        Spacer(modifier = Modifier.size(SakhiSpacing.space4))
+        EmergencyCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 13.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                EmergencyBadgeIcon(
+                    icon = Icons.Filled.Lock,
+                    color = SakhiUIColors.BRAND_CONFIRM.toComposeColor(),
+                )
+                Text(
+                    text = stringResource(R.string.emergency_declined_privacy_note),
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = sakhiSecondaryLabel(),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
 
-        // main's primary button on this status was "Find Someone Else".
-        Button(
-            onClick = viewModel::askSomeoneElse,
-            shape = CircleShape,
-            modifier = Modifier.fillMaxWidth(),
+        // Figma `actions`: two full-width pills 10 apart. `main`'s primary on this status
+        // was "Find Someone Else"; the second is the other real answer -- a place she can
+        // walk to without waiting on anyone.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space5)
+                .padding(top = SakhiSpacing.space6, bottom = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Text(
-                text = stringResource(R.string.emergency_find_someone_else),
-                modifier = Modifier.padding(vertical = SakhiSpacing.space2),
+            EmergencyPrimaryButton(
+                title = stringResource(R.string.emergency_find_someone_else),
+                onClick = viewModel::askSomeoneElse,
             )
+            EmergencySecondaryButton(title = stringResource(R.string.emergency_exit)) {
+                viewModel.dismiss()
+                onExit()
+            }
         }
-
-        TextButton(onClick = {
-            viewModel.dismiss()
-            onExit()
-        }) {
-            Text(stringResource(R.string.emergency_exit))
-        }
-
-        Spacer(modifier = Modifier.size(SakhiSpacing.space3))
     }
 }

@@ -87,6 +87,10 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import team.sakhi.android.feature.emergency.HomeNearbyCircleButton
+import team.sakhi.emergency.EmergencyStore
+import team.sakhi.android.platform.DeviceLocation
+import team.sakhi.android.platform.AndroidLocationProvider
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.phasePrimaryColor
@@ -136,6 +140,8 @@ fun CalendarScreen(
     // `calendarLogVM` (`HomeCalendarSheet.swift`).
     logViewModel: LoggingViewModel = koinViewModel(),
     onAskSakhi: () -> Unit = {},
+    /** Opens Emergency Assistance from the bottom bar's leading slot. */
+    onOpenEmergency: () -> Unit = {},
     onLog: (LocalDate) -> Unit = {},
     // Year mode is hoistable so the host can bind it to a sheet detent. iOS ties the
     // two together explicitly -- `HomeCalendarSheet.swift`'s header states
@@ -186,6 +192,24 @@ fun CalendarScreen(
     }
     val scope = rememberCoroutineScope()
     val hapticManager = koinInject<AndroidHapticManager>()
+
+    // The nearby button in the bar needs a count and a coordinate. Read from the shared
+    // store rather than a new ViewModel: `ChatViewModel` already owns the refresh, so this
+    // is a second reader of the same state, not a second source of it.
+    val emergencyStore = koinInject<EmergencyStore>()
+    val locationProvider = koinInject<AndroidLocationProvider>()
+    val nearbyCount by emergencyStore.nearbyAvailableCount.collectAsStateWithLifecycle(null)
+    var nearbyCoordinate by remember { mutableStateOf<DeviceLocation?>(null) }
+
+    // Same shape as `ChatViewModel.refreshNearby()`: silent unless permission is already
+    // granted, so opening the calendar never triggers a location prompt on its own.
+    LaunchedEffect(Unit) {
+        if (!locationProvider.hasPermission()) return@LaunchedEffect
+        val fix = runCatching { locationProvider.currentLocation() }.getOrNull() ?: return@LaunchedEffect
+        nearbyCoordinate = fix
+        emergencyStore.updateDeviceLocation(fix.latitude, fix.longitude)
+        runCatching { emergencyStore.refreshNearbyAvailableCount() }
+    }
 
     LaunchedEffect(uiState.selectedDate) {
         logViewModel.selectDate(uiState.selectedDate)
@@ -460,6 +484,22 @@ fun CalendarScreen(
                 selectedFlow = logUiState.selectedFlow,
                 selectedDate = uiState.selectedDate,
                 showCalendarButton = false,
+                // iOS `HomeCalendarSheet` fills this slot with `HomeNearbyButton`: the
+                // little live map that is the way into Emergency Assistance. Android had a
+                // calendar glyph here on Home and nothing at all here, so the whole flow
+                // was only reachable from inside the AI chat.
+                leadingSlot = {
+                    // The 46dp circle, not the chat header's wide capsule. iOS has two
+                    // separate controls and this slot takes `HomeNearbyButton`.
+                    HomeNearbyCircleButton(
+                        count = nearbyCount,
+                        coordinate = nearbyCoordinate,
+                        onClick = {
+                            hapticManager.selection()
+                            onOpenEmergency()
+                        },
+                    )
+                },
                 onAskSakhiClick = {
                     hapticManager.selection()
                     onAskSakhi()
