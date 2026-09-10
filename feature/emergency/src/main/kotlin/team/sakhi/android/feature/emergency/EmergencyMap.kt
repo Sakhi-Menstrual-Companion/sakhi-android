@@ -12,7 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.filled.Group
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.MapStyleOptions
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
@@ -48,6 +49,9 @@ import team.sakhi.design.SakhiUIColors
 import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
+import com.google.maps.android.compose.MapEffect
+import com.google.maps.android.compose.MapsComposeExperimentalApi
+import androidx.compose.runtime.key
 import kotlin.math.asin
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -93,6 +97,7 @@ import androidx.compose.runtime.getValue
  * Inside an accepted session the pin is real, because at that point the server does give
  * both women each other's position.
  */
+@OptIn(MapsComposeExperimentalApi::class)
 @Composable
 internal fun EmergencyMap(
     userLocation: LatLng?,
@@ -129,18 +134,22 @@ internal fun EmergencyMap(
     val cameraPositionState = rememberCameraPositionState {
         userLocation?.let { position = CameraPosition.fromLatLngZoom(it, MapZoom) }
     }
-    var cameraPlaced by remember { mutableStateOf(userLocation != null) }
+    // False until the camera has been put on her through the live map (see the `MapEffect`
+    // below), even when her position is already known. A position given to the state up
+    // front lands before the map has taken the sheet's bottom padding; the padding then
+    // moves the camera's idea of centre instead of the map, and she ended up ~250dp lower,
+    // hidden under the sheet with only streets to the north showing. That happened on every
+    // reopen, because by then the view model already knows where she is.
+    var cameraPlaced by remember { mutableStateOf(false) }
 
     LaunchedEffect(userLocation) {
         val target = userLocation ?: return@LaunchedEffect
-        val update = CameraUpdateFactory.newCameraPosition(CameraPosition.fromLatLngZoom(target, MapZoom))
+        // She moved: a short glide is right, it is a few streets at most. The first
+        // placement is the `MapEffect`'s job.
         if (cameraPlaced) {
-            // She moved: a short glide is right, it is a few streets at most.
-            cameraPositionState.animate(update)
-        } else {
-            // The first fix is a placement, not a journey. Jump straight there.
-            cameraPositionState.move(update)
-            cameraPlaced = true
+            cameraPositionState.animate(
+                CameraUpdateFactory.newCameraPosition(CameraPosition.fromLatLngZoom(target, MapZoom)),
+            )
         }
     }
 
@@ -169,11 +178,32 @@ internal fun EmergencyMap(
         // iOS switches the SDK's own dot off and draws `EmergencyUserMarker` instead. Two
         // markers at one coordinate reads as a rendering fault, and the built-in dot cannot
         // carry the "You" label.
-        properties = MapProperties(isMyLocationEnabled = false),
+        //
+        // Dark tiles under the dark theme. The light basemap turned the status bar's white
+        // clock and battery invisible and sat as a white slab over a black sheet. A JSON
+        // style rather than `MapColorScheme`, which needs play-services-maps 19.
+        properties = MapProperties(
+            isMyLocationEnabled = false,
+            mapStyleOptions = if (isDark) MapStyleOptions(DarkMapStyle) else null,
+        ),
     ) {
+        // The first fix is a placement, not a journey, so it jumps. Done against the live
+        // map because by the time a `MapEffect` runs, the content padding above is applied.
+        MapEffect(userLocation) { map ->
+            val target = userLocation ?: return@MapEffect
+            if (!cameraPlaced) {
+                map.moveCamera(CameraUpdateFactory.newLatLngZoom(target, MapZoom))
+                cameraPlaced = true
+            }
+        }
+
         if (userLocation != null) {
+            // `rememberMarkerState(position = ...)` only reads the position the first time,
+            // so when she moved the camera followed her and the "You" marker stayed behind.
+            val userMarker = rememberMarkerState(position = userLocation)
+            LaunchedEffect(userLocation) { userMarker.position = userLocation }
             Marker(
-                state = rememberMarkerState(position = userLocation),
+                state = userMarker,
                 icon = BitmapDescriptorFactory.fromBitmap(
                     EmergencyUserMarker.bitmap(context, tint = accent.toArgb()),
                 ),
@@ -196,7 +226,7 @@ internal fun EmergencyMap(
             )
         }
 
-        pins.forEach { pin ->
+        pins.forEach { pin -> key(pin.id) {
             if (pin.isApproximate) {
                 // A soft disc, not a point. See the note above on why.
                 Circle(
@@ -207,8 +237,13 @@ internal fun EmergencyMap(
                     strokeWidth = 3f,
                 )
             }
+            // Keyed by id and kept in step with the pin: without the key a marker's state
+            // belonged to its index, so when the list changed one woman's pin could keep
+            // another's position.
+            val pinMarker = rememberMarkerState(position = pin.position)
+            LaunchedEffect(pin.position) { pinMarker.position = pin.position }
             Marker(
-                state = rememberMarkerState(position = pin.position),
+                state = pinMarker,
                 title = pin.title,
                 icon = BitmapDescriptorFactory.fromBitmap(
                     EmergencyPinRenderer.bitmap(
@@ -227,7 +262,7 @@ internal fun EmergencyMap(
                 anchor = Offset(0.5f, 1f),
                 zIndex = 1f,
             )
-        }
+        } }
     }
 }
 
@@ -247,6 +282,34 @@ internal data class EmergencyMapPin(
 )
 
 private const val APPROXIMATE_PIN_RADIUS_M = 90.0
+
+/**
+ * The basemap under the dark theme: neutral greys in the app's own dark palette (the
+ * grouped background and separator greys), with water a deep blue so the city still reads.
+ * Close to what Google draws for iOS in dark mode, without its blue cast.
+ */
+internal const val DarkMapStyle = """
+[
+  { "elementType": "geometry", "stylers": [{ "color": "#1c1c1e" }] },
+  { "elementType": "labels.text.fill", "stylers": [{ "color": "#8e8e93" }] },
+  { "elementType": "labels.text.stroke", "stylers": [{ "color": "#1c1c1e" }] },
+  { "featureType": "administrative", "elementType": "geometry", "stylers": [{ "color": "#3a3a3c" }] },
+  { "featureType": "poi", "elementType": "geometry", "stylers": [{ "color": "#242426" }] },
+  { "featureType": "poi.park", "elementType": "geometry", "stylers": [{ "color": "#1d2820" }] },
+  { "featureType": "road", "elementType": "geometry.fill", "stylers": [{ "color": "#2c2c2e" }] },
+  { "featureType": "road", "elementType": "geometry.stroke", "stylers": [{ "color": "#1c1c1e" }] },
+  { "featureType": "road.highway", "elementType": "geometry.fill", "stylers": [{ "color": "#3a3a3c" }] },
+  { "featureType": "transit", "elementType": "geometry", "stylers": [{ "color": "#242426" }] },
+  { "featureType": "water", "elementType": "geometry", "stylers": [{ "color": "#0d1b2a" }] },
+  { "featureType": "water", "elementType": "labels.text.fill", "stylers": [{ "color": "#4b6478" }] }
+]
+"""
+
+/** Two JSON map styles as one: the rules of [base] followed by those of [overlay]. */
+internal fun mergeMapStyles(base: String, overlay: String): String {
+    fun body(style: String) = style.trim().removePrefix("[").removeSuffix("]").trim()
+    return "[" + body(base) + "," + body(overlay) + "]"
+}
 
 /**
  * Walks [metres] along [bearingDegrees] from this point, on a sphere.
@@ -306,11 +369,13 @@ internal fun EmergencyMapOverlay(
             modifier = Modifier.size(35.dp),
         ) {
             IconButton(onClick = onBack, modifier = Modifier.size(35.dp)) {
+                // The iOS-shaped arrow, so the glyph itself is ~8x13 like SF's chevron.
+                // KeyboardArrowLeft in a 17 box drew a 5x8 tick in the middle of the disc.
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBackIos,
                     contentDescription = stringResource(R.string.emergency_back),
                     tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
-                    modifier = Modifier.size(17.dp),
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }

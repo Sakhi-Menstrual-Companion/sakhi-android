@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.scaleIn
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Button
@@ -94,6 +95,7 @@ import team.sakhi.android.platform.AndroidLocationProvider
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.phasePrimaryColor
+import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.feature.logging.LoggingViewModel
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
@@ -478,6 +480,10 @@ fun CalendarScreen(
             SakhiBottomActionBar(
                 phase = selectedDatePhase,
                 accentColor = phasePrimaryColor(selectedDatePhase),
+                // The dark theme's phase primary is near-white, so the log button fills
+                // white there. iOS's adaptive CTA is the same: a white button with a black
+                // glyph in dark mode. Left at the default white, the + vanished into it.
+                logIconColor = if (LocalSakhiDarkTheme.current) Color.Black else Color.White,
                 isPartnerMode = logUiState.session?.isViewingOwnData == false,
                 canLog = logUiState.canLogPeriod && logUiState.canMutateSelectedDate,
                 hasLoggedForDate = logUiState.hasAnyData,

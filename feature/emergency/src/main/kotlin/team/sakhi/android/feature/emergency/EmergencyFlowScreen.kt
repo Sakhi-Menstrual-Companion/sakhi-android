@@ -8,6 +8,7 @@ import team.sakhi.emergency.EmergencySafePlace
 import team.sakhi.models.EmergencyRequirement
 import team.sakhi.android.designsystem.sakhiGroupedBackground
 import android.Manifest
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -19,6 +20,9 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.WindowInsets
@@ -59,6 +63,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.emergency.EmergencyState
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSeparator
@@ -174,6 +179,24 @@ fun EmergencyFlowScreen(
         return
     }
 
+    // The system back, one level at a time -- the same move the on-screen Back makes at
+    // each level. There was no handler at all, and Emergency is drawn over Home rather than
+    // being a destination of its own, so back from anywhere in it finished the activity and
+    // closed the app. The profile, inbox and chat sheets and the face picker are their own
+    // windows and take back first.
+    BackHandler {
+        when {
+            placesRoute is PlacesRoute.Detail -> placesRoute = PlacesRoute.List
+            placesRoute is PlacesRoute.List -> placesRoute = PlacesRoute.None
+            state is EmergencyState.ChoosingSpot -> viewModel.backToSakhis()
+            state is EmergencyState.ChoosingSakhi -> viewModel.backToRequirement()
+            else -> {
+                viewModel.dismiss()
+                onClose()
+            }
+        }
+    }
+
     // Keep what is live for her fresh while Emergency is on screen. This is also the only
     // thing that notices a request landing mid-flow: requests addressed to her are polled,
     // not pushed, because she has no read on the row until she accepts.
@@ -246,7 +269,26 @@ fun EmergencyFlowScreen(
         // Column child it occupied a row of its own and pushed every step's content down,
         // so a debug-only control was changing the spacing of the screens it exists to let
         // you look at.
-        Box(modifier = Modifier.fillMaxSize()) {
+        //
+        // Full height minus the status bar and a small gap, not `fillMaxSize()`. The scaffold
+        // sizes the expanded sheet to its content, and a full-height content dragged the
+        // sheet's grabber and 40dp corners up under the clock and battery icons. iOS's large
+        // detent stops below the safe area with the map still showing in a sliver above it.
+        val sheetTopGap = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + SheetTopGap
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .layout { measurable, constraints ->
+                    val placeable = if (constraints.hasBoundedHeight) {
+                        val height = (constraints.maxHeight - sheetTopGap.roundToPx())
+                            .coerceAtLeast(constraints.minHeight)
+                        measurable.measure(constraints.copy(minHeight = height, maxHeight = height))
+                    } else {
+                        measurable.measure(constraints)
+                    }
+                    layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                },
+        ) {
         // `Loading` never gets a screen of its own. `restore()` passes through it every time
         // the flow opens, so giving it a step meant a spinner flashed in and the picker
         // animated in over it -- and reopening a live session flashed the spinner over the
@@ -487,7 +529,11 @@ fun EmergencyFlowScreen(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .background(MapMuteOverlay),
+                    .background(
+                        // The dark page ground under the dark theme. The light wash over the
+                        // dark basemap would have lifted it to a muddy grey.
+                        if (LocalSakhiDarkTheme.current) MapMuteOverlayDark else MapMuteOverlay,
+                    ),
             )
 
             // The sheet's own lift off the map, drawn rather than elevated.
@@ -570,6 +616,9 @@ fun EmergencyFlowScreen(
  */
 private val MapMuteOverlay = Color(0x61F8F2F4)
 
+/** The same 38% mute, in the dark theme's page black, so the dark map sits back too. */
+private val MapMuteOverlayDark = Color(0x61000000)
+
 /**
  * How much of the screen the sheet occupies at rest. Shared by the scaffold and by the
  * map's camera inset, which have to agree: the map draws behind the sheet, so the camera
@@ -583,6 +632,12 @@ private val MapMuteOverlay = Color(0x61F8F2F4)
  * drawn against, which is why this is an absolute dp rather than a fraction.
  */
 private val SheetPeekHeight = 502.dp
+
+/**
+ * How far below the status bar the fully dragged-up sheet stops. A sliver of map stays
+ * visible above it, as on iOS's large detent, so it still reads as a sheet over the map.
+ */
+private val SheetTopGap = 10.dp
 
 /**
  * The taller sheet her own profile opens at.

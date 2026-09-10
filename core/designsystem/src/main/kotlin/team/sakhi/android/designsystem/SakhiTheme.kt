@@ -21,6 +21,8 @@ import androidx.compose.ui.unit.sp
 import team.sakhi.design.SakhiUIColors
 import team.sakhi.models.CyclePhase
 import team.sakhi.design.PhaseVisualStyle
+import team.sakhi.design.PhaseColorFamily
+import team.sakhi.design.SakhiColors
 
 /**
  * Brand colors resolved once from KMM `DesignTokens`, per mode. Feature code should
@@ -345,10 +347,27 @@ fun sakhiWarning(): androidx.compose.ui.graphics.Color =
 fun sakhiDeepRose(): androidx.compose.ui.graphics.Color =
     if (LocalSakhiDarkTheme.current) DarkBrandColors.deepRose else LightBrandColors.deepRose
 
-/** Resolves a phase's primary hex (KMM `PhaseVisualStyle.colorHex`) straight to Compose. */
+/**
+ * A phase's primary colour for the theme actually on screen.
+ *
+ * Light mode is `PhaseVisualStyle.colorHex`, unchanged. Dark mode used to be that same
+ * light hex, because `colorHex` can only return one value -- so under the dark theme the
+ * calendar's Ask Sakhi bar drew deep maroon text on a near-black pill and all but vanished.
+ * It now takes the dark half of the same pair, through the same phase family, which is
+ * what iOS's adaptive `phasePalette.primary` resolves to.
+ */
 @Composable
-fun phasePrimaryColor(phase: CyclePhase): androidx.compose.ui.graphics.Color =
-    PhaseVisualStyle.colorHex(phase).toComposeColor()
+fun phasePrimaryColor(phase: CyclePhase): androidx.compose.ui.graphics.Color {
+    if (!LocalSakhiDarkTheme.current) return PhaseVisualStyle.colorHex(phase).toComposeColor()
+    val bundle = when (PhaseVisualStyle.family(phase)) {
+        PhaseColorFamily.MENSTRUAL -> SakhiColors.menstrual
+        PhaseColorFamily.FOLLICULAR -> SakhiColors.follicular
+        PhaseColorFamily.OVULATION -> SakhiColors.ovulation
+        PhaseColorFamily.DELAYED -> SakhiColors.delayed
+        PhaseColorFamily.UNKNOWN -> SakhiColors.unknown
+    }
+    return bundle.primary.dark.toComposeColor()
+}
 
 /**
  * The app's actual resolved dark/light state, as `MainActivity` computed it from

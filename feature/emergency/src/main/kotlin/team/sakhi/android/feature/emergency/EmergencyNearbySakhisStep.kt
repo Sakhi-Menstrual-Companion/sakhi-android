@@ -109,7 +109,9 @@ internal fun EmergencyNearbySakhisStep(
         // header, so its title came out at a different size and its Back had no chevron.
         EmergencySheetNavBar(
             title = stringResource(R.string.emergency_nearby_friends),
-            onBack = viewModel::backToSakhis,
+            // `backToRequirement`, as iOS. This was `backToSakhis`, which only acts from the
+            // spot step, so on this screen Back silently did nothing.
+            onBack = viewModel::backToRequirement,
         )
 
         // Figma `intro`: `pt-4 pb-14 px-20`, 4 between the count and the line under it.

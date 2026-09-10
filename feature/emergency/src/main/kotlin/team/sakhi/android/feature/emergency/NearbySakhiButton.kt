@@ -665,6 +665,7 @@ private fun NearbyMapThumbnail(
         }
     }
 
+    val isDarkMap = LocalSakhiDarkTheme.current
     GoogleMap(
         modifier = modifier,
         cameraPositionState = camera,
@@ -685,7 +686,11 @@ private fun NearbyMapThumbnail(
         ),
         properties = MapProperties(
             isMyLocationEnabled = false,
-            mapStyleOptions = MapStyleOptions(NEARBY_MAP_STYLE),
+            // Dark tiles under the dark theme. The light ones were a bright white disc in
+            // the dark Home bar, the loudest thing on the screen for no reason.
+            mapStyleOptions = MapStyleOptions(
+                if (isDarkMap) mergeMapStyles(DarkMapStyle, NEARBY_MAP_STYLE) else NEARBY_MAP_STYLE,
+            ),
         ),
     ) {
         // The same faces the pile in front shows, out on the map the camera flies between.

@@ -353,7 +353,9 @@ internal fun EmergencySpotStep(
         // it does ("Find a Sakhi") rather than where it goes.
         EmergencySheetNavBar(
             title = stringResource(R.string.emergency_spot_name),
-            onBack = viewModel::backToRequirement,
+            // Back to the Sakhi she picked from, as iOS `EmergencySpotView` does. The spot is
+            // named after the person now, so the requirement is two screens back, not one.
+            onBack = viewModel::backToSakhis,
         )
 
     // iOS is `VStack(alignment: .leading, spacing: 0)` with no outer horizontal padding:

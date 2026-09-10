@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.emergency
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -66,6 +67,10 @@ internal fun EmergencyOnboarding(
     onCancel: () -> Unit,
 ) {
     var page by remember { mutableIntStateOf(0) }
+
+    // The system back does what the nav bar's leading button does. Without it, back from
+    // here fell through to the activity and closed the app.
+    BackHandler { if (page > 0) page-- else onCancel() }
 
     OnboardingShell(
         onBack = if (page > 0) ({ page-- }) else null,

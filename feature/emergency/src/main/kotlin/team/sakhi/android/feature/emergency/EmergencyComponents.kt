@@ -25,7 +25,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.ArrowBackIos
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreHoriz
@@ -435,13 +435,17 @@ internal fun EmergencySheetNavBar(
                     .align(Alignment.CenterStart)
                     .padding(start = 14.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
+                // iOS draws `chevron.left` at 17pt semibold. Material's KeyboardArrowLeft in
+                // a 13dp box was a 4dp speck beside the word, because that glyph fills only
+                // a third of its box. The iOS-style arrow at 18dp comes out ~9x15, the same
+                // shape and weight as the SF symbol.
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBackIos,
                     contentDescription = "Back",
                     tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
-                    modifier = Modifier.size(13.dp),
+                    modifier = Modifier.size(18.dp),
                 )
                 Text(
                     text = "Back",

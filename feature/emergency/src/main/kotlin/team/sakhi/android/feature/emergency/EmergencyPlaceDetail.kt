@@ -33,9 +33,9 @@ import team.sakhi.emergency.EmergencySafePlace
 /**
  * One place in full. Port of iOS `EmergencyPlaceDetailView.swift`.
  *
- * Says "Not published for this place" rather than hiding an empty row: a missing phone
- * number is information, and a row that silently disappears reads as the app having fewer
- * facts than it does.
+ * A fact the place never published is left out, as iOS does. Two of three rows reading
+ * "Not published for this place" made the card look broken for most pharmacies, which
+ * Google lists without a phone or an address.
  */
 @Composable
 fun EmergencyPlaceDetail(
@@ -91,27 +91,31 @@ fun EmergencyPlaceDetail(
 
             EmergencySectionHeader(title = "Details")
             EmergencyCard {
-                DetailRow(
-                    icon = Icons.Filled.Place,
-                    tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
-                    title = "Address",
-                    value = place.address ?: "Not published for this place",
-                )
-                EmergencyRowDivider()
+                place.address?.let { address ->
+                    DetailRow(
+                        icon = Icons.Filled.Place,
+                        tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                        title = "Address",
+                        value = address,
+                    )
+                    EmergencyRowDivider()
+                }
                 DetailRow(
                     icon = Icons.Filled.DirectionsWalk,
                     tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
                     title = "On foot",
                     value = place.onFootDescription,
                 )
-                EmergencyRowDivider()
-                DetailRow(
-                    icon = Icons.Filled.Phone,
-                    tint = SakhiUIColors.BRAND_CONFIRM.toComposeColor(),
-                    title = "Phone",
-                    value = place.phoneNumber ?: "Not published for this place",
-                    onClick = place.phoneNumber?.let { { onCall(it) } },
-                )
+                place.phoneNumber?.let { number ->
+                    EmergencyRowDivider()
+                    DetailRow(
+                        icon = Icons.Filled.Phone,
+                        tint = SakhiUIColors.BRAND_CONFIRM.toComposeColor(),
+                        title = "Phone",
+                        value = number,
+                        onClick = { onCall(number) },
+                    )
+                }
                 place.website?.let { site ->
                     EmergencyRowDivider()
                     DetailRow(
@@ -163,7 +167,8 @@ private fun DetailRow(
                 lineHeight = 18.sp,
                 color = sakhiSecondaryLabel(),
                 textAlign = TextAlign.End,
-                maxLines = 1,
+                // Two lines, so an address reads as an address rather than "Plot 12, Hi…".
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         },
