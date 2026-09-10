@@ -76,6 +76,11 @@ import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.android.gms.maps.model.MapStyleOptions
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import team.sakhi.emergency.EmergencyHomeSignal
 
 /**
  * The chat header's Nearby button, ported from iOS `SakhiAIChatView.nearbySakhiButton`.
@@ -224,6 +229,12 @@ fun HomeNearbyCircleButton(
     coordinate: DeviceLocation?,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * What is live for her right now. Drives the ring: red and blinking with a badge when
+     * someone has asked her, steady green once she is in a session. See
+     * [team.sakhi.emergency.EmergencyHomeSignal].
+     */
+    signal: EmergencyHomeSignal = EmergencyHomeSignal.None,
 ) {
     val shown = nearbyBadgeCount(count)
     val mapCoordinate = sampleCoordinateOrNull(coordinate)
@@ -233,8 +244,29 @@ fun HomeNearbyCircleButton(
         else -> "$shown nearby"
     }
 
+    // The blink, shared by the ring and the badge so they pulse as one thing. Only runs while
+    // someone is actually waiting on her; an infinite transition left running at idle would
+    // redraw the button for ever for nothing.
+    val incoming = signal as? EmergencyHomeSignal.Incoming
+    val pulse = if (incoming != null) {
+        val transition = rememberInfiniteTransition(label = "incoming-pulse")
+        transition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0.28f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 650),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "incoming-alpha",
+        ).value
+    } else {
+        1f
+    }
+
+    // Unclipped, so the badge can sit on the ring's edge rather than inside the circle.
+    Box(modifier = modifier) {
     Box(
-        modifier = modifier
+        modifier = Modifier
             .size(NEARBY_CIRCLE_DIAMETER)
             .clip(CircleShape)
             .background(if (mapCoordinate == null) sakhiButtonFill() else Color.Transparent, CircleShape),
@@ -295,14 +327,68 @@ fun HomeNearbyCircleButton(
                     contentDescription = "Nearby Sakhis"
                     if (value.isNotEmpty()) stateDescription = value
                 }
-                .border(2.5.dp, Color.White, CircleShape)
-                .border(0.5.dp, nearbyCapsuleOutline(), CircleShape),
+                .then(
+                    when (signal) {
+                        // Someone has asked her. Thick, red, and blinking -- the one state on
+                        // Home that is somebody else waiting on her.
+                        is EmergencyHomeSignal.Incoming -> Modifier.border(
+                            SIGNAL_RING_WIDTH,
+                            IncomingRed.copy(alpha = pulse),
+                            CircleShape,
+                        )
+                        // Connected. Same weight, steady: nothing is being asked of her, she
+                        // just has somewhere to be.
+                        EmergencyHomeSignal.Connected -> Modifier.border(
+                            SIGNAL_RING_WIDTH,
+                            ConnectedGreen,
+                            CircleShape,
+                        )
+                        EmergencyHomeSignal.None -> Modifier
+                            .border(2.5.dp, Color.White, CircleShape)
+                            .border(0.5.dp, nearbyCapsuleOutline(), CircleShape)
+                    },
+                ),
         )
+    }
+
+    // The count, sitting on the ring at one o'clock. It blinks with the ring, and it carries
+    // a white edge so it reads as a badge on the button rather than a red blot beside it.
+    if (incoming != null) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .offset(x = 4.dp, y = (-4).dp)
+                .size(20.dp)
+                .clip(CircleShape)
+                .background(Color.White)
+                .padding(2.dp)
+                .clip(CircleShape)
+                .background(IncomingRed.copy(alpha = 0.55f + 0.45f * pulse)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = if (incoming.count > 9) "9+" else incoming.count.toString(),
+                color = Color.White,
+                fontSize = 10.sp,
+                lineHeight = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+        }
+    }
     }
 }
 
 /** iOS `HomeNearbyButton.diameter` -- matches the log button beside it. */
 private val NEARBY_CIRCLE_DIAMETER = 46.dp
+
+/** Thicker than the 2.5dp idle ring, so an alert reads from across the screen. */
+private val SIGNAL_RING_WIDTH = 3.5.dp
+
+/** iOS `systemRed`. The alert colour, not the brand pink the idle button already uses. */
+private val IncomingRed = Color(0xFFFF3B30)
+
+/** iOS `systemGreen` -- the same "all good" green the session screen uses. */
+private val ConnectedGreen = Color(0xFF34C759)
 
 /**
  * How far the map is drawn beyond the shape clipping it, per side.

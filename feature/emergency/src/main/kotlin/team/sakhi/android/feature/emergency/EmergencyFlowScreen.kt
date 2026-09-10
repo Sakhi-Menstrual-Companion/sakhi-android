@@ -62,6 +62,15 @@ import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.emergency.EmergencyState
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSeparator
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import kotlin.math.roundToInt
+import androidx.lifecycle.repeatOnLifecycle
 
 /** Where she is inside the safe-places browser. iOS `EmergencySheetContent.PlacesRoute`. */
 private sealed interface PlacesRoute {
@@ -89,6 +98,7 @@ fun EmergencyFlowScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val nearbyCount by viewModel.nearbyAvailableCount.collectAsStateWithLifecycle()
+    val nearbySakhis by viewModel.nearbySakhis.collectAsStateWithLifecycle()
     val hasSeenIntro by viewModel.hasSeenIntro.collectAsStateWithLifecycle()
     val responder by viewModel.responderState.collectAsStateWithLifecycle()
     val places by viewModel.places.collectAsStateWithLifecycle()
@@ -103,6 +113,16 @@ fun EmergencyFlowScreen(
     var placesRoute by remember { mutableStateOf<PlacesRoute>(PlacesRoute.None) }
     var pendingRequirement by remember { mutableStateOf<EmergencyRequirement?>(null) }
     var showMyProfile by remember { mutableStateOf(false) }
+    var showFacePicker by remember { mutableStateOf(false) }
+
+    // The requests addressed to her, as a sheet that can sit over any step.
+    //
+    // Opens on its own when a request she has not seen yet arrives, so a woman who is asked
+    // while Emergency is open does not have to know to go looking for it. Opens at once when
+    // she came here from Home's red ring or from the notification.
+    var showInbox by remember { mutableStateOf(openResponderInbox) }
+    var seenRequestIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
     // Bumped when she picks a face, so the profile and the header avatar both re-read the
     // preference. It is stored in UserDefaults-style local prefs, which Compose cannot
     // observe on its own.
@@ -154,6 +174,30 @@ fun EmergencyFlowScreen(
         return
     }
 
+    // Keep what is live for her fresh while Emergency is on screen. This is also the only
+    // thing that notices a request landing mid-flow: requests addressed to her are polled,
+    // not pushed, because she has no read on the row until she accepts.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+            while (true) {
+                viewModel.refreshHomeSignal()
+                kotlinx.coroutines.delay(IncomingPollMillis)
+            }
+        }
+    }
+
+    LaunchedEffect(responder.incoming) {
+        val ids = responder.incoming.map { it.requestId }.toSet()
+        if ((ids - seenRequestIds).isNotEmpty()) showInbox = true
+        seenRequestIds = ids
+    }
+
+    // Once she has accepted, the session is the screen; the inbox has done its job.
+    LaunchedEffect(state) {
+        if (state is EmergencyState.InSession) showInbox = false
+    }
+
     // Restore lands on Idle when she has nothing in flight, which is the point to start a
     // fresh request — that is what tapping the map button asked for. Not when she came
     // from an incoming-request push, though: she is here to answer, not to ask.
@@ -203,8 +247,16 @@ fun EmergencyFlowScreen(
         // so a debug-only control was changing the spacing of the screens it exists to let
         // you look at.
         Box(modifier = Modifier.fillMaxSize()) {
+        // `Loading` never gets a screen of its own. `restore()` passes through it every time
+        // the flow opens, so giving it a step meant a spinner flashed in and the picker
+        // animated in over it -- and reopening a live session flashed the spinner over the
+        // session. While loading, the last settled step stays up and nothing moves.
+        var lastSettled by remember { mutableStateOf<EmergencyState?>(null) }
+        if (state !is EmergencyState.Loading) lastSettled = state
+        val shown = if (state is EmergencyState.Loading) lastSettled ?: state else state
+
         AnimatedContent(
-            targetState = state.stepKey(),
+            targetState = shown.stepKey(),
             transitionSpec = {
                 (
                     slideInVertically(animationSpec = spring(dampingRatio = 0.86f, stiffness = 380f)) { it / 12 } +
@@ -214,9 +266,16 @@ fun EmergencyFlowScreen(
             label = "emergency-step",
             modifier = Modifier.fillMaxSize(),
         ) { key ->
-            // Read the live value rather than closing over the animated key, so a list
-            // refresh mid-step updates in place instead of animating the whole screen.
-            when (val current = remember(key) { state }) {
+            // The layer that is on screen reads the LIVE state; only the layer on its way out
+            // keeps the snapshot it had, so it does not redraw as the new step.
+            //
+            // This was `remember(key) { state }` for both, which froze every step at the
+            // moment it first appeared. A step whose state changes without its key changing
+            // -- the Sakhi list filling in after "Looking for Sakhis…", say -- never showed
+            // the change, and sat on its first frame for ever.
+            val snapshot = remember(key) { shown }
+            val current = if (key == shown.stepKey()) shown else snapshot
+            when (current) {
                 is EmergencyState.Loading -> EmergencyLoading()
 
                 is EmergencyState.Idle,
@@ -229,7 +288,6 @@ fun EmergencyFlowScreen(
                     // button on it. The picker leads to the places she can walk to either
                     // way, so there is nothing it was still telling her.
                     viewModel = viewModel,
-                    startOnResponderInbox = openResponderInbox,
                     onShowPlaces = { requirement ->
                         pendingRequirement = requirement
                         placesRoute = PlacesRoute.List
@@ -278,12 +336,31 @@ fun EmergencyFlowScreen(
             }
         }
 
+        // The five faces, as a dialog rather than a second sheet over the profile.
+        if (showFacePicker) {
+            val userId = viewModel.currentUserId
+            if (userId != null) {
+                EmergencyFacePickerDialog(
+                    userId = userId,
+                    onPicked = {
+                        showFacePicker = false
+                        faceRevision++
+                    },
+                    onDismissRequest = { showFacePicker = false },
+                )
+            }
+        }
+
         // The places browser sits OVER the step it was opened from rather than replacing
         // it, so closing it puts her back exactly where she was. Same shape as iOS's
         // `EmergencySheetContent`, which switches on its own `placesRoute` above the steps.
         when (val route = placesRoute) {
             is PlacesRoute.List -> {
-                LaunchedEffect(Unit) { viewModel.loadPlaces() }
+                LaunchedEffect(Unit) {
+                    viewModel.loadPlaces()
+                    // The people, alongside the places. Both lists are on this one sheet now.
+                    viewModel.loadNearbySakhis()
+                }
                 // The sheet's own blush ground, not `sakhiGroupedBackground()`'s grey.
                 // These two screens sit inside the same sheet as the step behind them, and
                 // pushing to them visibly changed the colour of the sheet.
@@ -294,17 +371,18 @@ fun EmergencyFlowScreen(
                 ) {
                     EmergencyNearbyPlaces(
                         places = places,
-                        sakhiCount = nearbyCount,
+                        sakhis = nearbySakhis,
                         isSearching = isSearchingPlaces,
                         hasLocation = lastCoordinate != null,
                         onBack = { placesRoute = PlacesRoute.None },
-                        // The Sakhi chip carries her need on to the people. Now that every
-                        // requirement opens this list instead of the Sakhi flow, it is the
-                        // only remaining route to `ChoosingSakhi`.
-                        onSelectSakhis = {
+                        // Asking from here goes straight through the state machine: the
+                        // requirement she tapped to get to this sheet is carried into
+                        // `ChoosingSakhi`, and the request goes out to the woman she picked.
+                        onAskSakhi = { sakhi ->
                             placesRoute = PlacesRoute.None
-                            pendingRequirement?.let(viewModel::chooseRequirement)
+                            pendingRequirement?.let { viewModel.askFromNearby(it, sakhi) }
                         },
+                        onOpenSakhiProfile = { sakhi -> viewModel.openProfile(sakhi.userId) },
                         onSelect = { placesRoute = PlacesRoute.Detail(it) },
                     )
                 }
@@ -324,6 +402,21 @@ fun EmergencyFlowScreen(
             }
 
             PlacesRoute.None -> Unit
+        }
+
+        // Requests addressed to her -- the requester's face, what she needs, and Accept /
+        // Decline. Lives here rather than inside one step so it can appear over any of them.
+        if (showInbox) {
+            ModalBottomSheet(
+                onDismissRequest = { showInbox = false },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = MaterialTheme.colorScheme.background,
+                shape = RoundedCornerShape(topStart = SheetCornerRadius, topEnd = SheetCornerRadius),
+                scrimColor = Color.Transparent,
+                dragHandle = { EmergencySheetGrabber() },
+            ) {
+                EmergencyResponderInbox(viewModel = viewModel)
+            }
         }
 
         // Her own profile, opened from the avatar beside "What do you need?". The face
@@ -355,11 +448,16 @@ fun EmergencyFlowScreen(
                     EmergencyMyProfileSheet(
                         userId = userId,
                         profile = profileDetail,
-                        onFaceChosen = { faceRevision++ },
-                        // Fixed, not content-sized. Material sizes a modal sheet to its
-                        // content, so this opened barely half as tall as the frame and cut
-                        // the face picker off the bottom.
-                        modifier = Modifier.height(ProfileSheetHeight - EmergencyGrabberHeight),
+                        onOpenFacePicker = { showFacePicker = true },
+                        onClose = { showMyProfile = false },
+                        // A fraction, not a fixed dp: iOS opens this one on
+                        // `EmergencySheetDetents.profileFraction` (0.82) rather than the
+                        // flow's usual detent, because the stats and the face row together
+                        // are taller than a 502 sheet. Material sizes a modal sheet to its
+                        // content, so the height goes on the content.
+                        modifier = Modifier
+                            .fillMaxHeight(ProfileSheetFraction)
+                            .navigationBarsPadding(),
                     )
                 }
             }
@@ -392,7 +490,67 @@ fun EmergencyFlowScreen(
                     .background(MapMuteOverlay),
             )
 
+            // The sheet's own lift off the map, drawn rather than elevated.
+            //
+            // Figma gives every frame's `Sheet` `shadow-[0px_-2px_16px_rgba(0,0,0,0.12)]`.
+            // `sheetShadowElevation` cannot produce that: Android's light comes from above,
+            // so almost all of an elevation shadow falls BELOW the object, and a bottom
+            // sheet's bottom is off-screen. Measured on Karan's phone, 16dp of elevation put
+            // a band 3% darker than the map above the edge and 32dp barely improved on it,
+            // against the 12% the frame asks for.
+            //
+            // So: a gradient tied to the sheet's live offset, which means it still hugs the
+            // edge while she drags. Its bottom corners are cut to the sheet's own 40dp
+            // radius, so no shadow spills over the map where the sheet is not.
+            val sheetTop = runCatching {
+                sheetState.bottomSheetState.requireOffset()
+            }.getOrNull()
+            if (sheetTop != null) {
+                val density = LocalDensity.current
+                val bandPx = with(density) { SheetShadowBand.roundToPx() }
+                // Slid down so its darkest edge tucks under the sheet rather than sitting
+                // on the map. Karan: "thodi jada bahar hogayi hai, halki si niche lao."
+                val tuckPx = with(density) { SheetShadowTuck.roundToPx() }
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        // Tall enough for the corner, not just for the shadow. Compose
+                        // clamps a corner radius to half the shorter side, so an 18dp-tall
+                        // strip could only round to 9 and left a notch at each end instead
+                        // of following the sheet's 40dp sweep -- Karan called it "ajeeb".
+                        // The band is this tall and the gradient stays transparent for all
+                        // but its last 18dp.
+                        .height(SheetShadowBand)
+                        .offset { IntOffset(0, sheetTop.roundToInt() - bandPx + tuckPx) }
+                        .clip(
+                            RoundedCornerShape(
+                                bottomStart = SheetCornerRadius,
+                                bottomEnd = SheetCornerRadius,
+                            ),
+                        )
+                        .background(
+                            // Eased, not a straight ramp: most of the visible band stays
+                            // under 4% and only the last few pixels reach 10%, so it reads
+                            // as the map falling away under the sheet rather than as a drawn
+                            // edge. Karan's note -- "thodi soft he rakhna".
+                            Brush.verticalGradient(
+                                0.00f to Color.Transparent,
+                                SheetShadowStart to Color.Transparent,
+                                0.90f to Color.Black.copy(alpha = 0.03f),
+                                0.97f to Color.Black.copy(alpha = 0.07f),
+                                1.00f to Color.Black.copy(alpha = 0.10f),
+                            ),
+                        ),
+                )
+            }
+
             EmergencyMapOverlay(
+                // ACTION_DIAL, not ACTION_CALL: it opens the dialer with 112 already in it
+                // and waits for her to press call. iOS gets the same guard for free -- the
+                // system confirms a `tel:` URL before dialling -- and it is the right one
+                // here, because a brush against a button on a map must not place a call to
+                // the emergency services.
+                onContactPolice = { dialPlaceNumber(context, PoliceEmergencyNumber) },
                 onBack = {
                     viewModel.dismiss()
                     onClose()
@@ -427,13 +585,41 @@ private val MapMuteOverlay = Color(0x61F8F2F4)
 private val SheetPeekHeight = 502.dp
 
 /**
- * The taller sheet her own profile opens at, from Figma frame "EA-02 · My profile": a 625
- * sheet on the same 874 screen the 502 peek was measured against.
+ * The taller sheet her own profile opens at.
+ *
+ * iOS `EmergencySheetDetents.profileFraction`. Everything else in the flow opens at the
+ * one shared height; this screen is the exception both platforms make, because her stats
+ * and the face row together do not fit in it.
  */
-private val ProfileSheetHeight = 625.dp
+private const val ProfileSheetFraction = 0.82f
+
+/**
+ * How often the flow re-asks for requests addressed to her. Short: a request is only
+ * answerable for two minutes, and she should see it within seconds of it landing.
+ */
+private const val IncomingPollMillis = 6_000L
 
 /** Figma draws every sheet in this flow with `rounded-t-[40px]`. */
 private val SheetCornerRadius = 40.dp
+
+/**
+ * The band the sheet's shadow is drawn in.
+ *
+ * Twice the corner radius, so the 40dp round is never clamped. Only the last
+ * [SheetShadowStart] of it is anything but transparent, which is Figma's `0px -2px 16px`.
+ */
+private val SheetShadowBand = SheetCornerRadius * 2
+
+/** Where the gradient stops being transparent -- the last 18dp of [SheetShadowBand]. */
+private const val SheetShadowStart = 1f - 18f / 80f
+
+/**
+ * How far the band is slid down behind the sheet.
+ *
+ * The darkest few pixels end up under the sheet's own surface, so what shows above the edge
+ * is only the soft part of the falloff.
+ */
+private val SheetShadowTuck = 7.dp
 
 /**
  * Where each step's pins come from.
@@ -503,7 +689,10 @@ private fun EmergencyState.pulseRadiusMeters(): Double? = when (this) {
  * list refreshes. Keying on step identity keeps it to real step changes.
  */
 private fun EmergencyState.stepKey(): String = when (this) {
-    is EmergencyState.Idle -> "idle"
+    // One key for both. They draw the same picker, and as two keys opening the flow ran
+    // the step animation twice -- Idle, then ChoosingRequirement a beat later -- which is
+    // the "what do you need jumps two times" Karan saw.
+    is EmergencyState.Idle -> "requirement"
     is EmergencyState.Loading -> "loading"
     is EmergencyState.ChoosingRequirement -> "requirement"
     is EmergencyState.ChoosingSpot -> "spot"

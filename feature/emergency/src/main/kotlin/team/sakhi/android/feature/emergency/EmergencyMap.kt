@@ -54,6 +54,21 @@ import kotlin.math.cos
 import kotlin.math.sin
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiLabel
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.alpha
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
 
 /**
  * The map the whole flow sits on, matching iOS.
@@ -105,17 +120,42 @@ internal fun EmergencyMap(
     // Pills are drawn in the current theme's ink, so a theme flip must not reuse them.
     LaunchedEffect(isDark) { EmergencyPinRenderer.clearCache() }
 
-    val cameraPositionState = rememberCameraPositionState()
+    // Starts on her if she is already known, rather than on Maps' default.
+    //
+    // `rememberCameraPositionState()` with no argument starts at 0°N 0°E, fully zoomed out:
+    // the whole world, centred off West Africa. The first fix then *animated* the camera all
+    // the way from there to street level, so opening Emergency showed Europe and North
+    // Africa for a beat and then a long zoom down to her -- recorded on Karan's phone.
+    val cameraPositionState = rememberCameraPositionState {
+        userLocation?.let { position = CameraPosition.fromLatLngZoom(it, MapZoom) }
+    }
+    var cameraPlaced by remember { mutableStateOf(userLocation != null) }
 
     LaunchedEffect(userLocation) {
         val target = userLocation ?: return@LaunchedEffect
-        cameraPositionState.animate(
-            CameraUpdateFactory.newCameraPosition(CameraPosition.fromLatLngZoom(target, 15f)),
-        )
+        val update = CameraUpdateFactory.newCameraPosition(CameraPosition.fromLatLngZoom(target, MapZoom))
+        if (cameraPlaced) {
+            // She moved: a short glide is right, it is a few streets at most.
+            cameraPositionState.animate(update)
+        } else {
+            // The first fix is a placement, not a journey. Jump straight there.
+            cameraPositionState.move(update)
+            cameraPlaced = true
+        }
     }
 
+    // Held back until it is over her, then faded in. Before the first fix the only thing it
+    // could show is that world view, so the sheet's own ground stands in for a moment instead.
+    val mapAlpha by animateFloatAsState(
+        targetValue = if (cameraPlaced) 1f else 0f,
+        animationSpec = tween(durationMillis = 280),
+        label = "map-fade-in",
+    )
+
     GoogleMap(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .alpha(mapAlpha),
         cameraPositionState = cameraPositionState,
         // Google's own inset mechanism, the same one iOS uses through `GMSMapView.padding`:
         // it shifts the camera's idea of centre rather than shrinking the map, so the
@@ -233,17 +273,17 @@ internal fun LatLng.offset(metres: Double, bearingDegrees: Double): LatLng {
 }
 
 /**
- * The one control floating over the map: back, top left.
+ * The controls floating over the map: back on the left, Contact Police on the right.
  *
- * There used to be a "Nearby Sakhis: N" pill opposite it. iOS has no such pill and neither
- * does Figma `13 · Emergency Assistance`, whose map carries the back control and nothing
- * else -- Karan spotted it on a device. It was carried over from `main`. Worth knowing what
- * iOS does have in that corner and Android still does not: a "Contact Police" capsule that
- * dials 112 from every step of the flow.
+ * There used to be a "Nearby Sakhis: N" pill opposite the back button. iOS has no such pill
+ * and neither does Figma `13 · Emergency Assistance` -- it was carried over from `main`, and
+ * Karan spotted it on a device. What iOS *does* put in that corner, and Android was missing
+ * entirely, is the way out that does not depend on anyone answering.
  */
 @Composable
 internal fun EmergencyMapOverlay(
     onBack: () -> Unit,
+    onContactPolice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     // Full width even though there is one control in it. The caller aligns this to
@@ -274,6 +314,59 @@ internal fun EmergencyMapOverlay(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // "Contact Police" -- the way out of this flow that does not depend on anyone
+        // answering. Port of iOS `EmergencyMapScreen.contactPoliceButton`: a 38dp white
+        // capsule, 14 inset, a 14pt pink handset and the words in Lato 15 bold.
+        //
+        // Present on every step, including while she is waiting on a Sakhi, because the
+        // moment she needs this is not a moment to go looking for it.
+        Surface(
+            shape = CircleShape,
+            color = sakhiSystemBackground(),
+            shadowElevation = 2.dp,
+            modifier = Modifier.height(38.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .clickable(onClick = onContactPolice)
+                    .padding(horizontal = 14.dp)
+                    .semantics {
+                        contentDescription = "Contact Police"
+                        stateDescription = "Calls $PoliceEmergencyNumber, the emergency number"
+                    },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Phone,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
+                )
+                Text(
+                    text = stringResource(R.string.emergency_contact_police),
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = sakhiLabel(),
+                )
+            }
+        }
     }
 }
+
+/**
+ * India's single emergency number.
+ *
+ * 112 rather than 100: it is the unified number, it reaches the police, it works from a
+ * locked phone and across every state, which 100 does not reliably do. The app's own safety
+ * guidance already names it.
+ */
+internal const val PoliceEmergencyNumber = "112"
+
+/** Street level: close enough to read the roads around her, far enough to see the next one. */
+private const val MapZoom = 15f
 

@@ -201,4 +201,14 @@
     <!-- Figma EA-13 · Incoming request. -->
     <string name="emergency_asking_you_now">Asking you now</string>
     <string name="emergency_profile">Profile</string>
+    <string name="emergency_contact_police">Contact Police</string>
+    <!-- The nearby sheet's Sakhi section, which is always present. -->
+    <string name="emergency_section_sakhis">Sakhis</string>
+    <string name="emergency_ask_a_sakhi_instead">Ask a Sakhi instead</string>
+    <string name="emergency_no_sakhis_nearby">No Sakhis nearby right now</string>
+    <string name="emergency_no_sakhis_nearby_body">Someone may come online. The places below are open either way.</string>
+    <string name="emergency_someone_nearby_may_help">Someone nearby may be able to help</string>
+    <string name="emergency_one_sakhi_around">1 Sakhi is around you</string>
+    <string name="emergency_n_sakhis_around">%1$d Sakhis are around you</string>
+    <string name="emergency_section_safe_places">Safe places</string>
 </resources>

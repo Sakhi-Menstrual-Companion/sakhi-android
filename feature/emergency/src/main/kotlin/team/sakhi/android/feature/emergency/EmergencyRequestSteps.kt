@@ -83,7 +83,6 @@ import team.sakhi.android.ui.SakhiAlertSheet
 @Composable
 internal fun EmergencyRequirementStep(
     viewModel: EmergencyViewModel,
-    startOnResponderInbox: Boolean = false,
     /**
      * Opens the safe-places browser, carrying what she said she needs.
      *
@@ -104,8 +103,6 @@ internal fun EmergencyRequirementStep(
 ) {
     // Opens straight onto the inbox when she arrived from a nearby-request push: she was
     // asked to help, so asking her what *she* needs would be the wrong first screen.
-    var showResponderInbox by remember { mutableStateOf(startOnResponderInbox) }
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     // No horizontal padding here. Figma's `content` frame is full width and every child
     // insets itself by 20 -- and `EmergencySheetTitle`, `EmergencySectionHeader` and
@@ -181,27 +178,14 @@ internal fun EmergencyRequirementStep(
         // Worth knowing what went with them, and it is the same on both platforms now: the
         // responder inbox has no in-app route at all. A push notification is the only thing
         // that opens it, so a helper who dismisses one cannot get back to the request.
-        // `startOnResponderInbox` is that push route, and it still works.
+        // The push route into it is `openResponderInbox` on the flow screen.
 
         Spacer(modifier = Modifier.size(SakhiSpacing.space8))
     }
 
-    if (showResponderInbox) {
-        ModalBottomSheet(
-            onDismissRequest = { showResponderInbox = false },
-            sheetState = sheetState,
-            // The same sheet as every other step: the flow's blush ground, its 40dp
-            // corners, its grabber, and no scrim. Karan's standing note on Emergency is
-            // that the map never dims behind a sheet, and this one arrived white, dimmed,
-            // and with Material's 48dp-tall handle.
-            containerColor = MaterialTheme.colorScheme.background,
-            shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
-            scrimColor = Color.Transparent,
-            dragHandle = { EmergencySheetGrabber() },
-        ) {
-            EmergencyResponderInbox(viewModel = viewModel)
-        }
-    }
+    // The responder inbox used to be presented from here, which meant a request that landed
+    // while she was on any other step -- the places list, her own waiting screen -- had
+    // nowhere to appear. `EmergencyFlowScreen` owns it now and can put it over anything.
 }
 
 @Composable

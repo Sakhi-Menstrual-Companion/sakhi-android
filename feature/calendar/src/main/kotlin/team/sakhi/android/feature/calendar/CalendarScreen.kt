@@ -87,7 +87,7 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-import team.sakhi.android.feature.emergency.HomeNearbyCircleButton
+import team.sakhi.android.feature.emergency.HomeEmergencyButton
 import team.sakhi.emergency.EmergencyStore
 import team.sakhi.android.platform.DeviceLocation
 import team.sakhi.android.platform.AndroidLocationProvider
@@ -141,7 +141,8 @@ fun CalendarScreen(
     logViewModel: LoggingViewModel = koinViewModel(),
     onAskSakhi: () -> Unit = {},
     /** Opens Emergency Assistance from the bottom bar's leading slot. */
-    onOpenEmergency: () -> Unit = {},
+    /** `true` opens straight onto a request waiting for her, rather than the picker. */
+    onOpenEmergency: (openInbox: Boolean) -> Unit = {},
     onLog: (LocalDate) -> Unit = {},
     // Year mode is hoistable so the host can bind it to a sheet detent. iOS ties the
     // two together explicitly -- `HomeCalendarSheet.swift`'s header states
@@ -491,12 +492,14 @@ fun CalendarScreen(
                 leadingSlot = {
                     // The 46dp circle, not the chat header's wide capsule. iOS has two
                     // separate controls and this slot takes `HomeNearbyButton`.
-                    HomeNearbyCircleButton(
+                    // The version that knows what is live for her: a blinking red ring
+                    // when she has been asked for help, green once she is connected.
+                    HomeEmergencyButton(
                         count = nearbyCount,
                         coordinate = nearbyCoordinate,
-                        onClick = {
+                        onOpen = { openInbox ->
                             hapticManager.selection()
-                            onOpenEmergency()
+                            onOpenEmergency(openInbox)
                         },
                     )
                 },

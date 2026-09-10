@@ -28,6 +28,7 @@ import team.sakhi.models.EmergencyRequirement
 import team.sakhi.models.IncomingRequest
 import team.sakhi.models.NearbySakhi
 import team.sakhi.session.SessionManager
+import team.sakhi.emergency.EmergencyHomeSignal
 
 /**
  * Local-only UI state. Everything that is not a draft text field or a transient spinner
@@ -83,6 +84,16 @@ class EmergencyViewModel(
      * not the same as zero — the original only showed its empty state once it knew.
      */
     val nearbyAvailableCount: StateFlow<Int?> = store.nearbyAvailableCount
+
+    /**
+     * The women around her, readable before she has picked a requirement, so the safe-places
+     * sheet can list them beside the places.
+     */
+    val nearbySakhis: StateFlow<List<NearbySakhi>> = store.nearbySakhis
+
+    fun loadNearbySakhis() {
+        viewModelScope.launch { runCatching { store.refreshNearbySakhiList() } }
+    }
 
     /** The profile card she opens before deciding who to ask. */
     val profileDetail: StateFlow<EmergencyProfileDetail?> = store.profileDetail
@@ -331,6 +342,26 @@ class EmergencyViewModel(
         }
     }
 
+    /**
+     * Ask a woman straight from the safe-places sheet.
+     *
+     * One coroutine, in order, not two launched side by side. `askSakhi` only acts once the
+     * state is `ChoosingSakhi`, and `chooseRequirement` is what gets it there -- fired as two
+     * separate launches they raced, and when `ask` won the tap silently did nothing. Lands
+     * on the spot step, which is what actually sends.
+     */
+    fun askFromNearby(requirement: EmergencyRequirement, sakhi: NearbySakhi) {
+        if (_uiState.value.isSubmitting) return
+        hapticManager.impact(HapticImpact.MEDIUM)
+        viewModelScope.launch {
+            refreshLocation()
+            runCatching {
+                store.chooseRequirement(requirement)
+                store.askSakhi(sakhi.userId, sakhi.name, sakhi.photoUrl)
+            }
+        }
+    }
+
     /** After a decline: back to the picker, keeping her requirement and spot. */
     fun askSomeoneElse() {
         hapticManager.impact(HapticImpact.LIGHT)
@@ -382,6 +413,18 @@ class EmergencyViewModel(
 
     fun refreshIncoming() {
         viewModelScope.launch { runCatching { store.refreshIncoming() } }
+    }
+
+    /** What Home's button shows -- red when she is asked, green once connected. */
+    val homeSignal: StateFlow<EmergencyHomeSignal> = store.homeSignal
+
+    /**
+     * Re-reads what is live for her. Also refills `responderState.incoming`, which is how a
+     * request that lands while Emergency is open gets noticed at all.
+     */
+    suspend fun refreshHomeSignal() {
+        val userId = currentUserId ?: return
+        runCatching { store.refreshHomeSignal(userId) }
     }
 
     /**

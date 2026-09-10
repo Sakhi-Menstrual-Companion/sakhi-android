@@ -101,7 +101,11 @@ internal fun EmergencyResponderInbox(viewModel: EmergencyViewModel) {
             ErrorNotice(message = error, onDismiss = viewModel::clearResponderError)
         }
 
-        if (!responder.isAvailable) {
+        // A request that names her is shown first, whatever the availability flag says.
+        // That flag is local and has been wrong -- it defaulted to off on every launch --
+        // and a woman who had been asked was shown "you are off" with the request hidden
+        // behind it. If someone asked her, she was findable; the request is the truth.
+        if (responder.incoming.isEmpty() && !responder.isAvailable) {
             OffState()
         } else if (responder.incoming.isEmpty()) {
             EmptyNearby(isRefreshing = responder.isRefreshing)

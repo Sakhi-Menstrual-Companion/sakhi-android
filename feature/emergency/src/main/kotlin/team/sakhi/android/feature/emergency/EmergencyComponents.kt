@@ -62,6 +62,7 @@ import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.design.SakhiUIColors
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.android.designsystem.sakhiSeparator
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.models.TrustLevel
 import androidx.compose.ui.res.painterResource
@@ -79,6 +80,8 @@ import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyRequirement
 import team.sakhi.android.designsystem.sakhiLabel
 import team.sakhi.android.designsystem.sakhiSystemGray5
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Shape
 
 /**
  * Maps the shared requirement to a Material icon.
@@ -263,10 +266,11 @@ internal fun EmergencySectionHeader(
  */
 @Composable
 internal fun EmergencyCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    // 12, not 16. Figma `card` is `rounded-[12px]`; at 16 the corners ate into the 56dp
+    // row and the card read rounder than the badges inside it.
+    val shape = RoundedCornerShape(SakhiRadius.lg)
     Surface(
-        // 12, not 16. Figma `card` is `rounded-[12px]`; at 16 the corners ate into the
-        // 56dp row and the card read rounder than the badges inside it.
-        shape = RoundedCornerShape(SakhiRadius.lg),
+        shape = shape,
         color = sakhiSystemBackground(),
         modifier = modifier
             .fillMaxWidth()
@@ -276,6 +280,7 @@ internal fun EmergencyCard(modifier: Modifier = Modifier, content: @Composable C
         Column(content = content)
     }
 }
+
 
 /**
  * iOS `EmergencyBadgeIcon`: the tinted circular glyph on a row.
@@ -493,8 +498,10 @@ internal fun EmergencyChevron(modifier: Modifier = Modifier) {
     Icon(
         imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
         contentDescription = null,
-        // Figma `chevron.right` is 13x13.
-        modifier = modifier.size(13.dp),
+        // 16, not Figma's 13. At 13 the disclosure was a smudge on a real screen -- iOS
+        // draws its chevron at a weight SF Symbols gives for free, and Material's outline
+        // glyph at the same box is much thinner than that.
+        modifier = modifier.size(16.dp),
         tint = sakhiTertiaryLabel(),
     )
 }
@@ -552,18 +559,20 @@ internal fun EmergencyRow(
 private val AccessoryMaxWidth = 180.dp
 
 /**
- * iOS `EmergencyRowDivider`: hairline inset past the leading glyph, as a grouped table insets.
+ * iOS `EmergencyRowDivider`: a hairline inset past the leading glyph, as a grouped table
+ * insets.
  *
- * 58, which is where the row title starts (16 inset + 30 badge + 12 gap) -- so the rule
- * begins exactly under the first letter. It was 62, four short of the text it should line
- * up with.
+ * Through the shared [SakhiListDivider], which draws at [androidx.compose.ui.unit.Dp.Hairline]
+ * -- one physical pixel, whatever the density. This drew Material's default 1dp instead,
+ * which on Karan's 2.75x phone is about three physical pixels, so every list in this flow
+ * looked ruled next to the profile screens that already use the shared one.
+ *
+ * 58 is where a row's title starts (16 inset + 30 badge + 12 gap), so the rule begins
+ * exactly under the first letter.
  */
 @Composable
 internal fun EmergencyRowDivider(leadingInset: Dp = 58.dp) {
-    HorizontalDivider(
-        modifier = Modifier.padding(start = leadingInset),
-        color = sakhiSeparator(),
-    )
+    SakhiListDivider(startInset = leadingInset)
 }
 
 /**
@@ -644,6 +653,18 @@ internal fun EmergencySheetTitle(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
+                // 24, a step above Figma's `Type/sectionHeader` (20).
+                //
+                // Spelled out because `titleMedium` is 16, and this had been falling back
+                // to it -- an explicit 20 here was lost when the nav bar beside it was
+                // rewritten, so the question that opens the whole feature was rendering at
+                // row-label size. Karan spotted it on a device with the system font scale
+                // at 1.0, so this is the type, not a setting. Lato's cap height is short
+                // for its point size, which is why 20 still read small next to iOS's 20pt;
+                // 24 is a real step up and still well short of the 28 screen title, which
+                // was tried and read as a banner over its own content.
+                fontSize = 24.sp,
+                lineHeight = 28.sp,
                 fontWeight = FontWeight.Bold,
                 color = sakhiLabel(),
             )
@@ -651,6 +672,9 @@ internal fun EmergencySheetTitle(
                 Text(
                     text = subtitle,
                     style = MaterialTheme.typography.bodyMedium,
+                    // Steps up with the title, so the pair keeps its proportion.
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
                     color = sakhiSecondaryLabel(),
                     modifier = Modifier.padding(top = 3.dp),
                 )

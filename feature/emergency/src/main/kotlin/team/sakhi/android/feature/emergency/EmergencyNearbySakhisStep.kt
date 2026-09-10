@@ -335,29 +335,54 @@ private fun SakhiRow(sakhi: NearbySakhi, onOpenProfile: () -> Unit, onAsk: () ->
             )
         }
 
-        // Figma `action`: `px-14 py-6`, brand pink with white text, or a flat grey once the
-        // request is out. Surfaced on the row rather than only inside the profile -- without
-        // it she taps in, reaches the Ask button, and only then finds out she already asked.
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(percent = 50))
-                .background(
-                    if (asked) {
-                        sakhiSecondaryLabel().copy(alpha = 0.09f)
-                    } else {
-                        SakhiUIColors.BRAND_PINK.toComposeColor()
-                    },
-                )
-                .clickable(enabled = !asked, onClick = onAsk)
-                .padding(horizontal = 14.dp, vertical = 6.dp),
+        // Asked is a state, not an action, so it is a small quiet label -- not a second pill
+        // the same size and shape as the one she can still press. A grey button beside a
+        // pink one reads as a choice she is being offered and is not.
+        //
+        // Still tappable, though: asking again is exactly what she would want if the first
+        // one went unanswered, and a woman who is standing somewhere uncomfortable should
+        // not have to work out that the app has silently stopped letting her try.
+        // The action and the chevron travel together, closer to each other than either is
+        // to the text. The row's own 12 gap sat between them as well, which with the
+        // label's padding on top left "Asked" adrift in the middle of nowhere.
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-            Text(
-                text = stringResource(
-                    if (asked) R.string.emergency_asked else R.string.emergency_ask,
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (asked) sakhiSecondaryLabel() else Color.White,
-            )
+            if (asked) {
+                Text(
+                    text = stringResource(R.string.emergency_asked),
+                    fontSize = 13.sp,
+                    lineHeight = 18.sp,
+                    color = sakhiSecondaryLabel(),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .clickable(onClick = onAsk)
+                        // Vertical only. The height keeps the tap target real; horizontal
+                        // padding here is what pushed it away from the chevron.
+                        .padding(vertical = 8.dp),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(SakhiUIColors.BRAND_PINK.toComposeColor())
+                        .clickable(onClick = onAsk)
+                        .padding(horizontal = 14.dp, vertical = 6.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.emergency_ask),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White,
+                    )
+                }
+            }
+
+            // Always, whichever of the two is beside it. The row pushes to her profile
+            // either way, so the disclosure is a fact about the row rather than about the
+            // state of the request -- taking it away once she had asked made the row look
+            // like it had stopped leading anywhere.
+            EmergencyChevron()
         }
     }
 }
