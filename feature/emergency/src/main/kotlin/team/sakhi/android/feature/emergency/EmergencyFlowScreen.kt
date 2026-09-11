@@ -493,6 +493,8 @@ fun EmergencyFlowScreen(
                     EmergencyMyProfileSheet(
                         userId = userId,
                         profile = profileDetail,
+                        isAvailable = responder.isAvailable,
+                        onAvailabilityChange = { viewModel.setAvailable(it) },
                         onOpenFacePicker = { showFacePicker = true },
                         onClose = { showMyProfile = false },
                         // A fraction, not a fixed dp: iOS opens this one on

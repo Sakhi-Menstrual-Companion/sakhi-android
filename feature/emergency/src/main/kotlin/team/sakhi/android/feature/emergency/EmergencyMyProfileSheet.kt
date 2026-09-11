@@ -16,6 +16,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.ui.res.stringResource
+import team.sakhi.android.ui.SakhiSwitch
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.VolunteerActivism
@@ -72,6 +74,10 @@ fun EmergencyMyProfileSheet(
     userId: String,
     profile: EmergencyProfileDetail?,
     name: String? = null,
+    /** Whether she is offering to help women near her right now. */
+    isAvailable: Boolean = false,
+    /** Turns being findable on or off. */
+    onAvailabilityChange: (Boolean) -> Unit = {},
     /** Opens the face picker. */
     onOpenFacePicker: () -> Unit,
     /** Closes the sheet from the X in its own top-left corner. */
@@ -197,6 +203,53 @@ fun EmergencyMyProfileSheet(
                 caption = "What your trust level counts",
                 value = "${profile?.ratingCount ?: 0}",
             )
+        }
+
+        // The one place in the app where she can choose to be findable.
+        //
+        // It existed only inside the responder inbox, and that sheet opens when somebody
+        // has already asked her -- so there was no way to turn it on before the fact and
+        // no way to see whether it was on. Meanwhile merely opening the nearby list
+        // published her as available, which is not a choice she ever made. This is the
+        // choice, made once, visible, and reversible.
+        EmergencySectionHeader(title = stringResource(R.string.emergency_section_being_found), topPadding = 28.dp)
+        EmergencyCard {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
+            ) {
+                EmergencyBadgeIcon(
+                    icon = Icons.Filled.VolunteerActivism,
+                    color = SakhiTokens.SectionRose,
+                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.emergency_available_toggle_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontSize = 15.sp,
+                        lineHeight = 21.sp,
+                        color = sakhiLabel(),
+                    )
+                    Text(
+                        text = if (isAvailable) {
+                            stringResource(R.string.emergency_available_toggle_on)
+                        } else {
+                            stringResource(R.string.emergency_available_toggle_off)
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = sakhiSecondaryLabel(),
+                    )
+                }
+                SakhiSwitch(checked = isAvailable, onCheckedChange = onAvailabilityChange)
+            }
         }
 
         // A row that opens the picker, not the picker itself.

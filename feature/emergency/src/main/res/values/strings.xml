@@ -212,4 +212,8 @@
     <string name="emergency_n_sakhis_around">%1$d Sakhis are around you</string>
     <string name="emergency_section_safe_places">Safe places</string>
     <string name="emergency_refresh_nearby">Check again</string>
+    <string name="emergency_section_being_found">Being found</string>
+    <string name="emergency_available_toggle_title">Available to help nearby</string>
+    <string name="emergency_available_toggle_on">Women within 2 km can ask you for help</string>
+    <string name="emergency_available_toggle_off">Nobody can see you or ask you right now</string>
 </resources>
