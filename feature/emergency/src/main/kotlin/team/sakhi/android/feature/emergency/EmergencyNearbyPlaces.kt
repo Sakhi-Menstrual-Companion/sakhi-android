@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -240,7 +241,6 @@ private fun SakhiSection(
                     NearbySakhiRow(
                         sakhi = sakhi,
                         onOpenProfile = { onOpenProfile(sakhi) },
-                        onAsk = { onAsk(sakhi) },
                     )
                 }
             }
@@ -260,7 +260,7 @@ private fun SakhiSection(
  * is visible before anyone has accepted anything.
  */
 @Composable
-private fun NearbySakhiRow(sakhi: NearbySakhi, onOpenProfile: () -> Unit, onAsk: () -> Unit) {
+private fun NearbySakhiRow(sakhi: NearbySakhi, onOpenProfile: () -> Unit) {
     val trust = EmergencyFormatting.trustLevel(sakhi.ratingCount)
     val trustColor = trust.accentColor()
     val asked = sakhi.alreadyAsked
@@ -315,55 +315,22 @@ private fun NearbySakhiRow(sakhi: NearbySakhi, onOpenProfile: () -> Unit, onAsk:
             )
         }
 
-        // Asked is a state, not an action, so it is a small quiet label -- not a second pill
-        // the same size and shape as the one she can still press. A grey button beside a
-        // pink one reads as a choice she is being offered and is not.
-        //
-        // Still tappable, though: asking again is exactly what she would want if the first
-        // one went unanswered, and a woman who is standing somewhere uncomfortable should
-        // not have to work out that the app has silently stopped letting her try.
-        // The action and the chevron travel together, closer to each other than either is
-        // to the text. The row's own 12 gap sat between them as well, which with the
-        // label's padding on top left "Asked" adrift in the middle of nowhere.
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            if (asked) {
-                Text(
-                    text = stringResource(R.string.emergency_asked),
-                    fontSize = 13.sp,
-                    lineHeight = 18.sp,
-                    color = sakhiSecondaryLabel(),
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(percent = 50))
-                        .clickable(onClick = onAsk)
-                        // Vertical only. The height keeps the tap target real; horizontal
-                        // padding here is what pushed it away from the chevron.
-                        .padding(vertical = 8.dp),
-                )
-            } else {
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(SakhiUIColors.BRAND_PINK.toComposeColor())
-                        .clickable(onClick = onAsk)
-                        .padding(horizontal = 14.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.emergency_ask),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = Color.White,
-                    )
-                }
-            }
-
-            // Always, whichever of the two is beside it. The row pushes to her profile
-            // either way, so the disclosure is a fact about the row rather than about the
-            // state of the request -- taking it away once she had asked made the row look
-            // like it had stopped leading anywhere.
-            EmergencyChevron()
+        // "Asked" stays, because it is a fact about this row she needs to see. The pink
+        // Ask pill is gone: the whole row already leads to her profile, where the ask
+        // button lives, and deciding to trust a stranger belongs on that screen rather
+        // than behind a button she can hit from a list. Karan asked for the row itself to
+        // be the target.
+        if (asked) {
+            Text(
+                text = stringResource(R.string.emergency_asked),
+                fontSize = 13.sp,
+                lineHeight = 18.sp,
+                color = sakhiSecondaryLabel(),
+            )
+            Spacer(modifier = Modifier.width(2.dp))
         }
+
+        EmergencyChevron()
     }
 }
 

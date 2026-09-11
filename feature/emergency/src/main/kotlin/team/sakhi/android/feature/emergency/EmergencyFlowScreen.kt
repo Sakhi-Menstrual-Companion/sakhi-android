@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import team.sakhi.emergency.EmergencySafePlace
 import team.sakhi.models.EmergencyRequirement
+import team.sakhi.models.NearbySakhi
 import team.sakhi.android.designsystem.sakhiGroupedBackground
 import android.Manifest
 import androidx.activity.compose.BackHandler
@@ -119,6 +120,9 @@ fun EmergencyFlowScreen(
     var placesRoute by remember { mutableStateOf<PlacesRoute>(PlacesRoute.None) }
     var pendingRequirement by remember { mutableStateOf<EmergencyRequirement?>(null) }
     var showMyProfile by remember { mutableStateOf(false) }
+    // The woman whose profile is open from the nearby sheet. Held here rather than read
+    // back out of `profileDetail`, because the Ask button needs the NearbySakhi itself.
+    var nearbyProfileSakhi by remember { mutableStateOf<NearbySakhi?>(null) }
     var showFacePicker by remember { mutableStateOf(false) }
 
     // The requests addressed to her, as a sheet that can sit over any step.
@@ -427,7 +431,10 @@ fun EmergencyFlowScreen(
                             placesRoute = PlacesRoute.None
                             pendingRequirement?.let { viewModel.askFromNearby(it, sakhi) }
                         },
-                        onOpenSakhiProfile = { sakhi -> viewModel.openProfile(sakhi.userId) },
+                        onOpenSakhiProfile = { sakhi ->
+                            nearbyProfileSakhi = sakhi
+                            viewModel.openProfile(sakhi.userId)
+                        },
                         onSelect = { placesRoute = PlacesRoute.Detail(it) },
                     )
                 }
@@ -447,6 +454,47 @@ fun EmergencyFlowScreen(
             }
 
             PlacesRoute.None -> Unit
+        }
+
+        // Her profile, opened by tapping a row in the nearby list.
+        //
+        // The row used to carry an Ask pill and tapping the row itself went nowhere: it
+        // loaded the profile into state with nothing on screen to show it. Karan asked for
+        // the pill to go and the whole row to be the target, which only works if the row
+        // actually arrives somewhere -- here.
+        val nearbyProfile = profileDetail
+        if (nearbyProfileSakhi != null && nearbyProfile != null &&
+            nearbyProfile.userId == nearbyProfileSakhi?.userId
+        ) {
+            ModalBottomSheet(
+                onDismissRequest = {
+                    nearbyProfileSakhi = null
+                    viewModel.closeProfile()
+                },
+                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                containerColor = MaterialTheme.colorScheme.background,
+                shape = RoundedCornerShape(topStart = SheetCornerRadius, topEnd = SheetCornerRadius),
+                scrimColor = Color.Transparent,
+                dragHandle = { EmergencySheetGrabber() },
+            ) {
+                EmergencyProfileDetailSheet(
+                    viewModel = viewModel,
+                    profile = nearbyProfile,
+                    askable = nearbyProfileSakhi,
+                    // `viewModel.ask` only acts from `ChoosingSakhi`, which this route is
+                    // not, so the request goes through the same path the Ask pill used.
+                    onAsk = { sakhi ->
+                        nearbyProfileSakhi = null
+                        viewModel.closeProfile()
+                        placesRoute = PlacesRoute.None
+                        pendingRequirement?.let { viewModel.askFromNearby(it, sakhi) }
+                    },
+                    onDismiss = {
+                        nearbyProfileSakhi = null
+                        viewModel.closeProfile()
+                    },
+                )
+            }
         }
 
         // Requests addressed to her -- the requester's face, what she needs, and Accept /

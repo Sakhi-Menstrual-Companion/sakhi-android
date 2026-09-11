@@ -84,6 +84,15 @@ internal fun EmergencyProfileDetailSheet(
      * there is nobody to ask from here, which is when `main` hid its request button too.
      */
     askable: NearbySakhi? = null,
+    /**
+     * How to ask, when the caller has to do more than `viewModel.ask`.
+     *
+     * Opened from the nearby sheet, the flow has not reached `ChoosingSakhi` yet, and
+     * `askSakhi` returns early anywhere else -- so the default would have been a button
+     * that did nothing. That caller passes `askFromNearby`, which chooses the requirement
+     * on the way. Null keeps the picker's own behaviour.
+     */
+    onAsk: ((NearbySakhi) -> Unit)? = null,
     onDismiss: () -> Unit,
 ) {
     var showBlockConfirm by remember { mutableStateOf(false) }
@@ -256,7 +265,7 @@ internal fun EmergencyProfileDetailSheet(
         if (askable != null) {
             EmergencyAskButton(
                 alreadyAsked = alreadyAsked,
-                onAsk = { viewModel.ask(askable) },
+                onAsk = { onAsk?.invoke(askable) ?: viewModel.ask(askable) },
                 onWindowElapsed = onDismiss,
                 modifier = Modifier
                     .padding(horizontal = SakhiSpacing.space4)
