@@ -16,8 +16,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
+import team.sakhi.android.ui.LoadingShimmer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -72,6 +81,10 @@ fun EmergencyNearbyPlaces(
     /** The women around her, listed beside the places rather than behind a push. */
     sakhis: List<NearbySakhi>,
     isSearching: Boolean,
+    /** True while her own refresh is in flight, which spins the glyph in the nav bar. */
+    isRefreshing: Boolean = false,
+    /** Re-asks who and what is around her. */
+    onRefresh: () -> Unit = {},
     /**
      * Whether there is a location fix. Without one the search cannot run at all, and the
      * empty state has to say so rather than claim nothing is nearby.
@@ -92,7 +105,14 @@ fun EmergencyNearbyPlaces(
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
-        EmergencySheetNavBar(title = "Nearby", onBack = onBack)
+        EmergencySheetNavBar(
+            title = "Nearby",
+            onBack = onBack,
+            // Asking again is the whole point of this screen on a quiet night: nobody was
+            // online a minute ago, somebody may be now. Nothing else re-ran the search
+            // short of closing the flow and opening it again.
+            trailing = { NearbyRefreshButton(isRefreshing = isRefreshing, onClick = onRefresh) },
+        )
 
         Column(
             modifier = Modifier
@@ -114,6 +134,7 @@ fun EmergencyNearbyPlaces(
 
             SakhiSection(
                 sakhis = sakhis,
+                isRefreshing = isRefreshing,
                 onAsk = onAskSakhi,
                 onOpenProfile = onOpenSakhiProfile,
                 modifier = Modifier.padding(bottom = SakhiSpacing.space2),
@@ -144,13 +165,22 @@ fun EmergencyNearbyPlaces(
 @Composable
 private fun SakhiSection(
     sakhis: List<NearbySakhi>,
+    isRefreshing: Boolean,
     onAsk: (NearbySakhi) -> Unit,
     onOpenProfile: (NearbySakhi) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
         EmergencySectionHeader(title = stringResource(R.string.emergency_section_sakhis))
-        if (sakhis.isEmpty()) {
+        if (isRefreshing && sakhis.isEmpty()) {
+            // While she is asking again, "No Sakhis nearby right now" is not yet true.
+            EmergencyCard {
+                repeat(SakhiSkeletonRows) { index ->
+                    if (index > 0) EmergencyRowDivider(leadingInset = 72.dp)
+                    NearbyRowSkeleton(avatarSize = 44.dp, titleWidth = if (index == 0) 132.dp else 108.dp)
+                }
+            }
+        } else if (sakhis.isEmpty()) {
             // A calm placeholder, not an error and not a dead end. She keeps the list of
             // places below either way, so this says what is true and gets out of the way.
             //
@@ -493,21 +523,94 @@ private fun PlaceRow(place: EmergencySafePlace, onClick: () -> Unit) {
     }
 }
 
+/**
+ * The list she is about to get, greyed out, rather than a spinner over empty space.
+ *
+ * A spinner says only "wait"; rows in the shape of the real ones say what is coming and
+ * keep the sheet from jumping when they arrive. Karan asked for this directly.
+ */
 @Composable
 private fun Loading() {
-    Column(
-        modifier = Modifier.fillMaxWidth().padding(top = SakhiSpacing.space8),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+    Column {
+        EmergencySectionHeader(title = stringResource(R.string.emergency_section_safe_places))
+        EmergencyCard {
+            repeat(PlaceSkeletonRows) { index ->
+                if (index > 0) EmergencyRowDivider()
+                NearbyRowSkeleton(titleWidth = PlaceSkeletonTitleWidths[index % PlaceSkeletonTitleWidths.size])
+            }
+        }
+    }
+}
+
+/**
+ * One placeholder row: the badge, the name, and the line under it.
+ *
+ * Laid out to the same numbers as [PlaceRow] -- a 30dp badge, 16/12 padding, 12 between --
+ * so the real rows land exactly where these stood.
+ */
+@Composable
+private fun NearbyRowSkeleton(titleWidth: Dp, avatarSize: Dp = 30.dp) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
-        CircularProgressIndicator(color = SakhiUIColors.BRAND_PINK.toComposeColor())
-        Text(
-            text = "Looking around you…",
-            style = MaterialTheme.typography.bodyLarge,
-            color = sakhiSecondaryLabel(),
+        LoadingShimmer(
+            height = avatarSize,
+            width = avatarSize,
+            // The badge's own corner, so the placeholder is the badge's shape, not a pill.
+            shape = RoundedCornerShape(avatarSize * 0.25f),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
+            LoadingShimmer(height = 13.dp, width = titleWidth, shape = RoundedCornerShape(4.dp))
+            LoadingShimmer(height = 11.dp, width = 92.dp, shape = RoundedCornerShape(4.dp))
+        }
+    }
+}
+
+/**
+ * Ask again, from the nav bar's trailing slot.
+ *
+ * Spins while the answer is on its way and refuses a second tap until it lands, so an
+ * impatient double tap cannot fire two searches.
+ */
+@Composable
+private fun NearbyRefreshButton(isRefreshing: Boolean, onClick: () -> Unit) {
+    val transition = rememberInfiniteTransition(label = "nearby-refresh")
+    val spin by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = 900, easing = LinearEasing)),
+        label = "nearby-refresh-spin",
+    )
+
+    IconButton(
+        onClick = onClick,
+        enabled = !isRefreshing,
+        modifier = Modifier.size(40.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Refresh,
+            contentDescription = stringResource(R.string.emergency_refresh_nearby),
+            // Tinted here rather than left to `IconButton`, which greys a disabled glyph --
+            // and this one is "disabled" exactly while it is spinning, which is when it most
+            // needs to look alive.
+            tint = SakhiUIColors.BRAND_PINK.toComposeColor(),
+            modifier = Modifier
+                .size(20.dp)
+                .graphicsLayer { rotationZ = if (isRefreshing) spin else 0f },
         )
     }
 }
+
+/** Enough rows to fill the sheet at its resting height, and no more. */
+private const val PlaceSkeletonRows = 5
+private const val SakhiSkeletonRows = 2
+
+/** Uneven on purpose: equal bars read as a table, not as names. */
+private val PlaceSkeletonTitleWidths = listOf(196.dp, 148.dp, 214.dp, 132.dp, 178.dp)
 
 /**
  * Says which kind came back empty rather than "no results".

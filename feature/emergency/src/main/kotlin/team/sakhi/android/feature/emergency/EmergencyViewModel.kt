@@ -134,6 +134,41 @@ class EmergencyViewModel(
         }
     }
 
+    private val _isRefreshingNearby = MutableStateFlow(false)
+
+    /** True while the Nearby sheet's refresh is in flight, for its spinning glyph. */
+    val isRefreshingNearby: StateFlow<Boolean> = _isRefreshingNearby.asStateFlow()
+
+    /**
+     * Re-asks who and what is around her, on her own say-so.
+     *
+     * [loadPlaces] deliberately searches only once per opening, so there was no way to ask
+     * again: a woman who opened the sheet before anyone was online saw "No Sakhis nearby"
+     * until she closed and reopened the whole flow. This forces both halves -- the people
+     * first, since that is what the button is for -- and takes a fresh fix on the way, so
+     * the distances belong to where she is standing now.
+     */
+    fun refreshNearby() {
+        if (_isRefreshingNearby.value) return
+        viewModelScope.launch {
+            _isRefreshingNearby.value = true
+            runCatching { store.refreshNearbySakhiList() }
+
+            if (locationProvider.hasPermission()) {
+                val fix = runCatching { locationProvider.currentLocation() }.getOrNull()
+                if (fix != null) {
+                    _lastCoordinate.value = fix
+                    _isSearchingPlaces.value = true
+                    _places.value = runCatching {
+                        safePlaces.search(fix.latitude, fix.longitude)
+                    }.getOrDefault(_places.value)
+                    _isSearchingPlaces.value = false
+                }
+            }
+            _isRefreshingNearby.value = false
+        }
+    }
+
     fun refreshLocationOnly() {
         viewModelScope.launch {
             if (!locationProvider.hasPermission()) return@launch

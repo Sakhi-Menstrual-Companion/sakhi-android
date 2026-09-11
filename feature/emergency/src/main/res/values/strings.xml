@@ -211,4 +211,5 @@
     <string name="emergency_one_sakhi_around">1 Sakhi is around you</string>
     <string name="emergency_n_sakhis_around">%1$d Sakhis are around you</string>
     <string name="emergency_section_safe_places">Safe places</string>
+    <string name="emergency_refresh_nearby">Check again</string>
 </resources>

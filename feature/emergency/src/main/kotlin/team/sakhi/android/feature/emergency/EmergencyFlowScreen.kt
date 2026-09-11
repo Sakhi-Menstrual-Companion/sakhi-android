@@ -108,6 +108,7 @@ fun EmergencyFlowScreen(
     val responder by viewModel.responderState.collectAsStateWithLifecycle()
     val places by viewModel.places.collectAsStateWithLifecycle()
     val isSearchingPlaces by viewModel.isSearchingPlaces.collectAsStateWithLifecycle()
+    val isRefreshingNearby by viewModel.isRefreshingNearby.collectAsStateWithLifecycle()
     val lastCoordinate by viewModel.lastCoordinate.collectAsStateWithLifecycle()
     val profileDetail by viewModel.profileDetail.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -415,6 +416,8 @@ fun EmergencyFlowScreen(
                         places = places,
                         sakhis = nearbySakhis,
                         isSearching = isSearchingPlaces,
+                        isRefreshing = isRefreshingNearby,
+                        onRefresh = viewModel::refreshNearby,
                         hasLocation = lastCoordinate != null,
                         onBack = { placesRoute = PlacesRoute.None },
                         // Asking from here goes straight through the state machine: the

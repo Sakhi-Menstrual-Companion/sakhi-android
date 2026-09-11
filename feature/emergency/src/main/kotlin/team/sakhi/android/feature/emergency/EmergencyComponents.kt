@@ -422,6 +422,8 @@ internal fun EmergencySheetNavBar(
     trailingTitle: String? = null,
     onTrailing: (() -> Unit)? = null,
     trailingEnabled: Boolean = true,
+    /** A trailing control of its own, for bars whose action is a glyph rather than a word. */
+    trailing: (@Composable () -> Unit)? = null,
 ) {
     Box(
         modifier = modifier
@@ -470,6 +472,16 @@ internal fun EmergencySheetNavBar(
                 // Keeps a long title clear of both the Back group and any trailing action.
                 .padding(horizontal = 76.dp),
         )
+
+        if (trailing != null) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = SakhiSpacing.space2),
+            ) {
+                trailing()
+            }
+        }
 
         if (onTrailing != null && trailingTitle != null) {
             Text(

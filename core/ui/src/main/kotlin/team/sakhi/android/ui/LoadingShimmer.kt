@@ -16,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.unit.Dp
 import team.sakhi.android.designsystem.SakhiRadius
@@ -31,6 +32,8 @@ fun LoadingShimmer(
     width: Dp? = null,
     // iOS's inert placeholder grey, not Material's lavender surfaceVariant.
     baseColor: Color = sakhiSystemGray5(),
+    /** Overridable so a placeholder can take the shape of the thing it stands in for. */
+    shape: Shape = RoundedCornerShape(SakhiRadius.xl),
 ) {
     val transition = rememberInfiniteTransition(label = "sakhiShimmer")
     val alpha by transition.animateFloat(
@@ -47,7 +50,7 @@ fun LoadingShimmer(
         modifier = modifier
             .then(if (width != null) Modifier.width(width) else Modifier.fillMaxWidth())
             .height(height)
-            .clip(RoundedCornerShape(SakhiRadius.xl))
+            .clip(shape)
             .background(baseColor.copy(alpha = alpha)),
     )
 }
