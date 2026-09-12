@@ -54,6 +54,7 @@ import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiLightPink
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyProfileDetail
 import team.sakhi.models.NearbySakhi
@@ -217,9 +218,9 @@ internal fun EmergencyProfileDetailSheet(
                 // (receivedCount). requestedCount is how many times *she* asked someone
                 // else, which is a fact about her own need rather than her reliability.
                 ProfileCountRow(stringResource(R.string.emergency_profile_helped), profile.helpedCount)
-                EmergencyRowDivider()
+                SakhiListDivider(startInset = EmergencyRowInset)
                 ProfileCountRow(stringResource(R.string.emergency_profile_received), profile.receivedCount)
-                EmergencyRowDivider()
+                SakhiListDivider(startInset = EmergencyRowInset)
                 EmergencyRow(
                     title = stringResource(R.string.emergency_profile_last_active),
                     leading = {

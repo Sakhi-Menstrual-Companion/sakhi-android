@@ -385,7 +385,7 @@ private fun PartnerDetailContent(
                             label = stringResource(R.string.care_label_days_of_care),
                             value = daysValue,
                         )
-                        RowDivider()
+                        SakhiListDivider(startInset = SakhiSpacing.space10)
                         InfoRow(
                             icon = { InfoSymbolIcon(Icons.Filled.CalendarToday) },
                             label = stringResource(R.string.care_label_connected_since),
@@ -417,7 +417,7 @@ private fun PartnerDetailContent(
                             onClick = onHistory,
                         )
                         if (!isPartnerRole && onManagePermissions != null) {
-                            RowDivider()
+                            SakhiListDivider(startInset = SakhiSpacing.space10)
                             ActionRow(
                                 icon = Icons.Filled.Shield,
                                 label = stringResource(R.string.care_action_manage_permissions),
@@ -574,11 +574,6 @@ private fun SectionHeader(text: String, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
     )
-}
-
-@Composable
-private fun RowDivider() {
-    SakhiListDivider(startInset = SakhiSpacing.space10)
 }
 
 @Composable
@@ -1150,7 +1145,7 @@ private fun PartnerPermissionsEditContent(
                         checked = canLogPeriods,
                         onCheckedChange = { canLogPeriods = it },
                     )
-                    RowDivider()
+                    SakhiListDivider(startInset = SakhiSpacing.space10)
                     PermissionToggleRow(
                         title = stringResource(R.string.care_permission_generate_reports),
                         checked = canGenerateReports,
@@ -1186,7 +1181,7 @@ private fun PartnerPermissionsEditContent(
                     )
                     rows.forEachIndexed { index, (title, checked, onChange) ->
                         PermissionToggleRow(title = title, checked = checked, onCheckedChange = onChange)
-                        if (index != rows.lastIndex) RowDivider()
+                        if (index != rows.lastIndex) SakhiListDivider(startInset = SakhiSpacing.space10)
                     }
                 }
             }
@@ -1445,7 +1440,7 @@ private fun PartnerHistoryContent(
                                 color = sakhiSecondaryLabel(),
                             )
                         }
-                        if (index != logs.lastIndex) RowDivider()
+                        if (index != logs.lastIndex) SakhiListDivider(startInset = SakhiSpacing.space10)
                     }
                 }
             }

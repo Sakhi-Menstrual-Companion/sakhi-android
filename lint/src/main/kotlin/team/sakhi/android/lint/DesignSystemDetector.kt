@@ -69,8 +69,9 @@ class DesignSystemDetector : Detector(), SourceCodeScanner {
             "TextField" to "SakhiTextField",
             "OutlinedTextField" to "SakhiTextField",
             "ModalBottomSheet" to "SakhiModalSheet",
-            "HorizontalDivider" to "SakhiListDivider",
-            "Divider" to "SakhiListDivider",
+            // Dividers are NOT here any more. They have their own rule, `SakhiDivider`
+            // (DividerDetector), at ERROR rather than this rule's WARNING, because at
+            // WARNING they drifted anyway. See that file.
         )
 
         @JvmField

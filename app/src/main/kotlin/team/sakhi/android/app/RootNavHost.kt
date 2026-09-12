@@ -92,6 +92,11 @@ fun RootNavHost() {
     val updateGateController = koinInject<UpdateGateController>()
     val appVersionProvider = koinInject<AndroidAppVersionProvider>()
     val hapticManager = koinInject<AndroidHapticManager>()
+    // The Koin singleton, the one `platformModule()` called `init(androidContext())` on.
+    // Constructing `PlatformKeyValueStore()` here instead leaves `prefs` null, so every read
+    // and write goes to a throwaway per-instance HashMap: `PendingInviteStore` looked durable
+    // and remembered nothing, and the owed-join rescue below could never fire.
+    val kvStore = koinInject<PlatformKeyValueStore>()
     val route by appStateStore.appRoute.collectAsStateWithLifecycle()
     val pendingDeepLink by AndroidDeepLinkManager.pending.collectAsStateWithLifecycle()
     val isOnline by networkStatus.isOnline.collectAsStateWithLifecycle(initialValue = true)
@@ -211,7 +216,7 @@ fun RootNavHost() {
     // owed and force the accept flow instead of Home.
     LaunchedEffect(route, forcedOnboardingDeepLink) {
         if (forcedOnboardingDeepLink != null) return@LaunchedEffect
-        val owed = PendingInviteStore.read(PlatformKeyValueStore()) ?: return@LaunchedEffect
+        val owed = PendingInviteStore.read(kvStore) ?: return@LaunchedEffect
         // Only once she is actually signed in. While signed out the flow still holds the
         // code itself and the normal steps handle it.
         if (route !is AppRoute.Home && route !is AppRoute.Onboarding) return@LaunchedEffect
@@ -365,7 +370,7 @@ fun RootNavHost() {
                         // to open the app on this device does not get her colour on the
                         // splash. A phase colour says something real about her.
                         LaunchedEffect(Unit) {
-                            LastKnownPhaseStore.clearLastActiveUser(PlatformKeyValueStore())
+                            LastKnownPhaseStore.clearLastActiveUser(kvStore)
                         }
                         OnboardingFlowHost(
                             flowId = "newUser",
@@ -583,12 +588,16 @@ private fun SplashPlaceholder(
     // Supabase session has not been read from storage yet, so that is null and the lookup
     // always missed — falling back to brand pink, which is the colour change this is meant to
     // remove. The last active user is recorded separately for exactly this moment.
+    // Same injected singleton as above, for the same reason: a bare `PlatformKeyValueStore()`
+    // reads from an empty per-instance map, so this lookup always missed and the splash always
+    // fell back, which is the colour change the block below is written to avoid.
+    val kvStore = koinInject<PlatformKeyValueStore>()
     val lastPhase = remember {
         // FOLLICULAR when nothing is remembered yet, rather than null. Null falls back to the
         // brand pink treatment inside SakhiLoadingView, so a first launch went pink and then
         // changed to whatever Home settled on. FOLLICULAR is the same neutral-cycle colour
         // Home itself shows while it has no phase, so the two agree from the first frame.
-        LastKnownPhaseStore.restoreForLastActiveUser(PlatformKeyValueStore())
+        LastKnownPhaseStore.restoreForLastActiveUser(kvStore)
             ?: CyclePhase.FOLLICULAR
     }
     SakhiLoadingView(

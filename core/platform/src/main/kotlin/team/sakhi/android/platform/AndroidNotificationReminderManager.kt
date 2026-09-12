@@ -21,6 +21,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import com.google.firebase.messaging.FirebaseMessaging
+import kotlin.coroutines.resume
 import org.koin.core.context.GlobalContext
 import team.sakhi.notifications.NotificationPreferences
 import team.sakhi.notifications.NotificationScheduleBuilder
@@ -78,31 +81,44 @@ class AndroidNotificationReminderManager(
                 } else {
                     persistSchedulingContext(session)
                     requestImmediateRefresh()
-                    registerPendingFcmTokenIfAny(session.userId)
+                    registerThisPhonesToken(session.userId)
                 }
             }
         }
     }
 
     /**
-     * FCM can hand `SakhiFirebaseMessagingService.onNewToken` a token before
-     * anyone is signed in (a fresh install generates a token immediately,
-     * well before onboarding/auth finishes) -- iOS's `AppDelegate` handles
-     * this exact race by caching `latestAPNsToken` and retrying from its
-     * `.userDidSignIn` observer. This is the Android equivalent: the token
-     * itself is cached in `kvStore` (not just an in-memory var) because
-     * `SakhiFirebaseMessagingService` is OS-managed and not guaranteed to
-     * stay alive between `onNewToken` and the user actually finishing
-     * sign-in, whereas this manager is a long-lived Koin singleton with its
-     * own scope for the whole process lifetime.
+     * Gives this phone's push token to whoever just signed in, on every sign-in.
+     *
+     * It used to register a token cached by `onNewToken` and then delete the cache. FCM
+     * mints a token once per install and calls `onNewToken` again only if it changes, so
+     * the first account to sign in got the token and every account after it on the same
+     * phone never did -- while the first kept receiving pushes on a phone that was no
+     * longer hers. Now the phone asks Firebase for its current token each time, falls back
+     * to the cached one if Firebase cannot answer, and keeps it cached: it is this phone's
+     * token, and sign-out needs it too. `register_push_token` (migration 055) moves it to
+     * the signed-in account server-side.
      */
-    private fun registerPendingFcmTokenIfAny(userId: String) {
-        val pendingToken = kvStore.get(PENDING_FCM_TOKEN) ?: return
+    private fun registerThisPhonesToken(userId: String) {
         scope.launch {
-            deviceRepository.registerToken(userId = userId, token = pendingToken, platform = "android")
-                .onSuccess { kvStore.remove(PENDING_FCM_TOKEN) }
+            val token = currentFcmToken() ?: kvStore.get(PENDING_FCM_TOKEN) ?: return@launch
+            kvStore.set(PENDING_FCM_TOKEN, token)
+            deviceRepository.registerToken(userId = userId, token = token, platform = "android")
         }
     }
+
+    /**
+     * Firebase's own answer for this phone's token. Null when Firebase is not configured
+     * in this build -- `getInstance()` throws without `google-services.json` -- or when it
+     * cannot reach Google right now.
+     */
+    private suspend fun currentFcmToken(): String? = runCatching {
+        suspendCancellableCoroutine<String?> { continuation ->
+            FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { continuation.resume(it) }
+                .addOnFailureListener { continuation.resume(null) }
+        }
+    }.getOrNull()
 
     fun isBuilderBackedLocalReminder(key: String): Boolean {
         return key in setOf(

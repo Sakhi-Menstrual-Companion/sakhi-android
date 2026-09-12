@@ -28,6 +28,7 @@ import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiLabel
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.toComposeColor
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.design.SakhiUIColors
 import team.sakhi.emergency.EmergencySafePlace
 
@@ -99,7 +100,7 @@ fun EmergencyPlaceDetail(
                         title = "Address",
                         value = address,
                     )
-                    EmergencyRowDivider()
+                    SakhiListDivider(startInset = EmergencyRowInset)
                 }
                 DetailRow(
                     icon = Icons.Filled.DirectionsWalk,
@@ -108,7 +109,7 @@ fun EmergencyPlaceDetail(
                     value = place.onFootDescription,
                 )
                 place.phoneNumber?.let { number ->
-                    EmergencyRowDivider()
+                    SakhiListDivider(startInset = EmergencyRowInset)
                     DetailRow(
                         icon = Icons.Filled.Phone,
                         tint = SakhiUIColors.BRAND_CONFIRM.toComposeColor(),
@@ -118,7 +119,7 @@ fun EmergencyPlaceDetail(
                     )
                 }
                 place.website?.let { site ->
-                    EmergencyRowDivider()
+                    SakhiListDivider(startInset = EmergencyRowInset)
                     DetailRow(
                         icon = Icons.Filled.Language,
                         tint = SakhiUIColors.BRAND_PINK.toComposeColor(),

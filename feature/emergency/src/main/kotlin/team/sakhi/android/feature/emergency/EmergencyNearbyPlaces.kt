@@ -53,6 +53,7 @@ import team.sakhi.android.designsystem.sakhiLabel
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.toComposeColor
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.design.SakhiUIColors
 import team.sakhi.emergency.EmergencySafePlace
 import team.sakhi.emergency.EmergencySafePlaceKind
@@ -178,7 +179,7 @@ private fun SakhiSection(
             // While she is asking again, "No Sakhis nearby right now" is not yet true.
             EmergencyCard {
                 repeat(SakhiSkeletonRows) { index ->
-                    if (index > 0) EmergencyRowDivider(leadingInset = 72.dp)
+                    if (index > 0) SakhiListDivider(startInset = 72.dp)
                     NearbyRowSkeleton(avatarSize = 44.dp, titleWidth = if (index == 0) 132.dp else 108.dp)
                 }
             }
@@ -238,7 +239,7 @@ private fun SakhiSection(
             // answers to the same question, so they belong on the same sheet.
             EmergencyCard {
                 sakhis.forEachIndexed { index, sakhi ->
-                    if (index > 0) EmergencyRowDivider(leadingInset = 72.dp)
+                    if (index > 0) SakhiListDivider(startInset = 72.dp)
                     NearbySakhiRow(
                         sakhi = sakhi,
                         onOpenProfile = { onOpenProfile(sakhi) },
@@ -440,7 +441,7 @@ private fun PlaceList(
         EmergencySectionHeader(title = title)
         EmergencyCard {
             visible.forEachIndexed { index, place ->
-                if (index > 0) EmergencyRowDivider()
+                if (index > 0) SakhiListDivider(startInset = EmergencyRowInset)
                 PlaceRow(place = place, onClick = { onSelect(place) })
             }
         }
@@ -503,7 +504,7 @@ private fun Loading() {
         EmergencySectionHeader(title = stringResource(R.string.emergency_section_safe_places))
         EmergencyCard {
             repeat(PlaceSkeletonRows) { index ->
-                if (index > 0) EmergencyRowDivider()
+                if (index > 0) SakhiListDivider(startInset = EmergencyRowInset)
                 NearbyRowSkeleton(titleWidth = PlaceSkeletonTitleWidths[index % PlaceSkeletonTitleWidths.size])
             }
         }

@@ -38,7 +38,6 @@ import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -630,7 +629,13 @@ private fun SakhiQuickLogMenu(
                 // One hairline, only where the menu actually changes purpose (quick flow
                 // choice -> the full sheet). The previous design boxed every group in its
                 // own divider, which is what made it look like a form rather than a menu.
-                QuickLogMenuDivider(brand)
+                SakhiListDivider(
+                    modifier = Modifier.padding(
+                        horizontal = QuickLogRowInset,
+                        vertical = SakhiSpacing.space2,
+                    ),
+                    color = brand.copy(alpha = 0.08f),
+                )
 
                 QuickLogOtherSymptomsRow(brand = brand, onClick = onOtherSymptoms)
             }
@@ -665,18 +670,6 @@ private fun QuickLogDateHeader(selectedDate: LocalDate) {
             color = sakhiSecondaryLabel(),
         )
     }
-}
-
-@Composable
-private fun QuickLogMenuDivider(brand: Color) {
-    HorizontalDivider(
-        thickness = 1.dp,
-        color = brand.copy(alpha = 0.08f),
-        modifier = Modifier.padding(
-            horizontal = QuickLogRowInset,
-            vertical = SakhiSpacing.space2,
-        ),
-    )
 }
 
 /**

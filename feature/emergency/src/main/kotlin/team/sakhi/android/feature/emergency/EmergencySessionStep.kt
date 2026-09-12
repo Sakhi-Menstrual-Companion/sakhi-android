@@ -54,6 +54,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.ui.graphics.Color
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.emergency.EmergencyState
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyMessage
@@ -235,7 +236,7 @@ internal fun EmergencySessionStep(
                     SessionRowValue(EmergencyFormatting.requirementShortName(session.requirement))
                 },
             )
-            EmergencyRowDivider()
+            SakhiListDivider(startInset = EmergencyRowInset)
             EmergencyRow(
                 title = stringResource(R.string.emergency_section_destination),
                 leading = {
@@ -247,7 +248,7 @@ internal fun EmergencySessionStep(
                     )
                 },
             )
-            EmergencyRowDivider()
+            SakhiListDivider(startInset = EmergencyRowInset)
             // Sakhi shows a number; the maps app is the right place for turn-by-turn, and it
             // is honest about its own accuracy. Shown to both women: iOS gives the seeker
             // this row too, and Android hid it from her.
@@ -440,12 +441,7 @@ private fun EmergencyChatSheet(
         }
 
         // iOS `inputBar` opens with a hairline over the whole width.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(0.5.dp)
-                .background(sakhiSeparator().copy(alpha = 0.18f)),
-        )
+        SakhiListDivider(color = sakhiSeparator().copy(alpha = 0.18f))
 
         val canSend = uiState.messageDraft.isNotBlank()
 

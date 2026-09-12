@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -221,13 +222,19 @@ private fun AlertButton(
             containerColor = containerColor,
             contentColor = contentColor,
         ),
-        // iOS: `.frame(height: 50)`.
-        modifier = modifier.height(AlertButtonHeight),
+        // iOS: `.frame(height: 50)`, but as a MINIMUM here. A fixed 50dp clipped any label
+        // that needed two lines, and the one that does is the destructive confirm on the
+        // partner conversion sheet: "Delete & Continue as Partner" rendered as "Delete &
+        // Continue as" with the rest cut off. Truncating the word "Partner" off the button
+        // that deletes her health data is the worst place to lose text, so the button grows
+        // to fit instead. Every one-line label still lands on exactly 50dp.
+        modifier = modifier.heightIn(min = AlertButtonHeight),
     ) {
         Text(
             text = label,
             fontSize = 15.sp,
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+            textAlign = TextAlign.Center,
         )
     }
 }

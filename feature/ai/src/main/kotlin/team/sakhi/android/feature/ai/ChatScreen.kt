@@ -106,6 +106,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
@@ -143,6 +144,7 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.CloseButton
 import team.sakhi.android.ui.KeyboardSafeScaffold
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.design.SakhiColors
 import team.sakhi.design.SakhiUIColors
@@ -500,7 +502,7 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
                     )
                 }
             }
-            HorizontalDivider()
+            SakhiListDivider()
 
             Surface(
                 shape = RoundedCornerShape(SakhiRadius.lg),
@@ -595,7 +597,7 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
                 modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space1),
             )
 
-            HorizontalDivider(modifier = Modifier.padding(top = SakhiSpacing.space2))
+            SakhiListDivider(modifier = Modifier.padding(top = SakhiSpacing.space2))
 
             if (filteredPlaces.isEmpty()) {
                 Box(
@@ -870,12 +872,7 @@ private fun ChatHeader(
         // `opaqueSeparator` is a UIKit system colour, and iOS picks it over `separator`
         // specifically because the translucent one washes out over the page's pink tint —
         // so this is the opaque value, not a themed outline slot.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(0.5.dp)
-                .background(chatHeaderSeparatorColor()),
-        )
+        SakhiListDivider(color = chatHeaderSeparatorColor())
     }
 }
 
@@ -1590,12 +1587,7 @@ private fun ChatInputBar(
     // `Rectangle().fill(DS.Colors.separator.opacity(0.18)).frame(height: 0.5)`. Android had
     // no rule here at all, so the bar floated against the thread with nothing separating them.
     Column(modifier = Modifier.fillMaxWidth()) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(0.5.dp)
-                .background(sakhiSeparator().copy(alpha = 0.18f)),
-        )
+        SakhiListDivider(color = sakhiSeparator().copy(alpha = 0.18f))
 
     Row(
         modifier = Modifier

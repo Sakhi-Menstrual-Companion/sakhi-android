@@ -47,6 +47,7 @@ import team.sakhi.android.designsystem.sakhiDeepRose
 import team.sakhi.android.designsystem.sakhiGroupedBackground
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.IncomingRequest
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
@@ -128,7 +129,7 @@ internal fun EmergencyResponderInbox(viewModel: EmergencyViewModel) {
                     item {
                         EmergencyCard {
                             responder.incoming.forEachIndexed { index, request ->
-                                if (index > 0) EmergencyRowDivider(leadingInset = 0.dp)
+                                if (index > 0) SakhiListDivider()
                                 IncomingRequestCard(
                                     request = request,
                                     countdownSeconds = EmergencyIso8601.secondsUntil(

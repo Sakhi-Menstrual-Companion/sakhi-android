@@ -61,6 +61,7 @@ import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SakhiModalSheet
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -220,7 +221,7 @@ internal fun EmergencyNearbySakhisStep(
                 item {
                     EmergencyCard {
                         sakhis.forEachIndexed { index, sakhi ->
-                            if (index > 0) EmergencyRowDivider(leadingInset = 72.dp)
+                            if (index > 0) SakhiListDivider(startInset = 72.dp)
                             SakhiRow(
                                 sakhi = sakhi,
                                 onOpenProfile = { viewModel.openProfile(sakhi.userId) },

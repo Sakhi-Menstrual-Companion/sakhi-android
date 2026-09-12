@@ -33,6 +33,7 @@ import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.ui.FeatureBulletRow
 import team.sakhi.android.ui.OnboardingIntroScaffold
 import team.sakhi.android.ui.OnboardingShell
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SakhiNavDirection
 import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.android.ui.SakhiSwitch
@@ -195,11 +196,7 @@ private fun PermissionsPage(
                 )
                 // iOS: `Divider().padding(.leading, DS.Spacing.m)`. Without it the two rows
                 // read as one tall block.
-                HorizontalDivider(
-                    modifier = Modifier.padding(start = SakhiSpacing.space4),
-                    thickness = 0.5.dp,
-                    color = sakhiSeparator(),
-                )
+                SakhiListDivider(startInset = SakhiSpacing.space4)
                 PermissionRow(
                     title = stringResource(R.string.emergency_permission_notifications),
                     isOn = notificationsGranted,

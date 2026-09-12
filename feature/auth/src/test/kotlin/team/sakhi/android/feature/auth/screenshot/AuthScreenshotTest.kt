@@ -36,9 +36,12 @@ import team.sakhi.auth.AuthRepository
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-// Pixel 5 rather than Robolectric's 320x470 default. At the default width the OTP row is
-// squeezed and the baseline showed only **five** boxes, while the code (and iOS) use six --
-// a capture that misrepresents the screen it exists to pin is worse than no capture.
+// Pixel 5 rather than Robolectric's 320x470 default, so these captures show a mainstream
+// phone. The default width used to render only **five** OTP boxes where the code (and iOS)
+// use six; that was a real `OtpField` measurement bug, not a bad capture -- the sixth cell
+// was handed whatever width the first five had not taken and measured 0dp. It is fixed in
+// `resolveOtpCellWidth`, and `otpScreen_narrow_showsAllSixCells` below now captures that
+// same narrow width on purpose.
 @Config(sdk = [34], qualifiers = RobolectricDeviceQualifiers.Pixel5)
 class AuthScreenshotTest {
 
@@ -95,5 +98,25 @@ class AuthScreenshotTest {
         }
 
         composeTestRule.onRoot().captureRoboImage("src/test/screenshots/OtpScreen_dark.png")
+    }
+
+    // The width the reported bug needed: 320dp leaves 272dp inside `OtpScreen`'s padding,
+    // where six 48dp cells and their gaps wanted 328dp. All six must be present and the same
+    // size, with the sixth digit visible -- it is the one that had nowhere to render, which is
+    // why entering the last digit looked like it did nothing. Filled in through the real
+    // `onOtpChanged`, so the capture shows a complete code rather than an empty row.
+    @Test
+    @Config(qualifiers = "+w320dp-h640dp")
+    fun otpScreen_narrow_showsAllSixCells() {
+        val viewModel = newViewModel().apply { onOtpChanged("123456") }
+
+        composeTestRule.setContent {
+            SakhiTheme(darkTheme = false) {
+                OtpScreen(phone = "+919990421555", viewModel = viewModel)
+            }
+        }
+
+        composeTestRule.onRoot()
+            .captureRoboImage("src/test/screenshots/OtpScreen_narrow_sixCells.png")
     }
 }

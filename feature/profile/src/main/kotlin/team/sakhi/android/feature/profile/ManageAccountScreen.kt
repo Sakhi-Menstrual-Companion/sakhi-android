@@ -565,11 +565,11 @@ private fun ResetContent(
                     // a real local store for this to clear.
                     Column {
                         LossRow(Icons.AutoMirrored.Filled.Logout, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_reset_signs_out))
-                        IndentedDivider()
+                        SakhiListDivider(startInset = ManageAccountRowInset)
                         LossRow(Icons.Filled.Lock, SakhiTokens.ActivityNotes, stringResource(R.string.profile_manage_account_reset_pin_cleared))
-                        IndentedDivider()
+                        SakhiListDivider(startInset = ManageAccountRowInset)
                         LossRow(Icons.Filled.Widgets, SakhiTokens.SectionAmber, stringResource(R.string.profile_manage_account_reset_widget_cleared))
-                        IndentedDivider()
+                        SakhiListDivider(startInset = ManageAccountRowInset)
                         LossRow(Icons.Filled.CloudDone, SakhiTokens.SectionGreen, stringResource(R.string.profile_manage_account_reset_nothing_deleted))
                     }
                 }
@@ -773,9 +773,9 @@ private fun DeleteContent(
                         ) {
                             Column {
                                 LossRow(Icons.Filled.Person, SakhiTokens.LeaveReasonRose, stringResource(R.string.profile_manage_account_loss_account_profile))
-                                IndentedDivider()
+                                SakhiListDivider(startInset = ManageAccountRowInset)
                                 LossRow(Icons.Filled.WaterDrop, SakhiTokens.CategoryPeriod, stringResource(R.string.profile_manage_account_loss_cycle_data))
-                                IndentedDivider()
+                                SakhiListDivider(startInset = ManageAccountRowInset)
                                 LossRow(Icons.Filled.AutoAwesome, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_loss_learned_about_you))
                             }
                         }
@@ -1081,11 +1081,6 @@ internal suspend fun deleteAccountAndSignOut(
 }
 
 @Composable
-private fun IndentedDivider() {
-    SakhiListDivider(startInset = 68.dp)
-}
-
-@Composable
 private fun DangerRow(
     icon: ImageVector,
     iconTint: Color,
@@ -1137,3 +1132,6 @@ private fun DangerRow(
         )
     }
 }
+
+/** Where a row's text begins, past its icon; the dividers between rows start here. */
+private val ManageAccountRowInset = 68.dp

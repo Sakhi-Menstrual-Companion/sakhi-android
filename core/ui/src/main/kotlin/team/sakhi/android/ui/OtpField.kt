@@ -6,6 +6,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -32,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiRadius
@@ -42,6 +44,38 @@ import team.sakhi.android.designsystem.sakhiSystemBackground
 
 /** Matches the shared `SCREEN_TRANSITION_DURATION_MS` every onboarding step-to-step slide uses. */
 private const val OTP_AUTO_FOCUS_DELAY_MS = 380L
+
+/**
+ * Cell width that keeps **all** [length] cells inside [available], shrinking them evenly
+ * rather than letting the last one absorb the whole shortfall.
+ *
+ * [length] fixed-width cells plus their gaps want `length * cellWidth + (length - 1) *
+ * cellSpacing` -- 328dp for the 6x48dp default. A 360dp-wide phone leaves only 312dp inside
+ * `OtpScreen`'s 24dp side padding, and `Row` measures fixed-width children in order against
+ * whatever width is still unused: cells 1-5 each took their full 48dp and the SIXTH was
+ * handed the remainder. That is 32dp on a 360dp phone and exactly **0dp** once the usable
+ * width reaches ~320dp -- a narrow device, or any phone with Display Zoom / a larger display
+ * size turned on, which is common.
+ *
+ * A zero-width final cell is the bug Karan reported as not being able to enter the last
+ * digit: the value already held the sixth digit and `onComplete` had already fired, but there
+ * was no box left on screen for it to appear in. `AuthScreenshotTest` hit the same thing from
+ * the other side and pinned itself to a Pixel 5 because "the baseline showed only **five**
+ * boxes" at Robolectric's 320dp default -- the capture was right about the screen, so the
+ * device got changed instead of this.
+ *
+ * A no-op on widths that already fit: a 393dp Pixel 5 resolves back to the full 48dp.
+ */
+internal fun resolveOtpCellWidth(
+    available: Dp,
+    cellWidth: Dp,
+    cellSpacing: Dp,
+    length: Int,
+): Dp {
+    if (length <= 0) return 0.dp
+    val roomPerCell = (available - cellSpacing * (length - 1)) / length
+    return minOf(cellWidth, roomPerCell).coerceAtLeast(0.dp)
+}
 
 /**
  * Single hidden text input rendered as 6 visible cells. The shared auth flow only
@@ -78,7 +112,7 @@ fun OtpField(
     // `lightPink` in this app's theme, which is why the cells were rendering pink.
     val resolvedContainerColor = containerColor ?: sakhiSystemBackground()
 
-    LaunchedEffect(autoFocus, filteredValue) {
+    LaunchedEffect(autoFocus, enabled, filteredValue.isEmpty()) {
         if (autoFocus && enabled && filteredValue.isEmpty()) {
             // iOS `PhoneStep`: "Dismiss immediately before moving to OTP. The shell does
             // not wait, and the OTP field focuses after its screen lands, avoiding
@@ -131,7 +165,16 @@ fun OtpField(
                 .fillMaxWidth()
                 .focusRequester(focusRequester),
             decorationBox = { innerTextField ->
-                Box {
+                BoxWithConstraints {
+                    // Evenly-shrinking cells so the sixth never collapses to zero width;
+                    // see `resolveOtpCellWidth` for the measurement this works around.
+                    val resolvedCellWidth = resolveOtpCellWidth(
+                        available = maxWidth,
+                        cellWidth = cellWidth,
+                        cellSpacing = cellSpacing,
+                        length = length,
+                    )
+
                     Box(
                         modifier = Modifier
                             .size(SakhiSpacing.space1)
@@ -160,7 +203,7 @@ fun OtpField(
                             Box(
                                 modifier = Modifier
                                     .size(
-                                        width = cellWidth,
+                                        width = resolvedCellWidth,
                                         height = cellHeight,
                                     )
                                     .background(

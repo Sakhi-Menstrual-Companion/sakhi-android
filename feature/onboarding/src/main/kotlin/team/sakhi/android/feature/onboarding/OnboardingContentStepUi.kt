@@ -161,7 +161,7 @@ fun OnboardingContentStepScreen(
     // Only the steps that own their chrome need this: the shell no longer draws a
     // button for them, so they draw their own close.
     onDismiss: (() -> Unit)? = null,
-    onOtpResolved: (isReturningUser: Boolean) -> Unit = {},
+    onOtpResolved: (isReturningUser: Boolean, hasExistingOwnAccount: Boolean) -> Unit = { _, _ -> },
     acceptUiState: OnboardingAcceptUiState = OnboardingAcceptUiState(),
     onAcceptInvite: () -> Unit = {},
     onCompleteOnboarding: () -> Unit = {},
@@ -2349,7 +2349,7 @@ private fun BeHerSakhiScreen(
 private fun OnboardingPhoneOtpScreen(
     step: OnboardingFlowStep,
     onContinue: () -> Unit,
-    onOtpResolved: (isReturningUser: Boolean) -> Unit,
+    onOtpResolved: (isReturningUser: Boolean, hasExistingOwnAccount: Boolean) -> Unit,
     authViewModel: AuthViewModel = koinViewModel(),
 ) {
     // The visible back button and the top-bar spacing are now owned by
@@ -2386,12 +2386,42 @@ private fun OnboardingPhoneOtpScreen(
         )
         OnboardingFlowStep.OtpVerification -> OtpScreen(
             onOtpVerified = { result ->
-                onOtpResolved(result.accountState is AccountState.ExistingComplete)
+                onOtpResolved(
+                    result.accountState is AccountState.ExistingComplete,
+                    result.accountState.isExistingOwnAccount(),
+                )
             },
             viewModel = authViewModel,
         )
         else -> {}
     }
+}
+
+// Gates `PartnerConversionWarning` -- the "You already have an account" screen that
+// offers to delete her own health data and continue as a partner, or keep the account.
+// This used to be the same `accountState is ExistingComplete` test that decides whether
+// to skip the remaining profile steps, and that let two real existing-account cases walk
+// straight past the warning into `BeHerAccept`, silently becoming a partner:
+//
+//  - `LocalOnlyComplete`: an offline-first user who finished onboarding on this device.
+//    She is the case that most needs asking, because her cycle history is definitely
+//    there and `ExistingComplete` never covered her.
+//  - `ExistingIncomplete`: `AccountClassifier.classify` also returns this from its own
+//    `catch` when the remote profile lookup THROWS, so an existing account on a flaky
+//    connection lands here alongside the genuinely-unfinished signups.
+//
+// Only a true `NewAccount` has nothing of her own to ask about. For the rest, one extra
+// screen she can decline with "Keep My Account" is the cheap side of this trade; guessing
+// wrong the other way deletes health data without ever asking. `SessionExpired` re-enters
+// through `newUser` and never reaches this branch with an invite code.
+internal fun AccountState.isExistingOwnAccount(): Boolean = when (this) {
+    is AccountState.ExistingComplete,
+    is AccountState.ExistingIncomplete,
+    is AccountState.LocalOnlyComplete,
+    -> true
+    AccountState.NewAccount,
+    is AccountState.SessionExpired,
+    -> false
 }
 
 // ── BeHerAccept ───────────────────────────────────────────────────────────────

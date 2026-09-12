@@ -17,4 +17,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
     // FeatureAccessGate reaches the shared FeatureAccessResolver through Koin.
     implementation(libs.koin.compose)
+
+    testImplementation(kotlin("test"))
 }

@@ -296,10 +296,11 @@ fun OnboardingFlowHost(
                 onCancelInvitation = viewModel::cancelCareInvitation,
                 onDismissInviteError = viewModel::dismissCareInviteError,
                 onDismiss = onDismiss,
-                onOtpResolved = { isReturningUser ->
+                onOtpResolved = { isReturningUser, hasExistingOwnAccount ->
                     viewModel.resolveOtp(
                         isReturningUser = isReturningUser,
                         pendingInviteCode = pendingInviteCodeOverride.ifBlank { navState.pendingInviteCode },
+                        hasExistingOwnAccount = hasExistingOwnAccount,
                     )
                 },
                 acceptUiState = acceptUiState,

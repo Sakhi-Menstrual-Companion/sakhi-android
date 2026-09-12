@@ -4,7 +4,6 @@ import kotlinx.coroutines.runBlocking
 import team.sakhi.platform.PlatformKeyValueStore
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 class SakhiFirebaseMessagingServiceTest {
 
@@ -26,8 +25,13 @@ class SakhiFirebaseMessagingServiceTest {
         assertEquals(0, registerCalls)
     }
 
+    /**
+     * The token stays cached after a successful registration. It is this phone's token:
+     * the next account to sign in here and sign-out both need it, and clearing it is what
+     * left every account after the first one on a phone without pushes.
+     */
     @Test
-    fun cacheAndMaybeRegisterToken_clearsPendingTokenAfterSuccessfulRegistration() = runBlocking {
+    fun cacheAndMaybeRegisterToken_keepsThisPhonesTokenAfterSuccessfulRegistration() = runBlocking {
         val kvStore = PlatformKeyValueStore()
 
         SakhiFirebaseMessagingService.cacheAndMaybeRegisterToken(
@@ -40,7 +44,7 @@ class SakhiFirebaseMessagingServiceTest {
             Result.success(Unit)
         }
 
-        assertNull(kvStore.get(AndroidNotificationReminderManager.PENDING_FCM_TOKEN))
+        assertEquals("token-success", kvStore.get(AndroidNotificationReminderManager.PENDING_FCM_TOKEN))
     }
 
     @Test

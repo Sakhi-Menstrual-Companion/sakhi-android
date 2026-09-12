@@ -47,6 +47,7 @@ import team.sakhi.android.designsystem.sakhiLightPink
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.emergency.EmergencyState
 import team.sakhi.models.EmergencyFormatting
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
@@ -211,7 +212,7 @@ internal fun EmergencyWaitingStep(
                     value = EmergencyFormatting.requirementShortName(step.requirement),
                 )
                 step.spotLabel?.takeIf { it.isNotBlank() }?.let { spot ->
-                    EmergencyRowDivider()
+                    SakhiListDivider(startInset = EmergencyRowInset)
                     WaitingSummaryRow(
                         icon = Icons.Filled.PinDrop,
                         accent = SakhiTokens.SectionBlue,
@@ -219,7 +220,7 @@ internal fun EmergencyWaitingStep(
                         value = spot,
                     )
                 }
-                EmergencyRowDivider()
+                SakhiListDivider(startInset = EmergencyRowInset)
                 WaitingSummaryRow(
                     icon = Icons.Filled.MyLocation,
                     accent = SakhiUIColors.BRAND_CONFIRM.toComposeColor(),

@@ -70,6 +70,11 @@ class OnboardingViewModel(
     private val userProfileRepository: UserProfileRepository,
     private val healthConnectManager: AndroidHealthConnectManager,
     private val hapticManager: AndroidHapticManager,
+    // Injected, NOT `PlatformKeyValueStore()`. The bare constructor leaves `prefs` null and
+    // every write silently lands in a per-instance HashMap that dies with the object, which
+    // is why `PendingInviteStore` never actually remembered anything. Koin's singleton is the
+    // one that had `init(androidContext())` called on it (see `platformModule()`).
+    private val kvStore: PlatformKeyValueStore,
 ) : ViewModel() {
 
     val navState: StateFlow<OnboardingNavState> = flowStore.state
@@ -203,7 +208,7 @@ class OnboardingViewModel(
         // AccountClassifier, which decides on account state alone and throws this flow
         // away, so the code has to survive somewhere the app can still find it afterwards.
         // See PendingInviteStore.
-        PendingInviteStore.save(PlatformKeyValueStore(), code)
+        PendingInviteStore.save(kvStore, code)
         flowStore.send(OnboardingFlowIntent.BeHerSakhiCodeEntered(code = code))
     }
 
@@ -254,7 +259,7 @@ class OnboardingViewModel(
     // secondary "Keep My Account" action, which completes the flow as-is.
     fun keepOwnAccount() {
         // She chose not to join, so stop owing the code.
-        PendingInviteStore.clear(PlatformKeyValueStore())
+        PendingInviteStore.clear(kvStore)
         flowStore.send(OnboardingFlowIntent.Complete)
     }
 
@@ -294,7 +299,7 @@ class OnboardingViewModel(
                 // The join is done, so the code is no longer owed. Leaving it would drag
                 // the next person who opens the app on this device into someone else's
                 // invitation.
-                PendingInviteStore.clear(PlatformKeyValueStore())
+                PendingInviteStore.clear(kvStore)
                 _acceptUiState.value = _acceptUiState.value.copy(isAccepting = false, succeeded = true, error = null)
             }.onFailure { throwable ->
                 if (!isStillCurrentUser(userId)) {
@@ -479,11 +484,16 @@ class OnboardingViewModel(
         }
     }
 
-    fun resolveOtp(isReturningUser: Boolean, pendingInviteCode: String = "") {
+    fun resolveOtp(
+        isReturningUser: Boolean,
+        pendingInviteCode: String = "",
+        hasExistingOwnAccount: Boolean = isReturningUser,
+    ) {
         flowStore.send(
             OnboardingFlowIntent.OtpVerified(
                 isReturningUser = isReturningUser,
                 pendingInviteCode = pendingInviteCode,
+                hasExistingOwnAccount = hasExistingOwnAccount,
             )
         )
     }

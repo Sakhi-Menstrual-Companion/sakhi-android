@@ -36,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.design.SakhiUIColors
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.designsystem.sakhiSystemGray5
@@ -201,7 +202,7 @@ private fun RequirementSection(
         // the first.
         EmergencyCard {
             items.forEachIndexed { index, requirement ->
-                if (index > 0) EmergencyRowDivider()
+                if (index > 0) SakhiListDivider(startInset = EmergencyRowInset)
                 RequirementRow(requirement = requirement, onClick = { onSelect(requirement) })
             }
         }
@@ -455,7 +456,7 @@ internal fun EmergencySpotStep(
             )
             EmergencyCard {
                 recentSpots.forEachIndexed { index, spot ->
-                    if (index > 0) EmergencyRowDivider(leadingInset = 58.dp)
+                    if (index > 0) SakhiListDivider(startInset = EmergencyRowInset)
                     EmergencyRow(
                         title = spot.replaceFirstChar { it.uppercase() },
                         // The flow's own badge, in Figma's info blue. A bare grey clock in

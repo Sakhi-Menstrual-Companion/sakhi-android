@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Medication
 import androidx.compose.material.icons.filled.SentimentSatisfied
 import androidx.compose.material.icons.filled.WaterDrop
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -201,7 +200,6 @@ private val ActivityLogRowTitleSize = 14.sp
 private val ActivityLogRowMetaSize = 11.sp
 private val ActivityLogMonthHeaderSize = 11.sp
 private val ActivityLogMonthHeaderLetterSpacing = 1.sp
-private val ActivityLogMonthHeaderDividerThickness = 0.5.dp
 private val ActivityLogDayTitleSize = 15.sp
 private val ActivityLogDayMetaSize = 11.sp
 private val ActivityLogEntriesPillHorizontalPadding = 8.dp
@@ -234,10 +232,7 @@ private fun MonthHeader(date: KLocalDate) {
             ),
             color = sakhiSecondaryLabel(),
         )
-        HorizontalDivider(
-            modifier = Modifier.weight(1f),
-            thickness = ActivityLogMonthHeaderDividerThickness,
-        )
+        SakhiListDivider(modifier = Modifier.weight(1f))
     }
 }
 

@@ -42,6 +42,7 @@ import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.DetailSheetScaffold
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.models.UserProfile
 import team.sakhi.repositories.UserProfileRepository
 import team.sakhi.session.SessionManager
@@ -177,14 +178,14 @@ fun EditProfileScreen(onBack: () -> Unit) {
                                 )
                                 if (!isPartnerRole) {
                                     val notSetText = stringResource(R.string.edit_profile_not_set)
-                                    RowDivider()
+                                    SakhiListDivider()
                                     EditProfileRow(
                                         label = stringResource(R.string.edit_profile_height),
                                         value = heightDisplay(context, heightCm, useMetricHeight, notSetText),
                                         isEditing = isEditing,
                                         onClick = { route = EditProfileRoute.Height },
                                     )
-                                    RowDivider()
+                                    SakhiListDivider()
                                     EditProfileRow(
                                         label = stringResource(R.string.edit_profile_weight),
                                         value = weightDisplay(context, weightKg, useMetricWeight, notSetText),
@@ -301,16 +302,6 @@ private fun EditProfileRow(
             }
         }
     }
-}
-
-@Composable
-private fun RowDivider() {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)),
-    )
 }
 
 private fun heightDisplay(

@@ -78,7 +78,7 @@ fun DetailSheetScaffold(
             trailing = trailingHeaderContent,
         )
         if (headerIcon == null) {
-            HorizontalDivider()
+            SakhiListDivider()
         }
 
         // The body takes the space left over once the footer is laid out, so the footer

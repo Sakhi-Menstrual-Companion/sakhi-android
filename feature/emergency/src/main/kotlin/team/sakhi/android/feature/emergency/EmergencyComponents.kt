@@ -575,23 +575,6 @@ internal fun EmergencyRow(
 private val AccessoryMaxWidth = 180.dp
 
 /**
- * iOS `EmergencyRowDivider`: a hairline inset past the leading glyph, as a grouped table
- * insets.
- *
- * Through the shared [SakhiListDivider], which draws at [androidx.compose.ui.unit.Dp.Hairline]
- * -- one physical pixel, whatever the density. This drew Material's default 1dp instead,
- * which on Karan's 2.75x phone is about three physical pixels, so every list in this flow
- * looked ruled next to the profile screens that already use the shared one.
- *
- * 58 is where a row's title starts (16 inset + 30 badge + 12 gap), so the rule begins
- * exactly under the first letter.
- */
-@Composable
-internal fun EmergencyRowDivider(leadingInset: Dp = 58.dp) {
-    SakhiListDivider(startInset = leadingInset)
-}
-
-/**
  * iOS `EmergencyTrustChip`.
  *
  * [tinted] carries the trust level's own colour; untinted it falls back to secondary ink.
@@ -786,3 +769,9 @@ internal fun TrustLevel.badgeIcon(): ImageVector = when (this) {
     TrustLevel.VERY_KIND -> Icons.Filled.Favorite
     TrustLevel.ANGEL -> Icons.Filled.AutoAwesome
 }
+
+/**
+ * Where an emergency row's text begins, past its icon. The dividers between those rows start
+ * here: `SakhiListDivider(startInset = EmergencyRowInset)`.
+ */
+internal val EmergencyRowInset = 58.dp

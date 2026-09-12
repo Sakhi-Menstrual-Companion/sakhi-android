@@ -76,6 +76,7 @@ import team.sakhi.android.ui.BackButton
 import team.sakhi.android.feature.reports.ReportDateRangePreset
 import team.sakhi.android.ui.EmptyState
 import team.sakhi.android.ui.GlassCard
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SakhiTextField
 import team.sakhi.models.AICardType
@@ -210,10 +211,7 @@ internal fun ChatInfoScreen(
                         isLast = false,
                         onClick = onOpenMedia,
                     )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = SakhiSpacing.space8),
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f),
-                    )
+                    SakhiListDivider(startInset = SakhiSpacing.space8)
                     ChatActionRow(
                         icon = Icons.Filled.Star,
                         title = stringResource(R.string.chat_info_starred_title),
@@ -314,10 +312,7 @@ internal fun ChatReportCard(
             }
         }
 
-        HorizontalDivider(
-            modifier = Modifier.padding(top = SakhiSpacing.space4),
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
-        )
+        SakhiListDivider(modifier = Modifier.padding(top = SakhiSpacing.space4))
 
         if (session.isGenerating) {
             Column(
@@ -683,7 +678,7 @@ private fun ChatSubscreenHeader(
         // Shared nav bar, same as every other sheet -- this used to be a bespoke row with
         // its own paddings and its own title size.
         SakhiNavBar(onBack = onBack, title = title)
-        HorizontalDivider()
+        SakhiListDivider()
     }
 }
 

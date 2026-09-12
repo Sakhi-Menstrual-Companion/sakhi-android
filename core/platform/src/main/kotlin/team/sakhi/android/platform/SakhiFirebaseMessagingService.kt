@@ -175,10 +175,12 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
             userId: String?,
             register: suspend (userId: String, token: String) -> Result<Unit>,
         ) {
+            // Kept after a successful registration, not removed: it is this phone's token,
+            // and the next account to sign in here, and sign-out, both need it. Removing it
+            // is what left every account after the first one on a phone without pushes.
             kvStore.set(AndroidNotificationReminderManager.PENDING_FCM_TOKEN, token)
             val activeUserId = userId?.takeIf(String::isNotBlank) ?: return
             register(activeUserId, token)
-                .onSuccess { kvStore.remove(AndroidNotificationReminderManager.PENDING_FCM_TOKEN) }
         }
 
         private fun ensureChannel(context: Context) {

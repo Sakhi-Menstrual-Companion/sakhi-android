@@ -78,7 +78,6 @@ import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -149,6 +148,7 @@ import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.LoadingShimmer
 import team.sakhi.android.ui.PhaseBadge
 import team.sakhi.android.ui.SakhiAnimatedValue
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.flowDisplayName
 import team.sakhi.android.ui.SakhiBottomActionBar
 import team.sakhi.android.feature.logging.LoggingViewModel
@@ -1288,7 +1288,7 @@ private fun HomeGlassCard(
                 }
             }
         }
-        HorizontalDivider(color = dividerColor)
+        SakhiListDivider(color = dividerColor)
         content()
       }
     }
@@ -1557,7 +1557,7 @@ private fun CycleDetailsCard(
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(horizontal = SakhiSpacing.space5))
+            SakhiListDivider(modifier = Modifier.padding(horizontal = SakhiSpacing.space5))
 
             Column(
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
@@ -1999,7 +1999,7 @@ private fun PartnerChecklistCard(
                 )
             }
             else -> state.items.forEachIndexed { i, item ->
-                if (i > 0) LearningDivider()
+                if (i > 0) SakhiListDivider(color = learningDividerColor())
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
@@ -2072,7 +2072,7 @@ private fun PartnerChecklistLoadingState(
                 )
             }
             if (index < rowWidths.lastIndex) {
-                LearningDivider()
+                SakhiListDivider(color = learningDividerColor())
             }
         }
     }
@@ -2365,7 +2365,7 @@ private fun LearningPhaseCards() {
                     stringResource(R.string.home_learning_phase_luteal_name) to stringResource(R.string.home_learning_phase_luteal_days),
                 ),
             ).forEachIndexed { i, (icon, color, nameDays) ->
-                if (i > 0) LearningDivider()
+                if (i > 0) SakhiListDivider(color = learningDividerColor())
                 LearningOverviewRow(icon = icon, color = color, name = nameDays.first, days = nameDays.second)
             }
         }
@@ -2413,11 +2413,11 @@ private fun LearningPhaseCards() {
 
         LearningCard(title = stringResource(R.string.home_learning_log_title), icon = Icons.AutoMirrored.Filled.ListAlt) {
             LearningTipRow(Icons.Filled.Opacity, stringResource(R.string.home_learning_log_tip_1))
-            LearningDivider()
+            SakhiListDivider(color = learningDividerColor())
             LearningTipRow(Icons.Filled.BarChart, stringResource(R.string.home_learning_log_tip_2))
-            LearningDivider()
+            SakhiListDivider(color = learningDividerColor())
             LearningTipRow(Icons.Filled.Favorite, stringResource(R.string.home_learning_log_tip_3))
-            LearningDivider()
+            SakhiListDivider(color = learningDividerColor())
             LearningTipRow(Icons.Filled.Visibility, stringResource(R.string.home_learning_log_tip_4))
         }
 
@@ -2444,7 +2444,7 @@ private fun LearningPhaseCards() {
                     stringResource(R.string.home_learning_hormone_p4_desc),
                 ),
             ).forEachIndexed { i, (abbr, name, desc) ->
-                if (i > 0) LearningDivider()
+                if (i > 0) SakhiListDivider(color = learningDividerColor())
                 LearningAbbrRow(abbr = abbr, name = name, description = desc)
             }
         }
@@ -2456,18 +2456,18 @@ private fun LearningPhaseCards() {
                 LearningNutritionRowData(Icons.Filled.AutoAwesome, phasePrimaryColor(CyclePhase.OVULATION), stringResource(R.string.home_learning_phase_ovulation_name), stringResource(R.string.home_learning_eat_ovulation_desc)),
                 LearningNutritionRowData(Icons.Filled.Bedtime, phasePrimaryColor(CyclePhase.LUTEAL), stringResource(R.string.home_learning_phase_luteal_name), stringResource(R.string.home_learning_eat_luteal_desc)),
             ).forEachIndexed { i, row ->
-                if (i > 0) LearningDivider()
+                if (i > 0) SakhiListDivider(color = learningDividerColor())
                 LearningOverviewRow(icon = row.icon, color = row.color, name = row.title, days = null, subtitle = row.description)
             }
         }
 
         LearningCard(title = stringResource(R.string.home_learning_tracking_title), icon = Icons.Filled.Lightbulb) {
             LearningTipRow(Icons.Filled.CalendarMonth, stringResource(R.string.home_learning_tracking_tip_1))
-            LearningDivider()
+            SakhiListDivider(color = learningDividerColor())
             LearningTipRow(Icons.Filled.Schedule, stringResource(R.string.home_learning_tracking_tip_2))
-            LearningDivider()
+            SakhiListDivider(color = learningDividerColor())
             LearningTipRow(Icons.Filled.Bedtime, stringResource(R.string.home_learning_tracking_tip_3))
-            LearningDivider()
+            SakhiListDivider(color = learningDividerColor())
             LearningTipRow(Icons.Filled.Autorenew, stringResource(R.string.home_learning_tracking_tip_4))
         }
     }
@@ -2495,13 +2495,13 @@ private fun LearningIntro(text: String) {
         color = sakhiSecondaryLabel(),
         modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
     )
-    LearningDivider()
+    SakhiListDivider(color = learningDividerColor())
 }
 
 @Composable
 private fun LearningRows(rows: List<Triple<ImageVector, String, String>>) {
     rows.forEachIndexed { i, (icon, title, subtitle) ->
-        if (i > 0) LearningDivider()
+        if (i > 0) SakhiListDivider(color = learningDividerColor())
         Row(
             verticalAlignment = Alignment.Top,
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
@@ -2607,9 +2607,9 @@ private fun LearningPhaseDetailCard(
             color = sakhiSecondaryLabel(),
             modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
         )
-        LearningDivider()
+        SakhiListDivider(color = learningDividerColor())
         points.forEachIndexed { i, point ->
-            if (i > 0) LearningDivider()
+            if (i > 0) SakhiListDivider(color = learningDividerColor())
             Row(
                 verticalAlignment = Alignment.Top,
                 horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
@@ -2627,10 +2627,14 @@ private fun LearningPhaseDetailCard(
     }
 }
 
+/**
+ * The rule between rows of the empty-state learning cards: lighter than the standard
+ * separator, because those cards sit on the phase tint and a full-strength line read heavy.
+ * A colour, not a component; the line itself is `SakhiListDivider`.
+ */
 @Composable
-private fun LearningDivider() {
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-}
+private fun learningDividerColor(): Color =
+    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
 
 // ── Recommendation cards ─────────────────────────────────────────────────────
 // Ports `HomeDayDetailGlassView+Cards.swift`'s `nutritionCard` ("What to Eat")
@@ -2701,12 +2705,9 @@ private fun NutritionCard(
                     pages[page].forEachIndexed { rowIndex, food ->
                     // iOS: 0.5pt rule at textTertiary@0.10, inset 46pt, between rows only.
                     if (rowIndex > 0) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(start = 46.dp)
-                                .height(0.5.dp)
-                                .background(LocalHomeCardText.current.tertiary.copy(alpha = 0.10f)),
+                        SakhiListDivider(
+                            startInset = 46.dp,
+                            color = LocalHomeCardText.current.tertiary.copy(alpha = 0.10f),
                         )
                     }
                     Row(
@@ -2870,9 +2871,9 @@ private fun NutritionLoadingState(
     ) {
         repeat(4) { index ->
             if (index > 0) {
-                HorizontalDivider(
+                SakhiListDivider(
+                    startInset = 46.dp,
                     color = shimmerBase.copy(alpha = 0.72f),
-                    modifier = Modifier.padding(start = 46.dp),
                 )
             }
 

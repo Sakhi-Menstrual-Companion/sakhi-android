@@ -13,6 +13,7 @@ class SakhiIssueRegistry : IssueRegistry() {
 
     override val issues: List<Issue> = listOf(
         DesignSystemDetector.ISSUE,
+        DividerDetector.ISSUE,
         HardcodedFontSizeDetector.ISSUE,
     )
 

@@ -18,6 +18,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.res.stringResource
 import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
+import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SakhiSwitch
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Star
@@ -188,7 +189,7 @@ fun EmergencyMyProfileSheet(
                 caption = "Asks you saw through",
                 value = "${profile?.helpedCount ?: 0}",
             )
-            EmergencyRowDivider()
+            SakhiListDivider(startInset = EmergencyRowInset)
             StatRow(
                 icon = Icons.Filled.Inbox,
                 tint = SakhiTokens.SectionBlue,
@@ -196,7 +197,7 @@ fun EmergencyMyProfileSheet(
                 caption = "Answered or not",
                 value = "${profile?.receivedCount ?: 0}",
             )
-            EmergencyRowDivider()
+            SakhiListDivider(startInset = EmergencyRowInset)
             StatRow(
                 icon = Icons.Filled.Star,
                 tint = SakhiTokens.SectionAmber,

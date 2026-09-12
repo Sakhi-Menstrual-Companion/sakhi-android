@@ -45,6 +45,7 @@ import team.sakhi.models.UserProfile
 import team.sakhi.onboarding.OnboardingFlowIntent
 import team.sakhi.onboarding.OnboardingFlowStep
 import team.sakhi.onboarding.OnboardingFlowStore
+import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.repositories.UserProfileRepository
@@ -158,6 +159,10 @@ class OnboardingViewModelTest {
         healthConnectManager: AndroidHealthConnectManager = mockHealthConnectManager(),
         hapticManager: AndroidHapticManager = mockk(relaxed = true),
         appContext: Context = mockContext(),
+        // The real class, not a mock: with no Android `Context` its `init` is never called and
+        // it falls back to its own in-memory map, which is a working store for a test and
+        // keeps `PendingInviteStore` behaving exactly as it does on device.
+        kvStore: PlatformKeyValueStore = PlatformKeyValueStore(),
     ) = OnboardingViewModel(
         flowId,
         appContext,
@@ -169,6 +174,7 @@ class OnboardingViewModelTest {
         userProfileRepository,
         healthConnectManager,
         hapticManager,
+        kvStore,
     )
 
     @Test

@@ -19,6 +19,7 @@ val onboardingFeatureModule = module {
             userProfileRepository = get(),
             healthConnectManager = get(),
             hapticManager = get(),
+            kvStore = get(),
         )
     }
 }
