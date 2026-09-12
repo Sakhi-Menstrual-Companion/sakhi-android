@@ -13,6 +13,15 @@ val careFeatureModule = module {
         )
     }
     viewModel {
+        StayWithMeViewModel(
+            appContext = get(),
+            sessionManager = get(),
+            store = get(),
+            placesProvider = get(),
+            hapticManager = get(),
+        )
+    }
+    viewModel {
         CareViewModel(
             appContext = get(),
             sessionManager = get(),

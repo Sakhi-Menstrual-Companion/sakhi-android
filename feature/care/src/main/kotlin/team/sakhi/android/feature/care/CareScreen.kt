@@ -50,6 +50,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -120,6 +121,14 @@ fun CareScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val hapticManager = koinInject<AndroidHapticManager>()
+    val stayWithMeViewModel: StayWithMeViewModel = koinViewModel()
+    val stayWithMe by stayWithMeViewModel.uiState.collectAsStateWithLifecycle()
+    // Only while this sheet is on screen: it re-reads the walk, tells her screen that her
+    // person is looking, and notices a walk that has gone past its time.
+    DisposableEffect(Unit) {
+        stayWithMeViewModel.onVisible()
+        onDispose { stayWithMeViewModel.onHidden() }
+    }
     var showPermissionsEdit by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
     var showOwnerInviteFlow by remember(prefillInviteCode) { mutableStateOf(false) }
@@ -232,9 +241,33 @@ fun CareScreen(
                     onClose = onClose,
                 )
 
-                is CareRuntimeState.OwnerConnected -> PartnerDetailContent(
+                is CareRuntimeState.OwnerConnected -> {
+                    val walk = stayWithMe.mine
+                    val personName = careDisplayName(state.partnership, isPartnerRole = false)
+                    if (walk != null) {
+                        StayWithMeOwnerLive(
+                            session = walk,
+                            personName = personName,
+                            now = stayWithMe.now,
+                            isBusy = stayWithMe.isBusy,
+                            onArrive = stayWithMeViewModel::arrive,
+                            onExtend = stayWithMeViewModel::extend,
+                            onStop = stayWithMeViewModel::stop,
+                            onClose = onClose,
+                        )
+                    } else PartnerDetailContent(
                     partnership = state.partnership,
                     isPartnerRole = false,
+                    stayWithMeSlot = {
+                        StayWithMeStartSection(
+                            personName = personName,
+                            isBusy = stayWithMe.isBusy,
+                            error = stayWithMe.error,
+                            onStart = { minutes, note ->
+                                stayWithMeViewModel.start(state.partnership.id, minutes, note)
+                            },
+                        )
+                    },
                     isRemoving = uiState.isRemovingPartnership,
                     onHistory = { showHistory = true },
                     onManagePermissions = { showPermissionsEdit = true },
@@ -244,8 +277,20 @@ fun CareScreen(
                     },
                     onClose = onClose,
                 )
+                }
 
-                is CareRuntimeState.PartnerConnected -> PartnerDetailContent(
+                is CareRuntimeState.PartnerConnected -> {
+                    val walk = stayWithMe.watching
+                    if (walk != null) {
+                        StayWithMeWatcherLive(
+                            session = walk,
+                            herName = careDisplayName(state.partnership, isPartnerRole = true),
+                            now = stayWithMe.now,
+                            places = stayWithMe.places,
+                            placesLoading = stayWithMe.placesLoading,
+                            onClose = onClose,
+                        )
+                    } else PartnerDetailContent(
                     partnership = state.partnership,
                     isPartnerRole = true,
                     isRemoving = uiState.isRemovingPartnership,
@@ -257,6 +302,7 @@ fun CareScreen(
                     },
                     onClose = onClose,
                 )
+                }
             }
         }
     }
@@ -272,6 +318,19 @@ private fun LoadingContent() {
     }
 }
 
+/** The other person's name, or a plain stand-in when she has not set one. */
+@Composable
+private fun careDisplayName(partnership: CarePartnership, isPartnerRole: Boolean): String {
+    val resolved = partnership.partnerName.takeIf { name ->
+        name.isNotEmpty() &&
+            !name.lowercase().contains("partner") &&
+            !name.lowercase().contains("sakhi") &&
+            name.lowercase() != "unknown"
+    }
+    return resolved
+        ?: if (isPartnerRole) stringResource(R.string.care_swm_she_fallback) else stringResource(R.string.care_swm_fallback_person)
+}
+
 // ── Connected: PartnerDetailView parity ────────────────────────────────────
 
 @Composable
@@ -279,6 +338,8 @@ private fun PartnerDetailContent(
     partnership: CarePartnership,
     isPartnerRole: Boolean,
     isRemoving: Boolean,
+    /** Stay With Me sits above DETAILS: the one thing on this screen she opens with something to do. */
+    stayWithMeSlot: (@Composable () -> Unit)? = null,
     onHistory: () -> Unit,
     onManagePermissions: (() -> Unit)?,
     onRemove: () -> Unit,
@@ -364,6 +425,12 @@ private fun PartnerDetailContent(
                         color = sakhiSecondaryLabel(),
                         modifier = Modifier.padding(top = SakhiSpacing.space1),
                     )
+                }
+            }
+
+            if (stayWithMeSlot != null) {
+                item(key = "care-detail-stay") {
+                    Box(modifier = Modifier.padding(bottom = SakhiSpacing.space6)) { stayWithMeSlot() }
                 }
             }
 

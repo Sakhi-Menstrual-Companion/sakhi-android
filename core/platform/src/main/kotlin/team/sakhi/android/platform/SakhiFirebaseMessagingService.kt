@@ -89,6 +89,7 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         if (notification == SakhiNotification.Unknown) return
 
         ensureChannel(applicationContext)
+        StayWithMeNotifications.ensureChannels(applicationContext)
         val presentation = presentation(applicationContext, notification) ?: return
         // Where a tap goes is decided in ONE place, shared with iOS and with the inbox.
         postPushNotification(applicationContext, presentation, NotificationRouting.deepLinkUri(notification))
@@ -106,6 +107,9 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
          * never replace one another, and an SOS must never be replaced by anything.
          */
         val notificationId: Int,
+        /** Walk notifications go on their own high-importance channel; see StayWithMeNotifications. */
+        val channelId: String = CHANNEL_ID,
+        val highPriority: Boolean = false,
     )
 
     /**
@@ -150,12 +154,52 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         // Sent as a visible FCM alert, which the system draws itself while the app is in the
         // background. In the foreground nothing is drawn, exactly as before this type had a
         // name of its own (it used to parse to Unknown). Its inbox row carries it either way.
+        // Stay With Me. Her first name and that she is walking, never where: the position
+        // stays inside the app. All four share one id per walk, so "is home" replaces
+        // "is heading home" instead of stacking under it.
+        is SakhiNotification.StayWithMeStarted -> walkPresentation(
+            notification.sessionId,
+            context.getString(R.string.platform_push_swm_started_title, walkName(context, notification.ownerName)),
+            context.getString(R.string.platform_push_swm_started_body),
+        )
+        is SakhiNotification.StayWithMeExtended -> walkPresentation(
+            notification.sessionId,
+            context.getString(R.string.platform_push_swm_extended_title, walkName(context, notification.ownerName)),
+            context.getString(R.string.platform_push_swm_extended_body),
+        )
+        is SakhiNotification.StayWithMeEnded -> walkPresentation(
+            notification.sessionId,
+            context.getString(
+                if (notification.arrived) R.string.platform_push_swm_arrived_title else R.string.platform_push_swm_cancelled_title,
+                walkName(context, notification.ownerName),
+            ),
+            context.getString(
+                if (notification.arrived) R.string.platform_push_swm_arrived_body else R.string.platform_push_swm_cancelled_body,
+            ),
+        )
+        is SakhiNotification.StayWithMeLate -> walkPresentation(
+            notification.sessionId,
+            context.getString(R.string.platform_push_swm_late_title, walkName(context, notification.ownerName)),
+            context.getString(R.string.platform_push_swm_late_body),
+        )
         is SakhiNotification.FeatureAvailable -> null
         SakhiNotification.Unknown -> null
     }
 
+    private fun walkName(context: Context, name: String): String =
+        name.trim().ifEmpty { context.getString(R.string.platform_push_swm_someone) }
+
+    private fun walkPresentation(sessionId: String, title: String, body: String) = PushPresentation(
+        title = title,
+        body = body,
+        notificationId = WALK_NOTIFICATION_BASE + (sessionId.hashCode() and 0xFFFF),
+        channelId = StayWithMeNotifications.ALERT_CHANNEL,
+        highPriority = true,
+    )
+
     companion object {
         private const val CHANNEL_ID = "sakhi_push"
+        private const val WALK_NOTIFICATION_BASE = 3_000_000
 
         /** Shared by every generic care/cycle push so they collapse into one row. */
         private const val CARE_UPDATE_NOTIFICATION_ID = 1001
@@ -215,11 +259,11 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
 
-            val built = NotificationCompat.Builder(context, CHANNEL_ID)
+            val built = NotificationCompat.Builder(context, presentation.channelId)
                 .setSmallIcon(android.R.drawable.ic_dialog_info)
                 .setContentTitle(presentation.title)
                 .setContentText(presentation.body)
-                .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+                .setPriority(if (presentation.highPriority) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setContentIntent(contentIntent)
                 // Keeps the generic copy generic on a locked screen: without this, an OEM

@@ -43,6 +43,8 @@ import androidx.compose.material.icons.rounded.NotificationsNone
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.VolunteerActivism
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -538,6 +540,29 @@ private fun rowCopy(kind: SakhiNotification): RowCopy {
             },
             stringResource(R.string.inbox_feature_body),
         )
+        is SakhiNotification.StayWithMeStarted -> RowCopy(
+            stringResource(R.string.inbox_swm_started_title, name(kind.ownerName)),
+            stringResource(R.string.inbox_swm_started_body),
+        )
+        is SakhiNotification.StayWithMeExtended -> RowCopy(
+            stringResource(R.string.inbox_swm_extended_title, name(kind.ownerName)),
+            stringResource(R.string.inbox_swm_extended_body),
+        )
+        is SakhiNotification.StayWithMeEnded -> if (kind.arrived) {
+            RowCopy(
+                stringResource(R.string.inbox_swm_arrived_title, name(kind.ownerName)),
+                stringResource(R.string.inbox_swm_arrived_body),
+            )
+        } else {
+            RowCopy(
+                stringResource(R.string.inbox_swm_cancelled_title, name(kind.ownerName)),
+                stringResource(R.string.inbox_swm_cancelled_body),
+            )
+        }
+        is SakhiNotification.StayWithMeLate -> RowCopy(
+            stringResource(R.string.inbox_swm_late_title, name(kind.ownerName)),
+            stringResource(R.string.inbox_swm_late_body),
+        )
         is SakhiNotification.PeriodReminder,
         SakhiNotification.LoggingReminder,
         SakhiNotification.Unknown,
@@ -565,6 +590,11 @@ private fun rowLook(kind: SakhiNotification): RowLook {
         is SakhiNotification.Sos -> RowLook(Icons.Rounded.Warning, AppleSystemColors.red)
         is SakhiNotification.EmergencyRequestReceived -> RowLook(Icons.Rounded.VolunteerActivism, AppleSystemColors.orange)
         is SakhiNotification.FeatureAvailable -> RowLook(Icons.Rounded.AutoAwesome, AppleSystemColors.indigo)
+        is SakhiNotification.StayWithMeStarted,
+        is SakhiNotification.StayWithMeExtended,
+        -> RowLook(Icons.Rounded.Place, pink)
+        is SakhiNotification.StayWithMeEnded -> RowLook(Icons.Rounded.Home, AppleSystemColors.green)
+        is SakhiNotification.StayWithMeLate -> RowLook(Icons.Rounded.Warning, AppleSystemColors.red)
         else -> RowLook(Icons.Rounded.Notifications, pink)
     }
 }

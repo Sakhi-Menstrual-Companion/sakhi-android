@@ -15,7 +15,21 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Stay With Me (2026-09-13). While a walk is live her phone shares its position with the
+         one person she asked, so this module now needs FINE location and a location-type
+         foreground service. Only ever during a walk she started, stopped the moment she marks
+         herself home. No background-location permission: the service is started from the
+         screen, while the app is visible. -->
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+
     <application>
+        <service
+            android:name=".StayWithMeLocationService"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
         <!-- FCM push transport (see SakhiFirebaseMessagingService kdoc), not
              wired to a live Firebase project yet, no google-services.json in
              this repo. Registered now so token wiring is real plumbing, not a

@@ -191,6 +191,9 @@ fun HomeNavHost() {
         when (val link = pending.link) {
             is SakhiDeepLink.AcceptInvite -> activeOverlaySheet = HomeOverlaySheet.Care(prefillInviteCode = link.code)
             is SakhiDeepLink.OpenCareMode -> activeOverlaySheet = HomeOverlaySheet.Care()
+            // sakhi://care/stay/{id}, from a Stay With Me notification. Care Mode opens on the
+            // live walk by itself, so there is nothing extra to pass: the store already holds it.
+            is SakhiDeepLink.OpenStayWithMe -> activeOverlaySheet = HomeOverlaySheet.Care()
             is SakhiDeepLink.OpenReport -> activeOverlaySheet = HomeOverlaySheet.Profile(initialScreen = ProfileSheetScreen.Reports)
             is SakhiDeepLink.OpenAIChat -> activeOverlaySheet = HomeOverlaySheet.Chat
             is SakhiDeepLink.OpenProfile -> activeOverlaySheet = HomeOverlaySheet.Profile()
@@ -267,6 +270,7 @@ fun HomeNavHost() {
             onOpenEmergency = { openInbox ->
                 presentOverlaySheet(HomeOverlaySheet.Emergency(openResponderInbox = openInbox))
             },
+            onOpenCare = { presentOverlaySheet(HomeOverlaySheet.Care()) },
             onLog = { date -> presentOverlaySheet(HomeOverlaySheet.Logging(initialDate = date)) },
             onDaySelected = homeViewModel::selectDate,
             // Detent and year mode are the same concept on iOS: dragging the sheet

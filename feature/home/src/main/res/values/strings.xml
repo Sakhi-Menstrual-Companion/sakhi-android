@@ -274,4 +274,16 @@
     <string name="inbox_feature_body">Thank you for waiting. You can use it again now.</string>
     <string name="inbox_generic_title">Something new in Sakhi</string>
     <string name="inbox_generic_body">Tap to have a look.</string>
+
+    <!-- Stay With Me, in the inbox -->
+    <string name="inbox_swm_started_title">%1$s is heading home</string>
+    <string name="inbox_swm_started_body">She asked you to stay with her.</string>
+    <string name="inbox_swm_extended_title">%1$s needs a little longer</string>
+    <string name="inbox_swm_extended_body">She added more time to her walk.</string>
+    <string name="inbox_swm_arrived_title">%1$s is home</string>
+    <string name="inbox_swm_arrived_body">She marked herself home.</string>
+    <string name="inbox_swm_cancelled_title">%1$s stopped sharing</string>
+    <string name="inbox_swm_cancelled_body">Her walk has ended.</string>
+    <string name="inbox_swm_late_title">%1$s has not reached yet</string>
+    <string name="inbox_swm_late_body">She is past the time she gave.</string>
 </resources>

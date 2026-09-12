@@ -89,7 +89,7 @@ import kotlinx.datetime.minus
 import kotlinx.datetime.plus
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
-import team.sakhi.android.feature.emergency.HomeEmergencyButton
+import team.sakhi.android.feature.care.CareModeHomeButton
 import team.sakhi.emergency.EmergencyStore
 import team.sakhi.android.platform.DeviceLocation
 import team.sakhi.android.platform.AndroidLocationProvider
@@ -146,6 +146,8 @@ fun CalendarScreen(
     /** Opens Emergency Assistance from the bottom bar's leading slot. */
     /** `true` opens straight onto a request waiting for her, rather than the picker. */
     onOpenEmergency: (openInbox: Boolean) -> Unit = {},
+    /** Opens Care Mode from the bottom bar's leading slot, where her person lives. */
+    onOpenCare: () -> Unit = {},
     onLog: (LocalDate) -> Unit = {},
     // Year mode is hoistable so the host can bind it to a sheet detent. iOS ties the
     // two together explicitly -- `HomeCalendarSheet.swift`'s header states
@@ -501,12 +503,10 @@ fun CalendarScreen(
                     // separate controls and this slot takes `HomeNearbyButton`.
                     // The version that knows what is live for her: a blinking red ring
                     // when she has been asked for help, green once she is connected.
-                    HomeEmergencyButton(
-                        count = nearbyCount,
-                        coordinate = nearbyCoordinate,
-                        onOpen = { openInbox ->
+                    CareModeHomeButton(
+                        onOpen = {
                             hapticManager.selection()
-                            onOpenEmergency(openInbox)
+                            onOpenCare()
                         },
                     )
                 },
