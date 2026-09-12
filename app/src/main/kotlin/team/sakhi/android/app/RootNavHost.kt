@@ -1,5 +1,6 @@
 package team.sakhi.android.app
 
+import androidx.compose.runtime.rememberCoroutineScope
 import co.touchlab.kermit.Logger
 import android.net.NetworkCapabilities
 import android.net.ConnectivityManager
@@ -312,6 +313,19 @@ fun RootNavHost() {
     }
 
     ToastHost()
+
+    // Partner mode is a live view of someone else's health, so it must never draw yesterday's
+    // numbers. Losing the network closes this side of the app until it is back (Karan,
+    // 2026-09-13). Her own side stays offline-first and is deliberately untouched, as the
+    // note below about the removed connectivity banner says.
+    val partnerSessionManager = koinInject<SessionManager>()
+    val partnerSyncStore = koinInject<SyncStore>()
+    val partnerSession by partnerSessionManager.session.collectAsStateWithLifecycle()
+    val coverScope = rememberCoroutineScope()
+    PartnerConnectionCover(
+        visible = partnerSession?.isViewingOwnData == false && !isOnline,
+        onRetry = { coverScope.launch { runCatching { partnerSyncStore.refreshPartnerHealth() } } },
+    )
 
     Column(modifier = Modifier.fillMaxSize()) {
         // No connectivity banner. Karan asked for it gone entirely: Sakhi is offline-first

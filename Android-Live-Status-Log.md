@@ -23234,3 +23234,34 @@ into the shared managers, navigators, stores, and design-system skeleton.
     self-mode/partner-mode local-key collision class were found in the current
     Android codebase beyond the already-fixed chat persistence bug.
   — Codex
+
+- **2026-09-13 03:45 IST, Codex continuation from Claude session "Sakhi
+  android app UI smoothness issues": finished the partner-mode stale-data
+  follow-up that Claude stopped on.**
+  - Picked up after commit `8b87d6b` ("A partner's Home reads her snapshot,
+    never this phone's cached copy"). That commit had already moved partner Home
+    away from the phone's old local cache and onto the permission-filtered
+    partner snapshot.
+  - Finished the unbuilt follow-up: `PartnerConnectionCover` is now a root-level
+    non-dismissable cover shown only when the current session is partner mode
+    and Android reports the network is offline. Her own side stays offline-first
+    and unchanged.
+  - The cover sits above sheets through a full-width dialog, slides from the
+    bottom, uses the same pink action treatment, and offers a retry that calls
+    `SyncStore.refreshPartnerHealth()`.
+  - Added the app module's direct material-icons dependency because the root app
+    module now renders the offline icon itself.
+  - Also kept the screenshot-test constructor aligned with the already-landed
+    Home notification repository parameter so Home tests compile.
+  - Verified:
+    `:app:compileDebugKotlin :app:lintDebug :feature:home:compileDebugUnitTestKotlin`
+    passed, then `:app:assembleDebug :feature:home:testDebugUnitTest --tests
+    team.sakhi.android.feature.home.HomeViewModelTest` passed.
+  - Installed the debug APK on the Redmi `M2101K6I` and launched
+    `com.rachna.mysakhi`. The app process was focused and no fatal crash was in
+    the checked log window.
+  - Device proof that the stale partner Home issue is now fixed end to end:
+    `SakhiHome` logged `latestPresent=2026-09-13` with two logs and the current
+    menstrual cycle, instead of the stale 5 September state seen in the Claude
+    session.
+  — Codex

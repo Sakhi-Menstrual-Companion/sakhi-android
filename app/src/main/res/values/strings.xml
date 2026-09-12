@@ -8,4 +8,9 @@
     <string name="app_support_title">Support</string>
     <!-- Verbatim from iOS's handleScreenshotTaken() in SakhiAppShellSnapshot.swift, which
          shows this as a 7s warning toast gated on the same preference. -->
+    <!-- Shown over a care partner's app while the connection is gone. Her own side of
+         Sakhi is offline-first and shows nothing like this. -->
+    <string name="partner_offline_title">You\'re offline</string>
+    <string name="partner_offline_message">Be Her Sakhi shows you how she is right now, so it needs a connection. This closes by itself the moment you are back online.</string>
+    <string name="partner_offline_retry">Try again</string>
 </resources>
