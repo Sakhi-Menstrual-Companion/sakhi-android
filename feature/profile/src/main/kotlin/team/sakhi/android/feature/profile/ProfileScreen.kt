@@ -24,6 +24,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Brush
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Gavel
 import androidx.compose.material.icons.filled.Info
@@ -46,6 +47,9 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
@@ -116,6 +120,8 @@ fun ProfileScreen(
     onAboutClick: () -> Unit = {},
     onFeedbackClick: () -> Unit = {},
     onManageAccountClick: () -> Unit = {},
+    /** Opens `OfflineModeScreen`, iOS's `navigator.push(.offlineMode)` for `.useOffline`. */
+    onUseOfflineClick: () -> Unit = {},
     onClose: (() -> Unit)? = null,
     viewModel: ProfileViewModel = koinViewModel(),
 ) {
@@ -125,6 +131,8 @@ fun ProfileScreen(
     val uriHandler = LocalUriHandler.current
     val themeStore = koinInject<ThemePreferenceStore>()
     val currentThemeMode by themeStore.mode.collectAsState()
+
+    var showResumeOnlineConfirm by remember { mutableStateOf(false) }
 
     val groups = profileSettingGroups(
         context = context,
@@ -141,12 +149,35 @@ fun ProfileScreen(
         onAboutClick = onAboutClick,
         onFeedbackClick = onFeedbackClick,
         onManageAccountClick = onManageAccountClick,
+        onUseOfflineClick = onUseOfflineClick,
+        onResumeOnlineClick = { showResumeOnlineConfirm = true },
+        isSyncPaused = uiState.isSyncPaused,
         onSignOutClick = viewModel::requestSignOut,
         // Asks the app root to run the onboarding phone/OTP flow over Home. The record
         // migration that makes this safe runs in `AuthViewModel` when that sign-in lands.
         onCreateAccountClick = OfflineUpgradeLauncher::request,
         isOfflineUser = uiState.isOfflineUser,
     )
+
+    // iOS confirms this one before acting (`AlertManager.shared.show(... "Resume online
+    // sync?" ...)`), because it starts sending her data to the cloud again and needs a
+    // connection. Going offline is NOT confirmed here on either platform: that has its own
+    // screen, which explains itself.
+    if (showResumeOnlineConfirm) {
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Info,
+            title = stringResource(R.string.profile_resume_online_title),
+            message = stringResource(R.string.profile_resume_online_message),
+            primaryLabel = stringResource(R.string.profile_resume_online_action),
+            onPrimaryClick = {
+                showResumeOnlineConfirm = false
+                viewModel.resumeOnline()
+            },
+            secondaryLabel = stringResource(R.string.profile_cancel),
+            onSecondaryClick = { showResumeOnlineConfirm = false },
+            onDismissRequest = { showResumeOnlineConfirm = false },
+        )
+    }
 
     if (uiState.showSignOutConfirm) {
         // Sakhi's own alert sheet, not a raw Material3 `AlertDialog`. Leaving a system
@@ -326,14 +357,17 @@ private fun ProfileCard(
                         } else {
                             sakhiConfirm()
                         }
+                        // iOS branches this pair on `vm.isAccountSecureOnline`, not on
+                        // "is this a guest": an account that chose Use Sakhi Offline is
+                        // signed in but its data is not going anywhere, and it must say so.
                         Icon(
-                            imageVector = if (uiState.isOfflineUser) Icons.Filled.PhoneAndroid else Icons.Filled.VerifiedUser,
+                            imageVector = if (!uiState.isAccountSecureOnline) Icons.Filled.PhoneAndroid else Icons.Filled.VerifiedUser,
                             contentDescription = null,
                             tint = statusColor,
                             modifier = Modifier.size(12.dp),
                         )
                         Text(
-                            text = if (uiState.isOfflineUser) {
+                            text = if (!uiState.isAccountSecureOnline) {
                                 stringResource(R.string.profile_on_device)
                             } else {
                                 stringResource(R.string.profile_synced_secure)
@@ -476,6 +510,10 @@ private fun profileSettingGroups(
     onAboutClick: () -> Unit,
     onFeedbackClick: () -> Unit,
     onManageAccountClick: () -> Unit,
+    onUseOfflineClick: () -> Unit,
+    onResumeOnlineClick: () -> Unit,
+    /** @see ProfileUiState.isSyncPaused */
+    isSyncPaused: Boolean,
     onSignOutClick: () -> Unit,
     /** Starts the offline-to-online upgrade: phone + OTP, then her records are migrated. */
     onCreateAccountClick: () -> Unit,
@@ -535,11 +573,6 @@ private fun profileSettingGroups(
         label = context.getString(R.string.profile_group_account),
         items = listOf(
             ProfileSettingItem(Icons.Filled.Storage, context.getString(R.string.profile_item_manage_account), onManageAccountClick),
-            // "Use Sakhi offline" is deliberately NOT listed yet. The screen exists
-            // (OfflineModeScreen) but Android cannot honour what it promises: every
-            // repository writes straight to Supabase, so logging does not work offline
-            // and there is no queued sync to pause. Re-add this row only once Android
-            // has a local-first write path. See Android-Live-Status-Log.md.
             // Offline accounts get NO Sign Out. iOS branches the same way
             // (`ProfileView.swift`): Sign Out exists only in the signed-in branch.
             // Signing out of an account that was never signed in is meaningless, and
@@ -561,7 +594,32 @@ private fun profileSettingGroups(
                     onCreateAccountClick,
                 )
             } else {
-                items + ProfileSettingItem(
+                // iOS's signed-in Account group, in ITS order: Manage Account, then the
+                // offline switch, then Sign Out (`ProfileView.swift`).
+                //
+                // This row used to be left out, on the grounds that "every repository writes
+                // straight to Supabase, so logging does not work offline and there is no
+                // queued sync to pause". That is no longer true and had not been for a
+                // while: `PeriodLogRepository.upsert` writes to the local store FIRST and
+                // pushes in the background, falling back to the durable `SyncQueue` on
+                // failure, and Android registers that local store (`AppModule`,
+                // `localStore = getOrNull()`). `SyncPauseState` holds the queue, and
+                // `OfflineModeViewModel` already ports iOS's `goOffline()` step for step.
+                // So the promise this row makes is one Android can now keep.
+                val offlineSwitch = if (isSyncPaused) {
+                    ProfileSettingItem(
+                        Icons.Filled.CloudUpload,
+                        context.getString(R.string.profile_item_resume_online),
+                        onResumeOnlineClick,
+                    )
+                } else {
+                    ProfileSettingItem(
+                        Icons.Filled.CloudOff,
+                        context.getString(R.string.profile_item_use_offline),
+                        onUseOfflineClick,
+                    )
+                }
+                items + offlineSwitch + ProfileSettingItem(
                     Icons.AutoMirrored.Filled.Logout,
                     context.getString(R.string.profile_item_sign_out),
                     onSignOutClick,

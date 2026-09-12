@@ -1,5 +1,6 @@
 package team.sakhi.android.app
 
+import team.sakhi.android.feature.profile.OfflineModeScreen
 import team.sakhi.care.CareRuntimeState
 import team.sakhi.care.CareStore
 import team.sakhi.android.feature.care.LogPermissionRequestSheet
@@ -111,6 +112,8 @@ private enum class ProfileSheetScreen {
     About,
     Feedback,
     ManageAccount,
+    /** iOS `navigator.push(.offlineMode)` from the Account group's "Use Sakhi offline". */
+    OfflineMode,
 }
 
 @Serializable
@@ -420,6 +423,7 @@ private fun ProfileOverlaySheet(
                 onAboutClick = { screen = ProfileSheetScreen.About },
                 onFeedbackClick = { screen = ProfileSheetScreen.Feedback },
                 onManageAccountClick = { screen = ProfileSheetScreen.ManageAccount },
+                onUseOfflineClick = { screen = ProfileSheetScreen.OfflineMode },
                 // iOS's `DSNavBar(onClose:)` on ProfileView dismisses the whole sheet
                 // (`AppCoordinator.shared.dismissSheet()`), not just this sub-screen.
                 onClose = onDismiss,
@@ -436,6 +440,9 @@ private fun ProfileOverlaySheet(
             ProfileSheetScreen.About -> AboutScreen(onBack = { screen = ProfileSheetScreen.Root })
             ProfileSheetScreen.Feedback -> FeedbackScreen(onBack = { screen = ProfileSheetScreen.Root })
             ProfileSheetScreen.ManageAccount -> ManageAccountScreen(onBack = { screen = ProfileSheetScreen.Root })
+            // Closes back to Profile on its own once the switch has been made, which is what
+            // `OfflineModeScreen` calls `onClose` for.
+            ProfileSheetScreen.OfflineMode -> OfflineModeScreen(onClose = { screen = ProfileSheetScreen.Root })
         }
     }
 }

@@ -2,6 +2,8 @@ package team.sakhi.android.feature.emergency
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -117,6 +119,9 @@ fun NearbySakhiButton(
 
     Box(
         modifier = modifier
+            // The capsule's OWN size, which the oversized map behind it must not change.
+            // See the `matchParentSize` note below.
+            .defaultMinSize(minWidth = NEARBY_CAPSULE_MIN_WIDTH, minHeight = NEARBY_CAPSULE_HEIGHT)
             // Two rings, drawn in this order for a reason, straight from iOS: the white
             // takes the outer band and the hairline then lands on the very edge of it, so
             // the result is a white band holding the capsule in with a defined outline
@@ -130,16 +135,40 @@ fun NearbySakhiButton(
         // Her surroundings behind the capsule, once there is a fix. Falls back to the plain
         // fill with no location, which is also what anyone who never granted it sees.
         if (mapCoordinate != null) {
-            NearbyMapThumbnail(
-                coordinate = mapCoordinate,
-                faceCount = shown,
-                // Same overscan as the circle: the Google logo is pinned to the map view's
-                // bottom-left, so the view has to be bigger than the shape clipping it.
-                modifier = Modifier.requiredSize(
-                    width = NEARBY_CAPSULE_MIN_WIDTH + MAP_ATTRIBUTION_OVERSCAN * 2,
-                    height = NEARBY_CAPSULE_HEIGHT + MAP_ATTRIBUTION_OVERSCAN * 2,
-                ),
-            )
+            // The oversized map is held inside a `matchParentSize` box, and that is load
+            // bearing.
+            //
+            // `requiredSize` ignores the parent's constraints, but the child still REPORTS
+            // its size, so a Box sizes itself to hold it. That made this capsule measure
+            // 308dp wide (220 + 2 x 44 of overscan) and 126dp tall instead of 220 x 38,
+            // while `clip` kept it LOOKING right, because clip changes drawing and not
+            // layout. In the AI chat header, where this sits in a Row beside a
+            // `weight(1f)` title, those extra 88dp left the title about 40dp wide and it
+            // rendered one letter per line (reported live: "ai sheet ... pura he khrab ho
+            // rakha hai"). The same silent inflation applied anywhere else this capsule is
+            // laid out next to something.
+            //
+            // A `matchParentSize` child takes the parent's size and does NOT contribute to
+            // it, and `wrapContentSize(unbounded = true)` then lets the map be bigger than
+            // that box without pushing it. So the overscan still hides Google's pinned
+            // attribution, and layout sees only the capsule.
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .wrapContentSize(align = Alignment.Center, unbounded = true),
+            ) {
+                NearbyMapThumbnail(
+                    coordinate = mapCoordinate,
+                    faceCount = shown,
+                    // Same overscan as the circle: the Google logo is pinned to the map
+                    // view's bottom-left, so the view has to be bigger than the shape
+                    // clipping it.
+                    modifier = Modifier.requiredSize(
+                        width = NEARBY_CAPSULE_MIN_WIDTH + MAP_ATTRIBUTION_OVERSCAN * 2,
+                        height = NEARBY_CAPSULE_HEIGHT + MAP_ATTRIBUTION_OVERSCAN * 2,
+                    ),
+                )
+            }
         }
 
         Row(

@@ -882,7 +882,7 @@
     <string name="profile_content_item_body_open_source_licenses_development_tools" formatted="false">Development Tools:\n\n• JUnit / Kotlin Test: Testing frameworks ensuring Sakhi\'s reliability and quality\n• Gradle: Build automation for the whole multi-module project\n\nThese tools help us maintain high code quality, catch issues early, and deliver a reliable experience to all Sakhi users.</string>
     <string name="profile_content_item_body_open_source_licenses_gratitude_and_compliance" formatted="false">We acknowledge and thank all open source contributors. The full text of all applicable licenses is available upon request.\n\nIf you believe we have inadvertently missed attribution for any library or if you have any licensing questions, please contact us at hello@getswipe.in.\n\nThe open source community makes software development better for everyone, and we are proud to be part of this ecosystem.</string>
     <!-- Use Sakhi offline. Copy transcribed from iOS OfflineModeSheet.swift. -->
-    <string name="profile_item_use_offline">Use Sakhi offline</string>
+    <string name="profile_item_use_offline">Use Sakhi Offline</string>
     <string name="offline_mode_title">Use Sakhi offline</string>
     <string name="offline_mode_subtitle">Keep Sakhi with you without the internet. You can resume sync anytime.</string>
     <string name="offline_mode_stays_label">STILL WORKS ON THIS PHONE</string>
@@ -898,4 +898,10 @@
     <string name="offline_mode_privacy_note">Nothing is deleted. Your existing cloud backup stays safe, but it will not update until you choose to resume online sync.</string>
     <string name="offline_mode_primary">Use Sakhi offline</string>
     <string name="offline_mode_secondary">Stay online</string>
+    <!-- iOS `ProfileView.swift` Account group, the paused half of the offline switch, and
+         the confirm it raises (`AlertManager.shared.show(title: "Resume online sync?" ...)`). -->
+    <string name="profile_item_resume_online">Resume Online Sync</string>
+    <string name="profile_resume_online_title">Resume online sync?</string>
+    <string name="profile_resume_online_message">We\'ll back up your data to the cloud again and sync across your devices. This needs an internet connection.</string>
+    <string name="profile_resume_online_action">Resume</string>
 </resources>

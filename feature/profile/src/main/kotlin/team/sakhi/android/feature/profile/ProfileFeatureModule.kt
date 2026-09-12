@@ -24,6 +24,8 @@ val profileFeatureModule = module {
             featureAccessState = get(),
             hapticManager = get(),
             appContext = get(),
+            syncPauseState = get(),
+            careRealtimeCoordinator = get(),
         )
     }
     viewModel {

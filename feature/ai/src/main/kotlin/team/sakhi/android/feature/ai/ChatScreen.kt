@@ -128,7 +128,6 @@ import kotlinx.datetime.Instant
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
-import team.sakhi.android.feature.emergency.NearbySakhiButton
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -142,6 +141,7 @@ import team.sakhi.android.designsystem.sakhiGroupedBackground
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
+import team.sakhi.android.ui.CloseButton
 import team.sakhi.android.ui.KeyboardSafeScaffold
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.design.SakhiColors
@@ -243,11 +243,11 @@ fun ChatScreen(
         viewModel.consumeSharePdf()
     }
 
-    // Feeds the count on the header's Nearby button. Mirrors iOS's
-    // `await nearbyCount.refreshIfAlreadyAllowed()` in the chat's `.task`: a no-op unless
-    // location is already granted, so it cannot raise a prompt from here.
-    val nearbyCount by viewModel.nearbyAvailableCount.collectAsStateWithLifecycle()
-    val nearbyCoordinate by viewModel.nearbyCoordinate.collectAsStateWithLifecycle()
+    // The header's Nearby capsule is hidden (see ChatHeader), so its count and coordinate
+    // are no longer read here. The refresh itself stays: it is what keeps the count warm for
+    // Emergency Assistance, and it mirrors iOS's `await nearbyCount.refreshIfAlreadyAllowed()`
+    // in the chat's `.task`, a no-op unless location is already granted, so it cannot raise a
+    // prompt from here.
     LaunchedEffect(Unit) { viewModel.refreshNearbyCountIfAlreadyAllowed() }
 
     // No location permission request from this screen, matching iOS.
@@ -272,10 +272,7 @@ fun ChatScreen(
                     topBar = {
                         ChatHeader(
                             uiState = uiState,
-                            nearbyCount = nearbyCount,
-                            nearbyCoordinate = nearbyCoordinate,
                             onInfoClick = { destination = ChatDestination.Info },
-                            onOpenEmergency = onOpenEmergency,
                             onClose = onClose,
                         )
                     },
@@ -751,10 +748,7 @@ private fun openWalkingDirections(
 @Composable
 private fun ChatHeader(
     uiState: ChatUiState,
-    nearbyCount: Int?,
-    nearbyCoordinate: team.sakhi.android.platform.DeviceLocation?,
     onInfoClick: () -> Unit,
-    onOpenEmergency: () -> Unit,
     onClose: () -> Unit,
 ) {
     val isOnline = uiState.isSending
@@ -855,15 +849,16 @@ private fun ChatHeader(
                 }
             }
 
-            // iOS puts this where a close button would sit: `headerBar` is
-            // `[identity block] Spacer nearbySakhiButton`, and the sheet closes by its
-            // grabber instead. This is the way into Emergency Assistance from chat — the
-            // input bar deliberately carries no location action of its own.
-            NearbySakhiButton(
-                count = nearbyCount,
-                coordinate = nearbyCoordinate,
-                onClick = onOpenEmergency,
-            )
+            // A close button, NOT iOS's nearby-Sakhis capsule.
+            //
+            // iOS puts `nearbySakhiButton` here and relies on the sheet's grabber to close
+            // (`headerBar` is `[identity block] Spacer nearbySakhiButton`). Karan's call on
+            // 2026-09-12 was to hide the capsule here and give this corner an X instead.
+            //
+            // The capsule itself is NOT deleted: `NearbySakhiButton` still exists and is
+            // still the way into Emergency Assistance from elsewhere. Only this one
+            // placement is gone, so putting it back is a matter of restoring this call.
+            CloseButton(onClick = onClose)
         }
 
         // iOS draws this as `Rectangle().fill(DS.Colors.opaqueSeparator).frame(height: 0.5)`
