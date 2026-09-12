@@ -1,6 +1,11 @@
 package team.sakhi.android.feature.home.inbox
 
 import android.text.format.DateFormat
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +20,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -26,21 +32,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ChatBubble
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.EditCalendar
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Mail
-import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.NotificationsNone
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.VolunteerActivism
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.WaterDrop
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SwipeToDismissBox
@@ -48,14 +51,14 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
@@ -86,7 +89,6 @@ import team.sakhi.android.feature.home.R
 import team.sakhi.android.ui.EmptyState
 import team.sakhi.android.ui.LoadingShimmer
 import team.sakhi.android.ui.SakhiListDivider
-import team.sakhi.android.ui.NavIconButton
 import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.android.ui.sakhiPressFeedback
@@ -106,7 +108,8 @@ import team.sakhi.notifications.SakhiNotification
  * A row that asks her something (a partner asking to log for her) carries its answer
  * inline, "Allow" and "Not now", rather than sending her somewhere else to find it.
  *
- * Swipe a row left to delete it. "Mark all as read" is under the ⋯ menu.
+ * Swipe a row left to delete it. "Mark all as read" floats at the bottom right while
+ * anything is unread.
  */
 @Composable
 fun NotificationInboxScreen(
@@ -119,50 +122,49 @@ fun NotificationInboxScreen(
     val answers by viewModel.answers.collectAsStateWithLifecycle()
     val sections = remember(inbox.items) { inbox.sections }
 
+    DisposableEffect(Unit) {
+        onDispose { viewModel.exitDemo() }
+    }
+
     SheetSurface {
         SakhiNavBar(
+            title = stringResource(R.string.inbox_title),
             onClose = onClose,
-            // Custom leading so the title can be offset by the width the ⋯ button adds on
-            // the right, keeping it where every other sheet's title sits.
-            leading = {
-                Spacer(modifier = Modifier.width(InboxMenuSlotWidth))
-                Text(
-                    text = stringResource(R.string.inbox_title),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                    modifier = Modifier.weight(1f),
-                )
-            },
-            trailing = {
-                InboxMenu(
-                    hasUnread = inbox.unreadCount > 0,
-                    onMarkAllRead = viewModel::markAllRead,
-                )
-                Spacer(modifier = Modifier.width(SakhiSpacing.space2))
-            },
         )
 
-        when {
-            sections.isNotEmpty() -> InboxList(
-                sections = sections,
-                answers = answers,
-                onOpen = { item -> viewModel.open(item)?.let(onOpenLink) },
-                onAnswer = viewModel::answer,
-                onDelete = viewModel::delete,
-            )
-            // Only a first load, never a background refresh, shows the placeholder.
-            viewModel.canLoad && !inbox.hasLoaded && !inbox.lastRefreshFailed -> InboxSkeleton()
-            inbox.lastRefreshFailed -> InboxMessage(
-                title = stringResource(R.string.inbox_error_title),
-                body = stringResource(R.string.inbox_error_body),
-                onRetry = viewModel::retry,
-            )
-            else -> InboxMessage(
-                title = stringResource(R.string.inbox_empty_title),
-                body = stringResource(R.string.inbox_empty_body),
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
+        ) {
+            when {
+                sections.isNotEmpty() -> InboxList(
+                    sections = sections,
+                    answers = answers,
+                    onOpen = { item -> viewModel.open(item)?.let(onOpenLink) },
+                    onAnswer = viewModel::answer,
+                    onDelete = viewModel::delete,
+                )
+                // Only a first load, never a background refresh, shows the placeholder.
+                viewModel.canLoad && !inbox.hasLoaded && !inbox.lastRefreshFailed -> InboxSkeleton()
+                inbox.lastRefreshFailed -> InboxMessage(
+                    title = stringResource(R.string.inbox_error_title),
+                    body = stringResource(R.string.inbox_error_body),
+                    onRetry = viewModel::retry,
+                )
+                else -> InboxMessage(
+                    title = stringResource(R.string.inbox_empty_title),
+                    body = stringResource(R.string.inbox_empty_body),
+                )
+            }
+
+            MarkAllReadButton(
+                visible = inbox.unreadCount > 0,
+                onClick = viewModel::markAllRead,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .navigationBarsPadding()
+                    .padding(end = SakhiSpacing.space5, bottom = SakhiSpacing.space5),
             )
         }
     }
@@ -183,7 +185,8 @@ private fun InboxList(
         contentPadding = PaddingValues(
             start = SakhiSpacing.space4,
             end = SakhiSpacing.space4,
-            bottom = SakhiSpacing.space8,
+            // Room for the floating button, so the last row can scroll clear of it.
+            bottom = FloatingButtonClearance,
         ),
         flingBehavior = rememberSakhiFlingBehavior(),
     ) {
@@ -406,24 +409,37 @@ private fun PillButton(label: String, filled: Boolean, enabled: Boolean, onClick
 
 // ── Header menu, placeholder, empty and error ────────────────────────────────
 
+/**
+ * "Mark all as read", floating at the bottom right over the list (Karan, 2026-09-12). It
+ * shows only while something is unread, and scales away once everything is.
+ */
 @Composable
-private fun InboxMenu(hasUnread: Boolean, onMarkAllRead: () -> Unit) {
-    var expanded by remember { mutableStateOf(false) }
-    Box {
-        NavIconButton(
-            icon = Icons.Rounded.MoreHoriz,
-            contentDescription = stringResource(R.string.inbox_more_content_description),
-            onClick = { expanded = true },
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.inbox_mark_all_read)) },
-                leadingIcon = { Icon(Icons.Rounded.DoneAll, contentDescription = null) },
-                enabled = hasUnread,
-                onClick = {
-                    expanded = false
-                    onMarkAllRead()
-                },
+private fun MarkAllReadButton(visible: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    AnimatedVisibility(
+        visible = visible,
+        modifier = modifier,
+        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+        exit = fadeOut() + scaleOut(targetScale = 0.8f),
+    ) {
+        val interaction = remember { MutableInteractionSource() }
+        Row(
+            modifier = Modifier
+                .sakhiPressFeedback(interaction, pressedScale = 0.96f)
+                .shadow(elevation = 8.dp, shape = CircleShape, clip = false)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primary)
+                .clickable(interactionSource = interaction, indication = null, onClick = onClick)
+                .height(48.dp)
+                .padding(horizontal = SakhiSpacing.space5),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+        ) {
+            Icon(Icons.Rounded.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Text(
+                text = stringResource(R.string.inbox_mark_all_read),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
             )
         }
     }
@@ -439,29 +455,27 @@ private fun InboxSkeleton() {
     }
 }
 
+/** The empty and error states, centred in the space under the header. */
 @Composable
 private fun InboxMessage(title: String, body: String, onRetry: (() -> Unit)? = null) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = SakhiSpacing.space12),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        EmptyState(
-            title = title,
-            subtitle = body,
-            icon = {
-                Icon(
-                    Icons.Rounded.NotificationsNone,
-                    contentDescription = null,
-                    tint = sakhiTertiaryLabel(),
-                    modifier = Modifier.size(48.dp),
-                )
-            },
-        )
-        if (onRetry != null) {
-            TextButton(onClick = onRetry) {
-                Text(stringResource(R.string.inbox_retry), color = MaterialTheme.colorScheme.primary)
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            EmptyState(
+                title = title,
+                subtitle = body,
+                icon = {
+                    Icon(
+                        Icons.Rounded.NotificationsNone,
+                        contentDescription = null,
+                        tint = sakhiTertiaryLabel(),
+                        modifier = Modifier.size(48.dp),
+                    )
+                },
+            )
+            if (onRetry != null) {
+                TextButton(onClick = onRetry) {
+                    Text(stringResource(R.string.inbox_retry), color = MaterialTheme.colorScheme.primary)
+                }
             }
         }
     }
@@ -594,5 +608,6 @@ private val IconSize = 40.dp
 /** Where a row's text starts: its padding, the icon, and the gap after it. */
 private val RowTextInset = 16.dp + 40.dp + 12.dp
 
-/** The ⋯ button and its gap, so the title can be offset by the same amount on the left. */
-private val InboxMenuSlotWidth = 44.dp + 8.dp
+
+/** The floating button's height, its margin, and a little air above it. */
+private val FloatingButtonClearance = 48.dp + 20.dp + 28.dp

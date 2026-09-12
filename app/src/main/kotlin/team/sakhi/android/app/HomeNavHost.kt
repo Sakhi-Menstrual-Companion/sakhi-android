@@ -2,6 +2,7 @@ package team.sakhi.android.app
 
 import android.content.Intent
 import android.net.Uri
+import team.sakhi.android.BuildConfig
 import team.sakhi.android.feature.home.inbox.NotificationInboxScreen
 import team.sakhi.android.feature.profile.OfflineModeScreen
 import team.sakhi.care.CareRuntimeState
@@ -203,7 +204,11 @@ fun HomeNavHost() {
                 )
             SakhiDeepLink.OpenEmergencyResponderInbox ->
                 activeOverlaySheet = HomeOverlaySheet.Emergency(openResponderInbox = true)
-            SakhiDeepLink.OpenNotifications -> activeOverlaySheet = HomeOverlaySheet.Notifications
+            is SakhiDeepLink.OpenNotifications -> {
+                // Sample rows, for checking the design on a phone. Debug builds only.
+                if (link.demo && BuildConfig.DEBUG) inboxStore.showDemo()
+                activeOverlaySheet = HomeOverlaySheet.Notifications
+            }
             // Doesn't apply once already inside Home.
             SakhiDeepLink.OpenOnboarding -> Unit
             SakhiDeepLink.Unknown -> Unit

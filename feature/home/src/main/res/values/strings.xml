@@ -236,7 +236,6 @@
     <!-- In-app inbox. Every row's words are written here, on the phone, from the row's type
          and names: the server stores no wording, so nothing about her health is kept as text. -->
     <string name="inbox_title">Notifications</string>
-    <string name="inbox_more_content_description">More options</string>
     <string name="inbox_mark_all_read">Mark all as read</string>
     <string name="inbox_today">Today</string>
     <string name="inbox_yesterday">Yesterday</string>
