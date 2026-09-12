@@ -27,6 +27,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Dp
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.ui.LoadingShimmer
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -118,7 +119,7 @@ fun EmergencyNearbyPlaces(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
                 .padding(bottom = SakhiSpacing.space8),
         ) {
             Chips(
@@ -346,7 +347,7 @@ private fun Chips(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
+            .horizontalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             // Figma `chips`: `pt-6 pb-14 px-20`, 8 between pills.
             .padding(horizontal = SakhiSpacing.space5)
             .padding(top = 6.dp, bottom = 14.dp),

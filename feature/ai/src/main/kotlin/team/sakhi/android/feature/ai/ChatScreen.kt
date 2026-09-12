@@ -127,6 +127,7 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.feature.emergency.NearbySakhiButton
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiRadius
@@ -290,6 +291,7 @@ fun ChatScreen(
                             }
                         } else {
                             LazyColumn(
+                                flingBehavior = rememberSakhiFlingBehavior(),
                                 state = listState,
                                 modifier = Modifier.fillMaxSize(),
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = SakhiSpacing.space4),
@@ -547,7 +549,7 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space1)
-                    .horizontalScroll(rememberScrollState()),
+                    .horizontalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior()),
                 horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
             ) {
                 nearbyPlacesDistanceStopsKm.forEach { stop ->
@@ -613,6 +615,7 @@ private fun PlacesDetailScreen(places: List<team.sakhi.models.SafePlace>, onBack
                 }
             } else {
                 LazyColumn(
+                    flingBehavior = rememberSakhiFlingBehavior(),
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
@@ -930,7 +933,7 @@ private fun SuggestedChipsRow(chips: List<String>, onChipClick: (String) -> Unit
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
+            .horizontalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             // iOS `.padding(.horizontal, DS.Spacing.screenHorizontal)` = 24,
             // `.padding(.vertical, DS.Spacing.xs)` = 8.
             .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),

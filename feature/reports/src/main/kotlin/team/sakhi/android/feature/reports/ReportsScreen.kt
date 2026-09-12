@@ -65,6 +65,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.format.TextStyle
 import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -603,7 +604,7 @@ private fun CycleSummaryPage(document: ReportDocument) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
@@ -730,7 +731,7 @@ private fun PeriodCalendarPage(report: ReportData) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
@@ -761,7 +762,7 @@ private fun SymptomsFlowPage(report: ReportData) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
@@ -817,7 +818,7 @@ private fun MoodPatternsPage(report: ReportData) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
@@ -861,7 +862,7 @@ private fun InsightsPage(report: ReportData) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {

@@ -26,6 +26,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
@@ -84,7 +85,7 @@ fun DetailSheetScaffold(
         // is pinned rather than floating over the content.
         val bodyModifier = Modifier
             .then(if (footer != null) Modifier.weight(1f) else Modifier.fillMaxSize())
-            .then(if (scrollable) Modifier.verticalScroll(rememberScrollState()) else Modifier)
+            .then(if (scrollable) Modifier.verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior()) else Modifier)
             .padding(contentPadding)
 
         Column(

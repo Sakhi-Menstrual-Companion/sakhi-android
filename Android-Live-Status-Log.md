@@ -8,6 +8,58 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-09-12 (third pass), Claude: lists, scroll glide, font weight, and the calendar
+  sheet's dismiss. Debug build installed on the Redmi and Home verified on screen; Profile,
+  Care and the sheet gestures still need Karan's eyes. Karan asked to stay on debug for now so
+  the UI can be locked first, so the release comparison is parked.**
+  **Calendar sheet dismiss, reported live: "calendar ki height choti kyun ho rahi hai, usse
+  toh sirf niche jana hai".** Correct, and it was this morning's fault. The sheet derived its
+  height from its top edge, so it was anchored to the bottom of the screen and everything it
+  did was a resize: dismissing squashed the month grid flat instead of sliding it away, and
+  presenting grew it out of nothing. Now height and position are separate. At or below the
+  compact line the height is fixed and the sheet TRANSLATES (present, dismiss, drag-down,
+  rubber band); above it the height grows with the top edge (compact to expanded, where the
+  content really does change from a month to a year). The two branches meet exactly at the
+  compact line, so nothing jumps at the changeover, and a dismiss now never re-measures.
+  **Four screens off Column+verticalScroll.** Home (`LazyColumn`, one item per card, stable
+  keys, `Modifier.animateItem()` for arrivals), Profile (one item per settings group, since
+  each group is one rounded card), Care's partner detail, and Care's partner history. History
+  was the only genuinely unbounded list in the app, every log row composed up front inside one
+  Surface; rows are now separate items that still draw as one card because only the first and
+  last round their corners (`historyRowShape`).
+  Home needed two things rebuilt on `LazyListState`: the hero's scroll fade now reads
+  `firstVisibleItemScrollOffset`, and the phase-label scroll-to-card records the phase card's
+  item index as the list is built, then scrolls by the card's own offset so iOS's 0.42s ease
+  still applies. Also dropped an `animateContentSize` that could never have worked: it sat on
+  a `weight(1f)` container, whose height is fixed by its parent.
+  **NOT converted, deliberately:** Reports. Its five scrolls are fixed-size PDF preview pages
+  inside a pager, and its config screen is one date card plus one card of toggles. Lazy gains
+  nothing there and would break the single-card look.
+  **iOS scroll glide on 49 scroll sites.** `rememberSakhiFlingBehavior()` swaps Android's
+  spline fling for the exponential decay iOS uses. Compose's decay is `v0 · e^(-4.2·m·t)` and
+  UIScrollView's is `v0 · 0.998^(1000t)`, so `m = -1000·ln(0.998)/4.2 = 0.4767`. A unit test
+  pins it by asking Compose where the decay ends (v0/2.002), which also pins the 4.2. It has
+  to be passed per call site: unlike overscroll there is no theme-level hook. Pagers keep
+  their own snapping fling.
+  **Font weight, and why NOT a Lato Medium file.** iOS ships only Light/Regular/Bold and calls
+  `.bold` 286 times. Compose resolves a missing 500 DOWN to Regular, so every Material button
+  label, `titleMedium`, `titleSmall` and `label*` was rendering Regular where iOS renders
+  Bold. Medium and SemiBold are now registered against the Bold file. A real Medium file would
+  have sat BETWEEN Regular and Bold, i.e. still lighter than iOS. `PrimaryButton` also moved
+  to iOS's actual `DS.Typography.buttonLabel`, Lato 17 Bold; Material's default was 14sp
+  Medium, visibly smaller and thinner than the same button on iOS.
+  **Measured, from Karan's own real use of the release build (not a synthetic scroll):**
+  18,683 frames, 53.5 percent janky, 50th percentile 26ms, 90th 32ms, 99th 65ms, on a 120Hz
+  screen where the budget is 8.3ms. Dominant counter was "Slow issue draw commands" (9,933,
+  i.e. essentially every janky frame). Saved as the before number; re-measure the same way
+  after a release build. Release cold start was 725ms.
+  **Baseline profile still NOT generated, and it needs a decision.** It is the single biggest
+  remaining win, but `BaselineProfileGenerator` installs the app FRESH, which would wipe the
+  login and local data on Karan's daily phone, and it signs in through the Supabase test OTP
+  (see the warning in that file about the billable SMS fallback). Not run without asking.
+  **Still parked:** the root fade between splash, onboarding and Home. `RootNavHost` still has
+  another session's uncommitted auth and onboarding work in it.
+
 - **2026-09-12 (later), Claude: iOS "weight" pass on motion and interaction, for Karan's
   "iOS jaisi heaviness aur smoothness, animations aur interactions mai". Builds clean, 12 new
   unit tests green, installs and cold-starts on the Redmi with no crash. The phone was still

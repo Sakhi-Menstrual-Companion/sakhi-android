@@ -5,12 +5,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
-import androidx.compose.material3.LocalRippleConfiguration
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -19,11 +19,11 @@ import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import team.sakhi.design.PhaseColorFamily
+import team.sakhi.design.PhaseVisualStyle
+import team.sakhi.design.SakhiColors
 import team.sakhi.design.SakhiUIColors
 import team.sakhi.models.CyclePhase
-import team.sakhi.design.PhaseVisualStyle
-import team.sakhi.design.PhaseColorFamily
-import team.sakhi.design.SakhiColors
 
 /**
  * Brand colors resolved once from KMM `DesignTokens`, per mode. Feature code should
@@ -43,6 +43,22 @@ import team.sakhi.design.SakhiColors
 private val SakhiFontFamily = FontFamily(
     Font(R.font.lato_light, weight = FontWeight.Light),
     Font(R.font.lato_regular, weight = FontWeight.Normal),
+    // Medium and SemiBold are registered against the BOLD file on purpose.
+    //
+    // iOS ships no Lato Medium or SemiBold: its whole `LatoWeight` enum is light /
+    // regular / bold (`SakhiDesignSystem.swift`), and it asks for `.bold` 286 times. So
+    // anything iOS emphasises is Lato Bold.
+    //
+    // Left unregistered, Compose resolves a missing 500 weight DOWN to Regular (the CSS
+    // matching rule it follows checks 400 before 700 for a 500 request). Material3 asks for
+    // Medium on every button label, `titleMedium`, `titleSmall` and all the `label*`
+    // styles, so all of those were silently rendering Regular on Android while the same
+    // text is Bold on iOS. That is a large part of why Android read as "halka".
+    //
+    // A real Lato Medium file would have been the wrong fix: it would sit BETWEEN Regular
+    // and Bold, i.e. still lighter than iOS. Mapping to Bold is what matches iOS.
+    Font(R.font.lato_bold, weight = FontWeight.Medium),
+    Font(R.font.lato_bold, weight = FontWeight.SemiBold),
     Font(R.font.lato_bold, weight = FontWeight.Bold),
 )
 private val LightBrandColors = SakhiBrandColors(
@@ -126,8 +142,9 @@ private fun sakhiTypography(): Typography {
     // Apply the shared font family to every Material3 text style first (so nothing
     // silently stays on Roboto), then override the sizes plan/KMM actually name
     // tokens for. Lato only ships Light/Regular/Bold weights (matching iOS's exact
-    // font files), so styles asking for a weight the font lacks fall back to Bold —
-    // the same fallback iOS's own `.lato` helper makes.
+    // font files); Medium and SemiBold are mapped onto Bold in `SakhiFontFamily`, which is
+    // what iOS renders for emphasised text. (This note used to claim the fallback already
+    // went to Bold. For SemiBold it did, for Medium it went to Regular.)
     val withFontFamily = Typography(
         displayLarge = default.displayLarge.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),
         displayMedium = default.displayMedium.copy(fontFamily = SakhiFontFamily, letterSpacing = 0.sp),

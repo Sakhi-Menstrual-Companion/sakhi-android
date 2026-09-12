@@ -62,6 +62,7 @@ import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiTokens
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.ui.EmptyState
 import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SakhiListDivider
@@ -133,7 +134,7 @@ internal fun MyDataRouteContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             .padding(
                 start = SakhiSpacing.space5,
                 end = SakhiSpacing.space5,

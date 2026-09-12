@@ -36,6 +36,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.design.SakhiUIColors
 import team.sakhi.android.designsystem.toComposeColor
 import team.sakhi.android.designsystem.sakhiSystemGray5
@@ -111,7 +112,7 @@ internal fun EmergencyRequirementStep(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior()),
         // iOS is a `VStack(spacing: 0)`: the title and the first section sit flush, and the
         // only gap is `.padding(.bottom, DS.Spacing.l)` = 24 under the first section.
         // Android's uniform 16 put a gap under the title that iOS does not have and made
@@ -366,7 +367,7 @@ internal fun EmergencySpotStep(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior()),
     ) {
         // Figma `intro`: `pt-4 pb-16 px-20`, 4 between the question and the line under it.
         Column(

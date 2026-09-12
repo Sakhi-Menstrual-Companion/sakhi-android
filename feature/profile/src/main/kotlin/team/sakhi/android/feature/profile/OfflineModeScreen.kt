@@ -35,6 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.ui.BackButton
 import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
@@ -80,7 +81,7 @@ fun OfflineModeScreen(
 
         Column(
             modifier = with(columnScope) { Modifier.weight(1f) }
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
                 .padding(horizontal = SakhiSpacing.space6),
         ) {
             Text(

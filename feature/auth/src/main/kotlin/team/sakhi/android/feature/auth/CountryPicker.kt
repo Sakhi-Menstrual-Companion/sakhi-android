@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.auth
 
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.ui.CloseButton
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -160,6 +161,7 @@ fun CountryPicker(
             EmptyCountrySearchState(query = query)
         } else {
             LazyColumn(
+                flingBehavior = rememberSakhiFlingBehavior(),
                 modifier = Modifier.fillMaxSize(),
             ) {
                 itemsIndexed(

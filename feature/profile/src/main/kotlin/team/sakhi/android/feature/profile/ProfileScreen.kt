@@ -14,10 +14,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -64,6 +64,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiConfirm
 import team.sakhi.android.designsystem.sakhiDeepRose
 import team.sakhi.android.designsystem.sakhiLightPink
@@ -181,59 +182,83 @@ fun ProfileScreen(
                 title = stringResource(R.string.profile_title),
                 onClose = onClose,
             )
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(SakhiSpacing.space4),
+        // A LazyColumn, not a Column + verticalScroll. Profile arrives by sliding in over
+        // Home, and a scrolling Column composes and measures every row of every settings
+        // group before that slide's first frame can draw, including the groups well below
+        // the fold. Lazily, only what is on screen is built up front, which is what keeps
+        // the push animation from dropping frames as it starts.
+        //
+        // One lazy item per settings GROUP (label + card), not per row: each group draws a
+        // single rounded card, and splitting its rows into separate items would break it.
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(SakhiSpacing.space4),
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+            flingBehavior = rememberSakhiFlingBehavior(),
         ) {
-
-            ProfileCard(
-                uiState = uiState,
-                context = context,
-                isPartnerRole = isPartnerRole,
-                onClick = onEditProfileClick,
-            )
+            item(key = "profile-card", contentType = "profile-card") {
+                ProfileCard(
+                    uiState = uiState,
+                    context = context,
+                    isPartnerRole = isPartnerRole,
+                    onClick = onEditProfileClick,
+                )
+            }
 
             if (uiState.isLoading) {
-                Text(
-                    text = stringResource(R.string.profile_loading),
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = SakhiSpacing.space2),
-                )
+                item(key = "loading", contentType = "status") {
+                    Text(
+                        text = stringResource(R.string.profile_loading),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(horizontal = SakhiSpacing.space2),
+                    )
+                }
             }
             uiState.error?.let { error ->
-                Text(
-                    text = error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = SakhiSpacing.space2),
-                )
+                item(key = "error", contentType = "status") {
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = SakhiSpacing.space2),
+                    )
+                }
             }
 
-            groups.forEach { group ->
-                ProfileSectionLabel(
-                    text = group.label.uppercase(),
-                    modifier = Modifier.padding(top = SakhiSpacing.space3),
-                )
-                Surface(
-                    shape = RoundedCornerShape(ProfileCardRadius),
-                    color = sakhiProfileCardBackground(),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column {
-                        group.items.forEachIndexed { index, item ->
-                            ProfileSettingRow(item = item)
-                            if (index != group.items.lastIndex) {
-                                SakhiListDivider(startInset = ProfileSettingDividerInset)
+            itemsIndexed(
+                items = groups,
+                // By position, not by label: nothing guarantees two groups never share a
+                // label, and a duplicate lazy key is a crash rather than a glitch.
+                key = { index, _ -> "group-$index" },
+                contentType = { _, _ -> "settings-group" },
+            ) { _, group ->
+                // Same spacing as when these were two direct children of the scrolling
+                // Column: the label and its card sit `space2` apart.
+                Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
+                    ProfileSectionLabel(
+                        text = group.label.uppercase(),
+                        modifier = Modifier.padding(top = SakhiSpacing.space3),
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(ProfileCardRadius),
+                        color = sakhiProfileCardBackground(),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column {
+                            group.items.forEachIndexed { index, item ->
+                                ProfileSettingRow(item = item)
+                                if (index != group.items.lastIndex) {
+                                    SakhiListDivider(startInset = ProfileSettingDividerInset)
+                                }
                             }
                         }
                     }
                 }
             }
 
-            ProfileFooter(onConnectClick = { uriHandler.openUri("https://sakhi.rachna.co") })
+            item(key = "footer", contentType = "footer") {
+                ProfileFooter(onConnectClick = { uriHandler.openUri("https://sakhi.rachna.co") })
+            }
         }
         }
     }

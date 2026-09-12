@@ -1,11 +1,13 @@
 package team.sakhi.android.feature.home
 
+import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import team.sakhi.android.common.CycleInsightAdapter
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.rounded.AutoAwesome
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -39,7 +41,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ListAlt
 import androidx.compose.material.icons.automirrored.filled.ShowChart
@@ -128,8 +129,10 @@ import kotlinx.datetime.LocalDate
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
+import team.sakhi.android.designsystem.SakhiMotion
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiSeparator
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.SakhiPhasePalette
@@ -166,9 +169,7 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.layout.onGloballyPositioned
-import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.LocalTextStyle
@@ -229,13 +230,13 @@ fun HomeScreen(
     val accentColor = phasePalette.primary
     val hapticManager = koinInject<AndroidHapticManager>()
     val scope = rememberCoroutineScope()
-    val scrollState = rememberScrollState()
+    val listState = rememberLazyListState()
     // iOS's phase label scrolls the day-detail to the "phaseInfo" card
-    // (`proxyReader.scrollTo("phaseInfo", anchor: .top)`). Compose's verticalScroll has
-    // no id-based anchor, so the card reports its own offset within the scroll content
-    // and the tap animates there.
-    var scrollColumnTop by remember { mutableFloatStateOf(0f) }
-    var phaseCardOffset by remember { mutableFloatStateOf(0f) }
+    // (`proxyReader.scrollTo("phaseInfo", anchor: .top)`). A lazy list scrolls by item
+    // index rather than by pixel offset, so the list below records the phase card's index
+    // as it declares its items. A plain holder, not state: it is written while the item
+    // list is being built, and writing snapshot state there would invalidate that build.
+    val phaseCardIndex = remember { intArrayOf(-1) }
     val density = LocalDensity.current
     // Deliberately NOT `by` (a delegated read). This value changes continuously across
     // 120dp of scroll, so reading it here — in `HomeScreen`'s own composition scope —
@@ -247,10 +248,18 @@ fun HomeScreen(
     // by whichever `graphicsLayer` block actually consumes it. That moves the invalidation
     // from the composition phase to the draw phase: scrolling now re-draws the hero without
     // recomposing anything at all.
-    val heroScrollProgressState = remember(scrollState, density) {
+    val heroScrollProgressState = remember(listState, density) {
         derivedStateOf {
             with(density) {
-                ((scrollState.value.toFloat() - 20.dp.toPx()) / 120.dp.toPx()).coerceIn(0f, 1f)
+                // The hero IS the first item, so while it is still the first visible one its
+                // own scroll offset is the distance scrolled. Once it is gone past, the
+                // progress is simply finished.
+                val scrolled = if (listState.firstVisibleItemIndex > 0) {
+                    Float.MAX_VALUE
+                } else {
+                    listState.firstVisibleItemScrollOffset.toFloat()
+                }
+                ((scrolled - 20.dp.toPx()) / 120.dp.toPx()).coerceIn(0f, 1f)
             }
         }
     }
@@ -364,31 +373,55 @@ fun HomeScreen(
                     scope.launch {
                         // iOS: withAnimation(.easeInOut(duration: 0.42)) then
                         // scrollTo("phaseInfo", anchor: .top).
-                        scrollState.animateScrollTo(
-                            phaseCardOffset.roundToInt().coerceAtLeast(0),
-                            animationSpec = tween(durationMillis = 420),
-                        )
+                        val index = phaseCardIndex[0]
+                        if (index >= 0) {
+                            val onScreen = listState.layoutInfo.visibleItemsInfo
+                                .firstOrNull { it.index == index }
+                            if (onScreen != null) {
+                                // Already visible: scroll by exactly its distance from the
+                                // top, so iOS's 0.42s ease can be matched. `animateScrollToItem`
+                                // takes no animation spec.
+                                listState.animateScrollBy(
+                                    onScreen.offset.toFloat(),
+                                    animationSpec = tween(
+                                        durationMillis = 420,
+                                        easing = SakhiMotion.IosEaseInOut,
+                                    ),
+                                )
+                            } else {
+                                listState.animateScrollToItem(index)
+                            }
+                        }
                     }
                 },
             )
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .verticalScroll(scrollState)
-                    // Cards appear, disappear and change height as a log lands — the logged
-                    // details card arrives, the cycle strip regrows, the empty state goes.
-                    // Without this the whole column jumps to its new height in a single
-                    // frame, which is the jolt that remains once the colours are easing.
-                    //
-                    // `animateContentSize` and NOT a Crossfade on the content: this block
-                    // resolves `koinViewModel()` and runs a `LaunchedEffect` that calls
-                    // `loadOrGenerate`, and a crossfade composes BOTH states at once, so it
-                    // would fire that generation twice per transition. Easing the size gets
-                    // the smoothness without composing anything twice.
-                    .animateContentSize(animationSpec = tween(HOME_CONTENT_RESIZE_MS))
-                    .onGloballyPositioned { scrollColumnTop = it.positionInRoot().y },
+            // A LazyColumn, not a Column + verticalScroll.
+            //
+            // Every card below used to be composed and measured before Home's first frame
+            // could be drawn, including the ones under the fold, on the single most
+            // important screen in the app and on the cold-start path. Lazily, only the cards
+            // on screen are built.
+            //
+            // One item per CARD, each with a stable key, so a card arriving or leaving (a log
+            // lands, the empty state goes) moves only itself and its neighbours.
+            //
+            // This replaces an `animateContentSize` that sat on the scrolling container. That
+            // could never have done anything: the container is `weight(1f)`, so its height is
+            // fixed by the parent and there was no size change to animate. `Modifier
+            // .animateItem()` on each card is the real version of what that was reaching for,
+            // it animates the cards' PLACEMENT as the list above them changes height.
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
+                flingBehavior = rememberSakhiFlingBehavior(),
             ) {
+            // Counts items as they are declared, so the phase card's index is known without
+            // having to guess it from the branches below. A plain holder, not snapshot
+            // state: writing state from inside this lambda would re-invalidate it.
+            var itemIndex = 0
+            fun nextIndex(): Int = itemIndex++
+
             val canShowHero = uiState.session?.isViewingOwnData == true || uiState.canViewPredictions
             // Hidden ONLY when there is genuinely nothing to show. It used to be hidden for
             // the whole of `isLoadingCycle`, so the hero unmounted and remounted on every
@@ -399,34 +432,38 @@ fun HomeScreen(
             // With data present the hero stays mounted and its values cross-fade underneath,
             // which is what the `AnimatedContent` below is for.
             if (canShowHero && (!uiState.isLoadingCycle || uiState.hasCycleData)) {
-                // iOS springs the hero when the day or phase changes rather than
-                // swapping it instantly -- `homePhaseTransition` is
-                // `.spring(response: 0.5, dampingFraction: 0.88, blendDuration: 0.14)`
-                // applied to `snapshot.displayPhase` (HomeView.swift). Android had no
-                // date-change animation at all: `AnimatedContent` and
-                // `animateFloatAsState` were imported here but never used.
-                //
-                // Keyed on the selected date AND the phase, because either can change
-                // the hero's content on its own (paging to another day of the same
-                // phase, or a phase boundary on the same day).
-                AnimatedContent(
-                    // Keyed on what the hero actually RENDERS, not just the date and phase.
-                    // Keyed on the pair alone, a sync that landed a new cycle day or a new
-                    // countdown swapped the numbers instantly while the fade sat unused,
-                    // because neither key had changed.
-                    targetState = heroState,
-                    transitionSpec = {
-                        fadeIn(animationSpec = spring(stiffness = HomeHeroSpringStiffness)) togetherWith
-                            fadeOut(animationSpec = spring(stiffness = HomeHeroSpringStiffness))
-                    },
-                    label = "home_hero",
-                ) { _ ->
-                    HeroSection(
-                        hero = heroState,
-                        accentColor = accentColor,
-                        phasePalette = phasePalette,
-                        scrollProgress = heroScrollProgress,
-                    )
+                nextIndex()
+                item(key = "hero", contentType = "hero") {
+                    // iOS springs the hero when the day or phase changes rather than
+                    // swapping it instantly -- `homePhaseTransition` is
+                    // `.spring(response: 0.5, dampingFraction: 0.88, blendDuration: 0.14)`
+                    // applied to `snapshot.displayPhase` (HomeView.swift). Android had no
+                    // date-change animation at all: `AnimatedContent` and
+                    // `animateFloatAsState` were imported here but never used.
+                    //
+                    // Keyed on the selected date AND the phase, because either can change
+                    // the hero's content on its own (paging to another day of the same
+                    // phase, or a phase boundary on the same day).
+                    AnimatedContent(
+                        // Keyed on what the hero actually RENDERS, not just the date and phase.
+                        // Keyed on the pair alone, a sync that landed a new cycle day or a new
+                        // countdown swapped the numbers instantly while the fade sat unused,
+                        // because neither key had changed.
+                        targetState = heroState,
+                        transitionSpec = {
+                            fadeIn(animationSpec = spring(stiffness = HomeHeroSpringStiffness)) togetherWith
+                                fadeOut(animationSpec = spring(stiffness = HomeHeroSpringStiffness))
+                        },
+                        label = "home_hero",
+                        modifier = Modifier.animateItem(),
+                    ) { _ ->
+                        HeroSection(
+                            hero = heroState,
+                            accentColor = accentColor,
+                            phasePalette = phasePalette,
+                            scrollProgress = heroScrollProgress,
+                        )
+                    }
                 }
             }
 
@@ -439,18 +476,27 @@ fun HomeScreen(
             // nothing, so the chip only ever appears when it is telling the user
             // something real.
             if (uiState.syncState.isWorthShowing()) {
-                StateChip(
-                    label = syncLabel(context, uiState.syncState),
-                    tint = syncTint(uiState.syncState, accentColor),
-                )
+                nextIndex()
+                item(key = "sync-chip", contentType = "chip") {
+                    Box(modifier = Modifier.animateItem()) {
+                        StateChip(
+                            label = syncLabel(context, uiState.syncState),
+                            tint = syncTint(uiState.syncState, accentColor),
+                        )
+                    }
+                }
             }
 
             uiState.error?.let { error ->
-                Text(
-                    text = error,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.error,
-                )
+                nextIndex()
+                item(key = "error", contentType = "error") {
+                    Text(
+                        text = error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.animateItem(),
+                    )
+                }
             }
 
             val isPartnerMode = uiState.session?.isViewingOwnData == false
@@ -466,123 +512,189 @@ fun HomeScreen(
             // there is real data to show.
             if (!uiState.isLoadingCycle || uiState.hasCycleData) {
                 if (isPartnerMode && !uiState.hasCycleData) {
-                    PartnerNoDataCard()
-                } else if (!uiState.hasCycleData) {
-                    EmptyStateCard(accentColor = accentColor)
-                    LearningPhaseCards()
-                } else if (isPartnerMode) {
-                    val checklistViewModel: PartnerChecklistViewModel = koinViewModel()
-                    val checklistState by checklistViewModel.uiState.collectAsStateWithLifecycle()
-                    LaunchedEffect(uiState.phase, uiState.dayInCycle, uiState.daysUntilNextPeriod) {
-                        checklistViewModel.loadOrGenerate(
-                            cyclePhase = uiState.phase,
-                            cycleDay = uiState.dayInCycle ?: 1,
-                            daysUntilNextPeriod = uiState.daysUntilNextPeriod,
-                        )
+                    nextIndex()
+                    item(key = "partner-no-data", contentType = "card") {
+                        Box(modifier = Modifier.animateItem()) {
+                            PartnerNoDataCard()
+                        }
                     }
-                    PartnerChecklistCard(
-                        state = checklistState,
-                        onToggle = checklistViewModel::toggle,
-                        onRetry = {
-                            checklistViewModel.retry(
+                } else if (!uiState.hasCycleData) {
+                    nextIndex()
+                    item(key = "empty-state", contentType = "card") {
+                        Box(modifier = Modifier.animateItem()) {
+                            EmptyStateCard(accentColor = accentColor)
+                        }
+                    }
+                    nextIndex()
+                    item(key = "learning-phases", contentType = "card") {
+                        Box(modifier = Modifier.animateItem()) {
+                            LearningPhaseCards()
+                        }
+                    }
+                } else if (isPartnerMode) {
+                    nextIndex()
+                    item(key = "partner-checklist", contentType = "card") {
+                        val checklistViewModel: PartnerChecklistViewModel = koinViewModel()
+                        val checklistState by checklistViewModel.uiState.collectAsStateWithLifecycle()
+                        LaunchedEffect(uiState.phase, uiState.dayInCycle, uiState.daysUntilNextPeriod) {
+                            checklistViewModel.loadOrGenerate(
                                 cyclePhase = uiState.phase,
                                 cycleDay = uiState.dayInCycle ?: 1,
                                 daysUntilNextPeriod = uiState.daysUntilNextPeriod,
                             )
-                        },
-                        phase = uiState.phase,
-                        accentColor = accentColor,
-                    )
-                    LoggedDetailsCard(
-                        log = uiState.selectedLog,
-                        isPartnerMode = true,
-                        phase = uiState.phase,
-                        accentColor = accentColor,
-                        onClick = onOpenLogHistory,
-                    )
+                        }
+                        Box(modifier = Modifier.animateItem()) {
+                            PartnerChecklistCard(
+                                state = checklistState,
+                                onToggle = checklistViewModel::toggle,
+                                onRetry = {
+                                    checklistViewModel.retry(
+                                        cyclePhase = uiState.phase,
+                                        cycleDay = uiState.dayInCycle ?: 1,
+                                        daysUntilNextPeriod = uiState.daysUntilNextPeriod,
+                                    )
+                                },
+                                phase = uiState.phase,
+                                accentColor = accentColor,
+                            )
+                        }
+                    }
+                    nextIndex()
+                    item(key = "logged-details", contentType = "card") {
+                        Box(modifier = Modifier.animateItem()) {
+                            LoggedDetailsCard(
+                                log = uiState.selectedLog,
+                                isPartnerMode = true,
+                                phase = uiState.phase,
+                                accentColor = accentColor,
+                                onClick = onOpenLogHistory,
+                            )
+                        }
+                    }
                     if (recoState.canViewPhaseRecommendations) {
-                        NutritionCard(
-                            phase = uiState.phase,
-                            foods = recoState.eatMoreFoods,
-                            isLoading = recoState.isLoading,
-                            accentColor = accentColor,
-                        )
+                        nextIndex()
+                        item(key = "nutrition", contentType = "card") {
+                            Box(modifier = Modifier.animateItem()) {
+                                NutritionCard(
+                                    phase = uiState.phase,
+                                    foods = recoState.eatMoreFoods,
+                                    isLoading = recoState.isLoading,
+                                    accentColor = accentColor,
+                                )
+                            }
+                        }
                     }
                     partnerHeadsUpText(context, uiState.phase, uiState.dayInCycle, uiState.daysUntilNextPeriod)?.let { headsUp ->
-                        PartnerHeadsUpCard(text = headsUp, accentColor = accentColor, phase = uiState.phase)
+                        nextIndex()
+                        item(key = "partner-heads-up", contentType = "card") {
+                            Box(modifier = Modifier.animateItem()) {
+                                PartnerHeadsUpCard(
+                                    text = headsUp,
+                                    accentColor = accentColor,
+                                    phase = uiState.phase,
+                                )
+                            }
+                        }
                     }
-                    PhaseInfoCard(
-                        phase = uiState.phase,
-                        isPartnerMode = true,
-                        accentColor = accentColor,
-                        modifier = Modifier.onGloballyPositioned {
-                            phaseCardOffset = it.positionInRoot().y - scrollColumnTop + scrollState.value
-                        },
-                    )
+                    phaseCardIndex[0] = nextIndex()
+                    item(key = "phase-info", contentType = "card") {
+                        PhaseInfoCard(
+                            phase = uiState.phase,
+                            isPartnerMode = true,
+                            accentColor = accentColor,
+                            modifier = Modifier.animateItem(),
+                        )
+                    }
                     // Real gap found in the second parity sweep: iOS's real
                     // `sakhiInsightCard` renders in partner mode too (its own
                     // title branches on `isPartnerMode` -- "How to be there for
                     // her today"), but this card was never called at all in
                     // Android's partner branch, so partners never saw it.
-                    SakhiInsightCard(
-                        phase = uiState.phase,
-                        insight = recoState.aiInsight,
-                        isLoading = recoState.isLoading,
-                        isPartnerMode = true,
-                        accentColor = accentColor,
-                        onRefresh = recommendationsViewModel::refreshInsight,
-                        isRefreshing = recoState.isRefreshingInsight,
-                    )
+                    nextIndex()
+                    item(key = "insight", contentType = "card") {
+                        Box(modifier = Modifier.animateItem()) {
+                            SakhiInsightCard(
+                                phase = uiState.phase,
+                                insight = recoState.aiInsight,
+                                isLoading = recoState.isLoading,
+                                isPartnerMode = true,
+                                accentColor = accentColor,
+                                onRefresh = recommendationsViewModel::refreshInsight,
+                                isRefreshing = recoState.isRefreshingInsight,
+                            )
+                        }
+                    }
                 } else {
                     // Order matches iOS `HomeDayDetailGlassView.body`'s own-data
                     // branch exactly: loggedDetails -> nutrition -> cycleDetails
                     // -> phaseInfo (`SakhiInsightCard` stays last -- it isn't one
                     // of that exact 4-card list, kept where it already was).
-                    LoggedDetailsCard(
-                        log = uiState.selectedLog,
-                        isPartnerMode = false,
-                        phase = uiState.phase,
-                        accentColor = accentColor,
-                        onClick = onOpenLogHistory,
-                    )
+                    nextIndex()
+                    item(key = "logged-details", contentType = "card") {
+                        Box(modifier = Modifier.animateItem()) {
+                            LoggedDetailsCard(
+                                log = uiState.selectedLog,
+                                isPartnerMode = false,
+                                phase = uiState.phase,
+                                accentColor = accentColor,
+                                onClick = onOpenLogHistory,
+                            )
+                        }
+                    }
                     if (recoState.canViewPhaseRecommendations) {
-                        NutritionCard(
-                            phase = uiState.phase,
-                            foods = recoState.eatMoreFoods,
-                            isLoading = recoState.isLoading,
-                            accentColor = accentColor,
-                        )
+                        nextIndex()
+                        item(key = "nutrition", contentType = "card") {
+                            Box(modifier = Modifier.animateItem()) {
+                                NutritionCard(
+                                    phase = uiState.phase,
+                                    foods = recoState.eatMoreFoods,
+                                    isLoading = recoState.isLoading,
+                                    accentColor = accentColor,
+                                )
+                            }
+                        }
                     }
                     uiState.currentCycle?.let { cycle ->
-                        CycleDetailsCard(
-                            cycle = cycle,
-                            periodLogDates = uiState.periodLogDates,
-                            dayInCycle = uiState.dayInCycle ?: 1,
-                            cycleLength = uiState.cycleLength ?: 28,
+                        nextIndex()
+                        item(key = "cycle-details", contentType = "card") {
+                            Box(modifier = Modifier.animateItem()) {
+                                CycleDetailsCard(
+                                    cycle = cycle,
+                                    periodLogDates = uiState.periodLogDates,
+                                    dayInCycle = uiState.dayInCycle ?: 1,
+                                    cycleLength = uiState.cycleLength ?: 28,
+                                    phase = uiState.phase,
+                                    accentColor = accentColor,
+                                    cyclesAnalyzed = uiState.cyclesAnalyzed,
+                                    shortestCycle = uiState.shortestCycle,
+                                    longestCycle = uiState.longestCycle,
+                                )
+                            }
+                        }
+                    }
+                    phaseCardIndex[0] = nextIndex()
+                    item(key = "phase-info", contentType = "card") {
+                        PhaseInfoCard(
                             phase = uiState.phase,
+                            isPartnerMode = false,
                             accentColor = accentColor,
-                            cyclesAnalyzed = uiState.cyclesAnalyzed,
-                            shortestCycle = uiState.shortestCycle,
-                            longestCycle = uiState.longestCycle,
+                            modifier = Modifier.animateItem(),
                         )
                     }
-                    PhaseInfoCard(
-                        phase = uiState.phase,
-                        isPartnerMode = false,
-                        accentColor = accentColor,
-                        modifier = Modifier.onGloballyPositioned {
-                            phaseCardOffset = it.positionInRoot().y - scrollColumnTop + scrollState.value
-                        },
-                    )
-                    SakhiInsightCard(
-                        phase = uiState.phase,
-                        insight = recoState.aiInsight,
-                        isLoading = recoState.isLoading,
-                        isPartnerMode = false,
-                        accentColor = accentColor,
-                        onRefresh = recommendationsViewModel::refreshInsight,
-                        isRefreshing = recoState.isRefreshingInsight,
-                    )
+                    nextIndex()
+                    item(key = "insight", contentType = "card") {
+                        Box(modifier = Modifier.animateItem()) {
+                            SakhiInsightCard(
+                                phase = uiState.phase,
+                                insight = recoState.aiInsight,
+                                isLoading = recoState.isLoading,
+                                isPartnerMode = false,
+                                accentColor = accentColor,
+                                onRefresh = recommendationsViewModel::refreshInsight,
+                                isRefreshing = recoState.isRefreshingInsight,
+                            )
+                        }
+                    }
                 }
             }
             }

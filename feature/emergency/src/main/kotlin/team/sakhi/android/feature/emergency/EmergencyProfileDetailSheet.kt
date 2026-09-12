@@ -50,6 +50,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.draw.clip
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiLightPink
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -122,7 +123,7 @@ internal fun EmergencyProfileDetailSheet(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
                 .fillMaxWidth(),
         ) {
             // Figma `EA-07`: the flow's nav bar, then a centred hero -- her face in an

@@ -24,6 +24,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiLabel
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.toComposeColor
@@ -51,7 +52,7 @@ fun EmergencyPlaceDetail(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
                 .padding(bottom = SakhiSpacing.space8),
         ) {
             // Figma `place head`: `pt-6 pb-18 px-20`, a 12 gap, and a 44dp badge, which

@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -18,6 +19,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -55,6 +58,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
@@ -70,6 +74,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.designsystem.SakhiRadius
@@ -321,96 +326,111 @@ private fun PartnerDetailContent(
         // deletes the partnership rather than just closing the sheet. Same fix, and
         // same reason, as the pending-invite state above.
         SakhiNavBar(onClose = onClose)
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState()),
+        LazyColumn(
+            // Lazily built, so the blocks below the fold are not composed before the sheet's
+            // push animation starts.
+            modifier = Modifier.weight(1f),
+            flingBehavior = rememberSakhiFlingBehavior(),
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space5),
-            ) {
-                AvatarPair(partnerInitial = partnerInitial)
+            item(key = "care-detail-1") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space5),
+                ) {
+                    AvatarPair(partnerInitial = partnerInitial)
+                }
             }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space6)
-                    .padding(bottom = SakhiSpacing.space8),
-            ) {
-                Text(
-                    text = headerTitle,
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = if (isPartnerRole) {
-                        stringResource(R.string.care_subtitle_you_are_her_sakhi)
-                    } else {
-                        stringResource(R.string.care_subtitle_trusted_sakhi)
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = sakhiSecondaryLabel(),
-                    modifier = Modifier.padding(top = SakhiSpacing.space1),
-                )
-            }
-
-            SectionHeader(text = stringResource(R.string.care_section_details))
-            Surface(
-                color = sakhiSystemBackground(),
-                shape = RoundedCornerShape(SakhiRadius.xxl),
-                tonalElevation = SakhiSpacing.space1,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space6),
-            ) {
-                Column {
-                    InfoRow(
-                        icon = { SparkleGlyph() },
-                        label = stringResource(R.string.care_label_days_of_care),
-                        value = daysValue,
+            item(key = "care-detail-2") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = SakhiSpacing.space6)
+                        .padding(bottom = SakhiSpacing.space8),
+                ) {
+                    Text(
+                        text = headerTitle,
+                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
-                    RowDivider()
-                    InfoRow(
-                        icon = { InfoSymbolIcon(Icons.Filled.CalendarToday) },
-                        label = stringResource(R.string.care_label_connected_since),
-                        value = dateString,
+                    Text(
+                        text = if (isPartnerRole) {
+                            stringResource(R.string.care_subtitle_you_are_her_sakhi)
+                        } else {
+                            stringResource(R.string.care_subtitle_trusted_sakhi)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = sakhiSecondaryLabel(),
+                        modifier = Modifier.padding(top = SakhiSpacing.space1),
                     )
                 }
             }
 
-            SectionHeader(
-                text = stringResource(R.string.care_section_actions),
-                modifier = Modifier.padding(top = SakhiSpacing.space6),
-            )
-            Surface(
-                color = sakhiSystemBackground(),
-                shape = RoundedCornerShape(SakhiRadius.xxl),
-                tonalElevation = SakhiSpacing.space1,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space6),
-            ) {
-                Column {
-                    ActionRow(
-                        icon = Icons.Filled.History,
-                        label = stringResource(R.string.care_action_history),
-                        onClick = onHistory,
-                    )
-                    if (!isPartnerRole && onManagePermissions != null) {
+            item(key = "care-detail-3") {
+                SectionHeader(text = stringResource(R.string.care_section_details))
+            }
+            item(key = "care-detail-4") {
+                Surface(
+                    color = sakhiSystemBackground(),
+                    shape = RoundedCornerShape(SakhiRadius.xxl),
+                    tonalElevation = SakhiSpacing.space1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = SakhiSpacing.space6),
+                ) {
+                    Column {
+                        InfoRow(
+                            icon = { SparkleGlyph() },
+                            label = stringResource(R.string.care_label_days_of_care),
+                            value = daysValue,
+                        )
                         RowDivider()
-                        ActionRow(
-                            icon = Icons.Filled.Shield,
-                            label = stringResource(R.string.care_action_manage_permissions),
-                            onClick = onManagePermissions,
+                        InfoRow(
+                            icon = { InfoSymbolIcon(Icons.Filled.CalendarToday) },
+                            label = stringResource(R.string.care_label_connected_since),
+                            value = dateString,
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(SakhiSpacing.space16))
+            item(key = "care-detail-5") {
+                SectionHeader(
+                    text = stringResource(R.string.care_section_actions),
+                    modifier = Modifier.padding(top = SakhiSpacing.space6),
+                )
+            }
+            item(key = "care-detail-6") {
+                Surface(
+                    color = sakhiSystemBackground(),
+                    shape = RoundedCornerShape(SakhiRadius.xxl),
+                    tonalElevation = SakhiSpacing.space1,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = SakhiSpacing.space6),
+                ) {
+                    Column {
+                        ActionRow(
+                            icon = Icons.Filled.History,
+                            label = stringResource(R.string.care_action_history),
+                            onClick = onHistory,
+                        )
+                        if (!isPartnerRole && onManagePermissions != null) {
+                            RowDivider()
+                            ActionRow(
+                                icon = Icons.Filled.Shield,
+                                label = stringResource(R.string.care_action_manage_permissions),
+                                onClick = onManagePermissions,
+                            )
+                        }
+                    }
+                }
+            }
+
+            item(key = "care-detail-7") {
+                Spacer(modifier = Modifier.height(SakhiSpacing.space16))
+            }
         }
 
         SakhiListDivider()
@@ -822,7 +842,7 @@ private fun InviteCreationContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             .padding(SakhiSpacing.space6),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
     ) {
@@ -1098,7 +1118,7 @@ private fun PartnerPermissionsEditContent(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior()),
         ) {
             Column(
                 modifier = Modifier
@@ -1356,22 +1376,37 @@ private fun PartnerHistoryContent(
             return
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(SakhiSpacing.space5),
+        // The only genuinely unbounded list in the app: every period log a care partner has
+        // ever made. It used to build every row up front inside one Surface, so opening the
+        // screen cost one composition per log however many there were.
+        //
+        // Each row is its own lazy item now. They still read as ONE rounded card because each
+        // row draws the card background itself and only the first and last round their
+        // corners, which is what `historyRowShape` is for.
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(SakhiSpacing.space5),
+            flingBehavior = rememberSakhiFlingBehavior(),
         ) {
-            SectionHeader(text = stringResource(R.string.care_section_recent_activity))
-            Surface(
-                color = sakhiSystemBackground(),
-                shape = RoundedCornerShape(SakhiRadius.xxl),
-                tonalElevation = SakhiSpacing.space1,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column {
-                    logs.forEachIndexed { index, log ->
+            item(key = "recent-activity-header") {
+                SectionHeader(text = stringResource(R.string.care_section_recent_activity))
+            }
+
+            itemsIndexed(
+                items = logs,
+                // Logs carry no stable id of their own here, so the date plus position is the
+                // closest thing to one. Never a bare index: a new log arriving at the top
+                // would renumber every row and defeat the point of having keys.
+                key = { index, log -> "log-${log.logDate}-$index" },
+                contentType = { _, _ -> "log-row" },
+            ) { index, log ->
+                Surface(
+                    color = sakhiSystemBackground(),
+                    shape = historyRowShape(index = index, lastIndex = logs.lastIndex),
+                    tonalElevation = SakhiSpacing.space1,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1415,49 +1450,70 @@ private fun PartnerHistoryContent(
                 }
             }
 
-            SectionHeader(
-                text = stringResource(R.string.care_section_connection),
-                modifier = Modifier.padding(top = SakhiSpacing.space6),
-            )
-            Surface(
-                color = sakhiSystemBackground(),
-                shape = RoundedCornerShape(SakhiRadius.xxl),
-                tonalElevation = SakhiSpacing.space1,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics(mergeDescendants = true) {}
-                        .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Favorite,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.width(28.dp),
+            item(key = "connection-section") {
+                Column {
+                    SectionHeader(
+                        text = stringResource(R.string.care_section_connection),
+                        modifier = Modifier.padding(top = SakhiSpacing.space6),
                     )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = stringResource(
-                                R.string.care_connected_with_name,
-                                partnership.partnerName.ifBlank { fallbackLabel },
-                            ),
-                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Text(
-                            text = connectedDate,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = sakhiSecondaryLabel(),
-                        )
+                    Surface(
+                        color = sakhiSystemBackground(),
+                        shape = RoundedCornerShape(SakhiRadius.xxl),
+                        tonalElevation = SakhiSpacing.space1,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .semantics(mergeDescendants = true) {}
+                                .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Favorite,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.width(28.dp),
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.care_connected_with_name,
+                                        partnership.partnerName.ifBlank { fallbackLabel },
+                                    ),
+                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = connectedDate,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = sakhiSecondaryLabel(),
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/**
+ * Rounds only the outer corners of a grouped list, so rows that are separate lazy items still
+ * draw as one card. Matches the single `RoundedCornerShape(SakhiRadius.xxl)` the whole group
+ * carried when it was one Surface.
+ */
+@Composable
+private fun historyRowShape(index: Int, lastIndex: Int): Shape {
+    val radius = SakhiRadius.xxl
+    val square = 0.dp
+    return RoundedCornerShape(
+        topStart = if (index == 0) radius else square,
+        topEnd = if (index == 0) radius else square,
+        bottomStart = if (index == lastIndex) radius else square,
+        bottomEnd = if (index == lastIndex) radius else square,
+    )
 }
 
 @Composable

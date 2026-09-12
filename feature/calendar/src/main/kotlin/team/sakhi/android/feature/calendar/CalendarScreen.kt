@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.calendar
 
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.ui.CloseButton
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
@@ -1116,6 +1117,7 @@ private fun CalendarYearView(
         ),
     ) { year ->
         LazyColumn(
+            flingBehavior = rememberSakhiFlingBehavior(),
             state = listState,
             // iOS: `VStack(spacing: 0)` — the month label's own top padding (12) is the
             // only separation between months, so an extra 16dp gap here double-spaced them.

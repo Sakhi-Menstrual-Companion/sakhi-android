@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.koin.compose.koinInject
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
 import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiRadius
@@ -130,7 +131,7 @@ fun OnboardingHealthStepScreen(
     Column(
         modifier = Modifier
             .weight(1f)
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             .padding(horizontal = SakhiSpacing.space6)
             .padding(top = SakhiSpacing.space6),
     ) {
@@ -764,7 +765,7 @@ private fun HealthConditionsStepContent(
         Column(
             modifier = Modifier
                 .heightIn(max = 320.dp)
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior()),
         ) {
             HealthCondition.entries.forEachIndexed { index, condition ->
                 HealthConditionRow(

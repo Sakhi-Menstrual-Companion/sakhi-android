@@ -42,6 +42,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import team.sakhi.android.designsystem.SakhiRadius
 import androidx.compose.ui.text.font.FontWeight
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiDeepRose
 import team.sakhi.android.designsystem.sakhiGroupedBackground
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -118,7 +119,7 @@ internal fun EmergencyResponderInbox(viewModel: EmergencyViewModel) {
                 isRefreshing = responder.isRefreshing,
                 onRefresh = viewModel::refreshIncoming,
             ) {
-                LazyColumn(modifier = Modifier.padding(bottom = SakhiSpacing.space5)) {
+                LazyColumn(flingBehavior = rememberSakhiFlingBehavior(), modifier = Modifier.padding(bottom = SakhiSpacing.space5)) {
                     item {
                         EmergencySectionHeader(
                             title = stringResource(R.string.emergency_asking_you_now),

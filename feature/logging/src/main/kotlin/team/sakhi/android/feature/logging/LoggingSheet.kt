@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.logging
 
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.ui.SakhiAlertKind
 import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.CloseButton
@@ -353,7 +354,7 @@ fun LoggingSheet(
                                 .weight(1f)
                                 .padding(horizontal = SakhiSpacing.space6),
                         ) {
-                            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                            Column(modifier = Modifier.verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())) {
                                 // Each block below is hidden entirely (not merely disabled)
                                 // when the viewer lacks the specific granular permission --
                                 // matches iOS `HomeLoggingSheet`'s per-section

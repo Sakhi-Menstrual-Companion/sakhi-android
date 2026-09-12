@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.annotation.StringRes
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiLightPink
 import team.sakhi.android.designsystem.sakhiSystemGray5
 import team.sakhi.android.designsystem.sakhiSystemGray6
@@ -127,6 +128,7 @@ internal fun ChatInfoScreen(
     Column(modifier = Modifier.fillMaxSize()) {
         ChatSubscreenHeader(title = stringResource(R.string.chat_title), onBack = onBack)
         LazyColumn(
+            flingBehavior = rememberSakhiFlingBehavior(),
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space4),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(
@@ -471,6 +473,7 @@ internal fun ChatSearchScreen(
             }
             else -> {
                 LazyColumn(
+                    flingBehavior = rememberSakhiFlingBehavior(),
                     verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         horizontal = SakhiSpacing.space6,
@@ -553,6 +556,7 @@ internal fun ChatMediaScreen(
                     )
                 } else {
                     LazyColumn(
+                        flingBehavior = rememberSakhiFlingBehavior(),
                         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             horizontal = SakhiSpacing.space6,
@@ -575,6 +579,7 @@ internal fun ChatMediaScreen(
                     )
                 } else {
                     LazyColumn(
+                        flingBehavior = rememberSakhiFlingBehavior(),
                         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             horizontal = SakhiSpacing.space6,
@@ -597,6 +602,7 @@ internal fun ChatMediaScreen(
                     )
                 } else {
                     LazyColumn(
+                        flingBehavior = rememberSakhiFlingBehavior(),
                         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
                         contentPadding = androidx.compose.foundation.layout.PaddingValues(
                             horizontal = SakhiSpacing.space6,
@@ -634,6 +640,7 @@ internal fun ChatStarredScreen(
             )
         } else {
             LazyColumn(
+                flingBehavior = rememberSakhiFlingBehavior(),
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     horizontal = SakhiSpacing.space6,

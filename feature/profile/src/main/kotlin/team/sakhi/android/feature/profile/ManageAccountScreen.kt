@@ -75,6 +75,7 @@ import org.koin.androidx.compose.koinViewModel
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.designsystem.SakhiTokens
@@ -439,7 +440,7 @@ private fun MenuContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
     ) {
@@ -535,7 +536,7 @@ private fun ResetContent(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
                 .padding(
                     start = SakhiSpacing.space5,
                     end = SakhiSpacing.space5,
@@ -631,7 +632,7 @@ private fun DeleteContent(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
                 .padding(
                     start = SakhiSpacing.space5,
                     end = SakhiSpacing.space5,

@@ -42,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import kotlinx.coroutines.delay
 import kotlinx.datetime.Clock
 import team.sakhi.android.designsystem.SakhiRadius
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiLightPink
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.clip
@@ -115,7 +116,7 @@ internal fun EmergencyWaitingStep(
     Column(modifier = Modifier.fillMaxWidth()) {
         Column(
             modifier = Modifier
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
                 .fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {

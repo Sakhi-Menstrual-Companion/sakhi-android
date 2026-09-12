@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +39,8 @@ import kotlinx.coroutines.launch
 import team.sakhi.android.designsystem.SakhiMotion
 import team.sakhi.android.designsystem.calendarSheetBackground
 import team.sakhi.models.CyclePhase
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private enum class CalendarDetent { Compact, Expanded }
@@ -180,6 +183,19 @@ fun HomeCalendarOverlay(
      */
     val rawTop = remember { floatArrayOf(0f) }
 
+    /**
+     * How tall the sheet is laid out, as opposed to where it sits. Capped at the compact
+     * height once the top edge reaches the compact line, which is what makes everything from
+     * there down a rigid slide rather than a resize. See the `Modifier.layout` below.
+     *
+     * Derived, so the value stops changing during a dismiss and the layout stops being
+     * invalidated. Handed down as a lambda so the read lands in the layout phase.
+     */
+    val sheetHeightState = remember(screenHeightPx, compactTopPx) {
+        derivedStateOf { screenHeightPx - min(sheetTop.value, compactTopPx) }
+    }
+    val sheetHeightPx: () -> Float = remember(sheetHeightState) { { sheetHeightState.value } }
+
     /** iOS `HomeCalendarSheet.rubberBand`, ported line for line (multi-select aside). */
     fun rubberBand(raw: Float): Float = when {
         raw < expandedTopPx -> expandedTopPx + (raw - expandedTopPx) * RUBBER_BAND_ABOVE_EXPANDED
@@ -241,19 +257,43 @@ fun HomeCalendarOverlay(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                // The ONLY place `sheetTop.value` is read. Inside a `Modifier.layout`
-                // measure block a snapshot read invalidates the layout phase alone, so a
-                // drag re-measures this subtree and recomposes nothing. Reading the same
-                // value in the composable body (which is what `by animateDpAsState` did)
-                // recomposed the entire calendar every frame instead.
+                // Height and position are deliberately NOT the same thing.
+                //
+                // This used to derive the height straight from the top edge, so the sheet was
+                // always anchored to the bottom of the screen and everything it did was a
+                // resize. Dismissing it squashed the month grid flat on the way out instead of
+                // sliding it away, and presenting it grew the calendar out of nothing
+                // ("calendar ki height choti kyun ho rahi hai, usse toh sirf niche jana hai").
+                //
+                // A sheet leaving the screen is a rigid object moving, so:
+                //
+                //   at or below compact   height stays compact, the sheet TRANSLATES
+                //                         (present, dismiss, drag-down, rubber band)
+                //   above compact         height grows with the top edge, bottom stays put
+                //                         (expanding toward the year view, and back)
+                //
+                // Both branches meet exactly at the compact line (height = compact, offset =
+                // 0), so there is no jump where they change over. Resizing is kept only for
+                // compact <-> expanded, where the content really does change from a month to
+                // a year and has to re-lay out anyway -- iOS animates its frame height across
+                // that same range for the same reason.
+                //
+                // `sheetHeightPx` is a derived value, so during a present/dismiss/drag-down it
+                // does not change at all and this never re-measures: those are pure layer
+                // translations. Above compact it re-measures, which is the price of the
+                // content genuinely resizing. Either way `sheetTop.value` is read only inside
+                // the layout and layer blocks, never in the composable body, so the calendar
+                // itself never recomposes while it moves.
                 .layout { measurable, constraints ->
-                    val height = (screenHeightPx - sheetTop.value)
-                        .roundToInt()
-                        .coerceIn(0, constraints.maxHeight)
+                    val height = sheetHeightPx().roundToInt().coerceIn(0, constraints.maxHeight)
                     val placeable = measurable.measure(
                         constraints.copy(minHeight = height, maxHeight = height),
                     )
-                    layout(placeable.width, height) { placeable.place(0, 0) }
+                    layout(placeable.width, height) {
+                        placeable.placeWithLayer(0, 0) {
+                            translationY = max(0f, sheetTop.value - compactTopPx)
+                        }
+                    }
                 }
                 // Whole-sheet drag. Scrollable children (the year view's LazyColumn) take
                 // the gesture first on the main pass and keep scrolling; everything else

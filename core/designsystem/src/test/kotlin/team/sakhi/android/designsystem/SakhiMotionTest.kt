@@ -1,6 +1,8 @@
 package team.sakhi.android.designsystem
 
 import androidx.compose.animation.core.SpringSpec
+import androidx.compose.animation.core.calculateTargetValue
+import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.runtime.MonotonicFrameClock
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -43,6 +45,17 @@ class SakhiMotionTest {
     fun `a spring without a damping fraction uses SwiftUI's default`() {
         val spec: SpringSpec<Float> = SakhiMotion.quick()
         assertEquals(0.825f, spec.dampingRatio)
+    }
+
+    // ── Scroll glide ───────────────────────────────────────────────────────────────────
+
+    @Test
+    fun `the glide decays at UIScrollView's normal rate`() {
+        assertEquals(0.4767f, IOS_FRICTION_MULTIPLIER, absoluteTolerance = 0.0005f)
+        // At 0.998 per ms a fling travels v0 / 2.002 in total. Asking Compose itself where
+        // the decay ends also pins the 4.2 base friction the multiplier was derived from.
+        val decay = exponentialDecay<Float>(frictionMultiplier = IOS_FRICTION_MULTIPLIER)
+        assertEquals(1000f, decay.calculateTargetValue(0f, 2002f), absoluteTolerance = 1f)
     }
 
     // ── Projection and rubber band ─────────────────────────────────────────────────────

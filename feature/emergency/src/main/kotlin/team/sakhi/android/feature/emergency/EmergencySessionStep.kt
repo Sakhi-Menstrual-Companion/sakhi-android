@@ -47,6 +47,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AssistantDirection
 import androidx.compose.material3.ModalBottomSheet
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import androidx.compose.foundation.layout.Spacer
@@ -126,7 +127,7 @@ internal fun EmergencySessionStep(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior()),
     ) {
         // ── Who is coming ────────────────────────────────────────────────────
         //
@@ -421,6 +422,7 @@ private fun EmergencyChatSheet(
                 )
             }
             LazyColumn(
+                flingBehavior = rememberSakhiFlingBehavior(),
                 state = listState,
                 modifier = Modifier.fillMaxSize().padding(horizontal = SakhiSpacing.space5),
                 verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),

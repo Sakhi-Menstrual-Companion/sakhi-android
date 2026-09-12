@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.ui.res.stringResource
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.ui.SakhiSwitch
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Star
@@ -100,7 +101,7 @@ fun EmergencyMyProfileSheet(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior())
             // iOS: `.padding(.bottom, DS.Spacing.xxl)`. No top padding of its own any
             // more -- the close row below carries the clearance off the grabber.
             .padding(bottom = SakhiSpacing.space8),

@@ -60,6 +60,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import team.sakhi.android.designsystem.SakhiRadius
+import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
@@ -216,6 +217,7 @@ internal fun EmergencyNearbySakhisStep(
             // same shape as every other list in the flow. It was a separate 16dp-radius
             // card per person, which made three people fill the whole sheet.
             LazyColumn(
+                flingBehavior = rememberSakhiFlingBehavior(),
                 contentPadding = PaddingValues(bottom = SakhiSpacing.space10),
             ) {
                 item {
