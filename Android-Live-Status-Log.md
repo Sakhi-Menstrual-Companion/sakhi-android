@@ -8,6 +8,56 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-09-12, Claude: motion and gesture pass, for Karan's "jumping, glitchy, not a
+  production app" report. Builds clean (`:app:assembleDebug`). Installed on the Redmi Note 10
+  Pro Max and it cold-starts with no crash, but the phone was PIN-locked, so the sheet
+  gesture and the splash handoff have NOT been checked by eye yet. Please do that on device
+  before shipping.**
+  **Calendar sheet (`app/.../HomeCalendarOverlay.kt`), rewritten motion, same resting
+  positions.** Three real problems fixed. (1) The sheet's position was read with
+  `by animateDpAsState(...)` in the composable body, so every drag and animation frame
+  recomposed the whole `CalendarScreen` (1300+ lines, grid, year LazyColumn). It is now one
+  `Animatable` in pixels, read only inside a `Modifier.layout` measure block, so a drag
+  re-measures the sheet and recomposes nothing. Same pattern as Home's `heroScrollProgress`.
+  (2) Release used a fixed 56dp distance, so a short fast flick sprang back. `chooseSettleTop`
+  now picks the anchor from throw velocity first (175dp/s threshold, one anchor per throw,
+  like Material), then nearest anchor for a slow release, and passes the velocity into the
+  settle spring. (3) Finger offset was added on top of a still-running `LowBouncy` spring,
+  which caused the wobble. There is now a single owner of position, the finger writes with
+  `snapTo`, and the settle spring is critically damped. The drag also moved from the 22dp
+  grabber row to the whole sheet via `Modifier.draggable`; the year LazyColumn still scrolls
+  because scrollable children consume first. Dismiss is now a settle to the off-screen
+  anchor, so a flick down leaves with the same motion as a slow drag.
+  **Screen transitions (`core/ui/.../SakhiScreenTransition.kt`).** `ContentTransform`
+  defaults `sizeTransform` to `SizeTransform()`, so every push, pop and fade was also
+  animating the container size between two identical full-bleed screens, one extra measure
+  of both screens per frame. `sakhiScreenSlide` now builds the transform with
+  `sizeTransform = null`. Note: in Compose 1.11 `using` is a member of
+  `AnimatedContentTransitionScope`, not top-level, so it cannot be used from this function.
+  This does NOT stop `AnimatedContent` composing both screens during the slide, that is how
+  it works. The real fix for the mid-push frame drop is a release build plus a generated
+  baseline profile (`app/src/release/generated/baselineProfiles/` is still empty).
+  **Cold start (`MainActivity.kt`, `res/values/themes.xml`, `libs.versions.toml`,
+  `app/build.gradle.kts`).** `core-splashscreen` 1.0.1 restored and `installSplashScreen()`
+  wired before `super.onCreate()`. `Theme.Sakhi.Splash` now parents `Theme.SplashScreen`,
+  with background `@color/sakhi_window_background` (same colour as the window behind
+  Compose, already has a night variant), icon `@mipmap/ic_launcher` (named explicitly
+  because below API 31 the compat library draws no icon otherwise), and
+  `postSplashScreenTheme = Theme.Sakhi`. The splash holds until the first composition
+  (`LaunchedEffect` flips `contentReady`), with a 2s safety ceiling, then fades out over
+  220ms. It deliberately does not wait for the session gate, because that can wait on the
+  network. Why it failed to resolve on 2026-07-04 is not in git history; it resolves now.
+  **Found along the way, not fixed in code:** `00-Shared/SakhiCore/local.properties` is
+  gitignored but also TRACKED, and it carried `sdk.dir=/Users/karankumar/...`, the other
+  macOS account's SDK, which this account cannot read. Edited locally to
+  `/Users/karanpersonal/Library/Android/sdk`, and created the missing
+  `02-Prediction-Engine/local.properties`, so the build could run. Not committed. It should
+  be `git rm --cached` so it stops carrying one account's path to the other.
+  **Pre-existing, not from this pass:** `:feature:home:compileDebugUnitTestKotlin` fails at
+  `HomeScreenshotTest.kt:159`, "No value passed for parameter 'notificationRepository'".
+  The working tree also held uncommitted edits in RootNavHost, OtpField, SakhiAlertSheet,
+  onboarding and others from another session. They were left alone.
+
 - **2026-08-21, Claude: dark-mode sweep against iOS, view by view, plus the colour
   single-source-of-truth Karan asked for. App + all unit tests green; NOT yet verified on a
   real device -- this needs a live light/dark pass before it ships.**

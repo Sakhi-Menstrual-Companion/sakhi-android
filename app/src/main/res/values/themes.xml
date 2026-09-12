@@ -15,7 +15,34 @@
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
     </style>
 
-    <style name="Theme.Sakhi.Splash" parent="Theme.Sakhi">
-        <item name="android:windowBackground">@color/sakhi_splash_background</item>
+    <!-- The launch theme, and the ONLY theme the manifest gives MainActivity. Handing the
+         cold start to androidx's SplashScreen compat instead of painting a flat colour.
+
+         What it replaces: this used to be `Theme.Sakhi` with a different windowBackground.
+         That gave a cold start three separate visual states in a row — Android 12+ draws
+         its own icon splash whether or not the app asks for one, then this flat colour
+         window appeared while the process warmed, then Compose's first frame arrived. Three
+         hard cuts is the "app pops in" jump, and no amount of Compose-side work can fix it,
+         because two of the three happen before Compose exists.
+
+         With `Theme.SplashScreen` there is ONE splash, it is the system's own, and
+         `postSplashScreenTheme` swaps the activity over to the real theme the moment the
+         splash is done — so the colour behind Compose never changes.
+
+         windowSplashScreenBackground deliberately points at `sakhi_window_background`, the
+         SAME colour the app window paints behind Compose (and which already carries a
+         values-night variant), not at a splash-only colour. Splash, window and first frame
+         are then the same value and nothing flashes between them. `sakhi_splash_background`
+         is kept in colors.xml because it is the KMM-synced token; this theme just no longer
+         needs a second, separate one.
+
+         windowSplashScreenAnimatedIcon is set explicitly rather than left to default. On
+         API 31+ the platform would fall back to the launcher icon anyway, but below 31 the
+         compat library draws nothing at all unless it is named, which would leave older
+         devices with a blank coloured screen. -->
+    <style name="Theme.Sakhi.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/sakhi_window_background</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/Theme.Sakhi</item>
     </style>
 </resources>

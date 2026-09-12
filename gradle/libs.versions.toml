@@ -66,11 +66,22 @@ playServicesLocation = "21.3.0"
 # lower core-ktx requirement, and still exposes every Maps Compose API used by
 # `feature/ai/ChatScreen.kt`.
 mapsCompose = "5.0.3"
-# core-splashscreen dropped (2026-07-04): 1.0.1's SplashScreen API failed to resolve
-# under every calling convention (top-level extension, static call, explicit
-# Companion call — verified by real build failures). Not worth chasing for a
-# cosmetic feature; MainActivity uses the system default cold-start treatment until
-# a themed splash is wired in the design-system pass (plan Section 4/8).
+# core-splashscreen, restored 2026-09-12 after being dropped on 2026-07-04.
+#
+# The 2026-07-04 note said "1.0.1's SplashScreen API failed to resolve under every
+# calling convention". Git history starts after that change, so why it failed is not
+# recorded. What is verified (2026-09-12): with `implementation(libs.androidx.core.
+# splashscreen)` declared in :app, `:app:assembleDebug` builds cleanly and the API
+# resolves through the companion-scoped extension:
+#
+#     import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+#     installSplashScreen()   -- before super.onCreate()
+#
+# It is not cosmetic either. Without it a cold start shows THREE separate things in a
+# row — the system's own icon splash (Android 12+ draws one whether or not the app asks),
+# then a bare `windowBackground` colour while the process warms, then Compose's first
+# frame. That handoff is the "app pops in" jump. See MainActivity for how it is wired.
+coreSplashscreen = "1.0.1"
 
 # Screenshot-test durability lane (2026-07-15), on top of the manual visual + flow
 # parity gate above, not a substitute for it. Roborazzi over Paparazzi: it renders
@@ -130,6 +141,7 @@ compose-material-icons-extended = { group = "androidx.compose.material", name = 
 navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
+androidx-core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version.ref = "coreSplashscreen" }
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workManager" }
 androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }

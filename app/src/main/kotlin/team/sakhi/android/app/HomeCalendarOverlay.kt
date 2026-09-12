@@ -1,11 +1,13 @@
 package team.sakhi.android.app
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -20,19 +22,25 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import team.sakhi.android.designsystem.calendarSheetBackground
 import team.sakhi.models.CyclePhase
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 private enum class CalendarDetent { Compact, Expanded }
 
@@ -60,6 +68,46 @@ private enum class CalendarDetent { Compact, Expanded }
  *
  * Geometry is taken from the Swift source rather than eyeballed: 24dp top corners,
  * a 36×4 handle with 10dp top / 4dp bottom padding inside a 36dp touch row.
+ *
+ * ── How the motion works, and why it is built this way ──────────────────────────
+ *
+ * The resting positions above are unchanged. What changed is everything about how the
+ * sheet gets between them, because the previous version had three separate problems
+ * that together made it read as "glitchy" rather than physical:
+ *
+ *  1. The sheet position was held in a `Dp` read with `by animateDpAsState(...)`
+ *     directly in this composable's body. That read invalidated `HomeCalendarOverlay`
+ *     on EVERY animation and drag frame, and `content()` is `CalendarScreen` — a
+ *     1300-line tree with its own ViewModel, month grid and year `LazyColumn`. So the
+ *     whole calendar recomposed 60-120 times a second for the length of every drag.
+ *     It is now an `Animatable` in pixels whose `.value` is read ONLY inside the
+ *     `Modifier.layout` measure block below. A snapshot read in that position
+ *     invalidates the layout phase and nothing above it, so dragging the sheet no
+ *     longer recomposes a single composable. This is the same fix, and the same
+ *     reasoning, as `HomeScreen`'s `heroScrollProgress` lambda.
+ *
+ *  2. Release decided where to land purely on distance travelled (a fixed 56dp
+ *     threshold). A short fast flick therefore did nothing and sprang back, which is
+ *     the single clearest tell that a gesture is not physical. [chooseSettleTop] now
+ *     picks the anchor from the throw VELOCITY first and falls back to nearest-anchor
+ *     only for a slow release, and that velocity is handed to the settling spring as
+ *     `initialVelocity` so the sheet carries the throw through instead of restarting
+ *     from a standstill.
+ *
+ *  3. The live drag offset was added ON TOP of a still-running `animateDpAsState`
+ *     spring, and that spring was `DampingRatioLowBouncy`. A bouncy spring fighting a
+ *     finger is where the visible wobble and overshoot came from. There is now one
+ *     owner of the position ([sheetTop]), the finger writes to it directly through
+ *     `snapTo`, and the settle spring is critically damped ([SETTLE_DAMPING]) so it
+ *     never oscillates around a detent.
+ *
+ * The drag also lives on the whole sheet now rather than only the 22dp grabber row.
+ * `Modifier.draggable` dispatches on the main pointer pass, so a scrollable child (the
+ * year view's `LazyColumn`) still consumes its own vertical drags first and scrolls
+ * normally; everything that is NOT a scroller — the grabber, the month header, the day
+ * grid, the bottom bar — drags the sheet, which is what both iOS sheets and Material
+ * sheets do. Taps are unaffected, because `draggable` only claims the gesture after
+ * touch slop.
  */
 @Composable
 fun HomeCalendarOverlay(
@@ -88,26 +136,69 @@ fun HomeCalendarOverlay(
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp +
         topSafeInset + systemBars.calculateBottomPadding()
 
-    val compactTop = screenHeight * COMPACT_TOP_FRACTION
-    val expandedTop = topSafeInset + EXPANDED_TOP_GAP
+    // Every anchor is kept in PIXELS from here down. The position is animated and
+    // dragged as a raw float, and converting Dp per frame would be pointless work in
+    // the one place that runs on every frame.
+    val density = LocalDensity.current
+    val screenHeightPx = with(density) { screenHeight.toPx() }
+    val expandedTopPx = with(density) { (topSafeInset + EXPANDED_TOP_GAP).toPx() }
+    val compactTopPx = screenHeightPx * COMPACT_TOP_FRACTION
+    // Off the bottom of the screen. Also the dismiss anchor: settling here IS the
+    // dismissal, so a hard flick down leaves through the same motion a slow drag does.
+    val hiddenTopPx = screenHeightPx
+    val flingVelocityPx = with(density) { FLING_VELOCITY_DP_PER_SEC.dp.toPx() }
 
     var detent by remember { mutableStateOf(CalendarDetent.Compact) }
-    // Live finger movement, folded into the resting position so the sheet tracks the
-    // drag 1:1 instead of only animating after release.
-    var dragOffset by remember { mutableFloatStateOf(0f) }
 
-    val restingTop = when {
-        !visible -> screenHeight
-        detent == CalendarDetent.Expanded -> expandedTop
-        else -> compactTop
+    /**
+     * The sheet's top edge, in pixels from the top of the screen. The single owner of
+     * where the sheet is: the finger writes to it with `snapTo`, releases and external
+     * detent changes animate it with `animateTo`, and `Animatable`'s own mutex means a
+     * new gesture cleanly takes over from an animation already in flight (grabbing a
+     * moving sheet works, rather than the two fighting).
+     */
+    val sheetTop = remember { Animatable(hiddenTopPx) }
+    val scope = rememberCoroutineScope()
+
+    // Bumped on every drag release so that releasing back onto the detent you started
+    // from still re-settles. Without it the settle effect below is keyed only on
+    // `visible`/`detent`, neither of which changed in that case, so the sheet would
+    // simply stay wherever the finger let go of it.
+    var settleRequest by remember { mutableIntStateOf(0) }
+    // A plain holder, NOT snapshot state: this is written during a gesture and read
+    // once by the effect, and making it observable would put a recomposition back into
+    // exactly the path this file exists to keep out of composition.
+    val pendingVelocity = remember { floatArrayOf(0f) }
+
+    val targetTopPx = when {
+        !visible -> hiddenTopPx
+        detent == CalendarDetent.Expanded -> expandedTopPx
+        else -> compactTopPx
     }
-    val animatedTop by animateDpAsState(
-        targetValue = restingTop,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow),
-        label = "calendar_detent",
-    )
 
-    val sheetTop = (animatedTop + if (visible) dragOffset.dp else 0.dp).coerceIn(expandedTop, screenHeight)
+    LaunchedEffect(targetTopPx, settleRequest) {
+        val velocity = pendingVelocity[0]
+        pendingVelocity[0] = 0f
+        if (sheetTop.value != targetTopPx) {
+            sheetTop.animateTo(
+                targetValue = targetTopPx,
+                animationSpec = spring(
+                    dampingRatio = SETTLE_DAMPING,
+                    stiffness = Spring.StiffnessMediumLow,
+                    // Half a pixel. The Float default (0.01) keeps the spring alive for
+                    // frames after the sheet has visibly stopped.
+                    visibilityThreshold = 0.5f,
+                ),
+                initialVelocity = velocity,
+            )
+        }
+    }
+
+    val draggableState = rememberDraggableState { delta ->
+        scope.launch {
+            sheetTop.snapTo((sheetTop.value + delta).coerceIn(expandedTopPx, hiddenTopPx))
+        }
+    }
 
     // This overlay is drawn outside the NavHost, so without a handler the system back
     // gesture fell straight through to the nav graph, popped Home and quit the app while
@@ -122,7 +213,50 @@ fun HomeCalendarOverlay(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .height((screenHeight - sheetTop).coerceAtLeast(0.dp))
+                // The ONLY place `sheetTop.value` is read. Inside a `Modifier.layout`
+                // measure block a snapshot read invalidates the layout phase alone, so a
+                // drag re-measures this subtree and recomposes nothing. Reading the same
+                // value in the composable body (which is what `by animateDpAsState` did)
+                // recomposed the entire calendar every frame instead.
+                .layout { measurable, constraints ->
+                    val height = (screenHeightPx - sheetTop.value)
+                        .roundToInt()
+                        .coerceIn(0, constraints.maxHeight)
+                    val placeable = measurable.measure(
+                        constraints.copy(minHeight = height, maxHeight = height),
+                    )
+                    layout(placeable.width, height) { placeable.place(0, 0) }
+                }
+                // Whole-sheet drag. Scrollable children (the year view's LazyColumn) take
+                // the gesture first on the main pass and keep scrolling; everything else
+                // moves the sheet. See this file's header for why it is no longer confined
+                // to the grabber row.
+                .draggable(
+                    state = draggableState,
+                    orientation = Orientation.Vertical,
+                    enabled = visible,
+                    onDragStopped = { velocity ->
+                        val settleTo = chooseSettleTop(
+                            currentTopPx = sheetTop.value,
+                            velocityPxPerSec = velocity,
+                            expandedTopPx = expandedTopPx,
+                            compactTopPx = compactTopPx,
+                            hiddenTopPx = hiddenTopPx,
+                            flingVelocityPx = flingVelocityPx,
+                        )
+                        pendingVelocity[0] = velocity
+                        when (settleTo) {
+                            expandedTopPx -> detent = CalendarDetent.Expanded
+                            compactTopPx -> detent = CalendarDetent.Compact
+                            // Settling off the bottom is the dismissal. Telling the parent
+                            // flips `visible`, which moves `targetTopPx` to the hidden
+                            // anchor, and the effect above runs the throw out with the
+                            // velocity it was given.
+                            else -> onDismiss()
+                        }
+                        settleRequest++
+                    },
+                )
                 .clip(RoundedCornerShape(topStart = SHEET_CORNER, topEnd = SHEET_CORNER))
                 // iOS `HomeCalendarSheet.sheetBackground`: plain `systemBackground` in
                 // light -- deliberately NOT the phase-tinted surface -- and one of three
@@ -139,34 +273,12 @@ fun HomeCalendarOverlay(
                 // colour, not inline here.
                 .background(calendarSheetBackground(phase)),
         ) {
-            // Drag handle. Owns the gesture, like iOS's `dragHandle` + `panGesture`,
-            // so dragging inside the month grid still scrolls the grid rather than
-            // fighting the sheet.
+            // Grabber. Purely the visual affordance now — the gesture belongs to the whole
+            // sheet above, so this no longer owns a `pointerInput` of its own.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(HANDLE_ROW_HEIGHT)
-                    .pointerInput(detent) {
-                        detectVerticalDragGestures(
-                            onVerticalDrag = { _, delta -> dragOffset += delta / density },
-                            onDragEnd = {
-                                // Always land on a real detent — never leave the sheet
-                                // at an intermediate position (iOS makes the same
-                                // point explicitly in its own drag handler).
-                                when {
-                                    dragOffset < -SNAP_THRESHOLD -> detent = CalendarDetent.Expanded
-                                    dragOffset > SNAP_THRESHOLD ->
-                                        if (detent == CalendarDetent.Expanded) {
-                                            detent = CalendarDetent.Compact
-                                        } else {
-                                            onDismiss()
-                                        }
-                                }
-                                dragOffset = 0f
-                            },
-                            onDragCancel = { dragOffset = 0f },
-                        )
-                    },
+                    .height(HANDLE_ROW_HEIGHT),
                 contentAlignment = Alignment.TopCenter,
             ) {
                 Box(
@@ -186,6 +298,39 @@ fun HomeCalendarOverlay(
     }
 }
 
+/**
+ * Which anchor a release should land on, given where the sheet is and how hard it was
+ * thrown. Anchors are top-edge positions in pixels, so SMALLER is higher up the screen.
+ *
+ * Velocity wins over position, which is the whole point: a 20dp flick thrown hard is a
+ * deliberate "send it up", and judging it on the 20dp alone (which is what the old fixed
+ * distance threshold did) is what made the sheet feel like it was ignoring the user. A
+ * throw moves exactly ONE anchor in the direction it was thrown, so a hard flick down
+ * from the expanded detent lands on compact rather than skipping straight out — the same
+ * rule Material's own sheets follow.
+ *
+ * Only a slow release falls through to nearest-anchor.
+ */
+private fun chooseSettleTop(
+    currentTopPx: Float,
+    velocityPxPerSec: Float,
+    expandedTopPx: Float,
+    compactTopPx: Float,
+    hiddenTopPx: Float,
+    flingVelocityPx: Float,
+): Float {
+    val anchors = listOf(expandedTopPx, compactTopPx, hiddenTopPx)
+    return when {
+        // Thrown upward: the next anchor above where it is now.
+        velocityPxPerSec <= -flingVelocityPx ->
+            anchors.filter { it < currentTopPx }.maxOrNull() ?: anchors.min()
+        // Thrown downward: the next anchor below.
+        velocityPxPerSec >= flingVelocityPx ->
+            anchors.filter { it > currentTopPx }.minOrNull() ?: anchors.max()
+        else -> anchors.minByOrNull { abs(it - currentTopPx) } ?: compactTopPx
+    }
+}
+
 /** iOS `compactY = screenH * 0.20`, giving `actual_top = 0.40 * screenH`. */
 private const val COMPACT_TOP_FRACTION = 0.40f
 private val EXPANDED_TOP_GAP = 10.dp
@@ -198,4 +343,22 @@ private val HANDLE_ROW_HEIGHT = 22.dp
 private val HANDLE_TOP_PADDING = 10.dp
 private val HANDLE_WIDTH = 36.dp
 private val HANDLE_HEIGHT = 4.dp
-private const val SNAP_THRESHOLD = 56f
+
+/**
+ * How fast a release has to be before it counts as a throw rather than a slow let-go.
+ * In dp/s so it means the same thing on every screen density. Material's own sheets use
+ * 125dp/s; slightly higher here so that resting a finger and lifting it does not
+ * accidentally register as a flick.
+ */
+private const val FLING_VELOCITY_DP_PER_SEC = 175f
+
+/**
+ * Critically damped, i.e. the sheet reaches its detent and stops dead.
+ *
+ * This was `Spring.DampingRatioLowBouncy`, which overshoots every anchor by design.
+ * Bounce on a sheet that the user is still touching is the wobble Karan described, and
+ * a calendar bouncing under the finger reads as unstable rather than playful. The throw
+ * velocity is carried into the spring instead, which is where the sense of weight is
+ * supposed to come from.
+ */
+private const val SETTLE_DAMPING = Spring.DampingRatioNoBouncy

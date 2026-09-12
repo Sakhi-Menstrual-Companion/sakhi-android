@@ -220,6 +220,7 @@ dependencies {
     implementation(libs.kermit)
 
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.profileinstaller)
     // FragmentActivity is required by MainActivity — BiometricPrompt (:core:platform)

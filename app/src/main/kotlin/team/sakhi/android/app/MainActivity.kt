@@ -9,7 +9,9 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -25,17 +27,48 @@ import team.sakhi.preferences.ThemePreferenceStore
  * `FragmentActivity`, not plain `ComponentActivity` — `AndroidBiometricAdapter`
  * needs a `FragmentActivity` to host `BiometricPrompt` (see :core:platform).
  *
- * No `installSplashScreen()` call yet: `core-splashscreen` 1.0.1's `SplashScreen`
- * API failed to resolve under every calling convention tried (top-level extension,
- * static call, explicit `Companion` call — all "unresolved reference", verified by
- * real build failures), and the dependency isn't worth chasing further right now.
- * The system default cold-start treatment is fine for this foundation milestone;
- * wiring a real themed splash is a tracked follow-up for the design-system pass
- * (plan Section 4/8), not a Phase B blocker.
+ * Cold start is owned by androidx's SplashScreen compat (see `installSplashScreen()`
+ * below and `Theme.Sakhi.Splash` in themes.xml). The note that used to sit here said the
+ * API "failed to resolve under every calling convention tried". Why is not recorded in git
+ * history. As of 2026-09-12 it builds cleanly with `core-splashscreen` declared in :app,
+ * see the note beside `coreSplashscreen` in libs.versions.toml.
  */
 class MainActivity : FragmentActivity() {
+    /**
+     * Flipped by the composition itself, once Compose has produced its first frame.
+     *
+     * This is what the system splash waits on. Left to itself the splash tears down as
+     * soon as the activity's window is up, which is BEFORE Compose has drawn anything, so
+     * the bare window background showed for a frame or two in between. Holding the splash
+     * across that gap is what removes the flicker.
+     */
+    private var contentReady = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Before super.onCreate(), which the API requires: this is what swaps the activity
+        // from the splash theme to `postSplashScreenTheme`, and that has to happen before
+        // the window is created.
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
+
+        splashScreen.setKeepOnScreenCondition { !contentReady }
+        // A stalled composition must never be able to strand the user on a splash that
+        // looks frozen. After this the splash leaves regardless, and whatever the app did
+        // manage to draw is always better than a dead screen.
+        window.decorView.postDelayed({ contentReady = true }, MAX_SPLASH_HOLD_MS)
+        // Hand off by fading, not by cutting. The splash background and the window behind
+        // Compose are the same colour (themes.xml points both at `sakhi_window_background`),
+        // so across this fade the only thing that visibly changes is the icon dissolving
+        // into the first frame. That is the whole "one continuous move" the cold start was
+        // missing.
+        splashScreen.setOnExitAnimationListener { splashProvider ->
+            splashProvider.view
+                .animate()
+                .alpha(0f)
+                .setDuration(SPLASH_EXIT_FADE_MS)
+                .withEndAction { splashProvider.remove() }
+                .start()
+        }
         // `enableEdgeToEdge()` with no arguments makes the status bar fully transparent, but
         // for the navigation bar it applies AndroidX's own safety scrim -- ~90% opaque white
         // in light mode, ~50% black in dark -- specifically for 3-button nav, to keep the
@@ -89,6 +122,16 @@ class MainActivity : FragmentActivity() {
             SakhiTheme(darkTheme = darkTheme) {
                 RootNavHost()
             }
+            // Runs once the first composition has been applied, i.e. immediately before
+            // Compose's first draw. That is the earliest honest moment to say the content
+            // is ready, and it is what releases the splash above.
+            //
+            // Deliberately NOT held until the session gate inside RootNavHost resolves:
+            // that gate can wait on the network, and a system splash held that long reads
+            // as a hang. RootNavHost's own `SakhiLoadingView` is a designed, branded state
+            // that already paints the remembered phase colour, so handing off to it is
+            // continuous rather than a third cut.
+            LaunchedEffect(Unit) { contentReady = true }
         }
     }
 
@@ -110,3 +153,16 @@ class MainActivity : FragmentActivity() {
         AndroidDeepLinkManager.handleIntent(intent)
     }
 }
+
+/**
+ * How long the splash fades out over. Short enough that it never reads as a delay, long
+ * enough that the icon dissolves rather than blinks.
+ */
+private const val SPLASH_EXIT_FADE_MS = 220L
+
+/**
+ * The hard ceiling on holding the splash, as a safety net only. Normal cold starts release
+ * it on the first composition, far inside this. It exists so that a composition which never
+ * completes cannot leave the user looking at a splash that appears frozen.
+ */
+private const val MAX_SPLASH_HOLD_MS = 2_000L

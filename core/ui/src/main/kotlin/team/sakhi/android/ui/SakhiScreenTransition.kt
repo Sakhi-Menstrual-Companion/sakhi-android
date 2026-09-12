@@ -192,7 +192,7 @@ fun sakhiScreenSlide(
     val alphaSpec = tween<Float>(SCREEN_TRANSITION_DURATION_MS, easing = screenTransitionEasing)
     val offsetSpec = tween<IntOffset>(SCREEN_TRANSITION_DURATION_MS, easing = screenTransitionEasing)
     val outgoingAlpha = if (parentStaysBehind) OUTGOING_TARGET_ALPHA_PUSH else OUTGOING_TARGET_ALPHA
-    return when (direction) {
+    val transform = when (direction) {
         SakhiNavDirection.None ->
             fadeIn(tween(ROOT_FADE_DURATION_MS, easing = screenTransitionEasing))
                 .togetherWith(fadeOut(tween(ROOT_FADE_DURATION_MS, easing = screenTransitionEasing)))
@@ -213,4 +213,21 @@ fun sakhiScreenSlide(
                     fadeOut(alphaSpec, targetAlpha = outgoingAlpha),
             )
     }
+    // `ContentTransform`'s constructor defaults `sizeTransform` to `SizeTransform()`, so
+    // every transition above was silently also animating the CONTAINER's size from the
+    // outgoing screen's measured size to the incoming one's. That costs a full measure of
+    // both screens on every frame of the animation, and it buys nothing here: these are
+    // full-bleed screens, so the two sizes are identical and the "animation" is a
+    // 380ms-long measure of a value that never changes. Turning it off leaves the slide
+    // and the fade, which are the only things that were ever meant to move.
+    //
+    // Rebuilt through the public constructor rather than with `using null`: in this
+    // Compose version `using` is a member of `AnimatedContentTransitionScope`, so it only
+    // exists inside a `transitionSpec` lambda, and this function is called from outside
+    // one. The `sizeTransform` setter is internal to Compose.
+    return ContentTransform(
+        targetContentEnter = transform.targetContentEnter,
+        initialContentExit = transform.initialContentExit,
+        sizeTransform = null,
+    )
 }
