@@ -8,6 +8,28 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-09-12 (dividers), Claude: one divider in the whole app, enforced by the build.
+  Builds clean, and `lintDebug` on core:ui, ai, home, care, profile and emergency reports zero
+  `SakhiDivider` violations. Installed on the Redmi; not yet looked at screen by screen.**
+  Karan asked for every divider to be as thin as Profile's, and then for that divider to be
+  the only one, "iss tarah more components kabhi nhi banenge". Profile's is `SakhiListDivider`:
+  `Dp.Hairline` (one physical pixel) in `sakhiSeparator()`. Eighteen dividers were drawn some
+  other way: Material's default `HorizontalDivider()` (1dp, about three pixels here), a 1dp
+  `Box` in EditProfile, and several 0.5dp lines. Five private wrappers re-wrapped the same line
+  (`RowDivider` in Care and in EditProfile, `EmergencyRowDivider`, `IndentedDivider`,
+  `LearningDivider`, `QuickLogMenuDivider`).
+  **Now:** `SakhiListDivider` gained one optional `color`, for surfaces that are deliberately
+  tinted (Home cards over the phase colour, the quick-log menu). Every divider calls it
+  directly; all five wrappers are deleted. Where a wrapper only existed to carry an inset, the
+  inset is now a named value (`EmergencyRowInset = 58.dp`, `ManageAccountRowInset = 68.dp`),
+  and the lighter learning-card rule is a named colour, `learningDividerColor()`.
+  **Enforced:** new `DividerDetector`, issue `SakhiDivider`, at ERROR. Dividers were already in
+  `SakhiDesignSystem`, but at WARNING, and that is how these eighteen got in. The rule exempts
+  only `SakhiListDivider.kt` itself. It cannot see a hand-drawn `Box` line, which the
+  component's KDoc now warns about, together with the trap that `Modifier.height(Dp.Hairline)`
+  is zero and draws nothing. The rule is confirmed registered (it appears in the lint report)
+  and quiet on the current code; a deliberate violation has not been used to prove it fires.
+
 - **2026-09-12 (third pass), Claude: lists, scroll glide, font weight, and the calendar
   sheet's dismiss. Debug build installed on the Redmi and Home verified on screen; Profile,
   Care and the sheet gestures still need Karan's eyes. Karan asked to stay on debug for now so
