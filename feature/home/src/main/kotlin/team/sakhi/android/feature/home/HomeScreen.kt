@@ -148,6 +148,7 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.LoadingShimmer
 import team.sakhi.android.ui.PhaseBadge
+import team.sakhi.android.ui.SakhiAnimatedValue
 import team.sakhi.android.ui.flowDisplayName
 import team.sakhi.android.ui.SakhiBottomActionBar
 import team.sakhi.android.feature.logging.LoggingViewModel
@@ -991,6 +992,12 @@ private fun HeroSection(
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2 + SakhiSpacing.space1 / 2),
     ) {
         if (text.big.isNotEmpty()) {
+            // Changes INSTANTLY, on purpose. iOS rolls this figure
+            // (`.contentTransition(.numericText())` with a spring); both that and a plain
+            // fade were tried here and rejected by Karan on 2026-09-12, "fade bhi na ho,
+            // ekdum se badle, sirf numbers". The reading she is watching should simply be
+            // the new reading; the things around it are what transition. See the header of
+            // SakhiAnimatedValue.
             Text(
                 text = text.big,
                 // iOS: `.font(.lato(68, .regular))`, single line, shrink-to-fit at 0.65.
@@ -1001,11 +1008,12 @@ private fun HeroSection(
                 maxLines = 1,
             )
         }
-        Text(
+        // The wording under the figure DOES transition, on iOS's own spring for it
+        // (`.spring(response: 0.44, dampingFraction: 0.76)` on `text.sub`).
+        SakhiAnimatedValue(
             text = text.sub,
             // iOS: `.font(.lato(18))`.
-            fontSize = 18.sp,
-            lineHeight = 24.sp,
+            style = LocalTextStyle.current.copy(fontSize = 18.sp, lineHeight = 24.sp),
             color = subColor,
         )
 
@@ -1965,7 +1973,9 @@ private fun PartnerChecklistCard(
         hasCycleData = true,
         icon = Icons.AutoMirrored.Filled.ListAlt,
         badge = if (state.items.isEmpty()) null else "${state.completedCount}/${state.items.size}",
-        onRefresh = if (state.items.isEmpty()) null else onRetry,
+        // No refresh affordance, matching the same removal on iOS
+        // (HomeDayDetailGlassView+PartnerCards.swift). Karan's call, 2026-09-12.
+        onRefresh = null,
     ) {
         when {
             state.isGenerating -> PartnerChecklistLoadingState(phase = phase, accentColor = accentColor)
@@ -2012,7 +2022,18 @@ private fun PartnerChecklistCard(
                     Text(
                         text = item.text,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = if (item.isCompleted) sakhiSecondaryLabel() else sakhiLabel(),
+                        // The card's OWN text colours, not the plain label colour.
+                        // `sakhiLabel()` is near-black, and on a period day this card sits on
+                        // a saturated pink hero, so every item read as black-on-pink and was
+                        // barely legible (reported live: "text period ke din black he reh
+                        // jaa raha hai"). Every other card on this screen already reads
+                        // `LocalHomeCardText`, which resolves to white on a period day.
+                        // iOS does exactly this: `item.isCompleted ? textTertiary : textPrimary`.
+                        color = if (item.isCompleted) {
+                            LocalHomeCardText.current.tertiary
+                        } else {
+                            LocalHomeCardText.current.primary
+                        },
                         textDecoration = if (item.isCompleted) TextDecoration.LineThrough else null,
                         modifier = Modifier.weight(1f),
                     )
@@ -3073,6 +3094,9 @@ private fun HomeTopBar(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             val isToday = hero.selectedDate == DateConverter.today()
+            // A reading, so it changes instantly like the countdown does. iOS eases this one
+            // (`.animation(.easeInOut(duration: 0.35), value: snapshot.formattedDate)`), and
+            // that is the divergence Karan asked for.
             Text(
                 text = DateConverter.formatForDisplay(hero.selectedDate),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),

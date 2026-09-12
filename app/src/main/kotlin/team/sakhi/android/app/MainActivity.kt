@@ -1,6 +1,7 @@
 package team.sakhi.android.app
 
 import android.content.Intent
+import android.util.Log
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -15,11 +16,14 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import org.koin.mp.KoinPlatform
 import org.koin.compose.koinInject
 import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.R
 import team.sakhi.android.designsystem.SakhiTheme
+import team.sakhi.care.CareRealtimeCoordinator
 import team.sakhi.preferences.ThemeMode
 import team.sakhi.preferences.ThemePreferenceStore
 
@@ -132,6 +136,26 @@ class MainActivity : FragmentActivity() {
             // that already paints the remembered phase colour, so handing off to it is
             // continuous rather than a third cut.
             LaunchedEffect(Unit) { contentReady = true }
+        }
+    }
+
+    /**
+     * Catches up whatever realtime missed while the app was away.
+     *
+     * This phone is the case that makes it necessary: MIUI kills background sockets outright,
+     * so the care channel does not "reconnect", it simply was not there, and no reconnect
+     * event ever arrives to trigger a re-read. Supabase's own guidance is to re-sync on
+     * returning rather than trust the stream, because delivery is best-effort.
+     *
+     * Safe to call always: the coordinator returns immediately when nobody is signed in, and
+     * the refresh underneath coalesces, so a resume during an in-flight refresh costs nothing.
+     */
+    override fun onResume() {
+        super.onResume()
+        lifecycleScope.launch {
+            runCatching {
+                KoinPlatform.getKoin().get<CareRealtimeCoordinator>().recoverAfterAuthOrReconnect()
+            }.onFailure { Log.w("SakhiRealtime", "resume recovery failed: $it") }
         }
     }
 

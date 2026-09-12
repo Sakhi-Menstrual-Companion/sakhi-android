@@ -186,9 +186,24 @@ fun phasePageBackgroundBrush(phase: CyclePhase, hasCycleData: Boolean): Brush {
  * overshoots, and a colour that overshoots briefly shows a hue that belongs to no phase.
  */
 @Composable
-fun phaseColorSpec(): AnimationSpec<Color> =
-    tween(durationMillis = PHASE_COLOR_TRANSITION_MS, easing = FastOutSlowInEasing)
+fun phaseColorSpec(): AnimationSpec<Color> = SakhiMotion.iosSpring(
+    response = 0.5f,
+    dampingFraction = 0.88f,
+)
 
+/**
+ * iOS's `HomeView.homePhaseTransition`, `.spring(response: 0.5, dampingFraction: 0.88,
+ * blendDuration: 0.14)`, which is what it applies to `snapshot.displayPhase`, i.e. to every
+ * phase-tinted thing on Home at once.
+ *
+ * This was a 400ms `FastOutSlowInEasing` tween. A tween of a fixed length is the one shape a
+ * spring never has: it starts and stops at exactly the same rate every time regardless of how
+ * far the colour has to travel, which is what made a phase change read as a timed fade rather
+ * than as the screen settling. `blendDuration` has no Compose equivalent and is not needed
+ * here: it only matters when a second animation interrupts the first, and Compose's
+ * `animateColorAsState` already retargets smoothly from wherever the colour currently is.
+ */
+@Deprecated("Kept so nothing breaks if a call site still reads it; the spec is a spring now.")
 const val PHASE_COLOR_TRANSITION_MS = 400
 
 /**
