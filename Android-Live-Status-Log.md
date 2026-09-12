@@ -23265,3 +23265,31 @@ into the shared managers, navigators, stores, and design-system skeleton.
     menstrual cycle, instead of the stale 5 September state seen in the Claude
     session.
   — Codex
+
+- **2026-09-13 03:55 IST, Codex follow-up: fixed the remaining 5 September
+  marker in the partner calendar sheet.**
+  - The Home hero was already using the partner health snapshot, but
+    `CalendarViewModel` still read partner calendar marks from this phone's
+    local `PeriodLogRepository` / `CycleDataRepository` cache. That kept showing
+    5 September even when the live partner snapshot had 13 September.
+  - Calendar partner mode now observes `SyncStore.partnerHealthSnapshot` and
+    builds period/detail marks from that snapshot only. If no matching snapshot
+    is available, it shows a blank loading grid and requests a partner-health
+    refresh instead of drawing stale local marks.
+  - Home selected-date log presence also now uses the same snapshot path in
+    partner mode, so the bottom action state and selected-day details cannot
+    fall back to the stale local cache.
+  - Added regression coverage where the local repository says 5 September but
+    the partner snapshot says 13 September. The test asserts only 13 September
+    is marked and partner repositories are not read.
+  - Verified:
+    `:feature:calendar:testDebugUnitTest --tests team.sakhi.android.feature.calendar.CalendarViewModelTest`,
+    `:feature:home:testDebugUnitTest --tests team.sakhi.android.feature.home.HomeViewModelTest`,
+    and `:app:assembleDebug` all passed.
+  - Installed the debug APK on the connected Redmi device and visually verified
+    the calendar sheet: 5 September is plain, 13 September is the selected
+    period day, and the Home hero shows `13 Sep 2026`, `Menstrual Phase`,
+    `Day 1 of her period`.
+  - Log proof from the same run: `SakhiHome` read `2026-09-13 from partner
+    snapshot -> 1 log(s) ... revision=13`, then refreshed again at revision 14.
+  — Codex

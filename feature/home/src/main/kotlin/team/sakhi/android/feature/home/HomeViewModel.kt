@@ -713,6 +713,29 @@ class HomeViewModel(
             return
         }
 
+        if (!session.isViewingOwnData) {
+            val snapshot = syncStore.partnerHealthSnapshot.value
+                ?.takeIf { it.subjectUserId == targetUserId }
+            if (snapshot == null) {
+                if (sessionManager.current?.targetUserId != targetUserId) return
+                _uiState.update { it.copy(hasLoggedForSelectedDate = false, selectedLog = null) }
+                viewModelScope.launch { runCatching { syncStore.refreshPartnerHealth() } }
+                return
+            }
+
+            if (sessionManager.current?.targetUserId != targetUserId) return
+            if (_uiState.value.selectedDate != date) return
+            val logs = snapshot.periodLogs.filter { it.logDate == date }
+            val visibleLog = logs.firstOrNull()?.sanitizeForHome(session, canViewLoggedDetails)
+            homeLog.i {
+                "read $date from partner snapshot -> ${logs.size} log(s), " +
+                    "hasLogged=${logs.isNotEmpty()}, visibleAfterSanitize=${visibleLog != null}, " +
+                    "canViewLoggedDetails=$canViewLoggedDetails, revision=${snapshot.revision}"
+            }
+            _uiState.update { it.copy(hasLoggedForSelectedDate = logs.isNotEmpty(), selectedLog = visibleLog) }
+            return
+        }
+
         periodLogRepository.getForDateRange(userId = targetUserId, from = date, to = date)
             .onSuccess { logs ->
                 if (sessionManager.current?.targetUserId != targetUserId) return

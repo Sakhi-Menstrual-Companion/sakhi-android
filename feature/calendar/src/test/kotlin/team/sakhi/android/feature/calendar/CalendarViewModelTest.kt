@@ -32,9 +32,12 @@ import team.sakhi.models.CycleData
 import team.sakhi.models.CyclePhase
 import team.sakhi.models.UserCareRole
 import team.sakhi.repositories.CycleDataRepository
+import team.sakhi.repositories.PartnerHealthSnapshot
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.session.SessionPermissions
+import team.sakhi.sync.SyncRuntimeState
+import team.sakhi.sync.SyncStore
 
 /**
  * State-machine test for `CalendarViewModel`. `SessionManager`/`CycleDataRepository`/
@@ -136,11 +139,16 @@ class CalendarViewModelTest {
                 Result.success(cycles.flatMap { periodLogsFor(it) })
             }
         },
+        syncStore: SyncStore = mockk {
+            every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
+            every { partnerHealthSnapshot } returns MutableStateFlow<PartnerHealthSnapshot?>(null)
+            coEvery { refreshPartnerHealth(any(), any()) } returns null
+        },
         hapticManager: AndroidHapticManager = mockk(relaxed = true),
         appContext: Context = mockk {
             every { getString(R.string.calendar_load_failed) } returns "Failed to load calendar data"
         },
-    ) = CalendarViewModel(sessionManager, cycleDataRepository, periodLogRepository, hapticManager, appContext)
+    ) = CalendarViewModel(sessionManager, cycleDataRepository, periodLogRepository, syncStore, hapticManager, appContext)
 
     private fun todayCell(viewModel: CalendarViewModel) =
         viewModel.uiState.value.days.first { it.date == DateConverter.today() }
@@ -233,7 +241,17 @@ class CalendarViewModelTest {
         val cycleDataRepository = mockk<CycleDataRepository> {
             coEvery { getAll("primary-1") } returns Result.success(listOf(menstrualCycle(userId = "primary-1")))
         }
-        val viewModel = newViewModel(sessionManager, cycleDataRepository)
+        val syncStore = mockk<SyncStore> {
+            every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
+            every { partnerHealthSnapshot } returns MutableStateFlow(
+                partnerSnapshot(
+                    subjectUserId = "primary-1",
+                    cycles = listOf(menstrualCycle(userId = "primary-1")),
+                    logs = periodLogsFor(menstrualCycle(userId = "primary-1")),
+                ),
+            )
+        }
+        val viewModel = newViewModel(sessionManager, cycleDataRepository, syncStore = syncStore)
 
         advanceUntilIdle()
 
@@ -243,6 +261,76 @@ class CalendarViewModelTest {
         assertTrue(mark.isPeriod)
         assertEquals(CyclePhase.UNKNOWN, mark.phase)
         assertEquals(0, mark.cycleDay)
+        coVerify(exactly = 0) { cycleDataRepository.getAll("primary-1") }
+    }
+
+    @Test
+    fun `partner calendar uses the health snapshot instead of a stale local repository cache`() = runTest {
+        val staleDate = LocalDate(2026, 9, 5)
+        val realDate = LocalDate(2026, 9, 13)
+        val testSession = sessionContext(
+            userId = "partner-1",
+            targetUserId = "primary-1",
+        )
+        val sessionManager = mockk<SessionManager> {
+            every { session } returns MutableStateFlow<SessionContext?>(testSession)
+            every { current } returns testSession
+        }
+        val staleLocalLog = PeriodLog(
+            id = "stale-local-log",
+            userId = "primary-1",
+            logDate = staleDate,
+            periodPresent = true,
+            createdByUserId = "primary-1",
+            sourceUserId = "primary-1",
+        )
+        val realSnapshotLog = staleLocalLog.copy(
+            id = "real-snapshot-log",
+            logDate = realDate,
+        )
+        val cycleDataRepository = mockk<CycleDataRepository> {
+            coEvery { getAll("primary-1") } returns Result.success(
+                listOf(
+                    CycleData(
+                        id = "stale-cycle",
+                        userId = "primary-1",
+                        cycleStartDate = staleDate,
+                        periodStartDate = staleDate,
+                        periodLength = 5,
+                        cycleLength = 28,
+                    ),
+                ),
+            )
+        }
+        val periodLogRepository = mockk<PeriodLogRepository> {
+            coEvery { getAll("primary-1") } returns Result.success(listOf(staleLocalLog))
+        }
+        val syncStore = mockk<SyncStore> {
+            every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
+            every { partnerHealthSnapshot } returns MutableStateFlow(
+                partnerSnapshot(
+                    subjectUserId = "primary-1",
+                    logs = listOf(realSnapshotLog),
+                    revision = 13L,
+                ),
+            )
+        }
+        val viewModel = newViewModel(
+            sessionManager = sessionManager,
+            cycleDataRepository = cycleDataRepository,
+            periodLogRepository = periodLogRepository,
+            syncStore = syncStore,
+        )
+
+        advanceUntilIdle()
+        viewModel.showMonth(realDate)
+        advanceUntilIdle()
+
+        val days = viewModel.uiState.value.days
+        assertFalse(days.first { it.date == staleDate }.mark?.isPeriod == true)
+        assertTrue(days.first { it.date == realDate }.mark?.isPeriod == true)
+        coVerify(exactly = 0) { periodLogRepository.getAll("primary-1") }
+        coVerify(exactly = 0) { cycleDataRepository.getAll("primary-1") }
     }
 
     @Test
@@ -298,15 +386,26 @@ class CalendarViewModelTest {
             coEvery { getAll("user-1") } coAnswers { kotlinx.coroutines.awaitCancellation() }
             coEvery { getAll("partner-1") } returns Result.success(listOf(menstrualCycle(userId = "partner-1")))
         }
-        val viewModel = newViewModel(sessionManager, cycleDataRepository)
+        val snapshotFlow = MutableStateFlow<PartnerHealthSnapshot?>(null)
+        val syncStore = mockk<SyncStore> {
+            every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
+            every { partnerHealthSnapshot } returns snapshotFlow
+        }
+        val viewModel = newViewModel(sessionManager, cycleDataRepository, syncStore = syncStore)
         advanceUntilIdle()
 
         currentSlot[0] = sessionB
+        snapshotFlow.value = partnerSnapshot(
+            subjectUserId = "partner-1",
+            cycles = listOf(menstrualCycle(userId = "partner-1")),
+            logs = periodLogsFor(menstrualCycle(userId = "partner-1")),
+        )
         sessionFlow.value = sessionB
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value.hasAnyCalendarAccess)
         assertTrue(todayCell(viewModel).mark?.isPeriod == true)
+        coVerify(exactly = 0) { cycleDataRepository.getAll("partner-1") }
     }
 
     @Test
@@ -522,6 +621,10 @@ class CalendarViewModelTest {
             sessionManager,
             cycleDataRepository,
             mockk<PeriodLogRepository> { coEvery { getAll(any()) } returns Result.success(emptyList()) },
+            mockk<SyncStore> {
+                every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
+                every { partnerHealthSnapshot } returns MutableStateFlow<PartnerHealthSnapshot?>(null)
+            },
             mockk<AndroidHapticManager>(relaxed = true),
             mockk { every { getString(R.string.calendar_load_failed) } returns "Failed to load calendar data" },
         )
@@ -557,4 +660,21 @@ class CalendarViewModelTest {
         assertEquals(LocalDate(2027, 3, 1), state.visibleMonth)
         assertEquals(selectedBefore, state.selectedDate)
     }
+
+    private fun partnerSnapshot(
+        subjectUserId: String,
+        cycles: List<CycleData> = emptyList(),
+        logs: List<PeriodLog> = emptyList(),
+        revision: Long = 1L,
+    ) = PartnerHealthSnapshot(
+        schemaVersion = 1,
+        revision = revision,
+        subjectUserId = subjectUserId,
+        canViewPeriodDates = true,
+        canViewCycleHistory = true,
+        canViewPredictions = true,
+        periodLogs = logs,
+        cycles = cycles,
+        refreshedAt = "2026-09-13T00:00:00Z",
+    )
 }

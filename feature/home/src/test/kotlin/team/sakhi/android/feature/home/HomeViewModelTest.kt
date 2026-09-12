@@ -320,10 +320,6 @@ class HomeViewModelTest {
             every { session } returns sessionFlow
             every { current } returns sessionFlow.value
         }
-        val syncStore = mockk<SyncStore> {
-            every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
-            every { partnerHealthSnapshot } returns MutableStateFlow(null)
-        }
         val cycle = menstrualCycle(userId = "primary-1")
         val cycleDataRepository = mockk<CycleDataRepository> {
             coEvery { getLatest("primary-1") } returns Result.success(cycle)
@@ -357,6 +353,16 @@ class HomeViewModelTest {
                 ),
             ),
         )
+        val syncStore = mockk<SyncStore> {
+            every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
+            every { partnerHealthSnapshot } returns MutableStateFlow(
+                partnerSnapshot(
+                    "primary-1",
+                    cycles = listOf(cycle),
+                    logs = listOf(rawLog),
+                ),
+            )
+        }
         val periodLogRepository = mockk<PeriodLogRepository> {
             // Home reads the full log history for the shared phase engine, which
             // decides phase from logged period DAYS. Returning an empty list here
@@ -397,6 +403,7 @@ class HomeViewModelTest {
         assertEquals("", visibleLog.createdAt)
         assertEquals("", visibleLog.updatedAt)
         assertTrue(visibleLog.history.isEmpty())
+        coVerify(exactly = 0) { periodLogRepository.getForDateRange(any(), any(), any()) }
     }
 
     @Test
@@ -735,16 +742,12 @@ class HomeViewModelTest {
         coVerify(exactly = 1) { periodLogRepository.getForDateRange("user-1", futureDate, futureDate) }
     }
 
-    // Real gap found (2026-07-16) cross-checking the arbitrary-date-view
-    // feature against the earlier privacy sweep: `LOG_PERIOD` alone was only
-    // ever a safe stand-in for "can see *today's* log presence" (so a partner
-    // who logs on someone's behalf doesn't create a duplicate entry) back
-    // when this read was hardcoded to today. Once Calendar's day-tap could
-    // drive Home to an arbitrary date, that same clause would let a partner
-    // with ONLY `LOG_PERIOD` (no view permission at all) discover whether
-    // period was logged on ANY day, not just today -- since Calendar's own
-    // day-tap grid isn't gated by view permissions either. Verifies the log
-    // presence read is un-gated for today but blocked for another date.
+    // Real gap found (2026-07-16), then tightened again on 2026-09-13 after
+    // a partner phone kept showing stale 5 September data while the live
+    // snapshot had 13 September. `LOG_PERIOD` alone may reveal *today's*
+    // presence so a partner who logs on someone's behalf does not duplicate
+    // it, but the answer still has to come from the partner snapshot, never
+    // from this phone's local repository cache.
     @Test
     fun `a partner with only LOG_PERIOD sees log presence for today but not for another date`() = runTest {
         val partnerSession = sessionContext(
@@ -763,10 +766,6 @@ class HomeViewModelTest {
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
             every { current } returns sessionFlow.value
-        }
-        val syncStore = mockk<SyncStore> {
-            every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
-            every { partnerHealthSnapshot } returns MutableStateFlow(null)
         }
         val today = DateConverter.today()
         val otherDate = DateConverter.addDays(today, 3)
@@ -787,6 +786,15 @@ class HomeViewModelTest {
             sourceUserId = "primary-1",
         )
         val cycleDataRepository = mockk<CycleDataRepository>()
+        val syncStore = mockk<SyncStore> {
+            every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
+            every { partnerHealthSnapshot } returns MutableStateFlow(
+                partnerSnapshot(
+                    "primary-1",
+                    logs = listOf(todayLog, otherLog),
+                ),
+            )
+        }
         val periodLogRepository = mockk<PeriodLogRepository> {
             // Home reads the full log history for the shared phase engine, which
             // decides phase from logged period DAYS. Returning an empty list here
@@ -806,14 +814,14 @@ class HomeViewModelTest {
         val viewModel = newViewModel(sessionManager, syncStore, cycleDataRepository, periodLogRepository)
         advanceUntilIdle()
 
-        // No cycle-view permission at all, so refresh() never reads cycle data --
-        // only the log-presence path (LOG_PERIOD's narrow carve-out) is exercised.
+        // No cycle-view permission at all, so refresh() never reads cycle data.
+        // Only the selected-day presence path is exercised, and it must use the snapshot.
         coVerify(exactly = 0) { cycleDataRepository.getLatest(any()) }
-        // Presence leaks through (the LOG_PERIOD carve-out), but the actual
-        // logged details stay redacted since this partner has no detail-view
-        // permission at all -- `sanitizeForHome` nulls it out regardless.
+        // Presence leaks through for today (the LOG_PERIOD carve-out), but the actual
+        // logged details stay redacted since this partner has no detail-view permission.
         assertTrue(viewModel.uiState.value.hasLoggedForSelectedDate)
         assertNull(viewModel.uiState.value.selectedLog)
+        coVerify(exactly = 0) { periodLogRepository.getForDateRange("primary-1", today, today) }
 
         viewModel.selectDate(otherDate)
         advanceUntilIdle()

@@ -23,11 +23,14 @@ import team.sakhi.cycle.CalendarMarker
 import team.sakhi.date.DateConverter
 import team.sakhi.models.CycleData
 import team.sakhi.models.CyclePhase
+import team.sakhi.models.PeriodLog
+import team.sakhi.repositories.PartnerHealthSnapshot
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.session.Permission
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.android.common.toSafeUserMessage
+import team.sakhi.sync.SyncStore
 
 private fun currentMonthStart(): LocalDate {
     val today = DateConverter.today()
@@ -64,6 +67,12 @@ data class CalendarUiState(
     val hasAnyCalendarAccess: Boolean = false,
 )
 
+private data class CalendarLoadInput(
+    val session: SessionContext?,
+    val month: LocalDate,
+    val partnerSnapshot: PartnerHealthSnapshot?,
+)
+
 /**
  * Thin calendar-state adapter over KMM session, cycle repositories, and shared
  * calendar marker building. Android never computes cycle or phase rules itself.
@@ -72,6 +81,7 @@ class CalendarViewModel(
     private val sessionManager: SessionManager,
     private val cycleDataRepository: CycleDataRepository,
     private val periodLogRepository: PeriodLogRepository,
+    private val syncStore: SyncStore,
     private val hapticManager: AndroidHapticManager,
     private val appContext: Context,
 ) : ViewModel() {
@@ -97,10 +107,11 @@ class CalendarViewModel(
             combine(
                 sessionManager.session,
                 visibleMonth,
-            ) { session, month ->
-                session to month
-            }.collectLatest { (session, month) ->
-                loadMonth(session, month)
+                syncStore.partnerHealthSnapshot,
+            ) { session, month, partnerSnapshot ->
+                CalendarLoadInput(session, month, partnerSnapshot)
+            }.collectLatest { input ->
+                loadMonth(input.session, input.month, input.partnerSnapshot)
             }
         }
     }
@@ -152,7 +163,13 @@ class CalendarViewModel(
      */
     fun refreshAfterLogChange() {
         val session = sessionManager.current ?: return
-        viewModelScope.launch { loadMonth(session, visibleMonth.value) }
+        viewModelScope.launch {
+            loadMonth(
+                session = session,
+                month = visibleMonth.value,
+                partnerSnapshot = syncStore.partnerHealthSnapshot.value,
+            )
+        }
     }
 
     fun jumpToToday() {
@@ -188,6 +205,7 @@ class CalendarViewModel(
     private suspend fun loadMonth(
         session: SessionContext?,
         month: LocalDate,
+        partnerSnapshot: PartnerHealthSnapshot?,
     ) {
         val selectedDate = _uiState.value.selectedDate
         cachedSession = session
@@ -240,6 +258,55 @@ class CalendarViewModel(
         // `ensureYearLoaded does not reuse the previous targets cached cycles`.
         cachedPeriodLogDates = emptySet()
         cachedLogDetailDates = emptySet()
+        if (!session.isViewingOwnData) {
+            val visibleSnapshot = partnerSnapshot?.takeIf { it.subjectUserId == requestedTargetUserId }
+            if (visibleSnapshot == null) {
+                viewModelScope.launch { runCatching { syncStore.refreshPartnerHealth() } }
+                _uiState.value = CalendarUiState(
+                    visibleMonth = month,
+                    selectedDate = selectedDate,
+                    days = initialCache[month],
+                    monthCache = initialCache,
+                    isLoading = true,
+                    error = null,
+                    hasAnyCalendarAccess = true,
+                )
+                return
+            }
+
+            if (sessionManager.current?.targetUserId != requestedTargetUserId) return
+
+            cachedSession = session
+            cachedCycles = visibleSnapshot.cycles
+            cachedPeriodLogDates = visibleSnapshot.periodLogs
+                .filter { it.periodPresent }
+                .mapTo(mutableSetOf()) { it.logDate }
+            cachedLogDetailDates = visibleSnapshot.periodLogs
+                .filter { it.hasDetailForCalendar() }
+                .mapTo(mutableSetOf()) { it.logDate }
+
+            val monthsToLoad = preloadMonthsFor(month)
+            val monthCache = buildMonthCache(
+                months = monthsToLoad,
+                marksByMonth = buildMarksByMonth(
+                    months = monthsToLoad,
+                    cycles = visibleSnapshot.cycles,
+                    session = session,
+                ),
+            )
+
+            _uiState.value = CalendarUiState(
+                visibleMonth = month,
+                selectedDate = selectedDate,
+                days = monthCache[month],
+                monthCache = monthCache,
+                isLoading = false,
+                error = null,
+                hasAnyCalendarAccess = true,
+            )
+            return
+        }
+
         val loadedLogs = runCatching {
             periodLogRepository.getAll(requestedTargetUserId).getOrDefault(emptyList())
         }.getOrDefault(emptyList())
@@ -247,13 +314,7 @@ class CalendarViewModel(
             .filter { it.periodPresent }
             .mapTo(mutableSetOf()) { it.logDate }
         val loadedDetailDates = loadedLogs
-            .filter { log ->
-                log.symptoms.isNotEmpty() ||
-                    log.moods.isNotEmpty() ||
-                    log.medications.isNotEmpty() ||
-                    !log.notes.isNullOrBlank() ||
-                    log.sexualActivity != "none"
-            }
+            .filter { it.hasDetailForCalendar() }
             .mapTo(mutableSetOf()) { it.logDate }
         cycleDataRepository.getAll(requestedTargetUserId)
             .onSuccess { cycles ->
@@ -427,3 +488,10 @@ class CalendarViewModel(
 }
 
 private fun monthStart(date: LocalDate): LocalDate = LocalDate(date.year, date.month, 1)
+
+private fun PeriodLog.hasDetailForCalendar(): Boolean =
+    symptoms.isNotEmpty() ||
+        moods.isNotEmpty() ||
+        medications.isNotEmpty() ||
+        !notes.isNullOrBlank() ||
+        sexualActivity != "none"

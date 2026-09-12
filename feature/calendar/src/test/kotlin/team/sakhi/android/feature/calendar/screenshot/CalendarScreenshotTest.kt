@@ -36,6 +36,10 @@ import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.session.SessionPermissions
 import team.sakhi.models.PeriodLog
+import team.sakhi.notifications.NotificationRepository
+import team.sakhi.repositories.PartnerHealthSnapshot
+import team.sakhi.sync.SyncRuntimeState
+import team.sakhi.sync.SyncStore
 
 /**
  * Second slice of the screenshot-test durability lane (first slice was
@@ -148,6 +152,10 @@ class CalendarScreenshotTest {
             mockk<PeriodLogRepository> {
                 coEvery { getAll(any()) } returns Result.success(periodLogsFor(menstrualCycle()))
             },
+            mockk<SyncStore> {
+                every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
+                every { partnerHealthSnapshot } returns MutableStateFlow<PartnerHealthSnapshot?>(null)
+            },
             mockk(relaxed = true),
             appContext,
         )
@@ -195,6 +203,7 @@ class CalendarScreenshotTest {
                 coEvery { getLatest(any()) } returns Result.success(menstrualCycle())
             },
             syncStore = mockk(relaxed = true),
+            notificationRepository = mockk<NotificationRepository>(relaxed = true),
         )
     }
 
