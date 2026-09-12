@@ -29,11 +29,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -64,6 +61,7 @@ import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.ui.SakhiModalSheet
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -92,7 +90,6 @@ import androidx.compose.foundation.layout.WindowInsets
  * consents.** If this screen ever grows a "notify everyone" button, that is the broadcast
  * model coming back, and migration 036 explains why it was removed.
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EmergencyNearbySakhisStep(
     viewModel: EmergencyViewModel,
@@ -240,13 +237,10 @@ internal fun EmergencyNearbySakhisStep(
 
     val profile by viewModel.profileDetail.collectAsStateWithLifecycle()
     if (profile != null) {
-        // Always fully expanded. iOS offers `[.medium, .large]`, but a partially expanded
-        // Compose sheet clips the bottom of its content, which is exactly where the Ask
-        // button lives -- the one action on this screen would have been off-screen on open.
-        ModalBottomSheet(
-            onDismissRequest = viewModel::closeProfile,
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        ) {
+        // iOS offers `[.medium, .large]` here. Android keeps the one detent the shared
+        // host has, because the bottom of this content is the Ask button -- the one action
+        // on this screen -- and a half-open sheet would have opened with it off-screen.
+        SakhiModalSheet(onDismissRequest = viewModel::closeProfile) {
             EmergencyProfileDetailSheet(
                 viewModel = viewModel,
                 profile = profile!!,

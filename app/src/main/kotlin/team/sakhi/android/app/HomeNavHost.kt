@@ -382,8 +382,8 @@ private fun ProfileOverlaySheet(
     var screen by remember(initialScreen) { mutableStateOf(initialScreen) }
 
     // The outer `SakhiModalSheet` this content lives in already gets system
-    // back-dismiss for free (real `ModalBottomSheet`), but that only closes the whole
-    // sheet -- it doesn't know about this flat root/sub-screen state underneath it.
+    // back-dismiss for free (it presents in a dialog window, whose own back handling runs
+    // the sheet's exit animation), but that only closes the whole sheet -- it doesn't know about this flat root/sub-screen state underneath it.
     // Without this, system back from e.g. EditProfile skipped straight past Profile
     // Root and closed the entire sheet. Every sub-screen's own on-screen back arrow
     // already does exactly this same `screen = Root` step, so this just makes system

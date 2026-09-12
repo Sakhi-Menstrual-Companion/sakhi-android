@@ -32,8 +32,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.BottomSheetScaffold
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.rememberBottomSheetScaffoldState
@@ -68,6 +66,7 @@ import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.emergency.EmergencyState
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSeparator
+import team.sakhi.android.ui.SakhiModalSheet
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
@@ -466,15 +465,16 @@ fun EmergencyFlowScreen(
         if (nearbyProfileSakhi != null && nearbyProfile != null &&
             nearbyProfile.userId == nearbyProfileSakhi?.userId
         ) {
-            ModalBottomSheet(
+            SakhiModalSheet(
                 onDismissRequest = {
                     nearbyProfileSakhi = null
                     viewModel.closeProfile()
                 },
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 containerColor = MaterialTheme.colorScheme.background,
                 shape = RoundedCornerShape(topStart = SheetCornerRadius, topEnd = SheetCornerRadius),
-                scrimColor = Color.Transparent,
+                // No scrim, matching the rest of this flow: the map never dims behind a
+                // sheet. Null rather than a transparent colour, so nothing is drawn at all.
+                scrimColor = null,
                 dragHandle = { EmergencySheetGrabber() },
             ) {
                 EmergencyProfileDetailSheet(
@@ -500,12 +500,12 @@ fun EmergencyFlowScreen(
         // Requests addressed to her -- the requester's face, what she needs, and Accept /
         // Decline. Lives here rather than inside one step so it can appear over any of them.
         if (showInbox) {
-            ModalBottomSheet(
+            SakhiModalSheet(
                 onDismissRequest = { showInbox = false },
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 containerColor = MaterialTheme.colorScheme.background,
                 shape = RoundedCornerShape(topStart = SheetCornerRadius, topEnd = SheetCornerRadius),
-                scrimColor = Color.Transparent,
+                // As above: this flow never dims its map.
+                scrimColor = null,
                 dragHandle = { EmergencySheetGrabber() },
             ) {
                 EmergencyResponderInbox(viewModel = viewModel)
@@ -518,7 +518,7 @@ fun EmergencyFlowScreen(
         if (showMyProfile) {
             val userId = viewModel.currentUserId
             if (userId != null) {
-                ModalBottomSheet(
+                SakhiModalSheet(
                     onDismissRequest = { showMyProfile = false },
                     // The flow's own blush ground, not `sakhiGroupedBackground()`'s grey:
                     // this is the same sheet as every other step, opened taller.
@@ -530,12 +530,10 @@ fun EmergencyFlowScreen(
                     // No scrim, matching the rest of this flow. Karan's standing note on
                     // Emergency is that the map never dims behind a sheet, and Figma
                     // `EA-02` shows the map at its normal weight behind this one too.
-                    scrimColor = Color.Transparent,
-                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                    scrimColor = null,
                     // The map sheet's own grabber, so the two read as one sheet rather than
                     // this one arriving with Material's 48dp-tall handle.
                     dragHandle = { EmergencySheetGrabber() },
-                    contentWindowInsets = { WindowInsets(0) },
                 ) {
                     LaunchedEffect(userId) { viewModel.openProfile(userId) }
                     EmergencyMyProfileSheet(

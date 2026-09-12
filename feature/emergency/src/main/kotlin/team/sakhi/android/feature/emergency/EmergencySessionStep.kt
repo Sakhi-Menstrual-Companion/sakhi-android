@@ -46,7 +46,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AssistantDirection
-import androidx.compose.material3.ModalBottomSheet
 import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
@@ -60,7 +59,6 @@ import team.sakhi.models.EmergencyFormatting
 import team.sakhi.models.EmergencyMessage
 import team.sakhi.models.EmergencySession
 import team.sakhi.android.designsystem.sakhiSystemGray5
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -78,6 +76,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.width
 import team.sakhi.android.ui.SakhiAlertKind
 import team.sakhi.android.ui.SakhiAlertSheet
+import team.sakhi.android.ui.SakhiModalSheet
 import androidx.compose.foundation.Image
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.ui.layout.ContentScale
@@ -103,8 +102,6 @@ import androidx.compose.ui.text.style.TextOverflow
  * What she gets instead: who is coming, how far, how long that walk takes, the spot label
  * in plain words, and a way to talk.
  */
-// `ModalBottomSheet` is still an experimental Material3 API; opted in next to its one use.
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun EmergencySessionStep(
     viewModel: EmergencyViewModel,
@@ -316,14 +313,12 @@ internal fun EmergencySessionStep(
     // inline under the header, which made the session screen a chat screen and pushed the
     // requirement, destination and the two request actions off the bottom.
     if (showChat) {
-        // Fully expanded, as iOS opens this thread at the large detent. Left partially
-        // expanded, Compose clips the bottom of the content -- and the bottom of this
-        // content is the message field and the send button, so the thread opened with no
-        // way to reply.
-        ModalBottomSheet(
-            onDismissRequest = { showChat = false },
-            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        ) {
+        // iOS opens this thread at the large detent, and `SakhiModalSheet` has exactly
+        // one: the sheet is as tall as its content, capped just below the status bar. The
+        // bottom of this content is the message field and the send button, so it also
+        // depends on the sheet lifting over the keyboard, which the shared host's
+        // `imePadding` does.
+        SakhiModalSheet(onDismissRequest = { showChat = false }) {
             EmergencyChatSheet(viewModel = viewModel, step = step, onBack = { showChat = false })
         }
     }
