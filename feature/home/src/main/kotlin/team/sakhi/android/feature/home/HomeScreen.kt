@@ -1,6 +1,8 @@
 package team.sakhi.android.feature.home
 
 import androidx.compose.foundation.gestures.animateScrollBy
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import team.sakhi.android.common.CycleInsightAdapter
@@ -64,7 +66,6 @@ import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Opacity
-import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Refresh
@@ -128,6 +129,7 @@ import kotlinx.datetime.LocalDate
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
+import team.sakhi.android.designsystem.SakhiFontSize
 import team.sakhi.android.designsystem.SakhiMotion
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -208,6 +210,10 @@ fun HomeScreen(
      */
     onOpenLogHistory: () -> Unit = {},
     onOpenCare: () -> Unit = {},
+    /** Opens the in-app inbox behind the bell. */
+    onOpenNotifications: () -> Unit = {},
+    /** Drives the bell's badge; zero hides it. */
+    unreadNotificationCount: Int = 0,
     onOpenCalendar: () -> Unit = {},
     /** Counterpart to [onOpenCalendar] — see the `onPhaseTap` call site. */
     onCloseCalendar: () -> Unit = {},
@@ -352,10 +358,11 @@ fun HomeScreen(
                     hapticManager.selection()
                     onOpenProfile()
                 },
-                onOpenCare = {
+                onOpenNotifications = {
                     hapticManager.selection()
-                    onOpenCare()
+                    onOpenNotifications()
                 },
+                unreadNotificationCount = unreadNotificationCount,
                 onOpenCalendar = {
                     hapticManager.selection()
                     onOpenCalendar()
@@ -3052,7 +3059,8 @@ private fun HomeTopBar(
     heroScrollProgress: () -> Float,
     phasePalette: SakhiPhasePalette,
     onOpenProfile: () -> Unit,
-    onOpenCare: () -> Unit,
+    onOpenNotifications: () -> Unit,
+    unreadNotificationCount: Int,
     onOpenCalendar: () -> Unit,
     onResetToToday: () -> Unit,
     onPhaseTap: () -> Unit = {},
@@ -3132,13 +3140,24 @@ private fun HomeTopBar(
                 stroke = iconStroke,
                 onClick = onOpenProfile,
             )
+            // The bell takes the place the Care (people) button used to hold: Karan's call on
+            // 2026-09-12, so Home's top right is the inbox on both platforms.
             TopBarIconButton(
-                icon = Icons.Filled.People,
-                contentDescription = stringResource(R.string.home_open_care_content_description),
+                icon = Icons.Filled.Notifications,
+                contentDescription = if (unreadNotificationCount > 0) {
+                    stringResource(R.string.home_notifications_unread_content_description, unreadNotificationCount)
+                } else {
+                    stringResource(R.string.home_open_notifications_content_description)
+                },
                 foreground = foreground,
                 background = iconBackground,
                 stroke = iconStroke,
-                onClick = onOpenCare,
+                onClick = onOpenNotifications,
+                badgeCount = unreadNotificationCount,
+                // Brand pink on every phase except the period, where the whole hero is
+                // already that pink and a pink badge would vanish into it.
+                badgeFill = if (isMenstrual) Color.White else MaterialTheme.colorScheme.primary,
+                badgeContent = if (isMenstrual) MaterialTheme.colorScheme.primary else Color.White,
             )
         }
     }
@@ -3152,18 +3171,53 @@ private fun TopBarIconButton(
     background: Color,
     stroke: Color,
     onClick: () -> Unit,
+    /** Zero (the default) draws no badge at all. */
+    badgeCount: Int = 0,
+    badgeFill: Color = Color.Unspecified,
+    badgeContent: Color = Color.White,
 ) {
-    Box(
-        modifier = Modifier
-            .size(44.dp)
-            .background(background, CircleShape)
-            .border(0.5.dp, stroke, CircleShape)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(icon, contentDescription = contentDescription, tint = foreground)
+    // The outer Box is unclipped so the badge can sit over the circle's edge, the way an
+    // iOS badge does, instead of being squeezed inside it.
+    Box {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(background, CircleShape)
+                .border(0.5.dp, stroke, CircleShape)
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = contentDescription, tint = foreground)
+        }
+        if (badgeCount > 0) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = 3.dp, y = (-3).dp)
+                    .defaultMinSize(minWidth = TopBarBadgeSize, minHeight = TopBarBadgeSize)
+                    // Ringed in the button's own fill so the badge reads as sitting ON the
+                    // circle rather than merging into its outline.
+                    .border(1.5.dp, background, CircleShape)
+                    .background(badgeFill, CircleShape)
+                    .padding(horizontal = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    // Past nine the exact number stops being information; "9+" is what
+                    // every inbox she uses shows.
+                    text = if (badgeCount > 9) "9+" else badgeCount.toString(),
+                    color = badgeContent,
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = SakhiFontSize.xs,
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+            }
+        }
     }
 }
+
+private val TopBarBadgeSize = 18.dp
 
 @Composable
 private fun HeroTopBarSubtitle(

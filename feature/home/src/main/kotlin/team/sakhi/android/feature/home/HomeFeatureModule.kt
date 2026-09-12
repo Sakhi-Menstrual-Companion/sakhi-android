@@ -2,6 +2,7 @@ package team.sakhi.android.feature.home
 
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
+import team.sakhi.android.feature.home.inbox.NotificationInboxViewModel
 
 /** Koin module for the home feature. */
 val homeFeatureModule = module {
@@ -22,6 +23,13 @@ val homeFeatureModule = module {
             sessionManager = get(),
             aiRepository = get(),
             hapticManager = get(),
+        )
+    }
+    viewModel {
+        NotificationInboxViewModel(
+            store = get(),
+            careStore = get(),
+            sessionManager = get(),
         )
     }
 }

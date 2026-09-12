@@ -16,7 +16,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.koin.core.context.GlobalContext
+import team.sakhi.notifications.InAppNotificationStore
 import team.sakhi.notifications.NotificationPayloadParser
+import team.sakhi.notifications.NotificationRouting
 import team.sakhi.notifications.SakhiNotification
 import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.repositories.DeviceRepository
@@ -77,34 +79,19 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         if (message.data.isEmpty()) return
 
         val notification = NotificationPayloadParser.parse(message.data)
+
+        // Every push is also a row in the in-app inbox (migration 056): the server records it
+        // before sending. Re-read now so the bell's badge moves the moment the push lands,
+        // not the next time she happens to reopen Home. Coalesced and cheap, and harmless for
+        // a type the inbox does not hold.
+        runCatching { GlobalContext.getOrNull()?.getOrNull<InAppNotificationStore>()?.refresh() }
+
         if (notification == SakhiNotification.Unknown) return
 
         ensureChannel(applicationContext)
         val presentation = presentation(applicationContext, notification) ?: return
-        postPushNotification(applicationContext, presentation, deepLinkUri(notification))
-    }
-
-    /**
-     * Builds the same `sakhi://` scheme `MainActivity`'s own intent-filter
-     * already listens for, so a tapped notification flows through the exact
-     * same `AndroidDeepLinkManager.handleIntent` -> `DeepLinkParser` pipeline
-     * a tapped web/invite link does -- no separate routing table to keep in
-     * sync. Returns null for types with nothing more specific than "open the
-     * app" (the two local-reminder-shaped cases).
-     */
-    private fun deepLinkUri(notification: SakhiNotification): String? = when (notification) {
-        is SakhiNotification.InvitationReceived -> "sakhi://invite/${notification.inviteCode}"
-        is SakhiNotification.Sos -> "sakhi://emergency/${notification.sessionId}"
-        // Opens her inbox rather than a session: there is no session until she accepts,
-        // and by the time she taps, the requester may already have cancelled.
-        is SakhiNotification.EmergencyRequestReceived -> "sakhi://emergency/nearby"
-        is SakhiNotification.PartnerLoggedPeriod,
-        is SakhiNotification.InvitationAccepted,
-        is SakhiNotification.LogRequestReceived,
-        is SakhiNotification.LogRequestResponse,
-        is SakhiNotification.NewCareMessage,
-        -> "sakhi://care"
-        is SakhiNotification.PeriodReminder, SakhiNotification.LoggingReminder, SakhiNotification.Unknown -> null
+        // Where a tap goes is decided in ONE place, shared with iOS and with the inbox.
+        postPushNotification(applicationContext, presentation, NotificationRouting.deepLinkUri(notification))
     }
 
     private data class PushPresentation(
@@ -127,7 +114,8 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
      * that used to live here was removed: it put the partner's name and the health fact
      * itself on the lock screen, from a payload the server had deliberately sent silent.
      *
-     * The type still matters, it just decides where the tap goes ([deepLinkUri]), not
+     * The type still matters, it just decides where the tap goes
+     * ([NotificationRouting.deepLinkUri]), not
      * what a bystander gets to read.
      */
     private fun presentation(context: Context, notification: SakhiNotification): PushPresentation? = when (notification) {
@@ -159,6 +147,10 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
             // than one silently replacing the other.
             notificationId = notification.requestId.hashCode(),
         )
+        // Sent as a visible FCM alert, which the system draws itself while the app is in the
+        // background. In the foreground nothing is drawn, exactly as before this type had a
+        // name of its own (it used to parse to Unknown). Its inbox row carries it either way.
+        is SakhiNotification.FeatureAvailable -> null
         SakhiNotification.Unknown -> null
     }
 

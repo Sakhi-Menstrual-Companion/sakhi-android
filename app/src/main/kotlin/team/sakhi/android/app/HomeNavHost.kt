@@ -1,5 +1,8 @@
 package team.sakhi.android.app
 
+import android.content.Intent
+import android.net.Uri
+import team.sakhi.android.feature.home.inbox.NotificationInboxScreen
 import team.sakhi.android.feature.profile.OfflineModeScreen
 import team.sakhi.care.CareRuntimeState
 import team.sakhi.care.CareStore
@@ -54,6 +57,7 @@ import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.android.ui.SakhiSheetContentTransition
 import team.sakhi.deeplink.SakhiDeepLink
 import kotlinx.coroutines.launch
+import team.sakhi.notifications.InAppNotificationStore
 
 /**
  * Type-safe Navigation Compose graph (plan Section 8) for everything reachable
@@ -82,6 +86,8 @@ private sealed interface HomeOverlaySheet {
     data object Calendar : HomeOverlaySheet
     data object LogPermissionRequest : HomeOverlaySheet
     data object Chat : HomeOverlaySheet
+    /** The in-app inbox behind Home's bell. Also `sakhi://notifications`. */
+    data object Notifications : HomeOverlaySheet
     // Emergency Assistance. `deepLinkRequestId` is set when arriving from a
     // sakhi://emergency/{id} link or an SOS notification, so the flow restores that
     // session instead of starting a fresh request.
@@ -134,6 +140,10 @@ fun HomeNavHost() {
     // matching iOS's `onScrollBegan`.
     var showCalendar by remember { mutableStateOf(true) }
     val overlaySheetState = rememberSakhiModalSheetState()
+    // The inbox's state, for the badge on Home's bell. The same store the inbox sheet reads,
+    // so the badge and the list can never disagree.
+    val inboxStore = koinInject<InAppNotificationStore>()
+    val inboxState by inboxStore.state.collectAsStateWithLifecycle()
     val overlayScope = rememberCoroutineScope()
     // Hoisted (rather than left to HomeScreen's own default `koinViewModel()`) so
     // the Logging sheet's dismiss below can call `refreshSelectedDate()` on the
@@ -193,6 +203,7 @@ fun HomeNavHost() {
                 )
             SakhiDeepLink.OpenEmergencyResponderInbox ->
                 activeOverlaySheet = HomeOverlaySheet.Emergency(openResponderInbox = true)
+            SakhiDeepLink.OpenNotifications -> activeOverlaySheet = HomeOverlaySheet.Notifications
             // Doesn't apply once already inside Home.
             SakhiDeepLink.OpenOnboarding -> Unit
             SakhiDeepLink.Unknown -> Unit
@@ -215,6 +226,8 @@ fun HomeNavHost() {
                     )
                 },
                 onOpenCare = { presentOverlaySheet(HomeOverlaySheet.Care()) },
+                onOpenNotifications = { presentOverlaySheet(HomeOverlaySheet.Notifications) },
+                unreadNotificationCount = inboxState.unreadCount,
                 onOpenCalendar = { showCalendar = true },
                 onCloseCalendar = { showCalendar = false },
                 onOpenChat = { presentOverlaySheet(HomeOverlaySheet.Chat) },
@@ -343,6 +356,15 @@ fun HomeNavHost() {
                             )
                         }
                     }
+                    // A tapped row goes through the same AndroidDeepLinkManager pipeline a tapped
+                    // push does. Setting the destination swaps this sheet's content for it, so
+                    // the inbox is replaced rather than stacked under the next screen.
+                    HomeOverlaySheet.Notifications -> NotificationInboxScreen(
+                        onClose = ::dismissOverlaySheet,
+                        onOpenLink = { uri ->
+                            AndroidDeepLinkManager.handleIntent(Intent(Intent.ACTION_VIEW, Uri.parse(uri)))
+                        },
+                    )
                     HomeOverlaySheet.Chat -> FeatureAccessGate(
                         feature = AppFeature.SAKHI_AI_CHAT,
                         onBack = ::dismissOverlaySheet,

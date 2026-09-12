@@ -24,6 +24,7 @@ import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.R
 import team.sakhi.android.designsystem.SakhiTheme
 import team.sakhi.care.CareRealtimeCoordinator
+import team.sakhi.notifications.InAppNotificationStore
 import team.sakhi.preferences.ThemeMode
 import team.sakhi.preferences.ThemePreferenceStore
 
@@ -157,6 +158,9 @@ class MainActivity : FragmentActivity() {
                 KoinPlatform.getKoin().get<CareRealtimeCoordinator>().recoverAfterAuthOrReconnect()
             }.onFailure { Log.w("SakhiRealtime", "resume recovery failed: $it") }
         }
+        // Same reason for the inbox: a push that arrived while MIUI had the app frozen may
+        // never have reached `onMessageReceived`, but its row is on the server regardless.
+        runCatching { KoinPlatform.getKoin().getOrNull<InAppNotificationStore>()?.refresh() }
     }
 
     // Cold start: `onCreate`'s `intent` above. Already running (tapped a link
