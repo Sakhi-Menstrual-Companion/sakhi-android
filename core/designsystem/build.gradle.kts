@@ -10,4 +10,6 @@ android {
 dependencies {
     implementation("team.sakhi:SakhiCore:1.0.0")
     implementation(project(":core:common"))
+
+    testImplementation(kotlin("test"))
 }

@@ -1,5 +1,7 @@
 package team.sakhi.android.ui
 
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -21,9 +23,11 @@ fun SecondaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
+        interactionSource = interactionSource,
         shape = RoundedCornerShape(SakhiRadius.full),
         border = BorderStroke(
             width = SakhiSpacing.space1 / 4,
@@ -42,6 +46,7 @@ fun SecondaryButton(
             .height(SakhiSpacing.space12 + SakhiSpacing.space1)
             .padding(horizontal = SakhiSpacing.space1),
     ) {
-        Text(text = text)
+        // iOS `DS.Buttons.Secondary`: the label dims to 0.6 while pressed.
+        Text(text = text, modifier = Modifier.sakhiPressFeedback(interactionSource, pressedAlpha = 0.6f))
     }
 }

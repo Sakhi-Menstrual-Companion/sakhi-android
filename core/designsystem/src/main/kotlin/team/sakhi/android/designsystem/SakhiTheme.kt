@@ -1,5 +1,6 @@
 package team.sakhi.android.designsystem
 
+import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -411,6 +412,10 @@ fun SakhiTheme(
             // one place, rather than each call site passing `indication = null`.
             CompositionLocalProvider(
                 LocalRippleConfiguration provides null,
+                // iOS rubber-band overscroll for every scrollable in the app, in place of
+                // Android's stretch. See SakhiRubberBandOverscroll.kt for how it keeps
+                // nested scrolling (lists inside sheets) working unchanged.
+                LocalOverscrollFactory provides SakhiRubberBandOverscrollFactory,
             ) {
             // Material3's `LocalContentColor` defaults to plain black app-wide unless
             // something explicitly provides it -- normally a `Surface`/`Scaffold` does

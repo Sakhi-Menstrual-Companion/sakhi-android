@@ -2,8 +2,6 @@ package team.sakhi.android.app
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
@@ -37,9 +35,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
+import team.sakhi.android.designsystem.SakhiMotion
 import team.sakhi.android.designsystem.calendarSheetBackground
 import team.sakhi.models.CyclePhase
-import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private enum class CalendarDetent { Compact, Expanded }
@@ -72,7 +70,7 @@ private enum class CalendarDetent { Compact, Expanded }
  * ── How the motion works, and why it is built this way ──────────────────────────
  *
  * The resting positions above are unchanged. What changed is everything about how the
- * sheet gets between them, because the previous version had three separate problems
+ * sheet gets between them, because the previous version had four separate problems
  * that together made it read as "glitchy" rather than physical:
  *
  *  1. The sheet position was held in a `Dp` read with `by animateDpAsState(...)`
@@ -88,18 +86,21 @@ private enum class CalendarDetent { Compact, Expanded }
  *
  *  2. Release decided where to land purely on distance travelled (a fixed 56dp
  *     threshold). A short fast flick therefore did nothing and sprang back, which is
- *     the single clearest tell that a gesture is not physical. [chooseSettleTop] now
- *     picks the anchor from the throw VELOCITY first and falls back to nearest-anchor
- *     only for a slow release, and that velocity is handed to the settling spring as
- *     `initialVelocity` so the sheet carries the throw through instead of restarting
- *     from a standstill.
+ *     the single clearest tell that a gesture is not physical. [chooseSettleTop] is now
+ *     a line-for-line port of iOS's own `panGesture.onEnded`, which judges a release by
+ *     where it was going (projected distance) as well as where it was let go.
  *
  *  3. The live drag offset was added ON TOP of a still-running `animateDpAsState`
  *     spring, and that spring was `DampingRatioLowBouncy`. A bouncy spring fighting a
  *     finger is where the visible wobble and overshoot came from. There is now one
  *     owner of the position ([sheetTop]), the finger writes to it directly through
- *     `snapTo`, and the settle spring is critically damped ([SETTLE_DAMPING]) so it
- *     never oscillates around a detent.
+ *     `snapTo`, and every settle uses iOS's own sheet spring, `SakhiMotion.sheet()`
+ *     (`.interpolatingSpring(stiffness: 340, damping: 34)`, damping ratio ≈ 0.92).
+ *
+ *  4. The sheet had no resistance at its ends. iOS's `rubberBand` makes it heavy past
+ *     its limits: pulled above the expanded position it follows the finger at 14%, and
+ *     pulled down from compact at 22%, so a dismiss has to be meant. That resistance is
+ *     most of the "weight" the iOS sheet has, and it is ported exactly in [rubberBand].
  *
  * The drag also lives on the whole sheet now rather than only the 22dp grabber row.
  * `Modifier.draggable` dispatches on the main pointer pass, so a scrollable child (the
@@ -146,7 +147,17 @@ fun HomeCalendarOverlay(
     // Off the bottom of the screen. Also the dismiss anchor: settling here IS the
     // dismissal, so a hard flick down leaves through the same motion a slow drag does.
     val hiddenTopPx = screenHeightPx
-    val flingVelocityPx = with(density) { FLING_VELOCITY_DP_PER_SEC.dp.toPx() }
+    // iOS's release thresholds, in points there and dp here.
+    val thresholds = with(density) {
+        ReleaseThresholds(
+            dismissPastCompact = 80.dp.toPx(),
+            dismissProjected = 600.dp.toPx(),
+            collapsePastExpanded = 120.dp.toPx(),
+            collapseProjected = 500.dp.toPx(),
+            expandAboveCompact = 8.dp.toPx(),
+            expandProjected = 120.dp.toPx(),
+        )
+    }
 
     var detent by remember { mutableStateOf(CalendarDetent.Compact) }
 
@@ -159,6 +170,23 @@ fun HomeCalendarOverlay(
      */
     val sheetTop = remember { Animatable(hiddenTopPx) }
     val scope = rememberCoroutineScope()
+
+    /**
+     * Where the FINGER has taken the sheet's top edge, before resistance. iOS keeps the
+     * same split (`committedOffset + translation` versus the rubber-banded
+     * `activeOffset`): the release rules below judge the raw position, so pulling hard
+     * against the resistance still counts as a pull even though the sheet barely moved.
+     * A plain holder for the same reason as [pendingVelocity].
+     */
+    val rawTop = remember { floatArrayOf(0f) }
+
+    /** iOS `HomeCalendarSheet.rubberBand`, ported line for line (multi-select aside). */
+    fun rubberBand(raw: Float): Float = when {
+        raw < expandedTopPx -> expandedTopPx + (raw - expandedTopPx) * RUBBER_BAND_ABOVE_EXPANDED
+        detent == CalendarDetent.Compact && raw > compactTopPx ->
+            compactTopPx + (raw - compactTopPx) * RUBBER_BAND_BELOW_COMPACT
+        else -> raw
+    }
 
     // Bumped on every drag release so that releasing back onto the detent you started
     // from still re-settles. Without it the settle effect below is keyed only on
@@ -182,22 +210,22 @@ fun HomeCalendarOverlay(
         if (sheetTop.value != targetTopPx) {
             sheetTop.animateTo(
                 targetValue = targetTopPx,
-                animationSpec = spring(
-                    dampingRatio = SETTLE_DAMPING,
-                    stiffness = Spring.StiffnessMediumLow,
-                    // Half a pixel. The Float default (0.01) keeps the spring alive for
-                    // frames after the sheet has visibly stopped.
-                    visibilityThreshold = 0.5f,
-                ),
+                // Half a pixel. The Float default (0.01) keeps the spring alive for frames
+                // after the sheet has visibly stopped.
+                animationSpec = SakhiMotion.sheet(visibilityThreshold = 0.5f),
+                // One deliberate difference from iOS: its `withAnimation(spring)` starts
+                // the settle from rest, so a hard flick visibly stops at release and then
+                // restarts. Carrying the throw's velocity into the same spring removes that
+                // hitch without changing where it lands or how the spring settles.
                 initialVelocity = velocity,
             )
         }
     }
 
     val draggableState = rememberDraggableState { delta ->
-        scope.launch {
-            sheetTop.snapTo((sheetTop.value + delta).coerceIn(expandedTopPx, hiddenTopPx))
-        }
+        rawTop[0] += delta
+        val drawn = rubberBand(rawTop[0]).coerceAtMost(hiddenTopPx)
+        scope.launch { sheetTop.snapTo(drawn) }
     }
 
     // This overlay is drawn outside the NavHost, so without a handler the system back
@@ -235,14 +263,18 @@ fun HomeCalendarOverlay(
                     state = draggableState,
                     orientation = Orientation.Vertical,
                     enabled = visible,
+                    // Grabbing the sheet mid-animation starts from where it visibly is, so
+                    // it never jumps under the finger.
+                    onDragStarted = { rawTop[0] = sheetTop.value },
                     onDragStopped = { velocity ->
                         val settleTo = chooseSettleTop(
-                            currentTopPx = sheetTop.value,
-                            velocityPxPerSec = velocity,
+                            rawTopPx = rawTop[0],
+                            projectedPx = SakhiMotion.projectedDistance(velocity),
+                            isExpanded = detent == CalendarDetent.Expanded,
                             expandedTopPx = expandedTopPx,
                             compactTopPx = compactTopPx,
                             hiddenTopPx = hiddenTopPx,
-                            flingVelocityPx = flingVelocityPx,
+                            thresholds = thresholds,
                         )
                         pendingVelocity[0] = velocity
                         when (settleTo) {
@@ -298,37 +330,51 @@ fun HomeCalendarOverlay(
     }
 }
 
+/** iOS's release thresholds from `HomeCalendarSheet.panGesture.onEnded`, in pixels. */
+private class ReleaseThresholds(
+    val dismissPastCompact: Float,
+    val dismissProjected: Float,
+    val collapsePastExpanded: Float,
+    val collapseProjected: Float,
+    val expandAboveCompact: Float,
+    val expandProjected: Float,
+)
+
 /**
- * Which anchor a release should land on, given where the sheet is and how hard it was
- * thrown. Anchors are top-edge positions in pixels, so SMALLER is higher up the screen.
+ * Where a release lands, ported line for line from iOS `HomeCalendarSheet.panGesture
+ * .onEnded` (its multi-select branches aside, which Android's sheet does not have).
+ * Anchors are top-edge positions in pixels, so SMALLER is higher up the screen.
  *
- * Velocity wins over position, which is the whole point: a 20dp flick thrown hard is a
- * deliberate "send it up", and judging it on the 20dp alone (which is what the old fixed
- * distance threshold did) is what made the sheet feel like it was ignoring the user. A
- * throw moves exactly ONE anchor in the direction it was thrown, so a hard flick down
- * from the expanded detent lands on compact rather than skipping straight out — the same
- * rule Material's own sheets follow.
+ * Each rule is "dragged far enough OR thrown hard enough", where "thrown" is the
+ * projected glide distance rather than raw speed, exactly as iOS compares
+ * `predictedEndTranslation - translation`. The thresholds are lopsided on purpose, and
+ * that asymmetry is a big part of the iOS feel: a light flick up (120pt projected)
+ * expands, while closing needs a real throw (500-600pt) or a long drag.
  *
- * Only a slow release falls through to nearest-anchor.
+ *  - compact, pulled 80pt below compact or thrown down 600pt  -> dismiss
+ *  - expanded, pulled 120pt below expanded or thrown down 500pt -> compact
+ *  - compact, pushed 8pt above compact or thrown up 120pt       -> expanded
+ *  - otherwise expanded stays expanded, and compact goes to whichever side of the
+ *    compact line it was released on
  */
 private fun chooseSettleTop(
-    currentTopPx: Float,
-    velocityPxPerSec: Float,
+    rawTopPx: Float,
+    projectedPx: Float,
+    isExpanded: Boolean,
     expandedTopPx: Float,
     compactTopPx: Float,
     hiddenTopPx: Float,
-    flingVelocityPx: Float,
-): Float {
-    val anchors = listOf(expandedTopPx, compactTopPx, hiddenTopPx)
-    return when {
-        // Thrown upward: the next anchor above where it is now.
-        velocityPxPerSec <= -flingVelocityPx ->
-            anchors.filter { it < currentTopPx }.maxOrNull() ?: anchors.min()
-        // Thrown downward: the next anchor below.
-        velocityPxPerSec >= flingVelocityPx ->
-            anchors.filter { it > currentTopPx }.minOrNull() ?: anchors.max()
-        else -> anchors.minByOrNull { abs(it - currentTopPx) } ?: compactTopPx
-    }
+    thresholds: ReleaseThresholds,
+): Float = when {
+    !isExpanded && (rawTopPx > compactTopPx + thresholds.dismissPastCompact ||
+        projectedPx > thresholds.dismissProjected) -> hiddenTopPx
+    isExpanded && (rawTopPx > expandedTopPx + thresholds.collapsePastExpanded ||
+        projectedPx > thresholds.collapseProjected) -> compactTopPx
+    !isExpanded && (rawTopPx < compactTopPx - thresholds.expandAboveCompact ||
+        projectedPx < -thresholds.expandProjected) -> expandedTopPx
+    isExpanded -> expandedTopPx
+    rawTopPx < compactTopPx -> expandedTopPx
+    else -> compactTopPx
 }
 
 /** iOS `compactY = screenH * 0.20`, giving `actual_top = 0.40 * screenH`. */
@@ -345,20 +391,8 @@ private val HANDLE_WIDTH = 36.dp
 private val HANDLE_HEIGHT = 4.dp
 
 /**
- * How fast a release has to be before it counts as a throw rather than a slow let-go.
- * In dp/s so it means the same thing on every screen density. Material's own sheets use
- * 125dp/s; slightly higher here so that resting a finger and lifting it does not
- * accidentally register as a flick.
+ * iOS `rubberBand`: how much of the finger's travel the sheet follows once past an end.
+ * 14% above the expanded position, 22% below compact.
  */
-private const val FLING_VELOCITY_DP_PER_SEC = 175f
-
-/**
- * Critically damped, i.e. the sheet reaches its detent and stops dead.
- *
- * This was `Spring.DampingRatioLowBouncy`, which overshoots every anchor by design.
- * Bounce on a sheet that the user is still touching is the wobble Karan described, and
- * a calendar bouncing under the finger reads as unstable rather than playful. The throw
- * velocity is carried into the spring instead, which is where the sense of weight is
- * supposed to come from.
- */
-private const val SETTLE_DAMPING = Spring.DampingRatioNoBouncy
+private const val RUBBER_BAND_ABOVE_EXPANDED = 0.14f
+private const val RUBBER_BAND_BELOW_COMPACT = 0.22f

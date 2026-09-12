@@ -1,5 +1,7 @@
 package team.sakhi.android.ui
 
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -41,10 +43,15 @@ fun CloseButton(
     onGradientColor: Color = Color.White,
 ) {
     val description = contentDescription ?: stringResource(R.string.close)
+    // iOS `DS.Buttons.Back/Close`: the whole control, circle included, scales to 0.90
+    // while pressed, easing out over 120ms.
+    val interactionSource = remember { MutableInteractionSource() }
     if (onGradient) {
         IconButton(
             onClick = onClick,
+            interactionSource = interactionSource,
             modifier = modifier
+                .sakhiPressFeedback(interactionSource, pressedScale = 0.90f)
                 .size(30.dp)
                 .background(onGradientColor.copy(alpha = 0.20f), CircleShape),
         ) {
@@ -58,7 +65,10 @@ fun CloseButton(
     } else {
         IconButton(
             onClick = onClick,
-            modifier = modifier.sakhiGlassCircle(44.dp),
+            interactionSource = interactionSource,
+            modifier = modifier
+                .sakhiPressFeedback(interactionSource, pressedScale = 0.90f)
+                .sakhiGlassCircle(44.dp),
         ) {
             Icon(
                 imageVector = Icons.Rounded.Close,

@@ -1,5 +1,7 @@
 package team.sakhi.android.ui
 
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,9 +27,11 @@ fun PrimaryButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Button(
         onClick = onClick,
         enabled = enabled,
+        interactionSource = interactionSource,
         shape = RoundedCornerShape(SakhiRadius.full),
         colors = ButtonDefaults.buttonColors(
             containerColor = MaterialTheme.colorScheme.primary,
@@ -37,6 +41,8 @@ fun PrimaryButton(
             .height(52.dp)
             .padding(horizontal = SakhiSpacing.space1),
     ) {
-        Text(text)
+        // iOS `DS.Buttons.Primary`: only the LABEL dims, to 0.85, while pressed. The pink
+        // capsule stays solid. See sakhiPressFeedback for why buttons need this at all.
+        Text(text, modifier = Modifier.sakhiPressFeedback(interactionSource, pressedAlpha = 0.85f))
     }
 }

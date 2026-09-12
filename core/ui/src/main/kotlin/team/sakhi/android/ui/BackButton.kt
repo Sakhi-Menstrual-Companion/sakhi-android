@@ -1,5 +1,7 @@
 package team.sakhi.android.ui
 
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -40,10 +42,15 @@ fun BackButton(
     onGradient: Boolean = false,
 ) {
     val description = contentDescription ?: stringResource(R.string.back)
+    // iOS `DS.Buttons.Back/Close`: the whole control, circle included, scales to 0.90
+    // while pressed, easing out over 120ms.
+    val interactionSource = remember { MutableInteractionSource() }
     if (onGradient) {
         IconButton(
             onClick = onClick,
+            interactionSource = interactionSource,
             modifier = modifier
+                .sakhiPressFeedback(interactionSource, pressedScale = 0.90f)
                 .size(30.dp)
                 .background(Color.White.copy(alpha = 0.20f), CircleShape),
         ) {
@@ -57,7 +64,10 @@ fun BackButton(
     } else {
         IconButton(
             onClick = onClick,
-            modifier = modifier.sakhiGlassCircle(44.dp),
+            interactionSource = interactionSource,
+            modifier = modifier
+                .sakhiPressFeedback(interactionSource, pressedScale = 0.90f)
+                .sakhiGlassCircle(44.dp),
         ) {
             Icon(
                 // iOS `DSBackButton` is `chevron.left` at `.lato(15, .bold)`, not a full

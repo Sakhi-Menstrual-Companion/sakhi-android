@@ -8,6 +8,51 @@ after finishing one. The checklist and ground rules live in
 
 ## Live Status (update after every task)
 
+- **2026-09-12 (later), Claude: iOS "weight" pass on motion and interaction, for Karan's
+  "iOS jaisi heaviness aur smoothness, animations aur interactions mai". Builds clean, 12 new
+  unit tests green, installs and cold-starts on the Redmi with no crash. The phone was still
+  PIN-locked, so none of this has been checked by eye yet.**
+  **Every value comes from the iOS source, converted exactly, not eyeballed.** New
+  `core/designsystem/.../SakhiMotion.kt` is now the one place iOS springs live. SwiftUI
+  `.spring(response:dampingFraction:)` maps to Compose as stiffness = (2 pi / response)^2,
+  dampingRatio = dampingFraction; `.interpolatingSpring(stiffness:damping:)` maps as
+  dampingRatio = damping / (2 sqrt(stiffness)). Tokens: `quick` (iOS `.spring(response: 0.3)`,
+  the most used iOS spring), `standard` (0.38/0.84), `sheet` (iOS calendar sheet's 340/34),
+  `slow` (0.58/0.90), `press` (iOS `easeOut(0.12)`). The main reason iOS feels heavier is
+  lower stiffness: the iOS sheet spring is 340, where Material's standard is 700.
+  **Scrolling: iOS rubber-band overscroll, app-wide in one place.**
+  `SakhiRubberBandOverscroll.kt` is provided through `LocalOverscrollFactory` in
+  `SakhiTheme`, so every verticalScroll, Lazy list and pager now follows the finger past its
+  end with growing resistance and springs back, and a fling into an end bounces, instead of
+  Android's stretch. It only ever gets delta and velocity that nested-scroll parents did not
+  consume, so a list inside a modal sheet still drags the sheet. A unit test pins that. The
+  resistance curve (c = 0.55) is the widely used approximation of UIScrollView, not a
+  published Apple value, and the bounce spring's 0.4s response is tuned, not measured.
+  **Taps: iOS pressed states.** Ripple is switched off app-wide (correct, iOS has none), but
+  nothing replaced it, so buttons showed no response to a touch at all. New
+  `core/ui/.../SakhiPressFeedback.kt` ports the iOS design system: `PrimaryButton` label to
+  0.85 opacity, `SecondaryButton` label to 0.6, `BackButton` and `CloseButton` scale to 0.90
+  over 120ms ease-out. iOS's `dsCardPressable` (0.97 scale) exists but no screen uses it, so
+  cards were deliberately left without a press effect.
+  **Calendar sheet: iOS's exact release rules.** `chooseSettleTop` is now a port of iOS
+  `panGesture.onEnded`, replacing this morning's guessed 175dp/s threshold. Dismiss from
+  compact at 80dp past or 600dp projected; collapse from expanded at 120dp or 500dp; expand
+  from compact at 8dp or 120dp. Projection uses Apple's WWDC18 "Designing Fluid Interfaces"
+  formula at 0.998 deceleration. SwiftUI's own `predictedEndTranslation` formula is not
+  documented, so the thresholds need a feel check on device. iOS `rubberBand` ported too:
+  14% past expanded, 22% below compact. All settles use the 340/34 spring. One deliberate
+  difference: Android carries the release velocity into the spring and iOS does not.
+  **Tried and not possible on this stack:** `MaterialTheme(motionScheme = ...)` would have
+  put iOS springs into all 27 ModalBottomSheets, switches and pickers at once, but
+  `MotionScheme` and that overload are internal in Material 1.4.0. Needs a Material upgrade.
+  Fling deceleration (iOS glides longer) has no global override either
+  (`rememberPlatformDefaultFlingBehavior`), so it would need a `flingBehavior` at each of
+  ~56 scroll sites.
+  **Deliberately not done, needs its own pass:** the root route switch in `RootNavHost` is a
+  hard cut, where iOS `MainFlowView` fades over `easeInOut(0.45)`. A crossfade keeps Home
+  composed during sign-out, and RootNavHost had another session's uncommitted auth and
+  onboarding edits in it, so it was left alone.
+
 - **2026-09-12, Claude: motion and gesture pass, for Karan's "jumping, glitchy, not a
   production app" report. Builds clean (`:app:assembleDebug`). Installed on the Redmi Note 10
   Pro Max and it cold-starts with no crash, but the phone was PIN-locked, so the sheet
