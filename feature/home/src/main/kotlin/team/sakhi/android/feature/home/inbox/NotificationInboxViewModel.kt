@@ -52,9 +52,6 @@ class NotificationInboxViewModel(
 
     fun retry() = store.refresh()
 
-    /** Leaving the inbox puts her own rows back if the sample rows were showing. */
-    fun exitDemo() = store.exitDemo()
-
     fun markAllRead() = store.markAllRead()
 
     fun delete(id: String) = store.delete(id)

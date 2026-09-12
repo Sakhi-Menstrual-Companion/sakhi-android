@@ -216,6 +216,14 @@ fun HomeNavHost() {
         AndroidDeepLinkManager.consume(pending.id)
     }
 
+    // Sample inbox rows last only while the inbox sheet is what is showing. Tied to the
+    // sheet rather than to the screen's own disposal, because the sheet host can compose
+    // and dispose its content while presenting, which dropped the rows the moment they
+    // appeared.
+    LaunchedEffect(activeOverlaySheet) {
+        if (activeOverlaySheet != HomeOverlaySheet.Notifications) inboxStore.exitDemo()
+    }
+
     NavHost(navController = navController, startDestination = HomeGraphRoute.Home) {
         composable<HomeGraphRoute.Home> {
             HomeScreen(

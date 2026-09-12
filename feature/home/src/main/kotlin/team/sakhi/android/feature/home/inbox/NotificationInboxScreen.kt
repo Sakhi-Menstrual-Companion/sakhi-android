@@ -51,7 +51,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -121,10 +120,6 @@ fun NotificationInboxScreen(
     val inbox by viewModel.inbox.collectAsStateWithLifecycle()
     val answers by viewModel.answers.collectAsStateWithLifecycle()
     val sections = remember(inbox.items) { inbox.sections }
-
-    DisposableEffect(Unit) {
-        onDispose { viewModel.exitDemo() }
-    }
 
     SheetSurface {
         SakhiNavBar(
