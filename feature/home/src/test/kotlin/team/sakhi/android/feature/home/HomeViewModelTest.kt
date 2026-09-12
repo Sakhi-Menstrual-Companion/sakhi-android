@@ -465,7 +465,11 @@ class HomeViewModelTest {
         }
         val syncStore = mockk<SyncStore> {
             every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
-            every { partnerHealthSnapshot } returns MutableStateFlow(null)
+            // Her data reaches a partner's Home through the snapshot now, never the local
+            // store, so the partner target needs one to have anything to draw.
+            every { partnerHealthSnapshot } returns MutableStateFlow(
+                partnerSnapshot("partner-1", cycles = listOf(follicularCycle(userId = "partner-1"))),
+            )
         }
         val ownCycle = menstrualCycle(userId = "user-1")
         val partnerCycle = follicularCycle(userId = "partner-1")
@@ -504,7 +508,11 @@ class HomeViewModelTest {
         }
         val syncStore = mockk<SyncStore> {
             every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
-            every { partnerHealthSnapshot } returns MutableStateFlow(null)
+            // Her data reaches a partner's Home through the snapshot now, never the local
+            // store, so the partner target needs one to have anything to draw.
+            every { partnerHealthSnapshot } returns MutableStateFlow(
+                partnerSnapshot("partner-1", cycles = listOf(follicularCycle(userId = "partner-1"))),
+            )
         }
         // getLatest("user-1") never completes during this test -- simulates a slow
         // in-flight request for the target the user has since navigated away from.
@@ -570,7 +578,11 @@ class HomeViewModelTest {
         }
         val syncStore = mockk<SyncStore> {
             every { syncState } returns MutableStateFlow(SyncRuntimeState.Idle)
-            every { partnerHealthSnapshot } returns MutableStateFlow(null)
+            // Her data reaches a partner's Home through the snapshot now, never the local
+            // store, so the partner target needs one to have anything to draw.
+            every { partnerHealthSnapshot } returns MutableStateFlow(
+                partnerSnapshot("partner-1", cycles = listOf(follicularCycle(userId = "partner-1"))),
+            )
         }
         // user-1's read is held open, then released *after* the switch to partner-1, so
         // the response is genuinely in-flight-then-late rather than never arriving.
@@ -964,4 +976,27 @@ class HomeViewModelTest {
         assertNull(state.partnerSnapshotRevision)
         assertNull(state.partnerSnapshotRefreshedAt)
     }
+
+    /**
+     * Her data reaches a partner's Home through `SyncStore.partnerHealthSnapshot`, which the
+     * server filters by what she has shared. Home stopped reading a partner's data from this
+     * phone's own store on 2026-09-13, because a cached copy there was kept for good.
+     */
+    private fun partnerSnapshot(
+        subjectUserId: String,
+        cycles: List<team.sakhi.models.CycleData> = emptyList(),
+        logs: List<team.sakhi.models.PeriodLog> = emptyList(),
+        revision: Long = 1L,
+    ) = PartnerHealthSnapshot(
+        schemaVersion = 1,
+        revision = revision,
+        subjectUserId = subjectUserId,
+        canViewPeriodDates = true,
+        canViewCycleHistory = true,
+        canViewPredictions = true,
+        periodLogs = logs,
+        cycles = cycles,
+        refreshedAt = "2026-09-13T00:00:00Z",
+    )
+
 }

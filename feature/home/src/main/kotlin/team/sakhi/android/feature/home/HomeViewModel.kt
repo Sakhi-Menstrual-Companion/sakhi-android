@@ -338,8 +338,8 @@ class HomeViewModel(
 
         val requestedTargetUserId = session.targetUserId
         if (canViewCycle) {
-            loadCycleInsight(requestedTargetUserId)
-            refreshCycleStatistics(requestedTargetUserId)
+            loadCycleInsight(requestedTargetUserId, visiblePartnerSnapshot, session.isViewingOwnData)
+            refreshCycleStatistics(requestedTargetUserId, visiblePartnerSnapshot, session.isViewingOwnData)
         } else {
             _uiState.update {
                 it.copy(
@@ -377,7 +377,45 @@ class HomeViewModel(
      * decides "am I inside a period right now" from the logged days themselves, which
      * is exactly the case a single-latest-cycle read cannot see.
      */
-    private suspend fun loadCycleInsight(targetUserId: String) {
+    private suspend fun loadCycleInsight(
+        targetUserId: String,
+        partnerSnapshot: PartnerHealthSnapshot?,
+        isViewingOwnData: Boolean,
+    ) {
+        // Her data, on a partner's phone, comes from the snapshot and never from this phone's
+        // own store. `PeriodLogRepository.getAll` returns whatever is stored locally the moment
+        // anything is stored, and asks the server only when the local store is empty, so a
+        // partner who had once cached her logs kept them for good: on 2026-09-13 her period on
+        // the 13th had been on the server for hours, and so had an edit to her 5 September log,
+        // while his Home still drew the old cached copy of both. iOS never showed this because
+        // it builds these repositories with no local store at all.
+        //
+        // The snapshot is the right partner read regardless: the server masks whatever she has
+        // not shared, which a direct table read does not.
+        if (!isViewingOwnData) {
+            val snapshot = partnerSnapshot?.takeIf { it.subjectUserId == targetUserId }
+            if (snapshot == null) {
+                // Nothing of hers to draw yet, and a cached copy must not stand in for it.
+                // Ask for a snapshot; the collector above re-enters here when it lands.
+                if (sessionManager.current?.targetUserId != targetUserId) return
+                _uiState.update { it.copy(isLoadingCycle = true, error = null) }
+                viewModelScope.launch {
+                    val refreshed = runCatching { syncStore.refreshPartnerHealth() }
+                    if (refreshed.isFailure && sessionManager.current?.targetUserId == targetUserId) {
+                        // Offline or refused. Better an honest message than her old numbers.
+                        _uiState.update {
+                            it.copy(
+                                isLoadingCycle = false,
+                                error = appContext.getString(R.string.home_load_cycle_failed),
+                            )
+                        }
+                    }
+                }
+                return
+            }
+            applyCycleInsight(targetUserId, snapshot.cycles, snapshot.periodLogs)
+            return
+        }
         val cyclesResult = cycleDataRepository.getAll(targetUserId)
         val logsResult = periodLogRepository.getAll(targetUserId)
 
@@ -408,8 +446,18 @@ class HomeViewModel(
             return
         }
 
-        val cycles = cyclesResult.getOrDefault(emptyList())
-        val logs = logsResult.getOrDefault(emptyList())
+        applyCycleInsight(
+            targetUserId = targetUserId,
+            cycles = cyclesResult.getOrDefault(emptyList()),
+            logs = logsResult.getOrDefault(emptyList()),
+        )
+    }
+
+    private suspend fun applyCycleInsight(
+        targetUserId: String,
+        cycles: List<CycleData>,
+        logs: List<PeriodLog>,
+    ) {
         if (sessionManager.current?.targetUserId != targetUserId) return
 
         // Everything below used to run INSIDE `_uiState.update { ... }`, on the main thread.
@@ -529,7 +577,25 @@ class HomeViewModel(
     // cycle history via the same shared `CycleMath.computeStatistics` Reports/
     // Care already call, not just the single latest cycle `refresh()` fetches
     // above -- a separate read is needed here for the same reason.
-    private suspend fun refreshCycleStatistics(targetUserId: String) {
+    private suspend fun refreshCycleStatistics(
+        targetUserId: String,
+        partnerSnapshot: PartnerHealthSnapshot?,
+        isViewingOwnData: Boolean,
+    ) {
+        // Same rule: her cycles come from the snapshot, never from this phone's store.
+        if (!isViewingOwnData) {
+            val snapshot = partnerSnapshot?.takeIf { it.subjectUserId == targetUserId } ?: return
+            if (sessionManager.current?.targetUserId != targetUserId) return
+            val stats = CycleMath.computeStatistics(snapshot.cycles.filter { it.isComplete })
+            _uiState.update {
+                it.copy(
+                    cyclesAnalyzed = stats.cyclesAnalyzed,
+                    shortestCycle = stats.shortestCycle,
+                    longestCycle = stats.longestCycle,
+                )
+            }
+            return
+        }
         cycleDataRepository.getAll(targetUserId)
             .onSuccess { cycles ->
                 if (sessionManager.current?.targetUserId != targetUserId) return
