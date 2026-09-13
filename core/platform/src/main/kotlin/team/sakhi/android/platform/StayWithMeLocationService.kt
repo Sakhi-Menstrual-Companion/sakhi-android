@@ -70,6 +70,16 @@ class StayWithMeLocationService : Service() {
     private var locationCallback: LocationCallback? = null
     private var runJob: Job? = null
 
+    /**
+     * True while "I'm home" tapped on the notification is still finishing on the server.
+     *
+     * That call runs in this service's scope, and ending the walk is also what tells the
+     * service to stop. Without this the teardown would cancel the very call that tells her
+     * person she got home.
+     */
+    @Volatile
+    private var isEnding = false
+
     private val store: StayWithMeStore? get() = GlobalContext.getOrNull()?.getOrNull()
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -93,7 +103,15 @@ class StayWithMeLocationService : Service() {
         if (!started) return stopNow()
 
         if (intent?.action == ACTION_ARRIVE) {
-            scope.launch { store.arrive() }
+            if (!isEnding) {
+                isEnding = true
+                scope.launch {
+                    store.arrive()
+                    // Nothing else will: the collector stands down while this is running,
+                    // and after a restart straight into this action there is no collector.
+                    withContext(Dispatchers.Main) { stopNow() }
+                }
+            }
             return START_NOT_STICKY
         }
 
@@ -124,8 +142,12 @@ class StayWithMeLocationService : Service() {
 
         store.mine.collect { session ->
             if (session == null) {
-                withContext(Dispatchers.Main) { stopNow() }
-                scope.cancel()
+                // Unless she ended it from the notification, in which case that coroutine
+                // is still telling her person, and it stops the service when it is done.
+                if (!isEnding) {
+                    withContext(Dispatchers.Main) { stopNow() }
+                    scope.cancel()
+                }
             } else {
                 postOngoing(session)
             }

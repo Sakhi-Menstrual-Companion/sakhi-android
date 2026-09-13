@@ -169,11 +169,14 @@
     <string name="care_swm_charging">Charging</string>
     <string name="care_swm_late_banner">She is past her time. Most of the time this is traffic. Try reaching her first.</string>
     <string name="care_swm_help_near_her">HELP NEAR HER</string>
+    <string name="care_swm_help_near_you">HELP NEAR YOU</string>
     <string name="care_swm_helplines">HELPLINES</string>
     <string name="care_swm_emergency">Emergency</string>
     <string name="care_swm_women_helpline">Women Helpline</string>
     <string name="care_swm_places_loading">Looking for help near her</string>
     <string name="care_swm_places_empty">Nothing found close to her yet</string>
+    <string name="care_swm_places_loading_you">Looking for help near you</string>
+    <string name="care_swm_places_empty_you">Nothing found close to you yet</string>
     <string name="care_swm_privacy_note">Her location is shared with you only while this walk is on.</string>
     <string name="care_swm_close">Close</string>
 </resources>

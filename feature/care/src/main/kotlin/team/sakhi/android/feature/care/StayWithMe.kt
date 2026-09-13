@@ -83,12 +83,15 @@ import androidx.core.content.ContextCompat
 import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.JointType
 import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.RoundCap
 import com.google.maps.android.compose.Circle
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
 import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
 import kotlinx.datetime.Instant
@@ -288,12 +291,24 @@ private fun DurationPicker(selected: Int, onSelect: (Int) -> Unit) {
  * right now, and the time is the one number she glances at. "I'm home" is the primary
  * action and sits in the footer, in thumb reach.
  */
+/**
+ * Her own screen once a walk is running.
+ *
+ * The same map-first layout her person sees, deliberately. She is the one out there, so she
+ * gets the bigger picture, not the smaller one: the way she has come, where she is now, her
+ * person right there on the screen with her, and the police station and helplines within
+ * reach without leaving the walk. The countdown and "I'm home" sit on top of that, not
+ * instead of it.
+ */
 @Composable
 internal fun StayWithMeOwnerLive(
     session: StayWithMeSession,
     personName: String,
     now: Instant,
     isBusy: Boolean,
+    trail: List<StayWithMeLocation>,
+    places: List<EmergencySafePlace>,
+    placesLoading: Boolean,
     onArrive: () -> Unit,
     onExtend: () -> Unit,
     onStop: () -> Unit,
@@ -305,123 +320,171 @@ internal fun StayWithMeOwnerLive(
     val accent = if (isLate || phase == StayWithMePhase.GRACE) AppleSystemColors.red else MaterialTheme.colorScheme.primary
     var confirmStop by remember { mutableStateOf(false) }
     val sharing = StayWithMeLocationService.hasLocationPermission(context)
+    val location = session.lastLocation
 
-    Column(modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground())) {
-        SakhiNavBar(onClose = onClose, title = stringResource(R.string.care_swm_title))
-
-        LazyColumn(modifier = Modifier.weight(1f)) {
-            item(key = "swm-map") {
-                Box(
-                    modifier = Modifier
-                        .padding(horizontal = SakhiSpacing.space6)
-                        .fillMaxWidth()
-                        .height(260.dp)
-                        .clip(RoundedCornerShape(SakhiRadius.xxl)),
-                ) {
-                    WalkMap(
-                        location = session.lastLocation,
-                        accent = accent,
-                        initial = "",
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                    if (session.lastLocation == null) {
-                        MapNotice(
-                            text = if (sharing) stringResource(R.string.care_swm_finding) else stringResource(R.string.care_swm_not_sharing),
-                            modifier = Modifier.align(Alignment.BottomCenter),
-                        )
-                    }
-                }
-            }
-
-            item(key = "swm-presence") {
-                PresenceRow(
-                    name = personName,
-                    present = session.isWatcherPresent(now),
-                    late = isLate,
-                    modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space5),
+    Box(modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground())) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxWidth().weight(0.46f)) {
+                WalkMap(
+                    location = location,
+                    accent = accent,
+                    initial = "",
+                    trail = trail,
+                    modifier = Modifier.fillMaxSize(),
                 )
-            }
-
-            item(key = "swm-time") {
-                Surface(
-                    color = sakhiSystemBackground(),
-                    shape = RoundedCornerShape(SakhiRadius.xxl),
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space6),
-                ) {
-                    Column(modifier = Modifier.padding(SakhiSpacing.space5)) {
-                        val big = when (phase) {
-                            StayWithMePhase.WALKING -> stringResource(R.string.care_swm_minutes_left, minutesUp(session.secondsRemaining(now)))
-                            else -> stringResource(R.string.care_swm_past_time)
-                        }
-                        Text(
-                            text = big,
-                            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                            color = if (phase == StayWithMePhase.WALKING) sakhiLabel() else AppleSystemColors.red,
-                        )
-                        Spacer(Modifier.height(SakhiSpacing.space1))
-                        Text(
-                            text = when (phase) {
-                                StayWithMePhase.GRACE -> stringResource(
-                                    R.string.care_swm_grace_left,
-                                    minutesUp(session.secondsRemaining(now)),
-                                    personName,
-                                )
-                                StayWithMePhase.LATE -> stringResource(R.string.care_swm_person_told_late, personName)
-                                else -> stringResource(R.string.care_swm_home_by, timeOf(session.expectedArrival))
-                            },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = sakhiSecondaryLabel(),
-                        )
-                        Spacer(Modifier.height(SakhiSpacing.space4))
-                        WalkProgress(progress = session.progress(now).toFloat(), color = accent)
-                        Spacer(Modifier.height(SakhiSpacing.space4))
-                        SakhiListDivider()
-                        Spacer(Modifier.height(SakhiSpacing.space3))
-                        val battery = session.lastLocation?.batteryPercent
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Filled.Place,
-                                contentDescription = null,
-                                tint = if (sharing) MaterialTheme.colorScheme.primary else sakhiTertiaryLabel(),
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(SakhiSpacing.space2))
-                            Text(
-                                text = when {
-                                    !sharing -> stringResource(R.string.care_swm_not_sharing)
-                                    battery != null -> stringResource(R.string.care_swm_sharing_battery, battery)
-                                    else -> stringResource(R.string.care_swm_sharing)
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = sakhiLabel(),
-                            )
-                        }
-                    }
-                }
-            }
-
-            item(key = "swm-stop") {
-                TextButton(
-                    onClick = { confirmStop = true },
-                    modifier = Modifier.fillMaxWidth().padding(top = SakhiSpacing.space3),
-                ) {
-                    Text(
-                        text = stringResource(R.string.care_swm_stop),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = sakhiSecondaryLabel(),
+                if (location == null) {
+                    MapNotice(
+                        text = if (sharing) stringResource(R.string.care_swm_finding) else stringResource(R.string.care_swm_not_sharing),
+                        modifier = Modifier.align(Alignment.Center),
                     )
                 }
             }
+            Spacer(Modifier.weight(0.54f))
         }
 
-        SakhiFooter(
-            primaryLabel = stringResource(R.string.care_swm_im_home),
-            onPrimaryClick = onArrive,
-            primaryEnabled = !isBusy,
-            secondaryLabel = stringResource(R.string.care_swm_extend),
-            onSecondaryClick = onExtend,
-            secondaryEnabled = !isBusy,
-        )
+        Box(
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(SakhiSpacing.space4)
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(sakhiSystemBackground())
+                .clickable(onClick = onClose),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = stringResource(R.string.care_swm_close),
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+
+        Surface(
+            color = sakhiSystemBackground(),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .fillMaxHeight(0.58f),
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                LazyColumn(modifier = Modifier.weight(1f)) {
+                    item(key = "swm-presence") {
+                        PresenceRow(
+                            name = personName,
+                            present = session.isWatcherPresent(now),
+                            late = isLate,
+                            modifier = Modifier.padding(
+                                start = SakhiSpacing.space6,
+                                end = SakhiSpacing.space6,
+                                top = SakhiSpacing.space6,
+                                bottom = SakhiSpacing.space4,
+                            ),
+                        )
+                    }
+
+                    item(key = "swm-time") {
+                        GroupedCard {
+                            Column(modifier = Modifier.padding(SakhiSpacing.space5)) {
+                                val big = when (phase) {
+                                    StayWithMePhase.WALKING -> stringResource(R.string.care_swm_minutes_left, minutesUp(session.secondsRemaining(now)))
+                                    else -> stringResource(R.string.care_swm_past_time)
+                                }
+                                Text(
+                                    text = big,
+                                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                                    color = if (phase == StayWithMePhase.WALKING) sakhiLabel() else AppleSystemColors.red,
+                                )
+                                Spacer(Modifier.height(SakhiSpacing.space1))
+                                Text(
+                                    text = when (phase) {
+                                        StayWithMePhase.GRACE -> stringResource(
+                                            R.string.care_swm_grace_left,
+                                            minutesUp(session.secondsRemaining(now)),
+                                            personName,
+                                        )
+                                        StayWithMePhase.LATE -> stringResource(R.string.care_swm_person_told_late, personName)
+                                        else -> stringResource(R.string.care_swm_home_by, timeOf(session.expectedArrival))
+                                    },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = sakhiSecondaryLabel(),
+                                )
+                                Spacer(Modifier.height(SakhiSpacing.space4))
+                                WalkProgress(progress = session.progress(now).toFloat(), color = accent)
+                                Spacer(Modifier.height(SakhiSpacing.space4))
+                                SakhiListDivider()
+                                Spacer(Modifier.height(SakhiSpacing.space3))
+                                val battery = location?.batteryPercent
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Place,
+                                        contentDescription = null,
+                                        tint = if (sharing) MaterialTheme.colorScheme.primary else sakhiTertiaryLabel(),
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.width(SakhiSpacing.space2))
+                                    Text(
+                                        text = when {
+                                            !sharing -> stringResource(R.string.care_swm_not_sharing)
+                                            battery != null -> stringResource(R.string.care_swm_sharing_battery, battery)
+                                            else -> stringResource(R.string.care_swm_sharing)
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = sakhiLabel(),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    item(key = "near-label") { SwmSectionLabel(stringResource(R.string.care_swm_help_near_you), top = SakhiSpacing.space5) }
+                    item(key = "near") {
+                        GroupedCard {
+                            when {
+                                places.isNotEmpty() -> places.forEachIndexed { index, place ->
+                                    if (index > 0) SakhiListDivider(startInset = 56.dp)
+                                    PlaceRow(place = place, onClick = { openDirections(context, place) })
+                                }
+                                placesLoading -> StatusRow(text = stringResource(R.string.care_swm_places_loading_you), loading = true)
+                                else -> StatusRow(text = stringResource(R.string.care_swm_places_empty_you), loading = false)
+                            }
+                        }
+                    }
+
+                    item(key = "lines-label") { SwmSectionLabel(stringResource(R.string.care_swm_helplines), top = SakhiSpacing.space5) }
+                    item(key = "lines") {
+                        GroupedCard {
+                            HelplineRow(label = stringResource(R.string.care_swm_emergency), number = "112") { dial(context, "112") }
+                            SakhiListDivider(startInset = 56.dp)
+                            HelplineRow(label = stringResource(R.string.care_swm_women_helpline), number = "181") { dial(context, "181") }
+                        }
+                    }
+
+                    item(key = "swm-stop") {
+                        TextButton(
+                            onClick = { confirmStop = true },
+                            modifier = Modifier.fillMaxWidth().padding(top = SakhiSpacing.space4, bottom = SakhiSpacing.space2),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.care_swm_stop),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = sakhiSecondaryLabel(),
+                            )
+                        }
+                    }
+                }
+
+                SakhiFooter(
+                    primaryLabel = stringResource(R.string.care_swm_im_home),
+                    onPrimaryClick = onArrive,
+                    primaryEnabled = !isBusy,
+                    secondaryLabel = stringResource(R.string.care_swm_extend),
+                    onSecondaryClick = onExtend,
+                    secondaryEnabled = !isBusy,
+                )
+            }
+        }
     }
 
     if (confirmStop) {
@@ -497,6 +560,7 @@ internal fun StayWithMeWatcherLive(
     now: Instant,
     places: List<EmergencySafePlace>,
     placesLoading: Boolean,
+    trail: List<StayWithMeLocation>,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -512,6 +576,7 @@ internal fun StayWithMeWatcherLive(
                     location = location,
                     accent = accent,
                     initial = herName.take(1).uppercase(),
+                    trail = trail,
                     modifier = Modifier.fillMaxSize(),
                 )
                 if (location == null) {
@@ -769,6 +834,7 @@ private fun WalkMap(
     accent: Color,
     initial: String,
     modifier: Modifier = Modifier,
+    trail: List<StayWithMeLocation> = emptyList(),
 ) {
     val context = LocalContext.current
     val target = location?.let { LatLng(it.latitude, it.longitude) }
@@ -811,6 +877,29 @@ private fun WalkMap(
             compassEnabled = false,
         ),
     ) {
+        // The way she has come. Drawn under her dot, and only from the second point, so a
+        // walk that has just started shows a dot rather than a line of length zero.
+        if (trail.size >= 2) {
+            val points = remember(trail) { trail.map { LatLng(it.latitude, it.longitude) } }
+            Polyline(
+                points = points,
+                color = accent.copy(alpha = 0.55f),
+                width = 12f,
+                jointType = JointType.ROUND,
+                startCap = RoundCap(),
+                endCap = RoundCap(),
+            )
+            points.firstOrNull()?.let { start ->
+                Circle(
+                    center = start,
+                    radius = 12.0,
+                    fillColor = accent,
+                    strokeColor = Color.White,
+                    strokeWidth = 4f,
+                )
+            }
+        }
+
         if (shown != null) {
             val accuracy = (location?.accuracyMeters ?: 40.0).coerceIn(15.0, 150.0)
             Circle(

@@ -17,6 +17,7 @@ val careFeatureModule = module {
             appContext = get(),
             sessionManager = get(),
             store = get(),
+            realtime = get(),
             placesProvider = get(),
             hapticManager = get(),
         )

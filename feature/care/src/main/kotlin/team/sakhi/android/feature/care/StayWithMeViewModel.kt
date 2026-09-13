@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -20,6 +21,8 @@ import team.sakhi.emergency.EmergencySafePlace
 import team.sakhi.emergency.EmergencySafePlaceKind
 import team.sakhi.emergency.EmergencySafePlacesProvider
 import team.sakhi.session.SessionManager
+import team.sakhi.staywithme.StayWithMeLocation
+import team.sakhi.staywithme.StayWithMeRealtimeCoordinator
 import team.sakhi.staywithme.StayWithMeSession
 import team.sakhi.staywithme.StayWithMeStore
 import kotlin.math.atan2
@@ -35,9 +38,15 @@ data class StayWithMeUiState(
     val watching: StayWithMeSession? = null,
     val isBusy: Boolean = false,
     val error: String? = null,
-    /** Police, hospitals and medical shops near her, nearest first. Watcher side only. */
+    /** Police, hospitals and medical shops near her, nearest first. Both sides see these. */
     val places: List<EmergencySafePlace> = emptyList(),
     val placesLoading: Boolean = false,
+    /** The line her own walk has drawn, on her phone. */
+    val mineTrail: List<StayWithMeLocation> = emptyList(),
+    /** The same line as her person has been shown it. */
+    val watchingTrail: List<StayWithMeLocation> = emptyList(),
+    /** True while the walk is arriving on a socket rather than being asked for. */
+    val isLiveSocket: Boolean = false,
 )
 
 /**
@@ -48,6 +57,7 @@ class StayWithMeViewModel(
     private val appContext: Context,
     private val sessionManager: SessionManager,
     private val store: StayWithMeStore,
+    private val realtime: StayWithMeRealtimeCoordinator,
     private val placesProvider: EmergencySafePlacesProvider,
     private val hapticManager: AndroidHapticManager,
 ) : ViewModel() {
@@ -62,9 +72,13 @@ class StayWithMeViewModel(
         StayWithMeUiState(now = n, mine = mine, watching = watching, isBusy = busy, error = error)
     }
 
+    private val withPlaces = combine(base, places, placesLoading) { state, found, loading ->
+        state.copy(places = found, placesLoading = loading)
+    }
+
     val uiState: StateFlow<StayWithMeUiState> =
-        combine(base, places, placesLoading) { state, found, loading ->
-            state.copy(places = found, placesLoading = loading)
+        combine(withPlaces, store.mineTrail, store.watchingTrail, realtime.isLive) { state, mine, watching, live ->
+            state.copy(mineTrail = mine, watchingTrail = watching, isLiveSocket = live)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StayWithMeUiState(now = store.now()))
 
     init {
@@ -75,16 +89,31 @@ class StayWithMeViewModel(
                 delay(1_000)
             }
         }
-        // Help near her follows her, but only after she has really moved.
+        // Help near her follows her, but only after she has really moved. Both sides get it:
+        // being the one walking is not a reason to be the one who cannot see a police
+        // station, and she is the person who might have to walk into one.
         viewModelScope.launch {
-            store.watching.collect { walk ->
+            combine(store.mine, store.watching) { mine, watching -> mine ?: watching }.collect { walk ->
                 val location = walk?.lastLocation ?: return@collect
                 refreshPlacesIfMoved(location.latitude, location.longitude)
             }
         }
+        // One socket, following whichever walks this phone is part of. A walk that ends
+        // takes its channel down with it.
+        viewModelScope.launch {
+            combine(store.mine, store.watching) { mine, watching -> mine?.id to watching?.id }
+                .distinctUntilChanged()
+                .collect { runCatching { realtime.sync() } }
+        }
     }
 
-    /** While the Care sheet is on screen: re-read the walk, say "I'm looking", notice late. */
+    /**
+     * While the Care sheet is on screen: re-read the walk, say "I'm looking", notice late.
+     *
+     * Once the socket is up this is a safety net, not the way the map moves, so it drops to
+     * one round trip a minute. That is the difference between six requests a minute and one
+     * on both phones, which on her side is battery she needs to still have when she is home.
+     */
     fun onVisible() {
         if (pollJob?.isActive == true) return
         pollJob = viewModelScope.launch {
@@ -99,7 +128,7 @@ class StayWithMeViewModel(
                         StayWithMeLocationService.start(appContext)
                     }
                 }
-                delay(POLL_MS)
+                delay(if (realtime.isLive.value) SOCKET_POLL_MS else POLL_MS)
             }
         }
     }
@@ -107,6 +136,11 @@ class StayWithMeViewModel(
     fun onHidden() {
         pollJob?.cancel()
         pollJob = null
+    }
+
+    override fun onCleared() {
+        viewModelScope.launch { runCatching { realtime.stop() } }
+        super.onCleared()
     }
 
     fun start(partnershipId: String, minutes: Int, note: String) {
@@ -162,6 +196,9 @@ class StayWithMeViewModel(
 
     private companion object {
         const val POLL_MS = 10_000L
+
+        /** The socket is carrying the walk, so this is only there for when it is not. */
+        const val SOCKET_POLL_MS = 60_000L
         const val PLACES_REFRESH_METERS = 300.0
         const val MAX_PLACES = 6
         val NEARBY_KINDS = listOf(

@@ -250,6 +250,9 @@ fun CareScreen(
                             personName = personName,
                             now = stayWithMe.now,
                             isBusy = stayWithMe.isBusy,
+                            trail = stayWithMe.mineTrail,
+                            places = stayWithMe.places,
+                            placesLoading = stayWithMe.placesLoading,
                             onArrive = stayWithMeViewModel::arrive,
                             onExtend = stayWithMeViewModel::extend,
                             onStop = stayWithMeViewModel::stop,
@@ -288,6 +291,7 @@ fun CareScreen(
                             now = stayWithMe.now,
                             places = stayWithMe.places,
                             placesLoading = stayWithMe.placesLoading,
+                            trail = stayWithMe.watchingTrail,
                             onClose = onClose,
                         )
                     } else PartnerDetailContent(
