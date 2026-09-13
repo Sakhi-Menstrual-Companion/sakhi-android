@@ -97,7 +97,9 @@ fun StayWithMeLiveLayer(
             modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground()),
             contentAlignment = Alignment.Center,
         ) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            // Only while the first read is in flight. A walk that has just ended closes this
+            // at once, and a spinner there looked like the app was still waiting for her.
+            if (!sawWalk) CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
     }
 }
