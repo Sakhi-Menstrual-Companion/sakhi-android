@@ -211,6 +211,7 @@ class HomeViewModelTest {
     fun `no session resets to a default state without touching repositories`() = runTest {
         val sessionManager = mockk<SessionManager> {
             every { session } returns MutableStateFlow(null)
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns null
         }
         val syncStore = mockk<SyncStore> {
@@ -230,6 +231,7 @@ class HomeViewModelTest {
         val sessionFlow = MutableStateFlow(sessionContext())
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns sessionFlow.value
         }
         val syncStore = mockk<SyncStore> {
@@ -274,6 +276,7 @@ class HomeViewModelTest {
         val sessionFlow = MutableStateFlow(testSession)
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns sessionFlow.value
         }
         val syncStore = mockk<SyncStore> {
@@ -318,6 +321,7 @@ class HomeViewModelTest {
         val sessionFlow = MutableStateFlow(testSession)
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns sessionFlow.value
         }
         val cycle = menstrualCycle(userId = "primary-1")
@@ -411,6 +415,7 @@ class HomeViewModelTest {
         val sessionFlow = MutableStateFlow(sessionContext())
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns sessionFlow.value
         }
         val syncStore = mockk<SyncStore> {
@@ -443,6 +448,7 @@ class HomeViewModelTest {
         val sessionFlow = MutableStateFlow(sessionContext())
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns sessionFlow.value
         }
         val syncStore = mockk<SyncStore> {
@@ -468,6 +474,7 @@ class HomeViewModelTest {
         val currentSlot = arrayOf(ownSession)
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } answers { currentSlot[0] }
         }
         val syncStore = mockk<SyncStore> {
@@ -511,6 +518,7 @@ class HomeViewModelTest {
         val currentSlot = arrayOf(sessionA)
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } answers { currentSlot[0] }
         }
         val syncStore = mockk<SyncStore> {
@@ -581,6 +589,7 @@ class HomeViewModelTest {
         val currentSlot = arrayOf(sessionA)
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } answers { currentSlot[0] }
         }
         val syncStore = mockk<SyncStore> {
@@ -624,6 +633,7 @@ class HomeViewModelTest {
         val sessionFlow = MutableStateFlow(sessionContext())
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns sessionFlow.value
         }
         val syncStore = mockk<SyncStore> {
@@ -681,6 +691,7 @@ class HomeViewModelTest {
         val sessionFlow = MutableStateFlow(sessionContext())
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns sessionFlow.value
         }
         val syncStore = mockk<SyncStore> {
@@ -765,6 +776,7 @@ class HomeViewModelTest {
         val sessionFlow = MutableStateFlow(partnerSession)
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns sessionFlow.value
         }
         val today = DateConverter.today()
@@ -846,6 +858,7 @@ class HomeViewModelTest {
         val sessionFlow = MutableStateFlow(sessionContext())
         val sessionManager = mockk<SessionManager> {
             every { session } returns sessionFlow
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns sessionFlow.value
         }
         val syncStore = mockk<SyncStore> {
@@ -882,6 +895,7 @@ class HomeViewModelTest {
         val partnerSession = sessionContext(userId = "user-1", targetUserId = "partner-1")
         val sessionManager = mockk<SessionManager> {
             every { session } returns MutableStateFlow(partnerSession)
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns partnerSession
         }
         val snapshot = PartnerHealthSnapshot(
@@ -922,6 +936,7 @@ class HomeViewModelTest {
         )
         val sessionManager = mockk<SessionManager> {
             every { session } returns MutableStateFlow(partnerSession)
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns partnerSession
         }
         val snapshot = PartnerHealthSnapshot(
@@ -955,6 +970,7 @@ class HomeViewModelTest {
         val partnerSession = sessionContext(userId = "user-1", targetUserId = "partner-1")
         val sessionManager = mockk<SessionManager> {
             every { session } returns MutableStateFlow(partnerSession)
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns partnerSession
         }
         val snapshot = PartnerHealthSnapshot(

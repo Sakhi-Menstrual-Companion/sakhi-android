@@ -904,4 +904,17 @@
     <string name="profile_resume_online_title">Resume online sync?</string>
     <string name="profile_resume_online_message">We\'ll back up your data to the cloud again and sync across your devices. This needs an internet connection.</string>
     <string name="profile_resume_online_action">Resume</string>
+    <!-- A care partner's Manage Account and delete steps (2026-09-13). Deleting his account
+         marks the care link revoked on the server (delete-user-data), so her app updates. -->
+    <string name="profile_manage_account_menu_delete_account_subtitle_partner">Delete your account and end your care connection</string>
+    <string name="profile_manage_account_partner_before_subtitle">Deleting your account also ends your care connection with her. Here is what that means.</string>
+    <string name="profile_manage_account_partner_loss_care_title">You will stop caring for her in Sakhi</string>
+    <string name="profile_manage_account_partner_loss_care_body">Her cycle, her day, and the ways you can help her will no longer reach you.</string>
+    <string name="profile_manage_account_partner_loss_walks_title">No more Stay With Me</string>
+    <string name="profile_manage_account_partner_loss_walks_body">She will not be able to ask you to stay with her on a walk, and you will not see where she is.</string>
+    <string name="profile_manage_account_partner_loss_link_title">Your connection with her ends</string>
+    <string name="profile_manage_account_partner_loss_link_body">Sakhi will show her that you left. To care for her again, she would need to send you a new invite.</string>
+    <string name="profile_manage_account_partner_loss_row_care">Your care connection with her</string>
+    <string name="profile_manage_account_partner_loss_row_walks">Stay With Me walks and her alerts on this phone</string>
+    <string name="profile_manage_account_delete_confirm_body_partner">This deletes your account and ends your care connection with her. You will not be able to care for her in Sakhi unless she invites you again.</string>
 </resources>

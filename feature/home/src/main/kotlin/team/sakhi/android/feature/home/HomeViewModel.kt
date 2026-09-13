@@ -207,6 +207,9 @@ class HomeViewModel(
     // Cached engine inputs so `selectDate` can re-ask the SAME engine for another day
     // instead of falling back to a different algorithm.
     private var cachedCycles: List<CycleData> = emptyList()
+
+    /** An empty read was held back because the session's role was not settled yet. */
+    private var awaitingSettledRole = false
     private var cachedPeriodLogDates: Set<LocalDate> = emptySet()
     private var cachedStats: team.sakhi.models.CycleStatistics? = null
 
@@ -271,6 +274,19 @@ class HomeViewModel(
                 partnerSnapshot
             }.collectLatest { partnerSnapshot ->
                 refresh(sessionManager.session.value, syncStore.syncState.value, partnerSnapshot)
+            }
+        }
+
+        // An empty read under the provisional session was held back as "still loading" (see
+        // `applyCycleInsight`). Once the role is settled, read again: if she really is the
+        // primary user the empty result now stands; if this is a partner's phone, the session
+        // has already moved to her and this reload is what draws her.
+        viewModelScope.launch {
+            sessionManager.roleSettled.collect { settled ->
+                if (settled && awaitingSettledRole) {
+                    awaitingSettledRole = false
+                    refresh(sessionManager.session.value, syncStore.syncState.value, syncStore.partnerHealthSnapshot.value)
+                }
             }
         }
 
@@ -459,6 +475,17 @@ class HomeViewModel(
         logs: List<PeriodLog>,
     ) {
         if (sessionManager.current?.targetUserId != targetUserId) return
+
+        // Nothing found, under a session whose role is not settled yet. On a care partner's
+        // phone that session is his own empty record, not hers, so "nothing logged" would be
+        // a false statement shown for the few seconds the care lookup takes, and then
+        // replaced by her real cycle. Stay on the skeleton; the `roleSettled` collector reads
+        // again once the lookup answers (Karan, 2026-09-13).
+        if (cycles.isEmpty() && logs.isEmpty() && !sessionManager.roleSettled.value) {
+            awaitingSettledRole = true
+            _uiState.update { it.copy(isLoadingCycle = true) }
+            return
+        }
 
         // Everything below used to run INSIDE `_uiState.update { ... }`, on the main thread.
         // Two problems with that. `MutableStateFlow.update` is a compare-and-set loop, so

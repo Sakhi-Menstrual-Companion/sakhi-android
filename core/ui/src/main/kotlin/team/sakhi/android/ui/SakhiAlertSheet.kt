@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -82,7 +83,14 @@ fun SakhiAlertSheet(
             // on the QA emulator before the fix.
             modifier = Modifier
                 .fillMaxWidth()
-                .background(sakhiSystemBackground())
+                // Shaped like the sheet. `SakhiModalSheet` draws no container of its own, so a
+                // plain rectangle here squared off the top corners over the dimmed page: the
+                // "Leave Her?" alert showed hard corners where iOS's are rounded
+                // (Karan, 2026-09-13).
+                .background(
+                    sakhiSystemBackground(),
+                    RoundedCornerShape(topStart = SakhiRadius.bottomSheet, topEnd = SakhiRadius.bottomSheet),
+                )
                 .navigationBarsPadding()
                 .height(AlertSheetHeight),
             horizontalAlignment = Alignment.CenterHorizontally,

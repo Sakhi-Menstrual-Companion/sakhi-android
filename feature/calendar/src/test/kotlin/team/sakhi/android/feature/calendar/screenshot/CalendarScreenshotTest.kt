@@ -27,6 +27,11 @@ import team.sakhi.android.feature.calendar.CalendarScreen
 import team.sakhi.android.feature.calendar.CalendarViewModel
 import team.sakhi.android.feature.logging.LoggingViewModel
 import team.sakhi.android.platform.AndroidHapticManager
+import team.sakhi.android.platform.AndroidLocationProvider
+import team.sakhi.care.CareRuntimeState
+import team.sakhi.care.CareStore
+import team.sakhi.emergency.EmergencyStore
+import team.sakhi.staywithme.StayWithMeStore
 import team.sakhi.date.DateConverter
 import team.sakhi.models.CycleData
 import team.sakhi.models.UserCareRole
@@ -68,6 +73,27 @@ class CalendarScreenshotTest {
             modules(
                 module {
                     single<AndroidHapticManager> { mockk(relaxed = true) }
+                    // The calendar bar's nearby button reads these (added in d3b3ea7); without
+                    // them both screenshots failed on a missing Koin definition.
+                    single<EmergencyStore> {
+                        mockk(relaxed = true) {
+                            every { nearbyAvailableCount } returns MutableStateFlow<Int?>(null)
+                        }
+                    }
+                    single<AndroidLocationProvider> { mockk(relaxed = true) }
+                    // The Care button in the same bar reads these three.
+                    single<CareStore> {
+                        mockk(relaxed = true) {
+                            every { careState } returns MutableStateFlow<CareRuntimeState>(CareRuntimeState.Disconnected)
+                        }
+                    }
+                    single<StayWithMeStore> {
+                        mockk(relaxed = true) {
+                            every { mine } returns MutableStateFlow(null)
+                            every { watching } returns MutableStateFlow(null)
+                        }
+                    }
+                    single<SessionManager> { mockk(relaxed = true) }
                 },
             )
         }

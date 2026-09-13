@@ -539,6 +539,9 @@ private fun HomeSessionGate(
                     }
                 }
                 else -> {
+                    // She stays the primary user (or the lookup could not be asked). Only now
+                    // may Home treat an empty read of her own data as "nothing logged yet".
+                    sessionManager.markRoleSettled()
                     runCatching { careRealtimeCoordinator.startAsOwner(session.userId) }
                 }
             }

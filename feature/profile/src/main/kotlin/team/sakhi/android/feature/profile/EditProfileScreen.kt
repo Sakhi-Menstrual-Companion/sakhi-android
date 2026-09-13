@@ -42,6 +42,8 @@ import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.DetailSheetScaffold
+import team.sakhi.android.ui.SakhiNavDirection
+import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.models.UserProfile
 import team.sakhi.repositories.UserProfileRepository
@@ -71,6 +73,7 @@ private enum class EditProfileRoute {
 fun EditProfileScreen(onBack: () -> Unit) {
     val sessionManager = koinInject<SessionManager>()
     val userProfileRepository = koinInject<UserProfileRepository>()
+    val authRepository = koinInject<team.sakhi.auth.AuthRepository>()
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -134,7 +137,17 @@ fun EditProfileScreen(onBack: () -> Unit) {
         }
     }
 
-    when (route) {
+    // Name, Height and Weight push over this page and pop back to it, the way Profile's own
+    // sub-screens do, rather than swapping in on the spot (Karan, 2026-09-13).
+    SakhiScreenTransition(
+        targetState = route,
+        directionFor = { _, target ->
+            if (target == EditProfileRoute.Root) SakhiNavDirection.Backward else SakhiNavDirection.Forward
+        },
+        label = "edit_profile_transition",
+        parentStaysBehind = true,
+    ) { shownRoute ->
+    when (shownRoute) {
         EditProfileRoute.Root -> {
             DetailSheetScaffold(
                 title = stringResource(R.string.edit_profile_title),
@@ -196,7 +209,13 @@ fun EditProfileScreen(onBack: () -> Unit) {
                             }
                         }
 
-                        profile?.phone?.takeIf { it.isNotBlank() }?.let { phone ->
+                        // Read-only, and always shown: the profile row's number when it has
+                        // one, else the number this account signed in with. A care partner's
+                        // profile row never stores one, so his page had no number at all
+                        // (Karan, 2026-09-13).
+                        val signedInNumber = remember { formatSignedInPhone(authRepository.currentPhone()) }
+                        val phoneNumber = profile?.phone?.takeIf { it.isNotBlank() } ?: signedInNumber
+                        phoneNumber?.let { phone ->
                             Surface(
                                 color = sakhiSystemBackground(),
                                 shape = RoundedCornerShape(SakhiRadius.xl),
@@ -262,6 +281,17 @@ fun EditProfileScreen(onBack: () -> Unit) {
                 },
             )
         }
+    }
+    }
+}
+
+/** A stored phone ("919999999999") shown as "+91 99999 99999" for an Indian number. */
+internal fun formatSignedInPhone(stored: String?): String? {
+    val raw = stored?.filter { it.isDigit() }?.takeIf { it.isNotBlank() } ?: return null
+    return if (raw.length == 12 && raw.startsWith("91")) {
+        "+91 ${raw.substring(2, 7)} ${raw.substring(7)}"
+    } else {
+        "+$raw"
     }
 }
 

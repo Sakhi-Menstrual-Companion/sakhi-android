@@ -271,8 +271,13 @@ fun HomeNavHost() {
         }
     }
 
+    // Held back while Home is on its first-load skeleton, and raised once her data is in, as
+    // iOS does (`canPresentOwnCalendar` waits for `!isLoading`). Up during the skeleton it
+    // showed a partner his own empty calendar for the seconds before his role was settled
+    // (2026-09-13).
+    val homeFirstLoading = homeUiState.isLoadingCycle && !homeUiState.hasCycleData
     HomeCalendarOverlay(
-        visible = showCalendar && activeOverlaySheet == null,
+        visible = showCalendar && activeOverlaySheet == null && !homeFirstLoading,
         onDismiss = { showCalendar = false },
         // `homeUiState.phase` is recomputed for `selectedDate` on every day tap
         // (`HomeViewModel.selectDate`), so this is iOS's `snapshot.displayPhase` -- the
@@ -363,6 +368,9 @@ fun HomeNavHost() {
             // below a gap. The grabber belongs inside `SheetSurface`, which owns the surface
             // it should sit on.
             showSystemDragHandle = false,
+            // Every sheet here fills the height on a `SheetSurface`, so an empty one is the
+            // right size to slide in while the real content is built.
+            placeholder = { SheetSurface {} },
         ) {
             // Peer sheet swaps are not full-screen pushes. Raindrop uses native modal
             // presentation plus short opacity fades for lightweight modal content

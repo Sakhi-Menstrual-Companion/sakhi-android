@@ -96,6 +96,7 @@ class HomeScreenshotTest {
 
     private fun mockSessionManager() = mockk<SessionManager> {
         every { session } returns MutableStateFlow(null)
+        every { roleSettled } returns MutableStateFlow(true)
         every { current } returns null
     }
 
@@ -205,6 +206,7 @@ class HomeScreenshotTest {
         val session = ownDataSession()
         val sessionManager = mockk<SessionManager> {
             every { this@mockk.session } returns MutableStateFlow(session)
+            every { roleSettled } returns MutableStateFlow(true)
             every { current } returns session
         }
         val syncStore = mockk<SyncStore> {

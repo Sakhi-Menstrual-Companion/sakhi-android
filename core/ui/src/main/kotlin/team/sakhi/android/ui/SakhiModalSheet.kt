@@ -1,5 +1,9 @@
 package team.sakhi.android.ui
 
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -70,6 +74,15 @@ fun SakhiModalSheet(
     scrimColor: Color? = MaterialTheme.colorScheme.scrim.copy(alpha = ScrimOpacity),
     dismissOnScrimTap: Boolean = true,
     dragHandle: (@Composable () -> Unit)? = null,
+    /**
+     * Drawn instead of [content] while the sheet slides in, then swapped for it once the sheet
+     * has landed. For a heavy sheet (Care composes a map) building the content took ~800 ms on
+     * the main thread before the first frame, so nothing moved after a tap for most of a second
+     * (measured on a Redmi Note 10 Pro, 2026-09-13). With a placeholder the slide starts on the
+     * next frame. It must take the same size the content will, or the sheet rests at the wrong
+     * line: use it only for sheets whose content fills the height.
+     */
+    placeholder: (@Composable () -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -139,7 +152,19 @@ fun SakhiModalSheet(
                 showSystemDragHandle -> SakhiSheetGrabber()
                 else -> Unit
             }
-            content()
+            var contentReady by remember { mutableStateOf(placeholder == null) }
+            if (!contentReady) {
+                LaunchedEffect(Unit) {
+                    // Wait for the present to start, then to finish. Capped, so content can
+                    // never be held back by a sheet that did not move.
+                    withTimeoutOrNull(PlaceholderMaxMs) {
+                        snapshotFlow { sheetState.top.isRunning }.first { it }
+                        snapshotFlow { sheetState.top.isRunning }.first { !it }
+                    }
+                    contentReady = true
+                }
+            }
+            if (contentReady || placeholder == null) content() else placeholder()
         }
     }
 }
@@ -166,6 +191,9 @@ private fun SakhiSheetGrabber() {
         )
     }
 }
+
+/** Longest a placeholder can stand in, whatever the sheet is doing. */
+private const val PlaceholderMaxMs = 700L
 
 /** Material's own scrim opacity, so migrated sheets dim by exactly as much as before. */
 private const val ScrimOpacity = 0.32f

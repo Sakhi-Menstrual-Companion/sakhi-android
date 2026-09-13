@@ -1,15 +1,18 @@
 package team.sakhi.android.feature.home
 
 import androidx.compose.foundation.gestures.animateScrollBy
-import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import team.sakhi.android.common.CycleInsightAdapter
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Person
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -224,7 +227,23 @@ fun HomeScreen(
     recommendationsViewModel: RecommendationsViewModel = koinViewModel(),
     quickLogViewModel: LoggingViewModel = koinViewModel(),
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val liveUiState by viewModel.uiState.collectAsStateWithLifecycle()
+    // Debug builds only: `am start ... --ei home_skeleton_hold <seconds>` shows Home as it
+    // looks before the first read lands, for that long, so the skeleton can be reviewed on a
+    // phone whose data loads too fast to see it.
+    val skeletonHoldSeconds = rememberDebugSkeletonHoldSeconds()
+    var skeletonHeld by remember { mutableStateOf(skeletonHoldSeconds > 0) }
+    LaunchedEffect(skeletonHoldSeconds) {
+        if (skeletonHoldSeconds > 0) {
+            delay(skeletonHoldSeconds * 1000L)
+            skeletonHeld = false
+        }
+    }
+    val uiState = if (skeletonHeld) {
+        liveUiState.copy(isLoadingCycle = true, hasCycleData = false, phase = CyclePhase.UNKNOWN)
+    } else {
+        liveUiState
+    }
     val recoState by recommendationsViewModel.uiState.collectAsStateWithLifecycle()
     val quickLogUiState by quickLogViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -235,6 +254,7 @@ fun HomeScreen(
     // palette (`PhaseColorManager.swift:94`). Using the raw token here put pink text
     // and icons on the pink menstrual background.
     val accentColor = phasePalette.primary
+    val skeletonStyle = rememberHomeSkeletonStyle()
     val hapticManager = koinInject<AndroidHapticManager>()
     val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
@@ -439,6 +459,17 @@ fun HomeScreen(
             //
             // With data present the hero stays mounted and its values cross-fade underneath,
             // which is what the `AnimatedContent` below is for.
+            // Nothing read yet: the skeleton, in the follicular palette the page is already
+            // painted in, with the hero's figure counting down until the real one lands.
+            val showSkeleton = uiState.isLoadingCycle && !uiState.hasCycleData
+            if (canShowHero && showSkeleton) {
+                nextIndex()
+                item(key = "hero-skeleton", contentType = "hero") {
+                    HomeSkeletonSweepProvider(style = skeletonStyle) {
+                        HomeHeroSkeleton(style = skeletonStyle)
+                    }
+                }
+            }
             if (canShowHero && (!uiState.isLoadingCycle || uiState.hasCycleData)) {
                 nextIndex()
                 item(key = "hero", contentType = "hero") {
@@ -518,6 +549,14 @@ fun HomeScreen(
             // the values restored from the last session were seeded, the hero drew them, and
             // then nothing else did. Loading is not a reason to show her an empty page when
             // there is real data to show.
+            if (showSkeleton) {
+                nextIndex()
+                item(key = "skeleton-cards", contentType = "card") {
+                    HomeSkeletonSweepProvider(style = skeletonStyle) {
+                        HomeSkeletonCards(isPartnerMode = isPartnerMode, style = skeletonStyle)
+                    }
+                }
+            }
             if (!uiState.isLoadingCycle || uiState.hasCycleData) {
                 if (isPartnerMode && !uiState.hasCycleData) {
                     nextIndex()
@@ -733,7 +772,9 @@ fun HomeScreen(
                 // screenshot existed.
                 logFill = phaseCardFill(
                     phase = uiState.phase,
-                    hasCycleData = uiState.hasCycleData,
+                    // Loading paints the follicular phase like the rest of the page; the
+                    // no-data fill here made the log button a stark surface circle.
+                    hasCycleData = uiState.hasCycleData || uiState.isLoadingCycle,
                 ),
                 // Third and final instance of the same bug. iOS is
                 // `logIconColor: standardAccent` (`HomeDayDetailGlassView+ActionBar:42`) --
@@ -3067,13 +3108,16 @@ private fun HomeTopBar(
 ) {
     val context = LocalContext.current
     val hasCycleData = hero.hasCycleData
+    // The first read has not landed: the bar wears the follicular palette with the skeleton.
+    val isFirstLoad = hero.isLoading && !hasCycleData
+    val paintsPhase = hasCycleData || isFirstLoad
     val isMenstrual = hero.phase == CyclePhase.MENSTRUAL
     val foreground = when {
-        !hasCycleData -> MaterialTheme.colorScheme.primary
+        !paintsPhase -> MaterialTheme.colorScheme.primary
         isMenstrual -> Color.White
         else -> phasePalette.primary
     }
-    val iconBackground = if (!hasCycleData) {
+    val iconBackground = if (!paintsPhase) {
         MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
     } else {
         phasePalette.secondary.copy(alpha = 0.12f)
@@ -3116,7 +3160,15 @@ private fun HomeTopBar(
                 // separate day-tap strip in the real iOS source.
                 modifier = Modifier.clickable(onClick = if (isToday) onOpenCalendar else onResetToToday),
             )
-            HeroTopBarSubtitle(
+            if (isFirstLoad) {
+                // Where the phase name will be: labelMedium in the subtitle's 16dp row.
+                val skeletonStyle = rememberHomeSkeletonStyle()
+                HomeSkeletonSweepProvider(style = skeletonStyle) {
+                    Box(modifier = Modifier.height(16.dp), contentAlignment = Alignment.Center) {
+                        Bone(height = 9.dp, width = 104.dp)
+                    }
+                }
+            } else HeroTopBarSubtitle(
                 phaseName = phaseLabel,
                 heroContentBig = heroSummary.big,
                 heroContentSub = heroSummary.sub,
@@ -3132,8 +3184,10 @@ private fun HomeTopBar(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // A plain person glyph for her profile. A face stand-in was tried here on
+            // 2026-09-13 and Karan asked for the simple user icon instead, the same day.
             TopBarIconButton(
-                icon = Icons.Filled.Menu,
+                icon = Icons.Rounded.Person,
                 contentDescription = stringResource(R.string.home_open_profile_content_description),
                 foreground = foreground,
                 background = iconBackground,
@@ -3153,11 +3207,10 @@ private fun HomeTopBar(
                 background = iconBackground,
                 stroke = iconStroke,
                 onClick = onOpenNotifications,
-                badgeCount = unreadNotificationCount,
-                // Brand pink on every phase except the period, where the whole hero is
-                // already that pink and a pink badge would vanish into it.
-                badgeFill = if (isMenstrual) Color.White else MaterialTheme.colorScheme.primary,
-                badgeContent = if (isMenstrual) MaterialTheme.colorScheme.primary else Color.White,
+                showDot = unreadNotificationCount > 0,
+                // Brand pink on every phase, as on iOS. The dot sits on the bell glyph itself,
+                // which is white on a period day, so a white dot there disappeared.
+                dotFill = MaterialTheme.colorScheme.primary,
             )
         }
     }
@@ -3171,53 +3224,43 @@ private fun TopBarIconButton(
     background: Color,
     stroke: Color,
     onClick: () -> Unit,
-    /** Zero (the default) draws no badge at all. */
-    badgeCount: Int = 0,
-    badgeFill: Color = Color.Unspecified,
-    badgeContent: Color = Color.White,
+    /** The unread mark: a small dot, never a number (Karan, 2026-09-13). */
+    showDot: Boolean = false,
+    dotFill: Color = Color.Unspecified,
 ) {
-    // The outer Box is unclipped so the badge can sit over the circle's edge, the way an
-    // iOS badge does, instead of being squeezed inside it.
-    Box {
-        Box(
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .background(background, CircleShape)
+            .border(0.5.dp, stroke, CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        // 20dp, not Material's default 24: the filled 24dp bell read as heavy next to iOS's
+        // 17pt SF bell (Karan, 2026-09-13).
+        Icon(icon, contentDescription = contentDescription, tint = foreground, modifier = Modifier.size(20.dp))
+        // On the bell's shoulder, ringed in white so it reads on every phase's background.
+        // TalkBack still hears the count, from the button's content description.
+        AnimatedVisibility(
+            visible = showDot,
+            enter = scaleIn(spring(dampingRatio = 0.55f, stiffness = 500f)) + fadeIn(),
+            exit = scaleOut() + fadeOut(),
             modifier = Modifier
-                .size(44.dp)
-                .background(background, CircleShape)
-                .border(0.5.dp, stroke, CircleShape)
-                .clickable(onClick = onClick),
-            contentAlignment = Alignment.Center,
+                .align(Alignment.TopEnd)
+                .offset(x = (-11).dp, y = 11.dp),
         ) {
-            Icon(icon, contentDescription = contentDescription, tint = foreground)
-        }
-        if (badgeCount > 0) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset(x = 3.dp, y = (-3).dp)
-                    .defaultMinSize(minWidth = TopBarBadgeSize, minHeight = TopBarBadgeSize)
-                    // Ringed in the button's own fill so the badge reads as sitting ON the
-                    // circle rather than merging into its outline.
-                    .border(1.5.dp, background, CircleShape)
-                    .background(badgeFill, CircleShape)
-                    .padding(horizontal = 4.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    // Past nine the exact number stops being information; "9+" is what
-                    // every inbox she uses shows.
-                    text = if (badgeCount > 9) "9+" else badgeCount.toString(),
-                    color = badgeContent,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = SakhiFontSize.xs,
-                        fontWeight = FontWeight.Bold,
-                    ),
-                )
-            }
+                    .size(TopBarDotSize)
+                    .border(1.25.dp, Color.White, CircleShape)
+                    .padding(1.25.dp)
+                    .background(dotFill, CircleShape),
+            )
         }
     }
 }
 
-private val TopBarBadgeSize = 18.dp
+private val TopBarDotSize = 8.dp
 
 @Composable
 private fun HeroTopBarSubtitle(

@@ -82,6 +82,8 @@ import team.sakhi.android.designsystem.SakhiTokens
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.DetailSheetScaffold
+import team.sakhi.android.ui.SakhiNavDirection
+import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.android.ui.ProfileSectionLabel
 import team.sakhi.android.ui.SakhiAlert
 import team.sakhi.android.ui.SakhiAlertTone
@@ -184,6 +186,10 @@ fun ManageAccountScreen(onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val session by sessionManager.session.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    // A care partner keeps no records of his own here, so his Manage Account is the one
+    // thing that applies to him, deleting the account, with steps that say plainly what that
+    // ends for her (Karan, 2026-09-13).
+    val isPartnerRole = session?.isViewingOwnData == false
 
     var route by remember { mutableStateOf(ManageAccountRoute.Menu) }
     var deleteStep by remember { mutableIntStateOf(0) }
@@ -280,7 +286,17 @@ fun ManageAccountScreen(onBack: () -> Unit) {
         verticalArrangement = Arrangement.Top,
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
-            when (route) {
+            // My Data, Start Fresh and Delete push over the menu and pop back to it, like
+            // Profile's sub-screens (Karan, 2026-09-13).
+            SakhiScreenTransition(
+                targetState = route,
+                directionFor = { _, target ->
+                    if (target == ManageAccountRoute.Menu) SakhiNavDirection.Backward else SakhiNavDirection.Forward
+                },
+                label = "manage_account_transition",
+                parentStaysBehind = true,
+            ) { shownRoute ->
+            when (shownRoute) {
                 ManageAccountRoute.Menu -> {
                     MenuContent(
                         onShowMyData = { route = ManageAccountRoute.MyData },
@@ -292,6 +308,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                         error = error,
                         isOfflineUser = session?.userId
                             ?.let(DataMigration::isOfflineUserId) == true,
+                        isPartnerRole = isPartnerRole,
                     )
                 }
 
@@ -311,6 +328,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
 
                 ManageAccountRoute.Delete -> {
                     DeleteContent(
+                        isPartnerRole = isPartnerRole,
                         step = deleteStep,
                         selectedReasons = selectedReasons,
                         stats = stats,
@@ -335,6 +353,7 @@ fun ManageAccountScreen(onBack: () -> Unit) {
                         onSkip = { deleteStep = 2 },
                     )
                 }
+            }
             }
 
             if (isBusy) {
@@ -405,7 +424,13 @@ fun ManageAccountScreen(onBack: () -> Unit) {
         SakhiAlertSheet(
             kind = SakhiAlertKind.Destructive,
             title = stringResource(R.string.profile_manage_account_delete_confirm_title),
-            message = stringResource(R.string.profile_manage_account_delete_confirm_body),
+            message = stringResource(
+                if (isPartnerRole) {
+                    R.string.profile_manage_account_delete_confirm_body_partner
+                } else {
+                    R.string.profile_manage_account_delete_confirm_body
+                },
+            ),
             primaryLabel = stringResource(R.string.profile_manage_account_delete_confirm_button),
             onPrimaryClick = {
                 showDeleteConfirm = false
@@ -436,6 +461,7 @@ private fun MenuContent(
     onDeleteAccount: () -> Unit,
     error: String?,
     isOfflineUser: Boolean,
+    isPartnerRole: Boolean,
 ) {
     Column(
         modifier = Modifier
@@ -444,7 +470,7 @@ private fun MenuContent(
             .padding(SakhiSpacing.space5),
         verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
+        if (!isPartnerRole) Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2)) {
             ProfileSectionLabel(text = stringResource(R.string.profile_manage_account_your_data))
             Surface(
                 color = sakhiSystemBackground(),
@@ -471,31 +497,39 @@ private fun MenuContent(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Column {
-                    DangerRow(
-                        icon = Icons.Filled.Restore,
-                        iconTint = MaterialTheme.colorScheme.error,
-                        title = stringResource(R.string.profile_manage_account_menu_reset_all_data),
-                        // For an `offline_*` account there is no account to fall back
-                        // on -- the phone IS the only copy. Promising that logs and
-                        // cycles "stay safe in your account" would talk someone into
-                        // permanently destroying their own health history.
-                        subtitle = stringResource(
-                            if (isOfflineUser) {
-                                R.string.profile_manage_account_menu_reset_all_data_subtitle_offline
-                            } else {
-                                R.string.profile_manage_account_menu_reset_all_data_subtitle
-                            },
-                        ),
-                        titleColor = MaterialTheme.colorScheme.error,
-                        chevronTint = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
-                        onClick = onStartFresh,
-                    )
-                    SakhiListDivider(modifier = Modifier.padding(horizontal = SakhiSpacing.space4))
+                    if (!isPartnerRole) {
+                        DangerRow(
+                            icon = Icons.Filled.Restore,
+                            iconTint = MaterialTheme.colorScheme.error,
+                            title = stringResource(R.string.profile_manage_account_menu_reset_all_data),
+                            // For an `offline_*` account there is no account to fall back
+                            // on -- the phone IS the only copy. Promising that logs and
+                            // cycles "stay safe in your account" would talk someone into
+                            // permanently destroying their own health history.
+                            subtitle = stringResource(
+                                if (isOfflineUser) {
+                                    R.string.profile_manage_account_menu_reset_all_data_subtitle_offline
+                                } else {
+                                    R.string.profile_manage_account_menu_reset_all_data_subtitle
+                                },
+                            ),
+                            titleColor = MaterialTheme.colorScheme.error,
+                            chevronTint = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
+                            onClick = onStartFresh,
+                        )
+                        SakhiListDivider(modifier = Modifier.padding(horizontal = SakhiSpacing.space4))
+                    }
                     DangerRow(
                         icon = Icons.Filled.Delete,
                         iconTint = MaterialTheme.colorScheme.error,
                         title = stringResource(R.string.profile_manage_account_menu_delete_account),
-                        subtitle = stringResource(R.string.profile_manage_account_menu_delete_account_subtitle),
+                        subtitle = stringResource(
+                            if (isPartnerRole) {
+                                R.string.profile_manage_account_menu_delete_account_subtitle_partner
+                            } else {
+                                R.string.profile_manage_account_menu_delete_account_subtitle
+                            },
+                        ),
                         titleColor = MaterialTheme.colorScheme.error,
                         chevronTint = MaterialTheme.colorScheme.error.copy(alpha = 0.45f),
                         onClick = onDeleteAccount,
@@ -619,6 +653,7 @@ private fun ResetContent(
 
 @Composable
 private fun DeleteContent(
+    isPartnerRole: Boolean,
     step: Int,
     selectedReasons: Set<LeaveReason>,
     stats: ManageAccountStats,
@@ -642,7 +677,34 @@ private fun DeleteContent(
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space5),
         ) {
             when (step) {
-                0 -> {
+                0 -> if (isPartnerRole) {
+                    StepHeader(
+                        icon = Icons.Filled.Favorite,
+                        iconTint = MaterialTheme.colorScheme.primary,
+                        title = stringResource(R.string.profile_manage_account_before_you_go),
+                        subtitle = stringResource(R.string.profile_manage_account_partner_before_subtitle),
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space3)) {
+                        BigLossCard(
+                            icon = Icons.Filled.Favorite,
+                            iconTint = SakhiTokens.CategoryCare,
+                            title = stringResource(R.string.profile_manage_account_partner_loss_care_title),
+                            subtitle = stringResource(R.string.profile_manage_account_partner_loss_care_body),
+                        )
+                        BigLossCard(
+                            icon = Icons.Filled.People,
+                            iconTint = MaterialTheme.colorScheme.primary,
+                            title = stringResource(R.string.profile_manage_account_partner_loss_walks_title),
+                            subtitle = stringResource(R.string.profile_manage_account_partner_loss_walks_body),
+                        )
+                        BigLossCard(
+                            icon = Icons.Filled.Person,
+                            iconTint = SakhiTokens.LeaveReasonRose,
+                            title = stringResource(R.string.profile_manage_account_partner_loss_link_title),
+                            subtitle = stringResource(R.string.profile_manage_account_partner_loss_link_body),
+                        )
+                    }
+                } else {
                     StepHeader(
                         icon = Icons.Filled.Favorite,
                         iconTint = MaterialTheme.colorScheme.primary,
@@ -729,7 +791,7 @@ private fun DeleteContent(
                         subtitle = stringResource(R.string.profile_manage_account_thank_you_subtitle),
                     )
 
-                    if (stats.logCount > 0 || stats.cycleCount > 0) {
+                    if (!isPartnerRole && (stats.logCount > 0 || stats.cycleCount > 0)) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
@@ -774,9 +836,15 @@ private fun DeleteContent(
                             Column {
                                 LossRow(Icons.Filled.Person, SakhiTokens.LeaveReasonRose, stringResource(R.string.profile_manage_account_loss_account_profile))
                                 SakhiListDivider(startInset = ManageAccountRowInset)
-                                LossRow(Icons.Filled.WaterDrop, SakhiTokens.CategoryPeriod, stringResource(R.string.profile_manage_account_loss_cycle_data))
-                                SakhiListDivider(startInset = ManageAccountRowInset)
-                                LossRow(Icons.Filled.AutoAwesome, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_loss_learned_about_you))
+                                if (isPartnerRole) {
+                                    LossRow(Icons.Filled.Favorite, SakhiTokens.CategoryCare, stringResource(R.string.profile_manage_account_partner_loss_row_care))
+                                    SakhiListDivider(startInset = ManageAccountRowInset)
+                                    LossRow(Icons.Filled.People, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_partner_loss_row_walks))
+                                } else {
+                                    LossRow(Icons.Filled.WaterDrop, SakhiTokens.CategoryPeriod, stringResource(R.string.profile_manage_account_loss_cycle_data))
+                                    SakhiListDivider(startInset = ManageAccountRowInset)
+                                    LossRow(Icons.Filled.AutoAwesome, MaterialTheme.colorScheme.primary, stringResource(R.string.profile_manage_account_loss_learned_about_you))
+                                }
                             }
                         }
                     }

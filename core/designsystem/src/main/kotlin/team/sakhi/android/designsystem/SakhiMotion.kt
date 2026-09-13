@@ -106,7 +106,10 @@ object SakhiMotion {
      * without a visible bounce.
      */
     fun <T> sheet(visibilityThreshold: T? = null): SpringSpec<T> =
-        iosInterpolatingSpring(stiffness = 340f, damping = 34f, visibilityThreshold = visibilityThreshold)
+        // Stiffer than iOS's 340/34, same damping ratio (~0.92, no bounce), so a sheet opens
+        // and closes about a fifth sooner. Karan found every sheet slow to arrive on
+        // Android (2026-09-13).
+        iosInterpolatingSpring(stiffness = 520f, damping = 42f, visibilityThreshold = visibilityThreshold)
 
     /**
      * iOS `HomeCalendarSheet.expandSpring`, `.spring(response: 0.58, dampingFraction:

@@ -95,6 +95,7 @@ import team.sakhi.android.platform.DeviceLocation
 import team.sakhi.android.platform.AndroidLocationProvider
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.designsystem.phaseCardFill
 import team.sakhi.android.designsystem.phasePrimaryColor
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.feature.logging.LoggingViewModel
@@ -221,7 +222,8 @@ fun CalendarScreen(
         logViewModel.selectDate(uiState.selectedDate)
     }
     val locale = Locale.getDefault()
-    val compactHeaders = remember(locale) { localizedWeekdayHeaders(sundayFirst = true, locale = locale) }
+    // Monday first, like iOS's Home calendar (Karan, 2026-09-13).
+    val compactHeaders = remember(locale) { localizedWeekdayHeaders(sundayFirst = false, locale = locale) }
     val expandedHeaders = remember(locale) { localizedWeekdayHeaders(sundayFirst = false, locale = locale) }
     var localYearExpanded by rememberSaveable { mutableStateOf(false) }
     val isYearExpanded = yearExpanded ?: localYearExpanded
@@ -465,6 +467,11 @@ fun CalendarScreen(
                 ?.mark
                 ?.phase
                 ?: currentPhase
+            // UNKNOWN (nothing read yet, or no data) takes the follicular colour, the one
+            // Home's page and skeleton wear in the same state. UNKNOWN's own primary is
+            // near-black.
+            val barPhaseUnknown = selectedDatePhase == CyclePhase.UNKNOWN
+            val barAccent = phasePrimaryColor(if (barPhaseUnknown) CyclePhase.FOLLICULAR else selectedDatePhase)
             // Claims the navigation-bar inset, exactly as iOS reserves
             // `.padding(.bottom, max(safeBottom, 16))` for this same bar. Home's copy
             // already did this; the calendar's did not, because it used to live inside a
@@ -482,11 +489,20 @@ fun CalendarScreen(
             ) {
             SakhiBottomActionBar(
                 phase = selectedDatePhase,
-                accentColor = phasePrimaryColor(selectedDatePhase),
+                accentColor = barAccent,
+                // Nothing read yet: the soft follicular button Home's own bar uses (tinted
+                // fill, accent glyph), not a solid circle of the follicular primary, which is
+                // a deep plum and read as a dark button under the skeleton (Karan, 2026-09-13).
+                logFill = if (barPhaseUnknown) phaseCardFill(CyclePhase.FOLLICULAR, hasCycleData = true) else null,
+                logStrokeColor = if (barPhaseUnknown) barAccent.copy(alpha = 0.14f) else null,
                 // The dark theme's phase primary is near-white, so the log button fills
                 // white there. iOS's adaptive CTA is the same: a white button with a black
                 // glyph in dark mode. Left at the default white, the + vanished into it.
-                logIconColor = if (LocalSakhiDarkTheme.current) Color.Black else Color.White,
+                logIconColor = when {
+                    barPhaseUnknown -> barAccent
+                    LocalSakhiDarkTheme.current -> Color.Black
+                    else -> Color.White
+                },
                 isPartnerMode = logUiState.session?.isViewingOwnData == false,
                 canLog = logUiState.canLogPeriod && logUiState.canMutateSelectedDate,
                 hasLoggedForDate = logUiState.hasAnyData,
@@ -603,7 +619,6 @@ private fun EditPeriodDatesBar(
         shape = RoundedCornerShape(percent = 50),
         color = MaterialTheme.colorScheme.inverseSurface,
         contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        shadowElevation = SakhiSpacing.space1,
         modifier = Modifier
             .fillMaxWidth()
             .heightIn(min = if (isMultiSelectMode && selectionCount > 0) 54.dp else 50.dp),
@@ -1019,7 +1034,7 @@ private fun MonthPanel(
     val today = compactToday
     val gridDays = remember(month, days, selectedDate, today) {
         val sourceDays = days.ifEmpty { fallbackMonthCells(month) }
-        sundayFirstMonthCells(month, sourceDays).toSakhiCalendarDays(
+        mondayFirstMonthCells(month, sourceDays).toSakhiCalendarDays(
             selectedDate = selectedDate,
         )
     }
@@ -1030,26 +1045,16 @@ private fun MonthPanel(
     )
 }
 
-// `CalendarViewModel`'s `monthCache` (and this file's own `fallbackMonthCells`) build
-// every month's 42-cell grid Monday-first (`isoDayNumber - 1`), which is correct for
-// this file's year-expanded view (its header really is Monday-first, matching iOS's
-// `HomeCalendarSheet.swift` hardcoded `["M","T","W","T","F","S","S"]`) but wrong for
-// this compact swipeable pager: its own header (`compactHeaders` above,
-// `sundayFirst = true`) matches iOS's real `SakhiCalendarView.swift` compact grid
-// (`lead = cal.component(.weekday, from: start) - 1`, a fixed Sunday-first offset),
-// not the year view's. Real, reproducible bug found doing a side-by-side iOS
-// comparison after the earlier layout-collapse fix: every date rendered two columns
-// off from where the real iOS app puts it (e.g. Wed 1 Jul 2026 rendered under "F",
-// not "W"). Re-derives a genuinely Sunday-first 42-cell grid for this specific view
-// from the same per-date marks already present in the Monday-first source list
-// (looked up by date, not by list position) rather than changing the shared
-// `monthCache`, which the year view still needs Monday-first.
-private fun sundayFirstMonthCells(
+// The compact pager's 42 cells, Monday first, matching its header (`compactHeaders`) and
+// iOS's Home calendar. This grid was Sunday-first until 2026-09-13, to match an older iOS
+// grid; Karan asked for Monday first on both platforms. Cells are looked up by date from the
+// source list, never by position, so a source built with a different start still lines up.
+private fun mondayFirstMonthCells(
     visibleMonth: LocalDate,
     monthlyDays: List<CalendarDayUiState>,
 ): List<CalendarDayUiState> {
     val byDate = monthlyDays.associateBy { it.date }
-    val offset = visibleMonth.dayOfWeek.isoDayNumber % 7
+    val offset = visibleMonth.dayOfWeek.isoDayNumber - 1
     val start = DateConverter.subtractDays(visibleMonth, offset)
     return List(GRID_CELL_COUNT) { index ->
         val date = DateConverter.addDays(start, index)

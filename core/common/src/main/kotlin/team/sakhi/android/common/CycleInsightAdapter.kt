@@ -147,12 +147,22 @@ object CycleInsightAdapter {
         // boundaries are the detector's.
         val detected = SakhiPredictionEngine.detectCycles(entries)
         val markGeometry = phaseGeometry(entries, today.toEpochDays().toLong(), userId)
+        // `CalendarState` predicts only the next period. iOS's calendar shows every period the
+        // engine forecasts over nine months (`MultiPeriodPredictor.forecastMonths = 9`), so
+        // the rest come from the same engine's forecast; Android's calendar went blank after
+        // next month (Karan, 2026-09-13).
+        val todayEpoch = today.toEpochDays().toLong()
+        val forecastEpochDays: Set<Long> = SakhiPredictionEngine
+            .forecast(entries, horizonMonths = PredictionHorizonMonths, todayEpochDay = todayEpoch)
+            .periods
+            .flatMapTo(mutableSetOf()) { period -> (period.startEpochDay..period.endEpochDay).filter { it >= todayEpoch } }
         val marks = mutableMapOf<LocalDate, CalendarMarker.DayMark>()
         var day = from
         while (day <= to) {
             val epoch = day.toEpochDays().toLong()
             val isPeriod = epoch in state.periodEpochDays
-            val isPredicted = epoch in state.predictedPeriodEpochDays
+            val isPredicted = !isPeriod &&
+                (epoch in state.predictedPeriodEpochDays || epoch in forecastEpochDays)
             // Projected from the shared geometry rather than read off `CalendarState`.
             // The engine emits ovulation and the fertile window for the **current cycle
             // only**, so every other month came back with nothing to colour -- page back
@@ -289,3 +299,6 @@ object CycleInsightAdapter {
     /** iOS's own ceiling on a believable period length before it distrusts the value. */
     private const val MAX_BELIEVABLE_PERIOD_LENGTH = 14
 }
+
+/** How far ahead the calendar shows predicted periods, matching iOS. */
+private const val PredictionHorizonMonths = 9

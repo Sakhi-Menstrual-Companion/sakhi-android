@@ -340,7 +340,9 @@ private fun ProfileCard(
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isPartnerRole) profileName(context, uiState) else stringResource(R.string.profile_you),
+                        // "You" on both sides. A care partner's card used to show his name, or
+                        // "User" / "Loading profile" while it was being read (Karan, 2026-09-13).
+                        text = stringResource(R.string.profile_you),
                         style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
                     )
                     Row(
@@ -619,7 +621,10 @@ private fun profileSettingGroups(
                         onUseOfflineClick,
                     )
                 }
-                items + offlineSwitch + ProfileSettingItem(
+                // Not for a care partner: his Home runs on her live data and is built to need
+                // the connection, so "Use Sakhi offline" has nothing to offer him
+                // (Karan, 2026-09-13).
+                items + listOfNotNull(offlineSwitch.takeUnless { isPartnerRole }) + ProfileSettingItem(
                     Icons.AutoMirrored.Filled.Logout,
                     context.getString(R.string.profile_item_sign_out),
                     onSignOutClick,
@@ -630,13 +635,6 @@ private fun profileSettingGroups(
     )
 
     return groups
-}
-
-private fun profileName(context: android.content.Context, uiState: ProfileUiState): String = when {
-    uiState.isLoading -> context.getString(R.string.profile_loading)
-    !uiState.profile?.name.isNullOrBlank() -> uiState.profile?.name.orEmpty()
-    !uiState.session?.userName.isNullOrBlank() -> uiState.session?.userName.orEmpty()
-    else -> context.getString(R.string.profile_fallback_user)
 }
 
 @Composable

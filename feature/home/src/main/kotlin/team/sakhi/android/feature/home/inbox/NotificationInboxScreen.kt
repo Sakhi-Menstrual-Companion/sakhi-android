@@ -59,7 +59,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
@@ -422,7 +421,6 @@ private fun MarkAllReadButton(visible: Boolean, onClick: () -> Unit, modifier: M
         Row(
             modifier = Modifier
                 .sakhiPressFeedback(interaction, pressedScale = 0.96f)
-                .shadow(elevation = 8.dp, shape = CircleShape, clip = false)
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.primary)
                 .clickable(interactionSource = interaction, indication = null, onClick = onClick)

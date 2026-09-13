@@ -232,6 +232,8 @@
     <!-- Home's bell (in-app inbox). -->
     <string name="home_open_notifications_content_description">Notifications</string>
     <string name="home_notifications_unread_content_description">Notifications, %1$d unread</string>
+    <!-- Read by TalkBack for Home's loading skeleton. -->
+    <string name="home_loading_content_description">Loading your cycle</string>
 
     <!-- In-app inbox. Every row's words are written here, on the phone, from the row's type
          and names: the server stores no wording, so nothing about her health is kept as text. -->
