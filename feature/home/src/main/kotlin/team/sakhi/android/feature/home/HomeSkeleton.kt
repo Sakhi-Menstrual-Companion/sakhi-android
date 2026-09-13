@@ -352,16 +352,18 @@ private fun LoggedBones(style: HomeSkeletonStyle, isPartnerMode: Boolean) {
 
 @Composable
 private fun NutritionBones(style: HomeSkeletonStyle) {
+    // Four rows at a 51dp pitch, 18dp in, two page dots: the geometry measured against the
+    // real iOS card on 2026-09-13, which Android's card ports.
     BoneCard(style, titleWidth = 92.dp, icon = true) {
         Column(modifier = Modifier.height(214.dp)) {
-            listOf(Triple(118.dp, 186.dp, 0), Triple(96.dp, 160.dp, 1), Triple(132.dp, 172.dp, 2)).forEach { (titleW, subW, _) ->
+            listOf(118.dp to 186.dp, 96.dp to 160.dp, 132.dp to 172.dp, 108.dp to 150.dp).forEach { (titleW, subW) ->
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(70.dp)
-                        .padding(horizontal = 22.dp),
+                        .height(51.dp)
+                        .padding(horizontal = 18.dp),
                 ) {
                     Bone(height = 36.dp, width = 36.dp, shape = RoundedCornerShape(11.dp))
                     Column(
@@ -371,7 +373,13 @@ private fun NutritionBones(style: HomeSkeletonStyle) {
                         Bone(height = 12.dp, width = titleW)
                         Bone(height = 9.dp, width = subW, alpha = 0.7f)
                     }
-                    Bone(height = 14.dp, width = 10.dp, shape = RoundedCornerShape(3.dp), alpha = 0.7f)
+                    Bone(
+                        height = 14.dp,
+                        width = 10.dp,
+                        shape = RoundedCornerShape(3.dp),
+                        alpha = 0.7f,
+                        modifier = Modifier.padding(end = 8.dp),
+                    )
                 }
             }
         }
@@ -382,7 +390,6 @@ private fun NutritionBones(style: HomeSkeletonStyle) {
                 .padding(top = 12.dp, bottom = 10.dp),
         ) {
             Bone(height = 4.dp, width = 10.dp)
-            Bone(height = 4.dp, width = 4.dp)
             Bone(height = 4.dp, width = 4.dp)
         }
     }
@@ -395,9 +402,13 @@ private fun CycleBones(style: HomeSkeletonStyle) {
             modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Bone(height = 30.dp, width = 36.dp, shape = RoundedCornerShape(8.dp))
-                Bone(height = 12.dp, width = 30.dp, alpha = 0.7f)
+            Row(
+                verticalAlignment = Alignment.Bottom,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.height(38.dp),
+            ) {
+                Bone(height = 30.dp, width = 22.dp, shape = RoundedCornerShape(7.dp))
+                Bone(height = 12.dp, width = 30.dp, alpha = 0.7f, modifier = Modifier.padding(bottom = 5.dp))
             }
             Bone(height = 9.dp, width = 92.dp, alpha = 0.7f)
         }
