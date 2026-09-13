@@ -3,6 +3,7 @@ package team.sakhi.android.feature.care
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -53,6 +54,7 @@ import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiLabel
 import team.sakhi.android.ui.SakhiListDivider
+import team.sakhi.android.designsystem.sakhiDeepRose
 import team.sakhi.android.designsystem.sakhiGroupedBackground
 import team.sakhi.android.designsystem.sakhiLightPink
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
@@ -322,14 +324,22 @@ internal fun CareSection(
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
+    // No outline. A soft, pink-tinted shadow lifts the block off the page instead: a stroke
+    // round every card drew a box around each section, which is exactly the boxed-in look
+    // this screen is trying to get away from.
+    val lift = MaterialTheme.colorScheme.primary
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space5),
+            .padding(horizontal = SakhiSpacing.space5)
+            .shadow(
+                elevation = 10.dp,
+                shape = RoundedCornerShape(SakhiRadius.xl),
+                ambientColor = lift.copy(alpha = 0.06f),
+                spotColor = lift.copy(alpha = 0.10f),
+            ),
         shape = RoundedCornerShape(SakhiRadius.xl),
         color = sakhiSystemBackground(),
-        shadowElevation = 0.dp,
-        border = androidx.compose.foundation.BorderStroke(1.dp, sakhiLightPink()),
     ) {
         Column(modifier = Modifier.fillMaxWidth(), content = content)
     }
@@ -380,14 +390,14 @@ internal fun CareSectionTitle(
  * It is the one fact under her name, and a line of secondary text under a bold heading
  * reads as a caption nobody looks at. In a pill it reads as a badge the two of them earned.
  *
- * Quiet on purpose: a pink pill under a heading, on a pink page, beside a pink button, was
- * a third pink thing competing with the one the screen wants her to press.
+ * A deep rose on a faint pink tint: the brand pink at full strength was a third bright pink
+ * thing beside the button, and grey sat on the pink page like something switched off.
  */
 @Composable
 internal fun CareSinceChip(text: String, modifier: Modifier = Modifier) {
     Row(
         modifier = modifier
-            .background(sakhiGroupedBackground(), RoundedCornerShape(SakhiRadius.full))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), RoundedCornerShape(SakhiRadius.full))
             .padding(horizontal = SakhiSpacing.space3, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -395,13 +405,13 @@ internal fun CareSinceChip(text: String, modifier: Modifier = Modifier) {
         Icon(
             imageVector = Icons.Filled.Favorite,
             contentDescription = null,
-            tint = sakhiSecondaryLabel(),
+            tint = sakhiDeepRose(),
             modifier = Modifier.size(13.dp),
         )
         Text(
             text = text,
             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
-            color = sakhiSecondaryLabel(),
+            color = sakhiDeepRose(),
         )
     }
 }

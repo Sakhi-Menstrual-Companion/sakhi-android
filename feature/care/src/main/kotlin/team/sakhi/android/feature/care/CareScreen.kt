@@ -458,7 +458,9 @@ private fun PartnerDetailContent(
     // that sit on it are white: on a white page they would be invisible, and this screen is
     // meant to read as a few separate things rather than one long list.
     val pageTop = sakhiLightPink()
-    val pageBottom = sakhiSystemBackground()
+    // Not quite white at the bottom, so the white blocks still read as blocks without an
+    // outline round them.
+    val pageBottom = androidx.compose.ui.graphics.lerp(sakhiLightPink(), sakhiSystemBackground(), 0.82f)
     Column(
         modifier = Modifier
             .fillMaxSize()
