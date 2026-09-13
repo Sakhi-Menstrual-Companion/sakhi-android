@@ -179,49 +179,31 @@ internal fun StayWithMeStartSection(
         pending = false
     }
 
-    Column {
-        SwmSectionLabel(stringResource(R.string.care_swm_section))
-        Surface(
-            color = sakhiSystemBackground(),
-            shape = RoundedCornerShape(SakhiRadius.xxl),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = SakhiSpacing.space6),
-        ) {
-            Column(modifier = Modifier.padding(SakhiSpacing.space5)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(40.dp)
-                            .background(sakhiLightPink(), RoundedCornerShape(SakhiRadius.md)),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.DirectionsWalk,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(22.dp),
-                        )
-                    }
-                    Spacer(Modifier.width(SakhiSpacing.space3))
-                    Column {
-                        Text(
-                            text = stringResource(R.string.care_swm_heading_home),
-                            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                            color = sakhiLabel(),
-                        )
-                        Text(
-                            text = stringResource(R.string.care_swm_ask_subtitle, personName),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = sakhiSecondaryLabel(),
-                        )
-                    }
-                }
+    // Laid out on the sheet itself, not in a card on it: the sheet is already a surface, and
+    // a card inside it is a box inside a box (Karan, 2026-09-13).
+    Column(modifier = Modifier.padding(horizontal = SakhiSpacing.space5)) {
+        Column {
+            Column {
+                Text(
+                    text = stringResource(R.string.care_swm_heading_home),
+                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    color = sakhiLabel(),
+                )
+                Text(
+                    text = stringResource(R.string.care_swm_ask_subtitle, personName),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = sakhiSecondaryLabel(),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
 
                 Spacer(Modifier.height(SakhiSpacing.space5))
+                SwmFormLabel(stringResource(R.string.care_swm_how_long))
+                Spacer(Modifier.height(SakhiSpacing.space2))
                 DurationPicker(selected = minutes, onSelect = { minutes = it })
+                Spacer(Modifier.height(SakhiSpacing.space5))
+                SwmFormLabel(stringResource(R.string.care_swm_where_to))
 
-                Spacer(Modifier.height(SakhiSpacing.space3))
+                Spacer(Modifier.height(SakhiSpacing.space2))
                 val picked = destination
                 if (picked != null) {
                     Row(
@@ -288,8 +270,9 @@ internal fun StayWithMeStartSection(
                     }
                 }
 
-                Spacer(Modifier.height(SakhiSpacing.space4))
+                Spacer(Modifier.height(SakhiSpacing.space5))
                 PrimaryButton(
+                    modifier = Modifier.fillMaxWidth(),
                     text = stringResource(R.string.care_swm_ask_button, personName),
                     enabled = !isBusy,
                     onClick = {
@@ -321,9 +304,20 @@ internal fun StayWithMeStartSection(
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
+                Spacer(Modifier.height(SakhiSpacing.space4))
             }
         }
     }
+}
+
+/** The small grey heading over a group in the walk form. */
+@Composable
+private fun SwmFormLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.6.sp),
+        color = sakhiTertiaryLabel(),
+    )
 }
 
 /** Four durations in one track, the selection sliding between them. */

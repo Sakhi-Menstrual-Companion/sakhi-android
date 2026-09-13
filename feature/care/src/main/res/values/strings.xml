@@ -203,7 +203,9 @@
     <string name="care_swm_section">STAY WITH ME</string>
     <string name="care_swm_heading_home">Heading home?</string>
     <string name="care_swm_ask_subtitle">Ask %1$s to stay with you until you reach.</string>
-    <string name="care_swm_where_placeholder">Where to? Search a place</string>
+    <string name="care_swm_how_long">HOW LONG</string>
+    <string name="care_swm_where_to">WHERE TO</string>
+    <string name="care_swm_where_placeholder">Search a place</string>
     <string name="care_swm_ask_button">Ask %1$s to stay</string>
     <string name="care_swm_consent">%1$s sees your location and battery until you mark yourself home.</string>
     <string name="care_swm_minutes">%1$d min</string>
