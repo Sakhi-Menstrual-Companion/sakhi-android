@@ -20,6 +20,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
+import team.sakhi.android.platform.StayWithMeLocationService
+import team.sakhi.session.SessionManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -52,11 +60,35 @@ fun CareModeHomeButton(
     onOpen: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val careStore = koinInject<CareStore>()
     val stayWithMeStore = koinInject<StayWithMeStore>()
+    val sessionManager = koinInject<SessionManager>()
     val careState by careStore.careState.collectAsStateWithLifecycle()
     val mine by stayWithMeStore.mine.collectAsStateWithLifecycle()
     val watching by stayWithMeStore.watching.collectAsStateWithLifecycle()
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    // Home is where she looks first, so it cannot wait for her to open Care Mode to find
+    // out a walk is live. After the app is killed and reopened the store is empty, which
+    // left this button blank and, worse, left her walk sharing nothing until she happened
+    // to open the sheet. Ask while Home is on screen, and pick the sharing back up.
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (true) {
+                sessionManager.current?.userId?.let { userId ->
+                    runCatching { stayWithMeStore.refresh(userId) }
+                    stayWithMeStore.checkLate()
+                    if (stayWithMeStore.mine.value != null &&
+                        StayWithMeLocationService.hasLocationPermission(context)
+                    ) {
+                        StayWithMeLocationService.start(context)
+                    }
+                }
+                delay(HOME_WALK_REFRESH_MS)
+            }
+        }
+    }
 
     val name = when (val state = careState) {
         is CareRuntimeState.OwnerConnected -> state.partnership.partnerName
@@ -108,3 +140,9 @@ fun CareModeHomeButton(
         }
     }
 }
+
+/**
+ * How often Home re-asks whether a walk is live. Half a minute: this is a button, not the
+ * walk screen, and the walk screen polls at ten seconds while it is open.
+ */
+private const val HOME_WALK_REFRESH_MS = 30_000L
