@@ -457,15 +457,15 @@ private fun PartnerDetailContent(
     // top down to a paler pink at the bottom. It never reaches white, because the blocks
     // that sit on it are white: on a white page they would be invisible, and this screen is
     // meant to read as a few separate things rather than one long list.
-    val pageTop = androidx.compose.ui.graphics.lerp(sakhiLightPink(), sakhiSystemBackground(), 0.45f)
-    val pageBottom = androidx.compose.ui.graphics.lerp(sakhiLightPink(), sakhiSystemBackground(), 0.86f)
+    val pageTop = sakhiLightPink()
+    val pageBottom = sakhiSystemBackground()
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
                     0f to pageTop,
-                    0.45f to androidx.compose.ui.graphics.lerp(pageTop, pageBottom, 0.7f),
+                    0.30f to androidx.compose.ui.graphics.lerp(pageTop, pageBottom, 0.72f),
                     1f to pageBottom,
                 ),
             ),
@@ -488,45 +488,31 @@ private fun PartnerDetailContent(
                 // how long it has been. The "since" line is a pill rather than a grey
                 // sentence: it is the one fact under her name and it should read as
                 // something the two of them earned.
-                CareSection(modifier = Modifier.padding(top = SakhiSpacing.space1)) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        // A soft pink wash inside the block, under the picture, fading to the
-                        // white the rest of the card is. The arc and its three lights were
-                        // drawn to sit on something; on flat white they float.
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.verticalGradient(
-                                    0f to sakhiLightPink(),
-                                    0.62f to sakhiSystemBackground(),
-                                    1f to sakhiSystemBackground(),
-                                ),
-                            ),
-                    ) {
-                        CareConnectionArt(
-                            selfAvatarIndex = selfAvatarIndex,
-                            otherAvatarIndex = otherAvatarIndex,
-                        )
-                        Text(
-                            text = if (isPartnerRole) {
-                                stringResource(R.string.care_header_you_are_with, displayLabel)
-                            } else {
-                                stringResource(R.string.care_header_is_with_you, displayLabel)
-                            },
-                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                            color = sakhiLabel(),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = SakhiSpacing.space5),
-                        )
-                        CareSinceChip(
-                            text = stringResource(R.string.care_taking_care_since, dateString),
-                            modifier = Modifier.padding(top = SakhiSpacing.space3),
-                        )
-                        Spacer(modifier = Modifier.height(SakhiSpacing.space6))
-                    }
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    CareConnectionArt(
+                        selfAvatarIndex = selfAvatarIndex,
+                        otherAvatarIndex = otherAvatarIndex,
+                    )
+                    Text(
+                        text = if (isPartnerRole) {
+                            stringResource(R.string.care_header_you_are_with, displayLabel)
+                        } else {
+                            stringResource(R.string.care_header_is_with_you, displayLabel)
+                        },
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        color = sakhiLabel(),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = SakhiSpacing.space6),
+                    )
+                    CareSinceChip(
+                        text = stringResource(R.string.care_taking_care_since, dateString),
+                        modifier = Modifier.padding(top = SakhiSpacing.space3),
+                    )
+                    Spacer(modifier = Modifier.height(SakhiSpacing.space6))
                 }
-                Spacer(modifier = Modifier.height(SakhiSpacing.space4))
             }
 
             // ── The one thing she came here to do ────────────────────────────────

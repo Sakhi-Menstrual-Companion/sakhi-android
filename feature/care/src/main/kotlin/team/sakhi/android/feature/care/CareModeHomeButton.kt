@@ -8,6 +8,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiLightPink
 import androidx.compose.ui.res.painterResource
@@ -133,18 +134,27 @@ fun CareModeHomeButton(
         label = "careButtonBlink",
     )
 
+    // A ring only when there is something to say. The grey hairline it used to wear at rest
+    // made a quiet button look like a disabled one, next to a solid pink log button.
     val ring = when {
         late -> AppleSystemColors.red
         walk != null -> MaterialTheme.colorScheme.primary
-        else -> sakhiSeparator()
+        else -> Color.Transparent
     }
 
     Box(
         modifier = modifier
             .size(46.dp)
-            .background(if (pair != null) sakhiLightPink() else sakhiButtonFill(), CircleShape)
+            .background(
+                if (pair != null) {
+                    androidx.compose.ui.graphics.lerp(sakhiLightPink(), sakhiSystemBackground(), 0.45f)
+                } else {
+                    sakhiButtonFill()
+                },
+                CircleShape,
+            )
             .alpha(if (late) blink else 1f)
-            .border(BorderStroke(if (walk != null) 3.dp else 1.dp, ring), CircleShape)
+            .border(BorderStroke(if (walk != null) 3.dp else 0.dp, ring), CircleShape)
             .clickable(onClick = onOpen)
             .semantics { contentDescription = name ?: "Care Mode" },
         contentAlignment = Alignment.Center,
