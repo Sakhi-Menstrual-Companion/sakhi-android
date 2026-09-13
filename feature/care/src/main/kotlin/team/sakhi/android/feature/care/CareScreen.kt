@@ -161,8 +161,6 @@ fun CareScreen(
     // It used to be four flags, each ANDed with live connection state, so a care refresh that
     // briefly had no partnership popped the page and pushed it back.
     var careScreen by remember { mutableStateOf(CareSubScreen.Root) }
-    /** Her side: the duration, the destination and the ask, raised by the footer button. */
-    var showStartWalk by remember { mutableStateOf(false) }
     var showOwnerInviteFlow by remember(prefillInviteCode) { mutableStateOf(false) }
     var autoLaunchInviteFlow by remember(prefillInviteCode) {
         mutableStateOf(prefillInviteCode.isNullOrBlank())
@@ -428,7 +426,17 @@ fun CareScreen(
                                     stringResource(R.string.care_section_stay_line_owner, personName)
                                 },
                                 stayIdleLabel = stringResource(R.string.care_swm_ask_button, personName),
-                                onStayButton = { showStartWalk = true },
+                                onStayButton = {},
+                                startContent = {
+                                    StayWithMeStartSection(
+                                        personName = personName,
+                                        isBusy = stayWithMe.isBusy,
+                                        error = stayWithMe.error,
+                                        onStart = { minutes, note, destination ->
+                                            stayWithMeViewModel.start(state.partnership.id, minutes, note, destination)
+                                        },
+                                    )
+                                },
                                 mapLocation = walk?.lastLocation ?: here,
                                 mapTrail = if (walk != null) stayWithMe.mineTrail else emptyList(),
                                 mapDestination = walk?.destination,
@@ -531,23 +539,6 @@ fun CareScreen(
 
     // Her side: duration, where to, and the ask, raised by the footer button rather than
     // sitting in the page. The page is about the two of them; this is the doing.
-    if (showStartWalk && ownerConnected != null) {
-        SakhiModalSheet(onDismissRequest = { showStartWalk = false }) {
-            SheetSurface {
-                Column(modifier = Modifier.padding(bottom = SakhiSpacing.space6)) {
-                    StayWithMeStartSection(
-                        personName = careDisplayName(ownerConnected.partnership, isPartnerRole = false),
-                        isBusy = stayWithMe.isBusy,
-                        error = stayWithMe.error,
-                        onStart = { minutes, note, destination ->
-                            stayWithMeViewModel.start(ownerConnected.partnership.id, minutes, note, destination)
-                            showStartWalk = false
-                        },
-                    )
-                }
-            }
-        }
-    }
 }
 
 @Composable
@@ -614,6 +605,8 @@ private fun ConnectedCare(
     mapAvatarWithoutName: Boolean,
     /** The full screen walk, when there is one. Given the way to close back into the card. */
     liveWalk: (@Composable (onClose: () -> Unit) -> Unit)?,
+    /** Her side's start form, shown in the panel over the map. Null on his side. */
+    startContent: (@Composable () -> Unit)? = null,
     onHistory: () -> Unit,
     onManagePermissions: (() -> Unit)?,
     onRemove: () -> Unit,
@@ -655,7 +648,11 @@ private fun ConnectedCare(
                             },
                             line = stayLine,
                             idleLabel = stayIdleLabel,
-                            onButton = onStayButton,
+                            onButton = if (startContent != null && stayState == CareStayState.Idle) {
+                                { expanded = true }
+                            } else {
+                                onStayButton
+                            },
                             onExpand = { expanded = true },
                             mapModifier = sharedMap,
                         ) {
@@ -689,6 +686,7 @@ private fun ConnectedCare(
                             idleLabel = stayIdleLabel,
                             onButton = onStayButton,
                             onClose = { expanded = false },
+                            startContent = startContent.takeIf { stayState != CareStayState.Live },
                         ) {
                             WalkMap(
                                 location = mapLocation,
@@ -716,6 +714,13 @@ private fun CareStayExpandedIdle(
     idleLabel: String,
     onButton: () -> Unit,
     onClose: () -> Unit,
+    /**
+     * Her side's whole form: how long, where to, and the ask. Given here so the map is the
+     * screen and everything there is to do sits in the panel over it, the way a live walk and
+     * Emergency Assistance are built (Karan, 2026-09-13). Null on his side, which has one
+     * button and nothing to fill in.
+     */
+    startContent: (@Composable () -> Unit)? = null,
     map: @Composable () -> Unit,
 ) {
     Box(modifier = Modifier.fillMaxSize().background(sakhiSystemBackground())) {
@@ -727,24 +732,28 @@ private fun CareStayExpandedIdle(
             color = sakhiSystemBackground(),
             shadowElevation = 0.dp,
         ) {
-            Column(modifier = Modifier.navigationBarsPadding().padding(top = SakhiSpacing.space5)) {
-                Text(
-                    text = line,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = sakhiSecondaryLabel(),
-                    modifier = Modifier.padding(horizontal = SakhiSpacing.space5),
-                )
-                CareStayButton(
-                    state = state,
-                    idleLabel = idleLabel,
-                    onClick = onButton,
-                    modifier = Modifier.padding(
-                        start = SakhiSpacing.space4,
-                        end = SakhiSpacing.space4,
-                        top = SakhiSpacing.space4,
-                        bottom = SakhiSpacing.space5,
-                    ),
-                )
+            Column(modifier = Modifier.navigationBarsPadding().padding(top = SakhiSpacing.space3)) {
+                if (startContent != null) {
+                    startContent()
+                } else {
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = sakhiSecondaryLabel(),
+                        modifier = Modifier.padding(horizontal = SakhiSpacing.space5),
+                    )
+                    CareStayButton(
+                        state = state,
+                        idleLabel = idleLabel,
+                        onClick = onButton,
+                        modifier = Modifier.padding(
+                            start = SakhiSpacing.space4,
+                            end = SakhiSpacing.space4,
+                            top = SakhiSpacing.space4,
+                            bottom = SakhiSpacing.space5,
+                        ),
+                    )
+                }
             }
         }
     }
