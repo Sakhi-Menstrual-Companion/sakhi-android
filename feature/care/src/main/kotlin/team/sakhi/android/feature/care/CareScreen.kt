@@ -1,5 +1,9 @@
 package team.sakhi.android.feature.care
 
+import team.sakhi.android.ui.SakhiNavDirection
+import team.sakhi.android.ui.SakhiScreenTransition
+import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.PersonAdd
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -155,6 +159,8 @@ fun CareScreen(
     }
     var showPermissionsEdit by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    /** Leaving (or removing), as its own screen with what changes spelled out. */
+    var showLeave by remember { mutableStateOf(false) }
     var showSheShares by remember { mutableStateOf(false) }
     /** Her side: the duration, the destination and the ask, raised by the footer button. */
     var showStartWalk by remember { mutableStateOf(false) }
@@ -218,10 +224,7 @@ fun CareScreen(
             .filter { it.loggedBy == team.sakhi.models.LogSource.PARTNER }
             .sortedByDescending { it.logDate.toString() }
             .take(6)
-            .map { log ->
-                kotlinx.datetime.LocalDateTime(log.logDate, kotlinx.datetime.LocalTime(12, 0))
-                    .toInstant(kotlinx.datetime.TimeZone.currentSystemDefault()) to log.logDate.toString()
-            }
+            .map { log -> careLoggedDay(log.logDate) }
     }
 
     val shouldAutoShowInviteFlow = autoLaunchInviteFlow &&
@@ -264,193 +267,238 @@ fun CareScreen(
     // iOS presents this as a `.sheet(...).presentationDetents([.large])` with a
     // drag indicator over Home -- SheetSurface gives the same rounded-top +
     // drag-handle look without changing the nav-graph push mechanism itself.
+    // Every screen opened from inside Care pushes in and slides back out, the way Profile's
+    // sub-screens do (Karan, 2026-09-13). They used to swap in with no motion at all, which
+    // read as the sheet changing into something else rather than going one step deeper.
+    val subScreen = when {
+        showInviteFlowRoute -> CareSubScreen.InviteFlow
+        showSheShares && partnerConnected != null -> CareSubScreen.SheShares
+        showLeave && connectedPartnership != null -> CareSubScreen.Leave
+        showHistory && connectedPartnership != null -> CareSubScreen.History
+        showPermissionsEdit && ownerConnected != null -> CareSubScreen.Permissions
+        else -> CareSubScreen.Root
+    }
     SheetSurface {
-        if (showInviteFlowRoute) {
-            OnboardingFlowHost(
-                flowId = "carePartnerInvite",
-                // Modal flow: iOS shows a close button on the root step. Closes the whole
-                // care sheet, matching `requestDismiss(route:)`.
-                onDismiss = onClose,
-                onFlowCompleted = {
-                    showOwnerInviteFlow = false
-                    autoLaunchInviteFlow = false
-                    if (uiState.careState !is CareRuntimeState.OwnerConnected) {
-                        onClose()
-                    }
-                },
-            )
-        } else if (showSheShares && partnerConnected != null) {
-            BackHandler { showSheShares = false }
-            SheSharesContent(
-                partnership = partnerConnected.partnership,
-                herName = careDisplayName(partnerConnected.partnership, isPartnerRole = true),
-                onBack = { showSheShares = false },
-            )
-        } else if (showHistory && connectedPartnership != null) {
-            PartnerHistoryContent(
-                partnership = connectedPartnership,
-                isPartnerRole = partnerConnected != null,
-                onBack = { showHistory = false },
-            )
-        } else if (showPermissionsEdit && ownerConnected != null) {
-            PartnerPermissionsEditContent(
-                partnership = ownerConnected.partnership,
-                isSaving = uiState.isSavingPermissions,
-                onBack = { showPermissionsEdit = false },
-                onSave = { permissions ->
-                    viewModel.updatePermissions(ownerConnected.partnership.id, permissions) { saved ->
-                        if (saved) showPermissionsEdit = false
-                    }
-                },
-            )
-        } else {
-            when (val state = uiState.careState) {
-                CareRuntimeState.Loading -> LoadingContent()
-
-                CareRuntimeState.Disconnected -> InviteCreationContent(
-                    uiState = uiState,
-                    onInviteeNameChanged = viewModel::onInviteeNameChanged,
-                    onPartnerRelationChanged = viewModel::onPartnerRelationChanged,
-                    onCreateInvitation = viewModel::createInvitation,
-                    onAcceptInviteCodeChanged = viewModel::onAcceptInviteCodeChanged,
-                    onAcceptInvitation = {
-                        hapticManager.impact(HapticImpact.MEDIUM)
-                        viewModel.acceptInvitation()
+        SakhiScreenTransition(
+            targetState = subScreen,
+            directionFor = { _, target ->
+                when (target) {
+                    CareSubScreen.Root -> SakhiNavDirection.Backward
+                    CareSubScreen.InviteFlow -> SakhiNavDirection.None
+                    else -> SakhiNavDirection.Forward
+                }
+            },
+            label = "care_sheet_transition",
+            // Care's pages are children of the Care screen, so it stays behind them.
+            parentStaysBehind = true,
+        ) { target ->
+            // Each branch reads its partnership again rather than trusting the check above:
+            // a screen sliding out can still be drawn after the connection it showed is gone.
+            when (target) {
+                CareSubScreen.InviteFlow -> OnboardingFlowHost(
+                    flowId = "carePartnerInvite",
+                    // Modal flow: iOS shows a close button on the root step. Closes the whole
+                    // care sheet, matching `requestDismiss(route:)`.
+                    onDismiss = onClose,
+                    onFlowCompleted = {
+                        showOwnerInviteFlow = false
+                        autoLaunchInviteFlow = false
+                        if (uiState.careState !is CareRuntimeState.OwnerConnected) {
+                            onClose()
+                        }
                     },
                 )
 
-                is CareRuntimeState.PendingInvitation -> PendingInviteContent(
-                    invitation = state.invitation,
-                    isCancelling = uiState.isCancellingInvite,
-                    onCancel = viewModel::cancelInvitation,
-                    onClose = onClose,
-                )
-
-                is CareRuntimeState.OwnerConnected -> {
-                    val walk = stayWithMe.mine
-                    val personName = careDisplayName(state.partnership, isPartnerRole = false)
-                    val moments = remember(walkHistory, loggedDays, personName) {
-                        careMoments(careContext, walkHistory, loggedDays, isPartnerRole = false, otherName = personName)
-                    }
-                    ConnectedCare(
-                        partnership = state.partnership,
-                        isPartnerRole = false,
-                        isRemoving = uiState.isRemovingPartnership,
-                        moments = moments,
-                        selfAvatarIndex = selfAvatarIndex,
-                        otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
-                        serverName = partnerCard?.name,
-                        stayState = when {
-                            walk != null -> CareStayState.Live
-                            stayWithMe.isBusy -> CareStayState.Working
-                            else -> CareStayState.Idle
-                        },
-                        stayLine = if (walk != null) {
-                            stringResource(R.string.care_stay_live_owner, personName)
-                        } else {
-                            stringResource(R.string.care_section_stay_line_owner, personName)
-                        },
-                        stayIdleLabel = stringResource(R.string.care_swm_ask_button, personName),
-                        onStayButton = { showStartWalk = true },
-                        mapLocation = walk?.lastLocation ?: here,
-                        mapTrail = if (walk != null) stayWithMe.mineTrail else emptyList(),
-                        mapDestination = walk?.destination,
-                        mapRoute = if (walk != null) route?.points.orEmpty() else emptyList(),
-                        mapInitial = "",
-                        mapAvatarWithoutName = false,
-                        liveWalk = walk?.let { session ->
-                            { close ->
-                                StayWithMeOwnerLive(
-                                    session = session,
-                                    personName = personName,
-                                    now = stayWithMe.now,
-                                    isBusy = stayWithMe.isBusy,
-                                    trail = stayWithMe.mineTrail,
-                                    places = stayWithMe.places,
-                                    placesLoading = stayWithMe.placesLoading,
-                                    onArrive = stayWithMeViewModel::arrive,
-                                    onExtend = stayWithMeViewModel::extend,
-                                    onStop = stayWithMeViewModel::stop,
-                                    onClose = close,
-                                    onRefresh = stayWithMeViewModel::refreshMyLocation,
-                                    route = route,
-                                    refreshing = refreshing,
-                                    recenterKey = recenterTick,
-                                )
-                            }
-                        },
-                        onHistory = { showHistory = true },
-                        onManagePermissions = { showPermissionsEdit = true },
-                        onRemove = {
-                            hapticManager.impact(HapticImpact.MEDIUM)
-                            viewModel.removePartnership(state.partnership.id)
-                        },
-                        onClose = onClose,
+                CareSubScreen.SheShares -> partnerConnected?.let { connected ->
+                    BackHandler { showSheShares = false }
+                    SheSharesContent(
+                        partnership = connected.partnership,
+                        onBack = { showSheShares = false },
                     )
                 }
 
-                is CareRuntimeState.PartnerConnected -> {
-                    val walk = stayWithMe.watching
-                    val herName = careDisplayName(state.partnership, isPartnerRole = true)
-                    val moments = remember(walkHistory, loggedDays, herName) {
-                        careMoments(careContext, walkHistory, loggedDays, isPartnerRole = true, otherName = herName)
-                    }
-                    val stayState = when {
-                        walk != null -> CareStayState.Live
-                        stayWithMe.isBusy -> CareStayState.Working
-                        askedAt != null -> CareStayState.Waiting
-                        else -> CareStayState.Idle
-                    }
-                    ConnectedCare(
-                        partnership = state.partnership,
-                        isPartnerRole = true,
+                CareSubScreen.Leave -> connectedPartnership?.let { connected ->
+                    BackHandler { showLeave = false }
+                    LeaveConnectionContent(
+                        isPartnerRole = partnerConnected != null,
+                        name = careDisplayName(connected, isPartnerRole = partnerConnected != null),
                         isRemoving = uiState.isRemovingPartnership,
-                        moments = moments,
-                        selfAvatarIndex = selfAvatarIndex,
-                        otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
-                        serverName = partnerCard?.name,
-                        stayState = stayState,
-                        stayLine = when (stayState) {
-                            CareStayState.Live -> stringResource(R.string.care_stay_live_partner)
-                            CareStayState.Waiting -> stringResource(R.string.care_stay_waiting_line)
-                            else -> stringResource(R.string.care_section_stay_line_partner)
+                        onBack = { showLeave = false },
+                        onConfirm = {
+                            hapticManager.impact(HapticImpact.MEDIUM)
+                            viewModel.removePartnership(connected.id)
                         },
-                        stayIdleLabel = stringResource(R.string.care_ask_to_stay_with_her),
-                        onStayButton = { stayWithMeViewModel.askToStay(state.partnership.id) },
-                        // Before she starts, this phone's own position: her person sees a real
-                        // map, never where she is until she chooses to share it.
-                        mapLocation = walk?.lastLocation ?: here,
-                        mapTrail = if (walk != null) stayWithMe.watchingTrail else emptyList(),
-                        mapDestination = walk?.destination,
-                        mapRoute = if (walk != null) route?.points.orEmpty() else emptyList(),
-                        mapInitial = "",
-                        mapAvatarWithoutName = walk != null,
-                        liveWalk = walk?.let { session ->
-                            { close ->
-                                StayWithMeWatcherLive(
-                                    session = session,
-                                    herName = herName,
-                                    now = stayWithMe.now,
-                                    places = stayWithMe.places,
-                                    placesLoading = stayWithMe.placesLoading,
-                                    trail = stayWithMe.watchingTrail,
-                                    onClose = close,
-                                    onRefresh = stayWithMeViewModel::refreshWalk,
-                                    route = route,
-                                    refreshing = refreshing,
-                                    recenterKey = recenterTick,
-                                )
+                    )
+                }
+
+                CareSubScreen.History -> connectedPartnership?.let { connected ->
+                    BackHandler { showHistory = false }
+                    PartnerHistoryContent(
+                        partnership = connected,
+                        isPartnerRole = partnerConnected != null,
+                        walks = walkHistory,
+                        onBack = { showHistory = false },
+                    )
+                }
+
+                CareSubScreen.Permissions -> ownerConnected?.let { owner ->
+                    BackHandler { showPermissionsEdit = false }
+                    PartnerPermissionsEditContent(
+                        partnership = owner.partnership,
+                        isSaving = uiState.isSavingPermissions,
+                        onBack = { showPermissionsEdit = false },
+                        onSave = { permissions ->
+                            viewModel.updatePermissions(owner.partnership.id, permissions) { saved ->
+                                if (saved) showPermissionsEdit = false
                             }
                         },
-                        onHistory = { showHistory = true },
-                        // His side reads what she shares; only she can change it.
-                        onManagePermissions = { showSheShares = true },
-                        onRemove = {
-                            hapticManager.impact(HapticImpact.MEDIUM)
-                            viewModel.removePartnership(state.partnership.id)
-                        },
-                        onClose = onClose,
                     )
+                }
+
+                CareSubScreen.Root -> {
+                    when (val state = uiState.careState) {
+                        CareRuntimeState.Loading -> LoadingContent()
+
+                        CareRuntimeState.Disconnected -> InviteCreationContent(
+                            uiState = uiState,
+                            onInviteeNameChanged = viewModel::onInviteeNameChanged,
+                            onPartnerRelationChanged = viewModel::onPartnerRelationChanged,
+                            onCreateInvitation = viewModel::createInvitation,
+                            onAcceptInviteCodeChanged = viewModel::onAcceptInviteCodeChanged,
+                            onAcceptInvitation = {
+                                hapticManager.impact(HapticImpact.MEDIUM)
+                                viewModel.acceptInvitation()
+                            },
+                        )
+
+                        is CareRuntimeState.PendingInvitation -> PendingInviteContent(
+                            invitation = state.invitation,
+                            isCancelling = uiState.isCancellingInvite,
+                            onCancel = viewModel::cancelInvitation,
+                            onClose = onClose,
+                        )
+
+                        is CareRuntimeState.OwnerConnected -> {
+                            val walk = stayWithMe.mine
+                            val personName = careDisplayName(state.partnership, isPartnerRole = false)
+                            val moments = remember(walkHistory, loggedDays, personName) {
+                                careMoments(careContext, walkHistory, loggedDays, isPartnerRole = false, otherName = personName)
+                            }
+                            ConnectedCare(
+                                partnership = state.partnership,
+                                isPartnerRole = false,
+                                isRemoving = uiState.isRemovingPartnership,
+                                moments = moments,
+                                selfAvatarIndex = selfAvatarIndex,
+                                otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
+                                serverName = partnerCard?.name,
+                                stayState = when {
+                                    walk != null -> CareStayState.Live
+                                    stayWithMe.isBusy -> CareStayState.Working
+                                    else -> CareStayState.Idle
+                                },
+                                stayLine = if (walk != null) {
+                                    stringResource(R.string.care_stay_live_owner, personName)
+                                } else {
+                                    stringResource(R.string.care_section_stay_line_owner, personName)
+                                },
+                                stayIdleLabel = stringResource(R.string.care_swm_ask_button, personName),
+                                onStayButton = { showStartWalk = true },
+                                mapLocation = walk?.lastLocation ?: here,
+                                mapTrail = if (walk != null) stayWithMe.mineTrail else emptyList(),
+                                mapDestination = walk?.destination,
+                                mapRoute = if (walk != null) route?.points.orEmpty() else emptyList(),
+                                mapInitial = "",
+                                mapAvatarWithoutName = false,
+                                liveWalk = walk?.let { session ->
+                                    { close ->
+                                        StayWithMeOwnerLive(
+                                            session = session,
+                                            personName = personName,
+                                            now = stayWithMe.now,
+                                            isBusy = stayWithMe.isBusy,
+                                            trail = stayWithMe.mineTrail,
+                                            places = stayWithMe.places,
+                                            placesLoading = stayWithMe.placesLoading,
+                                            onArrive = stayWithMeViewModel::arrive,
+                                            onExtend = stayWithMeViewModel::extend,
+                                            onStop = stayWithMeViewModel::stop,
+                                            onClose = close,
+                                            onRefresh = stayWithMeViewModel::refreshMyLocation,
+                                            route = route,
+                                            refreshing = refreshing,
+                                            recenterKey = recenterTick,
+                                        )
+                                    }
+                                },
+                                onHistory = { showHistory = true },
+                                onManagePermissions = { showPermissionsEdit = true },
+                                onRemove = { showLeave = true },
+                                onClose = onClose,
+                            )
+                        }
+
+                        is CareRuntimeState.PartnerConnected -> {
+                            val walk = stayWithMe.watching
+                            val herName = careDisplayName(state.partnership, isPartnerRole = true)
+                            val moments = remember(walkHistory, loggedDays, herName) {
+                                careMoments(careContext, walkHistory, loggedDays, isPartnerRole = true, otherName = herName)
+                            }
+                            val stayState = when {
+                                walk != null -> CareStayState.Live
+                                stayWithMe.isBusy -> CareStayState.Working
+                                askedAt != null -> CareStayState.Waiting
+                                else -> CareStayState.Idle
+                            }
+                            ConnectedCare(
+                                partnership = state.partnership,
+                                isPartnerRole = true,
+                                isRemoving = uiState.isRemovingPartnership,
+                                moments = moments,
+                                selfAvatarIndex = selfAvatarIndex,
+                                otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
+                                serverName = partnerCard?.name,
+                                stayState = stayState,
+                                stayLine = when (stayState) {
+                                    CareStayState.Live -> stringResource(R.string.care_stay_live_partner)
+                                    CareStayState.Waiting -> stringResource(R.string.care_stay_waiting_line)
+                                    else -> stringResource(R.string.care_section_stay_line_partner)
+                                },
+                                stayIdleLabel = stringResource(R.string.care_ask_to_stay_with_her),
+                                onStayButton = { stayWithMeViewModel.askToStay(state.partnership.id) },
+                                // Before she starts, this phone's own position: her person sees a real
+                                // map, never where she is until she chooses to share it.
+                                mapLocation = walk?.lastLocation ?: here,
+                                mapTrail = if (walk != null) stayWithMe.watchingTrail else emptyList(),
+                                mapDestination = walk?.destination,
+                                mapRoute = if (walk != null) route?.points.orEmpty() else emptyList(),
+                                mapInitial = "",
+                                mapAvatarWithoutName = walk != null,
+                                liveWalk = walk?.let { session ->
+                                    { close ->
+                                        StayWithMeWatcherLive(
+                                            session = session,
+                                            herName = herName,
+                                            now = stayWithMe.now,
+                                            places = stayWithMe.places,
+                                            placesLoading = stayWithMe.placesLoading,
+                                            trail = stayWithMe.watchingTrail,
+                                            onClose = close,
+                                            onRefresh = stayWithMeViewModel::refreshWalk,
+                                            route = route,
+                                            refreshing = refreshing,
+                                            recenterKey = recenterTick,
+                                        )
+                                    }
+                                },
+                                onHistory = { showHistory = true },
+                                // His side reads what she shares; only she can change it.
+                                onManagePermissions = { showSheShares = true },
+                                onRemove = { showLeave = true },
+                                onClose = onClose,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -499,6 +547,9 @@ internal fun careDisplayName(partnership: CarePartnership, isPartnerRole: Boolea
     return resolved
         ?: if (isPartnerRole) stringResource(R.string.care_swm_she_fallback) else stringResource(R.string.care_swm_fallback_person)
 }
+
+/** The pages the Care sheet can show, for the push and slide between them. */
+private enum class CareSubScreen { Root, InviteFlow, SheShares, Leave, History, Permissions }
 
 // ── Connected: PartnerDetailView parity ────────────────────────────────────
 
@@ -572,7 +623,11 @@ private fun ConnectedCare(
                     stayCard = {
                         CareStayCard(
                             state = stayState,
-                            title = stringResource(R.string.care_section_stay_with_me),
+                            title = if (isPartnerRole) {
+                                stringResource(R.string.care_section_stay_with_her)
+                            } else {
+                                stringResource(R.string.care_section_stay_with_me)
+                            },
                             line = stayLine,
                             idleLabel = stayIdleLabel,
                             onButton = onStayButton,
@@ -645,7 +700,7 @@ private fun CareStayExpandedIdle(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
             shape = RoundedCornerShape(topStart = SakhiRadius.xl, topEnd = SakhiRadius.xl),
             color = sakhiSystemBackground(),
-            shadowElevation = 8.dp,
+            shadowElevation = 0.dp,
         ) {
             Column(modifier = Modifier.navigationBarsPadding().padding(top = SakhiSpacing.space5)) {
                 Text(
@@ -692,7 +747,6 @@ private fun PartnerDetailContent(
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
-    var showConfirmRemove by remember { mutableStateOf(false) }
 
     val resolvedName = (serverName ?: partnership.partnerName).takeIf { name ->
         name.isNotEmpty() &&
@@ -808,11 +862,10 @@ private fun PartnerDetailContent(
                         } else {
                             stringResource(R.string.care_section_moments_owner, displayLabel)
                         },
-                        actionText = if (moments.isNotEmpty()) stringResource(R.string.care_moments_see_all) else null,
-                        onAction = if (moments.isNotEmpty()) onHistory else null,
                     )
                     CareMoments(
-                        moments = moments.take(4),
+                        moments = moments,
+                        onShowAll = onHistory,
                         emptyText = if (isPartnerRole) {
                             stringResource(R.string.care_moments_empty_partner)
                         } else {
@@ -860,7 +913,7 @@ private fun PartnerDetailContent(
                             stringResource(R.string.care_remove_name, displayLabel)
                         },
                         subtitle = stringResource(R.string.care_remove_sub),
-                        onClick = { showConfirmRemove = true },
+                        onClick = onRemove,
                     )
                     Spacer(modifier = Modifier.height(SakhiSpacing.space2))
                 }
@@ -872,36 +925,6 @@ private fun PartnerDetailContent(
         }
     }
 
-    if (showConfirmRemove) {
-        // iOS uses `.sakhiAlert(type: .destructive, ... secondaryButton: .cancel())` here,
-        // not a system alert. A raw Material3 AlertDialog shares none of the app's styling
-        // and it is the last thing she sees before a partnership is deleted.
-        SakhiAlertSheet(
-            kind = SakhiAlertKind.Destructive,
-            title = if (isPartnerRole) {
-                stringResource(R.string.care_leave_her_title)
-            } else {
-                stringResource(R.string.care_remove_name_title, displayLabel)
-            },
-            message = if (isPartnerRole) {
-                stringResource(R.string.care_leave_her_body)
-            } else {
-                stringResource(R.string.care_remove_name_body, displayLabel)
-            },
-            primaryLabel = if (isPartnerRole) {
-                stringResource(R.string.care_confirm_leave_her)
-            } else {
-                stringResource(R.string.care_confirm_remove)
-            },
-            onPrimaryClick = {
-                showConfirmRemove = false
-                onRemove()
-            },
-            secondaryLabel = stringResource(R.string.care_cancel),
-            onSecondaryClick = { showConfirmRemove = false },
-            onDismissRequest = { showConfirmRemove = false },
-        )
-    }
 }
 
 @Composable
@@ -1662,7 +1685,6 @@ private fun PermissionToggleRow(title: String, checked: Boolean, onCheckedChange
 @Composable
 private fun SheSharesContent(
     partnership: CarePartnership,
-    herName: String,
     onBack: () -> Unit,
 ) {
     val p = partnership.enhancedPermissions ?: ParentChildPermissions()
@@ -1702,7 +1724,7 @@ private fun SheSharesContent(
                     style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
                 )
                 Text(
-                    text = stringResource(R.string.care_she_shares_subtitle, herName),
+                    text = stringResource(R.string.care_she_shares_subtitle),
                     style = MaterialTheme.typography.bodyMedium,
                     color = sakhiSecondaryLabel(),
                     modifier = Modifier.padding(top = SakhiSpacing.space2),
@@ -1789,242 +1811,236 @@ private fun SharedStateCard(rows: List<Pair<String, Boolean>>) {
 private fun PartnerHistoryContent(
     partnership: CarePartnership,
     isPartnerRole: Boolean,
+    /** The walks this connection has done, from the Stay With Me store. */
+    walks: List<team.sakhi.staywithme.StayWithMeWalkRecord>,
     onBack: () -> Unit,
     periodLogRepository: team.sakhi.repositories.PeriodLogRepository = org.koin.compose.koinInject(),
 ) {
+    // Everything this person did for her, as one timeline: every walk they stayed for and
+    // every day they logged, newest first. The card on the connection screen shows three of
+    // these and opens this with "Show all"; it is drawn with the card's own timeline so the
+    // two read as the same thing at two lengths.
     val context = LocalContext.current
     var logs by remember { mutableStateOf<List<team.sakhi.models.PeriodLog>>(emptyList()) }
     var isLoaded by remember { mutableStateOf(false) }
-    var loadError by remember { mutableStateOf<String?>(null) }
-    val fallbackLabel = if (isPartnerRole) {
-        stringResource(R.string.care_fallback_someone_you_care_for)
-    } else {
-        stringResource(R.string.care_fallback_your_sakhi)
-    }
+    val name = careDisplayName(partnership, isPartnerRole)
     val connectedDate = formatConnectedSince(partnershipStartDate(partnership), context)
 
-    androidx.compose.runtime.LaunchedEffect(partnership.userId) {
-        logs = emptyList()
-        loadError = null
-        isLoaded = false
-        periodLogRepository.getAll(partnership.userId)
-            .onSuccess { all ->
-                logs = all
-                    .filter { it.loggedBy == team.sakhi.models.LogSource.PARTNER }
-                    .sortedByDescending { it.logDate.toString() }
-            }
-            .onFailure { throwable ->
-                loadError = throwable.toSafeUserMessage(context, R.string.care_error_load_activity_right_now)
-            }
+    LaunchedEffect(partnership.userId) {
+        periodLogRepository.getAll(partnership.userId).onSuccess { all ->
+            logs = all
+                .filter { it.loggedBy == team.sakhi.models.LogSource.PARTNER }
+                .sortedByDescending { it.logDate.toString() }
+        }
         isLoaded = true
     }
+    val moments = remember(walks, logs, name, isPartnerRole) {
+        careMoments(context, walks, logs.map { careLoggedDay(it.logDate) }, isPartnerRole, name)
+    }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        // Was a hand-rolled Row of BackButton + Text, which is exactly the drift
-        // SakhiNavBar exists to stop: its button size and paddings did not match any
-        // other sheet header in the app.
-        SakhiNavBar(onBack = onBack, title = stringResource(R.string.care_title_activity))
-        SakhiListDivider()
-
-        if (!isLoaded) {
+    val pageTop = sakhiLightPink()
+    val pageBottom = androidx.compose.ui.graphics.lerp(sakhiLightPink(), sakhiSystemBackground(), 0.82f)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    0f to pageTop,
+                    0.30f to androidx.compose.ui.graphics.lerp(pageTop, pageBottom, 0.72f),
+                    1f to pageBottom,
+                ),
+            ),
+    ) {
+        SakhiNavBar(onBack = onBack)
+        if (!isLoaded && walks.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
             }
-            return
+            return@Column
         }
-
-        if (loadError != null) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    // The sheet runs to the bottom of the screen, so without this the
-                    // last row sits under the gesture bar.
-                    .navigationBarsPadding()
-                    .padding(SakhiSpacing.space6),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
-            ) {
-                Icon(
-                    Icons.Filled.History,
-                    contentDescription = null,
-                    tint = sakhiSecondaryLabel(),
-                    modifier = Modifier.size(32.dp),
-                )
-                Text(
-                    text = stringResource(R.string.care_error_couldnt_load_activity),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    text = loadError.orEmpty(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = sakhiSecondaryLabel(),
-                    modifier = Modifier.padding(top = SakhiSpacing.space2),
-                )
-            }
-            return
-        }
-
-        if (logs.isEmpty()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .navigationBarsPadding()
-                    .padding(SakhiSpacing.space6),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Spacer(modifier = Modifier.weight(1f))
-                Icon(
-                    Icons.Filled.History,
-                    contentDescription = null,
-                    tint = sakhiSecondaryLabel(),
-                    modifier = Modifier.size(32.dp),
-                )
-                Text(
-                    text = stringResource(R.string.care_empty_no_activity_yet),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = sakhiSecondaryLabel(),
-                )
-                Text(
-                    // The partner is the one doing the logging here, so the owner's
-                    // sentence ("<name> logs something for you") read backwards to them.
-                    text = if (isPartnerRole) {
-                        stringResource(R.string.care_empty_when_you_log_for_her)
-                    } else {
-                        stringResource(
-                            R.string.care_empty_when_name_logs,
-                            partnership.partnerName.ifBlank { fallbackLabel },
-                        )
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = sakhiSecondaryLabel(),
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                ConnectionBadge(connectedDate = connectedDate)
-            }
-            return
-        }
-
-        // The only genuinely unbounded list in the app: every period log a care partner has
-        // ever made. It used to build every row up front inside one Surface, so opening the
-        // screen cost one composition per log however many there were.
-        //
-        // Each row is its own lazy item now. They still read as ONE rounded card because each
-        // row draws the card background itself and only the first and last round their
-        // corners, which is what `historyRowShape` is for.
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(SakhiSpacing.space5),
+            modifier = Modifier.fillMaxSize().navigationBarsPadding(),
+            contentPadding = PaddingValues(top = SakhiSpacing.space2, bottom = SakhiSpacing.space10),
             flingBehavior = rememberSakhiFlingBehavior(),
         ) {
-            item(key = "recent-activity-header") {
-                SectionHeader(text = stringResource(R.string.care_section_recent_activity))
+            // A large title under the back button, as every page opened from Care has.
+            item(key = "title") {
+                Text(
+                    text = if (isPartnerRole) {
+                        stringResource(R.string.care_section_moments_partner)
+                    } else {
+                        stringResource(R.string.care_section_moments_owner, name)
+                    },
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                    color = sakhiLabel(),
+                    modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
+                )
             }
-
-            itemsIndexed(
-                items = logs,
-                // Logs carry no stable id of their own here, so the date plus position is the
-                // closest thing to one. Never a bare index: a new log arriving at the top
-                // would renumber every row and defeat the point of having keys.
-                key = { index, log -> "log-${log.logDate}-$index" },
-                contentType = { _, _ -> "log-row" },
-            ) { index, log ->
-                Surface(
-                    color = sakhiSystemBackground(),
-                    shape = historyRowShape(index = index, lastIndex = logs.lastIndex),
-                    tonalElevation = SakhiSpacing.space1,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .semantics(mergeDescendants = true) {}
-                                .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-                        ) {
-                            Icon(
-                                imageVector = if (log.periodPresent) Icons.Filled.WaterDrop else Icons.Filled.Opacity,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.width(28.dp),
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = if (log.periodPresent) {
-                                        stringResource(R.string.care_period_logged)
-                                    } else {
-                                        stringResource(R.string.care_period_cleared)
-                                    },
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                                )
-                                Text(
-                                    text = formatConnectedSince(log.logDate, context),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = sakhiSecondaryLabel(),
-                                )
-                            }
-                            Text(
-                                text = stringResource(
-                                    R.string.care_by_name,
-                                    partnership.partnerName.ifBlank { fallbackLabel },
-                                ),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = sakhiSecondaryLabel(),
-                            )
-                        }
-                        if (index != logs.lastIndex) SakhiListDivider(startInset = SakhiSpacing.space10)
-                    }
+            // On the page, not in a card: this page is only this list, and a card inside it
+            // just boxes it in (Karan, 2026-09-13).
+            item(key = "timeline") {
+                Column(modifier = Modifier.padding(horizontal = SakhiSpacing.space1)) {
+                    Spacer(modifier = Modifier.height(SakhiSpacing.space2))
+                    CareMoments(
+                        moments = moments,
+                        emptyText = if (isPartnerRole) {
+                            stringResource(R.string.care_moments_empty_partner)
+                        } else {
+                            stringResource(R.string.care_moments_empty_owner, name)
+                        },
+                        dayLabel = { momentDayLabel(it, context) },
+                        limit = null,
+                    )
+                    Spacer(modifier = Modifier.height(SakhiSpacing.space3))
                 }
             }
-
-            item(key = "connection-section") {
-                Column {
-                    SectionHeader(
-                        text = stringResource(R.string.care_section_connection),
-                        modifier = Modifier.padding(top = SakhiSpacing.space6),
-                    )
-                    Surface(
-                        color = sakhiSystemBackground(),
-                        shape = RoundedCornerShape(SakhiRadius.xxl),
-                        tonalElevation = SakhiSpacing.space1,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .semantics(mergeDescendants = true) {}
-                                .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Favorite,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.width(28.dp),
-                            )
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = stringResource(
-                                        R.string.care_connected_with_name,
-                                        partnership.partnerName.ifBlank { fallbackLabel },
-                                    ),
-                                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                                Text(
-                                    text = connectedDate,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = sakhiSecondaryLabel(),
-                                )
-                            }
-                        }
-                    }
+            item(key = "since") {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(top = SakhiSpacing.space6),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    ConnectionBadge(connectedDate = connectedDate)
                 }
             }
         }
+    }
+}
+
+/**
+ * Leaving (her person) or removing (her), as its own screen rather than an alert: what
+ * actually changes, said plainly, and the choice in the footer. An alert gave one line to
+ * the most consequential thing on the Care screen.
+ */
+@Composable
+private fun LeaveConnectionContent(
+    isPartnerRole: Boolean,
+    name: String,
+    isRemoving: Boolean,
+    onBack: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    val pageTop = sakhiLightPink()
+    val pageBottom = androidx.compose.ui.graphics.lerp(sakhiLightPink(), sakhiSystemBackground(), 0.82f)
+    val points = if (isPartnerRole) {
+        listOf(
+            Icons.Filled.VisibilityOff to stringResource(R.string.care_leave_point_see_partner),
+            Icons.AutoMirrored.Filled.DirectionsWalk to stringResource(R.string.care_leave_point_walk_partner),
+            Icons.Filled.History to stringResource(R.string.care_leave_point_history_partner),
+            Icons.Filled.PersonAdd to stringResource(R.string.care_leave_point_again_partner),
+        )
+    } else {
+        listOf(
+            Icons.Filled.VisibilityOff to stringResource(R.string.care_leave_point_see_owner, name),
+            Icons.AutoMirrored.Filled.DirectionsWalk to stringResource(R.string.care_leave_point_walk_owner, name),
+            Icons.Filled.History to stringResource(R.string.care_leave_point_history_owner, name),
+            Icons.Filled.PersonAdd to stringResource(R.string.care_leave_point_again_owner),
+        )
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    0f to pageTop,
+                    0.30f to androidx.compose.ui.graphics.lerp(pageTop, pageBottom, 0.72f),
+                    1f to pageBottom,
+                ),
+            ),
+    ) {
+        SakhiNavBar(onBack = onBack)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(androidx.compose.foundation.rememberScrollState()),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier
+                    .padding(top = SakhiSpacing.space4)
+                    .size(72.dp)
+                    .background(sakhiSystemBackground(), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.HeartBroken,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(32.dp),
+                )
+            }
+            Text(
+                text = if (isPartnerRole) {
+                    stringResource(R.string.care_leave_title_partner)
+                } else {
+                    stringResource(R.string.care_leave_title_owner, name)
+                },
+                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                color = sakhiLabel(),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(start = SakhiSpacing.space6, end = SakhiSpacing.space6, top = SakhiSpacing.space5),
+            )
+            Text(
+                text = if (isPartnerRole) {
+                    stringResource(R.string.care_leave_sub_partner)
+                } else {
+                    stringResource(R.string.care_leave_sub_owner)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(start = SakhiSpacing.space6, end = SakhiSpacing.space6, top = SakhiSpacing.space2),
+            )
+            Spacer(modifier = Modifier.height(SakhiSpacing.space6))
+            // On the page, not in a card: this screen is only this list.
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space1)) {
+                points.forEachIndexed { index, (icon, text) ->
+                    if (index > 0) SakhiListDivider(startInset = SakhiSpacing.space5 + 34.dp + SakhiSpacing.space3)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
+                    ) {
+                        Box(
+                            modifier = Modifier.size(34.dp).background(sakhiLightPink(), CircleShape),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(17.dp),
+                            )
+                        }
+                        Text(
+                            text = text,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = sakhiLabel(),
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(SakhiSpacing.space8))
+        }
+        // The choice, where every Sakhi screen keeps its one action: leaving on the button,
+        // and staying as the way out beside it.
+        SakhiFooter(
+            primaryLabel = if (isPartnerRole) {
+                stringResource(R.string.care_leave_cta_partner)
+            } else {
+                stringResource(R.string.care_leave_cta_owner, name)
+            },
+            onPrimaryClick = onConfirm,
+            primaryEnabled = !isRemoving,
+            secondaryLabel = if (isPartnerRole) {
+                stringResource(R.string.care_leave_keep_partner)
+            } else {
+                stringResource(R.string.care_leave_keep_owner, name)
+            },
+            onSecondaryClick = onBack,
+        )
     }
 }
 

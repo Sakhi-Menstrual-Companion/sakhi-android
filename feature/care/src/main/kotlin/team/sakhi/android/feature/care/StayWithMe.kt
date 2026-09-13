@@ -699,7 +699,7 @@ internal fun LiveWalkTopBar(onClose: () -> Unit, modifier: Modifier = Modifier) 
         Surface(
             shape = CircleShape,
             color = sakhiSystemBackground(),
-            shadowElevation = 2.dp,
+            shadowElevation = 0.dp,
             modifier = Modifier.size(35.dp),
         ) {
             IconButton(onClick = onClose, modifier = Modifier.size(35.dp)) {
@@ -717,7 +717,7 @@ internal fun LiveWalkTopBar(onClose: () -> Unit, modifier: Modifier = Modifier) 
         Surface(
             shape = CircleShape,
             color = sakhiSystemBackground(),
-            shadowElevation = 2.dp,
+            shadowElevation = 0.dp,
             modifier = Modifier.height(38.dp),
         ) {
             Row(

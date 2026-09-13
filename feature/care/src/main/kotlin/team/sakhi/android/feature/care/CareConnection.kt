@@ -1,5 +1,12 @@
 package team.sakhi.android.feature.care
 
+import kotlinx.datetime.toInstant
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.Canvas
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.clip
@@ -189,12 +196,22 @@ internal fun careMoments(
 }
 
 /**
- * The list itself: rows on the page, a hairline between them, and no card around any of it.
- * Cards inside cards inside a sheet is what this screen looked like before, and it read as
- * boxes rather than as one quiet page.
+ * What happened between them, as a timeline: a thin rail down the left with a dot for each
+ * moment, and the words beside it. Nothing here opens anything, so nothing looks like a
+ * button: the icon discs and chevrons the rows used to wear made every one of them read as
+ * a link.
+ *
+ * The card shows the newest [limit]; a quiet "Show all" under a hairline opens every one of
+ * them as their own screen ([onShowAll]). That screen passes no limit.
  */
 @Composable
-internal fun CareMoments(moments: List<CareMoment>, emptyText: String, dayLabel: (Instant) -> String) {
+internal fun CareMoments(
+    moments: List<CareMoment>,
+    emptyText: String,
+    dayLabel: (Instant) -> String,
+    limit: Int? = MOMENTS_ON_CARD,
+    onShowAll: (() -> Unit)? = null,
+) {
     if (moments.isEmpty()) {
         Text(
             text = emptyText,
@@ -204,45 +221,98 @@ internal fun CareMoments(moments: List<CareMoment>, emptyText: String, dayLabel:
         )
         return
     }
+    val shown = limit?.let { moments.take(it) } ?: moments
     Column(modifier = Modifier.fillMaxWidth()) {
-        moments.forEachIndexed { index, moment ->
-            if (index > 0) SakhiListDivider(startInset = SakhiSpacing.space5 + 34.dp + SakhiSpacing.space3)
+        shown.forEachIndexed { index, moment ->
+            TimelineRow(
+                moment = moment,
+                time = dayLabel(moment.at),
+                isFirst = index == 0,
+                isLast = index == shown.lastIndex,
+            )
+        }
+        if (onShowAll != null && limit != null && moments.size > limit) {
+            SakhiListDivider(modifier = Modifier.padding(top = SakhiSpacing.space2))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
+                    .clickable(onClick = onShowAll)
+                    .padding(vertical = SakhiSpacing.space4),
+                horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier.size(34.dp).background(sakhiLightPink(), CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = moment.icon,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(17.dp),
-                    )
-                }
-                Spacer(Modifier.width(SakhiSpacing.space3))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = moment.title,
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                        color = sakhiLabel(),
-                    )
-                    Text(
-                        text = moment.detail,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = sakhiSecondaryLabel(),
-                    )
-                }
                 Text(
-                    text = dayLabel(moment.at),
+                    text = androidx.compose.ui.res.stringResource(R.string.care_moments_show_all),
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.width(2.dp))
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
+/** How many moments the card shows before "Show all". */
+private const val MOMENTS_ON_CARD = 3
+
+/** A day her person logged for her, as a moment: noon that day, and "12 Sep". */
+internal fun careLoggedDay(date: kotlinx.datetime.LocalDate): Pair<Instant, String> {
+    val at = kotlinx.datetime.LocalDateTime(date, kotlinx.datetime.LocalTime(12, 0))
+        .toInstant(TimeZone.currentSystemDefault())
+    val label = java.time.LocalDate.of(date.year, date.monthNumber, date.dayOfMonth)
+        .format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))
+    return at to label
+}
+
+/** One moment on the rail: the dot, and beside it what happened, how, and when. */
+@Composable
+private fun TimelineRow(moment: CareMoment, time: String, isFirst: Boolean, isLast: Boolean) {
+    val pink = MaterialTheme.colorScheme.primary
+    val rail = pink.copy(alpha = 0.18f)
+    val collar = sakhiSystemBackground()
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(androidx.compose.foundation.layout.IntrinsicSize.Min)
+            .padding(horizontal = SakhiSpacing.space5),
+    ) {
+        Canvas(modifier = Modifier.width(14.dp).fillMaxHeight()) {
+            val x = size.width / 2
+            val dotY = 19.dp.toPx()
+            val stroke = 2.dp.toPx()
+            if (!isFirst) drawLine(rail, Offset(x, 0f), Offset(x, dotY), strokeWidth = stroke)
+            if (!isLast) drawLine(rail, Offset(x, dotY), Offset(x, size.height), strokeWidth = stroke)
+            drawCircle(collar, radius = 6.5.dp.toPx(), center = Offset(x, dotY))
+            drawCircle(pink, radius = 4.5.dp.toPx(), center = Offset(x, dotY))
+        }
+        Spacer(Modifier.width(SakhiSpacing.space3))
+        Column(modifier = Modifier.weight(1f).padding(vertical = 10.dp)) {
+            Row(verticalAlignment = Alignment.Top) {
+                Text(
+                    text = moment.title,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    color = sakhiLabel(),
+                    modifier = Modifier.weight(1f),
+                )
+                Spacer(Modifier.width(SakhiSpacing.space2))
+                Text(
+                    text = time,
                     style = MaterialTheme.typography.bodySmall,
                     color = sakhiSecondaryLabel(),
                 )
             }
+            Text(
+                text = moment.detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = sakhiSecondaryLabel(),
+                modifier = Modifier.padding(top = 2.dp),
+            )
         }
     }
 }
@@ -327,20 +397,12 @@ internal fun CareSection(
     modifier: Modifier = Modifier,
     content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
 ) {
-    // No outline. A soft, pink-tinted shadow lifts the block off the page instead: a stroke
-    // round every card drew a box around each section, which is exactly the boxed-in look
-    // this screen is trying to get away from.
-    val lift = MaterialTheme.colorScheme.primary
+    // No outline and no shadow. Sakhi draws no shadows anywhere (Karan, 2026-09-13), and a
+    // stroke round every card boxed each section in. White on the pale pink page is the edge.
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space5)
-            .shadow(
-                elevation = 10.dp,
-                shape = RoundedCornerShape(SakhiRadius.xl),
-                ambientColor = lift.copy(alpha = 0.06f),
-                spotColor = lift.copy(alpha = 0.10f),
-            ),
+            .padding(horizontal = SakhiSpacing.space5),
         shape = RoundedCornerShape(SakhiRadius.xl),
         color = sakhiSystemBackground(),
     ) {
@@ -369,10 +431,8 @@ internal fun CareSectionTitle(
     ) {
         Text(
             text = text,
-            style = MaterialTheme.typography.labelLarge.copy(
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 0.6.sp,
-            ),
+            // Sentence case, not capitals (Karan, 2026-09-13), so no wide caps tracking.
+            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
             color = sakhiSecondaryLabel(),
             modifier = Modifier.weight(1f),
         )
@@ -469,7 +529,7 @@ internal fun CareStayCard(
             Surface(
                 shape = CircleShape,
                 color = sakhiSystemBackground(),
-                shadowElevation = 2.dp,
+                shadowElevation = 0.dp,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(10.dp)

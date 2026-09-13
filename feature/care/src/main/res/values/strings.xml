@@ -9,16 +9,17 @@
     <string name="care_subtitle_you_are_her_sakhi">You are her Sakhi.</string>
     <!-- Header and avatar fallback when she has not set a name. -->
     <string name="care_fallback_someone_you_care_for">Someone You Care For</string>
-    <string name="care_section_details">DETAILS</string>
+    <string name="care_section_details">Details</string>
     <string name="care_label_days_of_care">Days of care</string>
     <string name="care_label_connected_since">Connected since</string>
     <string name="care_connected_since_date_format">d MMM, yyyy</string>
     <string name="care_taking_care_since">Taking care since %1$s</string>
     <string name="care_header_is_with_you">%1$s is with you</string>
     <string name="care_header_you_are_with">You are with her</string>
-    <string name="care_section_moments_owner">WHAT %1$s DID FOR YOU</string>
-    <string name="care_section_moments_partner">WHAT YOU DID FOR HER</string>
+    <string name="care_section_moments_owner">What %1$s did for you</string>
+    <string name="care_section_moments_partner">What you did for her</string>
     <string name="care_moments_see_all">See all</string>
+    <string name="care_moments_show_all">Show all</string>
     <string name="care_moments_empty_owner">When %1$s stays with you on your way home, or logs a day for you, it shows up here.</string>
     <string name="care_moments_empty_partner">When you stay with her on her way home, or log a day for her, it shows up here.</string>
     <string name="care_moment_walk_owner">Stayed with you until you were home</string>
@@ -38,7 +39,9 @@
     <string name="care_moment_log_partner">You logged a day for her</string>
     <string name="care_moment_log_for">For %1$s</string>
     <string name="care_ask_to_stay_with_her">Ask to stay with her</string>
-    <string name="care_section_stay_with_me">STAY WITH ME</string>
+    <!-- His side names the feature for what he does: he stays with her. -->
+    <string name="care_section_stay_with_her">Stay with her</string>
+    <string name="care_section_stay_with_me">Stay With Me</string>
     <string name="care_section_stay_line_owner">Tell %1$s where you are going. They see your way home until you reach.</string>
     <string name="care_section_stay_line_partner">She will get a gentle ask. Nothing is shared until she says yes.</string>
     <string name="care_stay_waiting_line">Asked. The moment she starts, her way home shows here.</string>
@@ -50,6 +53,25 @@
     <string name="care_stay_expand">Open the map full screen</string>
     <string name="care_ask_sent">Asked. She decides whether to start.</string>
     <string name="care_ask_failed">Could not ask just now. Try again.</string>
+    <!-- Leaving, as its own screen: what actually changes, said plainly, before the button.
+         Only what is certain: access ends, Stay With Me ends, walk history stops showing
+         (migration 061 reads it only for an active connection), and a new invite is needed. -->
+    <string name="care_leave_title_partner">Leave her?</string>
+    <string name="care_leave_title_owner">Remove %1$s?</string>
+    <string name="care_leave_sub_partner">She trusted you with something personal. This is what changes if you leave.</string>
+    <string name="care_leave_sub_owner">This is what changes, for both of you.</string>
+    <string name="care_leave_point_see_partner">You stop seeing her cycle, and anything else she shares with you.</string>
+    <string name="care_leave_point_see_owner">%1$s stops seeing your period dates and phase.</string>
+    <string name="care_leave_point_walk_partner">She can no longer ask you to stay with her on her way home, and you will not be told if she does not reach.</string>
+    <string name="care_leave_point_walk_owner">%1$s can no longer stay with you on your way home, or be told if you do not reach.</string>
+    <string name="care_leave_point_history_partner">The walks you stayed with her for stop showing, for both of you.</string>
+    <string name="care_leave_point_history_owner">The walks %1$s stayed with you for stop showing, for both of you.</string>
+    <string name="care_leave_point_again_partner">To connect again, she has to invite you with a new code.</string>
+    <string name="care_leave_point_again_owner">You can invite someone again whenever you like.</string>
+    <string name="care_leave_cta_partner">Leave her</string>
+    <string name="care_leave_cta_owner">Remove %1$s</string>
+    <string name="care_leave_keep_partner">Stay with her</string>
+    <string name="care_leave_keep_owner">Keep %1$s</string>
     <string name="care_remove_sub">Ends what they can see, for both of you</string>
     <string name="care_link_what_can_see">What %1$s can see</string>
     <string name="care_link_what_can_see_sub">Your period dates and phase</string>
@@ -57,7 +79,7 @@
     <string name="care_link_she_shares_sub">She chooses this, and can change it any time</string>
     <string name="care_moment_today">Today</string>
     <string name="care_moment_yesterday">Yesterday</string>
-    <string name="care_section_actions">ACTIONS</string>
+    <string name="care_section_actions">Actions</string>
     <string name="care_action_history">History</string>
     <string name="care_action_manage_permissions">Manage Permissions</string>
     <string name="care_today">Today</string>
@@ -117,10 +139,10 @@
     <string name="care_accept_invite">Accept invite</string>
     <string name="care_permissions_title">Share only what\nfeels right</string>
     <string name="care_permissions_subtitle">You\'re always in control. Change this any time.</string>
-    <string name="care_section_what_they_can_do">WHAT THEY CAN DO</string>
+    <string name="care_section_what_they_can_do">What they can do</string>
     <string name="care_permission_log_periods">Log Periods</string>
     <string name="care_permission_generate_reports">Generate &amp; Export Reports</string>
-    <string name="care_section_what_they_can_see">WHAT THEY CAN SEE</string>
+    <string name="care_section_what_they_can_see">What they can see</string>
     <string name="care_permission_period_dates">Period Dates</string>
     <string name="care_permission_cycle_history">Cycle History</string>
     <string name="care_permission_cycle_predictions">Cycle Predictions</string>
@@ -144,8 +166,8 @@
     <!-- Partner side: the activity list is what the partner logged FOR her, so the
          owner sentence above reads backwards to them. -->
     <string name="care_empty_when_you_log_for_her">When you log something for her, it will show up here.</string>
-    <string name="care_section_recent_activity">RECENT ACTIVITY</string>
-    <string name="care_section_connection">CONNECTION</string>
+    <string name="care_section_recent_activity">Recent activity</string>
+    <string name="care_section_connection">Connection</string>
     <string name="care_period_logged">Period logged</string>
     <string name="care_period_cleared">Period cleared</string>
     <string name="care_by_name">by %1$s</string>
@@ -232,7 +254,7 @@
     <string name="care_swm_refresh_hers">Get her newest location</string>
     <!-- His read-only page behind "What she shares with you" (2026-09-13). -->
     <string name="care_she_shares_title">What she shares with you</string>
-    <string name="care_she_shares_subtitle">%1$s chooses what you can see and do. Only she can change it, from her own phone.</string>
+    <string name="care_she_shares_subtitle">She chooses what you can see and do. Only she can change it, from her own phone.</string>
     <string name="care_she_shares_section_do">What you can do</string>
     <string name="care_she_shares_section_see">What you can see</string>
     <string name="care_she_shares_on">Shared</string>
