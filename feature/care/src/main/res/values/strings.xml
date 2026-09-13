@@ -38,6 +38,9 @@
     <string name="care_moment_log_partner">You logged a day for her</string>
     <string name="care_moment_log_for">For %1$s</string>
     <string name="care_ask_to_stay_with_her">Ask to stay with her</string>
+    <string name="care_section_stay_with_me">STAY WITH ME</string>
+    <string name="care_section_stay_line_owner">Tell %1$s where you are going. They see your way home until you reach.</string>
+    <string name="care_section_stay_line_partner">She will get a gentle ask. Nothing is shared until she says yes.</string>
     <string name="care_ask_sent">Asked. She decides whether to start.</string>
     <string name="care_ask_failed">Could not ask just now. Try again.</string>
     <string name="care_remove_sub">Ends what they can see, for both of you</string>

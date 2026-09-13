@@ -453,17 +453,20 @@ private fun PartnerDetailContent(
         else -> pluralStringResource(R.plurals.care_days_plural, daysOfCare, daysOfCare)
     }
 
-    // One surface for the whole screen: the soft pink of the picture at the top easing into
-    // the page below it. Everything sits on this, with hairlines between rows, instead of a
-    // stack of white cards.
+    // One pink surface for the whole screen, from the soft pink behind the picture at the
+    // top down to a paler pink at the bottom. It never reaches white, because the blocks
+    // that sit on it are white: on a white page they would be invisible, and this screen is
+    // meant to read as a few separate things rather than one long list.
+    val pageTop = androidx.compose.ui.graphics.lerp(sakhiLightPink(), sakhiSystemBackground(), 0.45f)
+    val pageBottom = androidx.compose.ui.graphics.lerp(sakhiLightPink(), sakhiSystemBackground(), 0.86f)
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    0f to sakhiLightPink(),
-                    0.32f to sakhiSystemBackground(),
-                    1f to sakhiSystemBackground(),
+                    0f to pageTop,
+                    0.45f to androidx.compose.ui.graphics.lerp(pageTop, pageBottom, 0.7f),
+                    1f to pageBottom,
                 ),
             ),
     ) {
@@ -481,21 +484,30 @@ private fun PartnerDetailContent(
             flingBehavior = rememberSakhiFlingBehavior(),
         ) {
             item(key = "care-detail-header") {
-                // The page opens with the picture itself, edge to edge. It used to sit in a
-                // card, inside a sheet, above more cards, which read as a stack of boxes.
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CareConnectionArt(
-                        selfAvatarIndex = selfAvatarIndex,
-                        otherAvatarIndex = otherAvatarIndex,
-                    )
+                // The page opens with the picture itself, edge to edge, then who this is and
+                // how long it has been. The "since" line is a pill rather than a grey
+                // sentence: it is the one fact under her name and it should read as
+                // something the two of them earned.
+                CareSection(modifier = Modifier.padding(top = SakhiSpacing.space1)) {
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(
-                            start = SakhiSpacing.space6,
-                            end = SakhiSpacing.space6,
-                            bottom = SakhiSpacing.space6,
-                        ),
+                        // A soft pink wash inside the block, under the picture, fading to the
+                        // white the rest of the card is. The arc and its three lights were
+                        // drawn to sit on something; on flat white they float.
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    0f to sakhiLightPink(),
+                                    0.62f to sakhiSystemBackground(),
+                                    1f to sakhiSystemBackground(),
+                                ),
+                            ),
                     ) {
+                        CareConnectionArt(
+                            selfAvatarIndex = selfAvatarIndex,
+                            otherAvatarIndex = otherAvatarIndex,
+                        )
                         Text(
                             text = if (isPartnerRole) {
                                 stringResource(R.string.care_header_you_are_with, displayLabel)
@@ -505,57 +517,91 @@ private fun PartnerDetailContent(
                             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
                             color = sakhiLabel(),
                             textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = SakhiSpacing.space5),
                         )
-                        Text(
+                        CareSinceChip(
                             text = stringResource(R.string.care_taking_care_since, dateString),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = sakhiSecondaryLabel(),
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(top = SakhiSpacing.space1),
+                            modifier = Modifier.padding(top = SakhiSpacing.space3),
                         )
+                        Spacer(modifier = Modifier.height(SakhiSpacing.space6))
                     }
                 }
+                Spacer(modifier = Modifier.height(SakhiSpacing.space4))
             }
 
-            item(key = "care-moments-label") {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = SakhiSpacing.space6, end = SakhiSpacing.space6, top = SakhiSpacing.space2),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    SectionHeader(
+            // ── The one thing she came here to do ────────────────────────────────
+            //
+            // First, and with the drawn map above it, because everything else on this
+            // screen is something to read. Before this the action was a bare pink bar
+            // pinned to the bottom with nothing around it, and there was no picture of
+            // what it would do.
+            item(key = "care-stay-with-me") {
+                CareSection {
+                    CareSectionTitle(text = stringResource(R.string.care_section_stay_with_me))
+                    CareWalkPreview(
+                        modifier = Modifier.padding(horizontal = SakhiSpacing.space5),
+                    )
+                    Text(
+                        text = if (isPartnerRole) {
+                            stringResource(R.string.care_section_stay_line_partner)
+                        } else {
+                            stringResource(R.string.care_section_stay_line_owner, displayLabel)
+                        },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = sakhiSecondaryLabel(),
+                        modifier = Modifier.padding(
+                            start = SakhiSpacing.space5,
+                            end = SakhiSpacing.space5,
+                            top = SakhiSpacing.space3,
+                        ),
+                    )
+                    PrimaryButton(
+                        text = primaryLabel,
+                        onClick = onPrimary,
+                        enabled = primaryEnabled && !isRemoving,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = SakhiSpacing.space4,
+                                end = SakhiSpacing.space4,
+                                top = SakhiSpacing.space4,
+                                bottom = SakhiSpacing.space5,
+                            ),
+                    )
+                }
+                Spacer(modifier = Modifier.height(SakhiSpacing.space4))
+            }
+
+            // ── What actually happened between them ──────────────────────────────
+            item(key = "care-moments") {
+                CareSection {
+                    CareSectionTitle(
                         text = if (isPartnerRole) {
                             stringResource(R.string.care_section_moments_partner, displayLabel)
                         } else {
                             stringResource(R.string.care_section_moments_owner, displayLabel)
                         },
-                        modifier = Modifier.weight(1f),
+                        actionText = if (moments.isNotEmpty()) stringResource(R.string.care_moments_see_all) else null,
+                        onAction = if (moments.isNotEmpty()) onHistory else null,
                     )
-                    if (moments.isNotEmpty()) {
-                        Text(
-                            text = stringResource(R.string.care_moments_see_all),
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.clickable(onClick = onHistory),
-                        )
-                    }
+                    CareMoments(
+                        moments = moments.take(4),
+                        emptyText = if (isPartnerRole) {
+                            stringResource(R.string.care_moments_empty_partner)
+                        } else {
+                            stringResource(R.string.care_moments_empty_owner, displayLabel)
+                        },
+                        dayLabel = { momentDayLabel(it, context) },
+                    )
+                    Spacer(modifier = Modifier.height(SakhiSpacing.space2))
                 }
-            }
-            item(key = "care-moments") {
-                CareMoments(
-                    moments = moments.take(4),
-                    emptyText = if (isPartnerRole) {
-                        stringResource(R.string.care_moments_empty_partner)
-                    } else {
-                        stringResource(R.string.care_moments_empty_owner, displayLabel)
-                    },
-                    dayLabel = { momentDayLabel(it, context) },
-                )
+                Spacer(modifier = Modifier.height(SakhiSpacing.space4))
             }
 
-            item(key = "care-detail-6") {
-                Column(modifier = Modifier.padding(top = SakhiSpacing.space6)) {
+            // ── The connection itself ────────────────────────────────────────────
+            item(key = "care-connection-links") {
+                CareSection {
+                    CareSectionTitle(text = stringResource(R.string.care_section_connection))
                     // What the other person can see comes first: on her side because it is
                     // hers to change, on his because it is the promise she was made.
                     CareLinkRow(
@@ -572,14 +618,14 @@ private fun PartnerDetailContent(
                         },
                         onClick = if (!isPartnerRole) onManagePermissions else null,
                     )
-                    SakhiListDivider(startInset = SakhiSpacing.space6 + 34.dp + SakhiSpacing.space3)
+                    SakhiListDivider(startInset = SakhiSpacing.space5 + 34.dp + SakhiSpacing.space3)
                     CareLinkRow(
                         icon = Icons.Filled.History,
                         title = stringResource(R.string.care_action_history),
                         subtitle = null,
                         onClick = onHistory,
                     )
-                    SakhiListDivider(startInset = SakhiSpacing.space6 + 34.dp + SakhiSpacing.space3)
+                    SakhiListDivider(startInset = SakhiSpacing.space5 + 34.dp + SakhiSpacing.space3)
                     // Ending the connection lives here, at the end of what there is to read,
                     // rather than as a button under everything: it is the rarest thing on
                     // this screen and the least like the others.
@@ -593,23 +639,14 @@ private fun PartnerDetailContent(
                         subtitle = stringResource(R.string.care_remove_sub),
                         onClick = { showConfirmRemove = true },
                     )
+                    Spacer(modifier = Modifier.height(SakhiSpacing.space2))
                 }
             }
 
-            item(key = "care-detail-7") {
-                Spacer(modifier = Modifier.height(SakhiSpacing.space16))
+            item(key = "care-detail-tail") {
+                Spacer(modifier = Modifier.height(SakhiSpacing.space12))
             }
         }
-
-        // The one action, where every other Sakhi screen keeps its one action. Ending the
-        // connection used to sit here, which gave the quietest thing on the screen the
-        // loudest place on it.
-        SakhiFooter(
-            primaryLabel = primaryLabel,
-            onPrimaryClick = onPrimary,
-            primaryEnabled = primaryEnabled && !isRemoving,
-            showSecondarySlot = false,
-        )
     }
 
     if (showConfirmRemove) {

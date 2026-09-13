@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -194,17 +195,17 @@ internal fun CareMoments(moments: List<CareMoment>, emptyText: String, dayLabel:
             text = emptyText,
             style = MaterialTheme.typography.bodyMedium,
             color = sakhiSecondaryLabel(),
-            modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
+            modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
         )
         return
     }
     Column(modifier = Modifier.fillMaxWidth()) {
         moments.forEachIndexed { index, moment ->
-            if (index > 0) SakhiListDivider(startInset = SakhiSpacing.space6 + 34.dp + SakhiSpacing.space3)
+            if (index > 0) SakhiListDivider(startInset = SakhiSpacing.space5 + 34.dp + SakhiSpacing.space3)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
+                    .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(
@@ -253,7 +254,7 @@ internal fun CareLinkRow(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
+            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
@@ -305,5 +306,193 @@ internal fun momentDayLabel(at: Instant, context: android.content.Context): Stri
             .format(java.time.format.DateTimeFormatter.ofPattern("EEE"))
         else -> java.time.LocalDate.of(day.year, day.monthNumber, day.dayOfMonth)
             .format(java.time.format.DateTimeFormatter.ofPattern("d MMM"))
+    }
+}
+
+/**
+ * One white block on the pink page.
+ *
+ * The screen reads as a few separate things she can act on -- what this person did, the
+ * walk she can start, what they can see -- rather than one long list. Each of them sits on
+ * its own white card so the eye can find where one ends and the next begins, which is what
+ * every checkout and order screen she already uses does.
+ */
+@Composable
+internal fun CareSection(
+    modifier: Modifier = Modifier,
+    content: @Composable androidx.compose.foundation.layout.ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = SakhiSpacing.space5),
+        shape = RoundedCornerShape(SakhiRadius.xl),
+        color = sakhiSystemBackground(),
+        shadowElevation = 0.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, sakhiLightPink()),
+    ) {
+        Column(modifier = Modifier.fillMaxWidth(), content = content)
+    }
+}
+
+/** The small line at the top of a card: a name for the block, and an optional action. */
+@Composable
+internal fun CareSectionTitle(
+    text: String,
+    modifier: Modifier = Modifier,
+    actionText: String? = null,
+    onAction: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(
+                start = SakhiSpacing.space5,
+                end = SakhiSpacing.space5,
+                top = SakhiSpacing.space5,
+                bottom = SakhiSpacing.space2,
+            ),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge.copy(
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 0.6.sp,
+            ),
+            color = sakhiSecondaryLabel(),
+            modifier = Modifier.weight(1f),
+        )
+        if (actionText != null && onAction != null) {
+            Text(
+                text = actionText,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.clickable(onClick = onAction),
+            )
+        }
+    }
+}
+
+/**
+ * "Taking care since 12 Sep, 2025", as a small pill rather than a grey sentence.
+ *
+ * It is the one fact under her name, and a line of secondary text under a bold heading
+ * reads as a caption nobody looks at. In a pill it reads as a badge the two of them earned.
+ *
+ * Quiet on purpose: a pink pill under a heading, on a pink page, beside a pink button, was
+ * a third pink thing competing with the one the screen wants her to press.
+ */
+@Composable
+internal fun CareSinceChip(text: String, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .background(sakhiGroupedBackground(), RoundedCornerShape(SakhiRadius.full))
+            .padding(horizontal = SakhiSpacing.space3, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Favorite,
+            contentDescription = null,
+            tint = sakhiSecondaryLabel(),
+            modifier = Modifier.size(13.dp),
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+            color = sakhiSecondaryLabel(),
+        )
+    }
+}
+
+/**
+ * The picture on the Stay With Me card: a drawn map, not a real one.
+ *
+ * There is nothing true to plot here -- she is not walking yet, and that is the whole point
+ * of the card -- so this is a few blocks, two roads and a dotted way to a pin. It says what
+ * the button does before she presses it. The moment a walk starts, the real map takes the
+ * whole screen (`StayWithMeLiveLayer`), and none of this is on it.
+ *
+ * Drawn rather than loaded so it costs no map tile, no key and no network.
+ */
+@Composable
+internal fun CareWalkPreview(modifier: Modifier = Modifier) {
+    val pink = MaterialTheme.colorScheme.primary
+    // The roads are the white, the blocks are the pink. The other way round, which is how
+    // this was drawn first, gave white boxes on a pale pink ground and the roads between
+    // them vanished -- it read as a grid, not as a place.
+    val paper = androidx.compose.ui.graphics.lerp(sakhiLightPink(), Color.White, 0.5f)
+    val block = androidx.compose.ui.graphics.lerp(sakhiLightPink(), pink, 0.12f)
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(132.dp)
+            .clip(RoundedCornerShape(SakhiRadius.lg))
+            .background(paper),
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val w = size.width
+            val h = size.height
+
+            // Blocks: the shapes between the roads, kept pale so the route stays the
+            // brightest thing in the picture.
+            listOf(
+                Offset(0.04f, 0.08f) to Size(0.30f, 0.34f),
+                Offset(0.40f, 0.04f) to Size(0.24f, 0.26f),
+                Offset(0.72f, 0.12f) to Size(0.24f, 0.30f),
+                Offset(0.06f, 0.58f) to Size(0.26f, 0.32f),
+                Offset(0.42f, 0.56f) to Size(0.30f, 0.34f),
+                Offset(0.80f, 0.60f) to Size(0.16f, 0.30f),
+            ).forEach { (at, box) ->
+                drawRoundRect(
+                    color = block,
+                    topLeft = Offset(at.x * w, at.y * h),
+                    size = Size(box.width * w, box.height * h),
+                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()),
+                )
+            }
+
+            // Two roads, one across and one down, left as the paper showing through.
+
+            // Her way: a dotted line from where she stands to where she is going.
+            val dots = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
+                floatArrayOf(7.dp.toPx(), 7.dp.toPx()),
+            )
+            val path = androidx.compose.ui.graphics.Path().apply {
+                moveTo(w * 0.16f, h * 0.80f)
+                lineTo(w * 0.16f, h * 0.50f)
+                lineTo(w * 0.68f, h * 0.50f)
+                lineTo(w * 0.68f, h * 0.24f)
+                lineTo(w * 0.86f, h * 0.24f)
+            }
+            drawPath(
+                path = path,
+                color = pink,
+                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, pathEffect = dots),
+            )
+
+            // Where she stands now.
+            drawCircle(Color.White, radius = 9.dp.toPx(), center = Offset(w * 0.16f, h * 0.80f))
+            drawCircle(pink, radius = 5.dp.toPx(), center = Offset(w * 0.16f, h * 0.80f))
+        }
+
+        // Where she is going. A real glyph rather than a drawn pin, so it reads as the same
+        // marker the live map uses.
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(end = 8.dp, top = 6.dp)
+                .size(30.dp)
+                .background(MaterialTheme.colorScheme.primary, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Home,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(16.dp),
+            )
+        }
     }
 }

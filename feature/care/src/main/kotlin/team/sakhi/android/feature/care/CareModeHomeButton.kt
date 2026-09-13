@@ -8,6 +8,16 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import team.sakhi.android.designsystem.sakhiSystemBackground
+import team.sakhi.android.designsystem.sakhiLightPink
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -96,6 +106,21 @@ fun CareModeHomeButton(
         else -> null
     }?.trim()?.takeIf { it.isNotEmpty() && !it.equals("unknown", ignoreCase = true) }
 
+    // The two of them, not one initial. A single letter in a circle is an account badge, and
+    // this button is not an account: it is the one person who is looking out for her. Both
+    // faces are the same five stand-ins the connection screen and Emergency use, picked by
+    // the same hash of the user id, so a person's face is the same wherever she sees it.
+    val partnership = when (val state = careState) {
+        is CareRuntimeState.OwnerConnected -> state.partnership
+        is CareRuntimeState.PartnerConnected -> state.partnership
+        else -> null
+    }
+    val selfUserId = sessionManager.current?.userId
+    val pair = partnership?.let { p ->
+        val otherId = if (p.userId == selfUserId) p.partnerId else p.userId
+        CareAvatars.indexFor(selfUserId.orEmpty()) to CareAvatars.indexFor(otherId)
+    }
+
     val walk = mine ?: watching
     val phase = walk?.phase(stayWithMeStore.now())
     val late = phase == StayWithMePhase.LATE || phase == StayWithMePhase.GRACE
@@ -117,21 +142,27 @@ fun CareModeHomeButton(
     Box(
         modifier = modifier
             .size(46.dp)
-            .background(sakhiButtonFill(), CircleShape)
+            .background(if (pair != null) sakhiLightPink() else sakhiButtonFill(), CircleShape)
             .alpha(if (late) blink else 1f)
             .border(BorderStroke(if (walk != null) 3.dp else 1.dp, ring), CircleShape)
             .clickable(onClick = onOpen)
             .semantics { contentDescription = name ?: "Care Mode" },
         contentAlignment = Alignment.Center,
     ) {
-        if (name != null) {
-            Text(
+        when {
+            pair != null -> Row(
+                horizontalArrangement = Arrangement.spacedBy((-8).dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                HomeButtonFace(avatarIndex = pair.first)
+                HomeButtonFace(avatarIndex = pair.second)
+            }
+            name != null -> Text(
                 text = name.take(1).uppercase(),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.primary,
             )
-        } else {
-            Icon(
+            else -> Icon(
                 imageVector = Icons.Filled.PersonAddAlt,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
@@ -146,3 +177,23 @@ fun CareModeHomeButton(
  * walk screen, and the walk screen polls at ten seconds while it is open.
  */
 private const val HOME_WALK_REFRESH_MS = 30_000L
+
+/** One small face inside the 46dp button: 22dp, with a thin collar so the two separate. */
+@Composable
+private fun HomeButtonFace(avatarIndex: Int) {
+    Box(
+        modifier = Modifier
+            .size(22.dp)
+            .background(sakhiSystemBackground(), CircleShape)
+            .padding(1.5.dp)
+            .background(sakhiLightPink(), CircleShape)
+            .clip(CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Image(
+            painter = painterResource(CareAvatars.drawable(avatarIndex)),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize().scale(CareAvatars.scale(avatarIndex)),
+        )
+    }
+}
