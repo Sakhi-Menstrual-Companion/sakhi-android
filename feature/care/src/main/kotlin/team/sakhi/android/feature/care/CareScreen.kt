@@ -44,7 +44,9 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.HeartBroken
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Opacity
@@ -153,6 +155,7 @@ fun CareScreen(
     }
     var showPermissionsEdit by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    var showSheShares by remember { mutableStateOf(false) }
     /** Her side: the duration, the destination and the ask, raised by the footer button. */
     var showStartWalk by remember { mutableStateOf(false) }
     var showOwnerInviteFlow by remember(prefillInviteCode) { mutableStateOf(false) }
@@ -183,6 +186,8 @@ fun CareScreen(
     val askResult by stayWithMeViewModel.askResult.collectAsStateWithLifecycle()
     val askedAt by stayWithMeViewModel.askedAt.collectAsStateWithLifecycle()
     val route by stayWithMeViewModel.route.collectAsStateWithLifecycle()
+    val refreshing by stayWithMeViewModel.refreshing.collectAsStateWithLifecycle()
+    val recenterTick by stayWithMeViewModel.recenterTick.collectAsStateWithLifecycle()
     // Where this phone is, for the card's map before any walk. Read once, from the last fix
     // the system already has, so opening the screen never switches the GPS on.
     var here by remember { mutableStateOf<team.sakhi.staywithme.StayWithMeLocation?>(null) }
@@ -205,7 +210,7 @@ fun CareScreen(
     val partnerCard by stayWithMeViewModel.partnerCard.collectAsStateWithLifecycle()
     val sessionManager = koinInject<team.sakhi.session.SessionManager>()
     val selfAvatarIndex = remember(sessionManager.current?.userId) {
-        CareAvatars.indexFor(sessionManager.current?.userId.orEmpty())
+        CareAvatars.selfIndex(careContext, sessionManager.current?.userId.orEmpty())
     }
     LaunchedEffect(connectedPartnership?.userId) {
         val userId = connectedPartnership?.userId ?: return@LaunchedEffect
@@ -273,6 +278,13 @@ fun CareScreen(
                         onClose()
                     }
                 },
+            )
+        } else if (showSheShares && partnerConnected != null) {
+            BackHandler { showSheShares = false }
+            SheSharesContent(
+                partnership = partnerConnected.partnership,
+                herName = careDisplayName(partnerConnected.partnership, isPartnerRole = true),
+                onBack = { showSheShares = false },
             )
         } else if (showHistory && connectedPartnership != null) {
             PartnerHistoryContent(
@@ -362,6 +374,8 @@ fun CareScreen(
                                     onClose = close,
                                     onRefresh = stayWithMeViewModel::refreshMyLocation,
                                     route = route,
+                                    refreshing = refreshing,
+                                    recenterKey = recenterTick,
                                 )
                             }
                         },
@@ -409,7 +423,7 @@ fun CareScreen(
                         mapTrail = if (walk != null) stayWithMe.watchingTrail else emptyList(),
                         mapDestination = walk?.destination,
                         mapRoute = if (walk != null) route?.points.orEmpty() else emptyList(),
-                        mapInitial = if (walk != null) walkInitials(herName) ?: "" else "",
+                        mapInitial = "",
                         mapAvatarWithoutName = walk != null,
                         liveWalk = walk?.let { session ->
                             { close ->
@@ -423,11 +437,14 @@ fun CareScreen(
                                     onClose = close,
                                     onRefresh = stayWithMeViewModel::refreshWalk,
                                     route = route,
+                                    refreshing = refreshing,
+                                    recenterKey = recenterTick,
                                 )
                             }
                         },
                         onHistory = { showHistory = true },
-                        onManagePermissions = null,
+                        // His side reads what she shares; only she can change it.
+                        onManagePermissions = { showSheShares = true },
                         onRemove = {
                             hapticManager.impact(HapticImpact.MEDIUM)
                             viewModel.removePartnership(state.partnership.id)
@@ -756,7 +773,7 @@ private fun PartnerDetailContent(
                     )
                     Text(
                         text = if (isPartnerRole) {
-                            stringResource(R.string.care_header_you_are_with, displayLabel)
+                            stringResource(R.string.care_header_you_are_with)
                         } else {
                             stringResource(R.string.care_header_is_with_you, displayLabel)
                         },
@@ -787,7 +804,7 @@ private fun PartnerDetailContent(
                 CareSection {
                     CareSectionTitle(
                         text = if (isPartnerRole) {
-                            stringResource(R.string.care_section_moments_partner, displayLabel)
+                            stringResource(R.string.care_section_moments_partner)
                         } else {
                             stringResource(R.string.care_section_moments_owner, displayLabel)
                         },
@@ -826,15 +843,11 @@ private fun PartnerDetailContent(
                         } else {
                             stringResource(R.string.care_link_what_can_see_sub)
                         },
-                        onClick = if (!isPartnerRole) onManagePermissions else null,
+                        // Both sides open it: hers to edit, his to read (Karan, 2026-09-13).
+                        onClick = onManagePermissions,
                     )
-                    SakhiListDivider(startInset = SakhiSpacing.space5 + 34.dp + SakhiSpacing.space3)
-                    CareLinkRow(
-                        icon = Icons.Filled.History,
-                        title = stringResource(R.string.care_action_history),
-                        subtitle = null,
-                        onClick = onHistory,
-                    )
+                    // No separate History row: "See all" on the moments above opens the same
+                    // page, and a second door to it read as clutter (Karan, 2026-09-13).
                     SakhiListDivider(startInset = SakhiSpacing.space5 + 34.dp + SakhiSpacing.space3)
                     // Ending the connection lives here, at the end of what there is to read,
                     // rather than as a button under everything: it is the rarest thing on
@@ -1638,6 +1651,130 @@ private fun PermissionToggleRow(title: String, checked: Boolean, onCheckedChange
             modifier = Modifier.weight(1f),
         )
         SakhiSwitch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/**
+ * His read-only view of what she shares with him: the same list she edits on her side, each
+ * row marked shared or not. Only she can change it, and the page says so, so nothing here
+ * reads as something he could ask the app to unlock.
+ */
+@Composable
+private fun SheSharesContent(
+    partnership: CarePartnership,
+    herName: String,
+    onBack: () -> Unit,
+) {
+    val p = partnership.enhancedPermissions ?: ParentChildPermissions()
+    val canDo = listOf(
+        stringResource(R.string.care_permission_log_periods) to p.canLogPeriods,
+        stringResource(R.string.care_permission_generate_reports) to p.canGenerateReports,
+    )
+    val canSee = listOf(
+        stringResource(R.string.care_permission_period_dates) to p.canViewPeriodDates,
+        stringResource(R.string.care_permission_cycle_history) to p.canViewCycleHistory,
+        stringResource(R.string.care_permission_cycle_predictions) to p.canViewPredictions,
+        stringResource(R.string.care_permission_symptoms) to p.canViewSymptoms,
+        stringResource(R.string.care_permission_moods) to p.canViewMoods,
+        stringResource(R.string.care_permission_daily_health_logs) to p.canViewDailyLogs,
+        stringResource(R.string.care_permission_ovulation_tests) to p.canViewOvulationTests,
+        stringResource(R.string.care_permission_medications) to p.canViewMedications,
+        stringResource(R.string.care_permission_body_temperature) to p.canViewTemperature,
+        stringResource(R.string.care_permission_weight_body) to p.canViewWeight,
+        stringResource(R.string.care_permission_discharge) to p.canViewDischarge,
+        stringResource(R.string.care_permission_personal_notes) to p.canViewNotes,
+    )
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        SakhiNavBar(onBack = onBack)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior()),
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space5),
+            ) {
+                Text(
+                    text = stringResource(R.string.care_she_shares_title),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
+                )
+                Text(
+                    text = stringResource(R.string.care_she_shares_subtitle, herName),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = sakhiSecondaryLabel(),
+                    modifier = Modifier.padding(top = SakhiSpacing.space2),
+                )
+            }
+
+            SectionHeader(text = stringResource(R.string.care_she_shares_section_do))
+            SharedStateCard(rows = canDo)
+
+            SectionHeader(
+                text = stringResource(R.string.care_she_shares_section_see),
+                modifier = Modifier.padding(top = SakhiSpacing.space6),
+            )
+            SharedStateCard(rows = canSee)
+
+            Text(
+                text = stringResource(R.string.care_permission_sexual_activity_private),
+                style = MaterialTheme.typography.bodySmall,
+                color = sakhiSecondaryLabel(),
+                modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
+            )
+            Spacer(modifier = Modifier.height(SakhiSpacing.space16))
+        }
+    }
+}
+
+@Composable
+private fun SharedStateCard(rows: List<Pair<String, Boolean>>) {
+    Surface(
+        color = sakhiSystemBackground(),
+        shape = RoundedCornerShape(SakhiRadius.xxl),
+        tonalElevation = SakhiSpacing.space1,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space6),
+    ) {
+        Column {
+            rows.forEachIndexed { index, (title, shared) ->
+                val stateLabel = stringResource(
+                    if (shared) R.string.care_she_shares_on else R.string.care_she_shares_off,
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .semantics(mergeDescendants = true) {}
+                        .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = if (shared) MaterialTheme.colorScheme.onSurface else sakhiSecondaryLabel(),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = if (shared) Icons.Filled.CheckCircle else Icons.Filled.Lock,
+                            contentDescription = null,
+                            tint = if (shared) MaterialTheme.colorScheme.primary else sakhiSecondaryLabel(),
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Text(
+                            text = stateLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (shared) MaterialTheme.colorScheme.primary else sakhiSecondaryLabel(),
+                        )
+                    }
+                }
+                if (index != rows.lastIndex) SakhiListDivider(startInset = SakhiSpacing.space5)
+            }
+        }
     }
 }
 

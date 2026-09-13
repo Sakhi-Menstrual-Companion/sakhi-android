@@ -40,6 +40,8 @@ fun StayWithMeLiveLayer(
     val care by careViewModel.uiState.collectAsStateWithLifecycle()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val route by viewModel.route.collectAsStateWithLifecycle()
+    val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
+    val recenterTick by viewModel.recenterTick.collectAsStateWithLifecycle()
 
     // While this is on screen: re-read the walk, tell her screen her person is looking,
     // and notice a walk that has gone past its time.
@@ -81,6 +83,8 @@ fun StayWithMeLiveLayer(
             onClose = onClose,
             onRefresh = viewModel::refreshMyLocation,
             route = route,
+            refreshing = refreshing,
+            recenterKey = recenterTick,
         )
         watching != null && partner != null -> StayWithMeWatcherLive(
             session = watching,
@@ -92,6 +96,8 @@ fun StayWithMeLiveLayer(
             onClose = onClose,
             onRefresh = viewModel::refreshWalk,
             route = route,
+            refreshing = refreshing,
+            recenterKey = recenterTick,
         )
         else -> Box(
             modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground()),

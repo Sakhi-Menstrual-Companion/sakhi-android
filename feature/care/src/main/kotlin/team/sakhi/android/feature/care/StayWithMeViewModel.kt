@@ -13,6 +13,8 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.Instant
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
@@ -253,18 +255,46 @@ class StayWithMeViewModel(
     /** Her refresh: a fresh fix from her phone, now, past the throttle. */
     fun refreshMyLocation() {
         hapticManager.selection()
-        if (StayWithMeLocationService.hasLocationPermission(appContext)) {
-            StayWithMeLocationService.refreshNow(appContext)
+        if (_refreshing.value) return
+        if (!StayWithMeLocationService.hasLocationPermission(appContext)) return
+        val before = store.mine.value?.lastLocation?.recordedAt
+        _refreshing.value = true
+        StayWithMeLocationService.refreshNow(appContext)
+        viewModelScope.launch {
+            // Her fix goes up and comes back as her row. Wait for one newer than what was on
+            // screen, but never longer than a phone takes to find the sky.
+            withTimeoutOrNull(REFRESH_WAIT_MS) {
+                store.mine.first { walk ->
+                    val at = walk?.lastLocation?.recordedAt
+                    at != null && (before == null || at > before)
+                }
+            }
+            _refreshing.value = false
+            _recenterTick.value += 1
         }
     }
 
     /** Her person's refresh: the newest the server has, now, rather than at the next beat. */
     fun refreshWalk() {
         hapticManager.selection()
+        if (_refreshing.value) return
+        _refreshing.value = true
         viewModelScope.launch {
             sessionManager.current?.userId?.let { store.refresh(it) }
+            // A read that comes back in 80 ms would only flash the spinner.
+            delay(REFRESH_MIN_SPIN_MS)
+            _refreshing.value = false
+            _recenterTick.value += 1
         }
     }
+
+    private val _refreshing = MutableStateFlow(false)
+    /** A refresh is in flight, from either side. */
+    val refreshing: StateFlow<Boolean> = _refreshing
+
+    private val _recenterTick = MutableStateFlow(0)
+    /** Bumped when a refresh lands, so the map frames her again. */
+    val recenterTick: StateFlow<Int> = _recenterTick
 
     fun clearError() = store.clearError()
 
@@ -291,6 +321,10 @@ class StayWithMeViewModel(
     }
 
     private companion object {
+        /** The longest a refresh waits for her phone's fresh fix before giving up quietly. */
+        private const val REFRESH_WAIT_MS = 10_000L
+        /** The least a refresh spins, so a fast answer does not read as a flicker. */
+        private const val REFRESH_MIN_SPIN_MS = 450L
         const val POLL_MS = 10_000L
 
         /** The socket is carrying the walk, so this is only there for when it is not. */

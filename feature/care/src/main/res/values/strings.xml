@@ -15,9 +15,9 @@
     <string name="care_connected_since_date_format">d MMM, yyyy</string>
     <string name="care_taking_care_since">Taking care since %1$s</string>
     <string name="care_header_is_with_you">%1$s is with you</string>
-    <string name="care_header_you_are_with">You are with %1$s</string>
+    <string name="care_header_you_are_with">You are with her</string>
     <string name="care_section_moments_owner">WHAT %1$s DID FOR YOU</string>
-    <string name="care_section_moments_partner">WHAT YOU DID FOR %1$s</string>
+    <string name="care_section_moments_partner">WHAT YOU DID FOR HER</string>
     <string name="care_moments_see_all">See all</string>
     <string name="care_moments_empty_owner">When %1$s stays with you on your way home, or logs a day for you, it shows up here.</string>
     <string name="care_moments_empty_partner">When you stay with her on her way home, or log a day for her, it shows up here.</string>
@@ -202,8 +202,8 @@
     <string name="care_swm_stop_confirm">Stop</string>
     <string name="care_swm_keep_sharing">Keep sharing</string>
     <string name="care_swm_she_fallback">She</string>
-    <string name="care_swm_her_walking">%1$s is walking home</string>
-    <string name="care_swm_her_late">%1$s has not reached yet</string>
+    <string name="care_swm_her_walking">She is going home</string>
+    <string name="care_swm_her_late">She has not reached yet</string>
     <string name="care_swm_her_home_by">Home by %1$s, %2$d min left</string>
     <string name="care_swm_her_due">She was due home at %1$s</string>
     <string name="care_swm_updated_now">Updated just now</string>
@@ -230,4 +230,11 @@
     <string name="care_swm_minutes_by_car">about %1$d min by car</string>
     <string name="care_swm_refresh_mine">Send my location now</string>
     <string name="care_swm_refresh_hers">Get her newest location</string>
+    <!-- His read-only page behind "What she shares with you" (2026-09-13). -->
+    <string name="care_she_shares_title">What she shares with you</string>
+    <string name="care_she_shares_subtitle">%1$s chooses what you can see and do. Only she can change it, from her own phone.</string>
+    <string name="care_she_shares_section_do">What you can do</string>
+    <string name="care_she_shares_section_see">What you can see</string>
+    <string name="care_she_shares_on">Shared</string>
+    <string name="care_she_shares_off">Not shared</string>
 </resources>

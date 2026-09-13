@@ -1,5 +1,6 @@
 package team.sakhi.android.feature.care
 
+import team.sakhi.android.designsystem.sakhiProfileCardBackground
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -400,6 +401,10 @@ internal fun StayWithMeOwnerLive(
     onClose: () -> Unit,
     onRefresh: () -> Unit = {},
     route: WalkRoute? = null,
+    /** A refresh is in flight: the button shows a spinner. */
+    refreshing: Boolean = false,
+    /** Bumped when a refresh lands, so the map frames her again even if she has not moved. */
+    recenterKey: Int = 0,
 ) {
     val context = LocalContext.current
     val phase = session.phase(now)
@@ -421,6 +426,7 @@ internal fun StayWithMeOwnerLive(
             bottomPadding = maxHeight * OWNER_PANEL_FRACTION - 28.dp,
             destination = session.destination,
             routeLine = route?.points.orEmpty(),
+            recenterKey = recenterKey,
         )
         if (location == null) {
             MapNotice(
@@ -515,7 +521,7 @@ internal fun StayWithMeOwnerLive(
                                             )
                                         }
                                     }
-                                    if (sharing) RefreshButton(onClick = onRefresh, label = stringResource(R.string.care_swm_refresh_mine))
+                                    if (sharing) RefreshButton(onClick = onRefresh, label = stringResource(R.string.care_swm_refresh_mine), refreshing = refreshing)
                                 }
                             }
                         }
@@ -634,20 +640,32 @@ private fun DestinationCard(place: StayWithMeDestination, route: WalkRoute?, ses
 }
 
 /** A round refresh control: her phone sends where she is now, or his asks for the newest. */
+/**
+ * Refresh, with a spinner in its place until the answer is in. Without it a tap did nothing
+ * visible for up to ten seconds while the phone found a fresh fix, and got tapped again.
+ */
 @Composable
-private fun RefreshButton(onClick: () -> Unit, label: String) {
+private fun RefreshButton(onClick: () -> Unit, label: String, refreshing: Boolean = false) {
     Surface(
         shape = CircleShape,
         color = sakhiLightPink(),
         modifier = Modifier.size(36.dp),
     ) {
-        IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
-            Icon(
-                imageVector = Icons.Filled.Refresh,
-                contentDescription = label,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
+        IconButton(onClick = onClick, enabled = !refreshing, modifier = Modifier.size(36.dp)) {
+            if (refreshing) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(16.dp),
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = label,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
         }
     }
 }
@@ -785,6 +803,8 @@ internal fun StayWithMeWatcherLive(
     onClose: () -> Unit,
     onRefresh: () -> Unit = {},
     route: WalkRoute? = null,
+    refreshing: Boolean = false,
+    recenterKey: Int = 0,
 ) {
     val context = LocalContext.current
     val phase = session.phase(now)
@@ -796,13 +816,16 @@ internal fun StayWithMeWatcherLive(
         WalkMap(
             location = location,
             accent = accent,
-            initial = walkInitials(herName) ?: "",
+            // On his phone she is "she", and her marker is a face, not the first letter of
+            // whatever her profile happens to be called ("U" for "User").
+            initial = "",
             avatarWithoutName = true,
             trail = trail,
             modifier = Modifier.fillMaxSize(),
             bottomPadding = maxHeight * WATCHER_PANEL_FRACTION - 28.dp,
             destination = session.destination,
             routeLine = route?.points.orEmpty(),
+            recenterKey = recenterKey,
         )
         if (location == null) {
             MapNotice(
@@ -839,9 +862,9 @@ internal fun StayWithMeWatcherLive(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = if (isLate) {
-                                    stringResource(R.string.care_swm_her_late, herName)
+                                    stringResource(R.string.care_swm_her_late)
                                 } else {
-                                    stringResource(R.string.care_swm_her_walking, herName)
+                                    stringResource(R.string.care_swm_her_walking)
                                 },
                                 style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                                 color = if (isLate) AppleSystemColors.red else sakhiLabel(),
@@ -883,7 +906,7 @@ internal fun StayWithMeWatcherLive(
                             InfoChip(icon = Icons.Filled.Place, text = note, tint = sakhiLabel())
                         }
                         Spacer(Modifier.weight(1f))
-                        RefreshButton(onClick = onRefresh, label = stringResource(R.string.care_swm_refresh_hers))
+                        RefreshButton(onClick = onRefresh, label = stringResource(R.string.care_swm_refresh_hers), refreshing = refreshing)
                     }
                 }
 
@@ -949,7 +972,8 @@ internal fun StayWithMeWatcherLive(
 private fun PlaceRow(place: EmergencySafePlace, onClick: () -> Unit) {
     val (icon, tint) = when (place.kind) {
         EmergencySafePlaceKind.POLICE -> Icons.Filled.LocalPolice to AppleSystemColors.blue
-        EmergencySafePlaceKind.HOSPITAL -> Icons.Filled.LocalHospital to AppleSystemColors.red
+        // Pink, as iOS and Emergency Assistance draw it. Red on this screen means late.
+        EmergencySafePlaceKind.HOSPITAL -> Icons.Filled.LocalHospital to MaterialTheme.colorScheme.primary
         else -> Icons.Filled.LocalPharmacy to AppleSystemColors.green
     }
     Row(
@@ -1066,6 +1090,8 @@ internal fun WalkMap(
      * or the page stops scrolling wherever the map is. Tapping the card opens it instead.
      */
     interactive: Boolean = true,
+    /** Changing it frames her again, for after a refresh, whether or not she has moved. */
+    recenterKey: Int = 0,
 ) {
     val context = LocalContext.current
     val target = location?.let { LatLng(it.latitude, it.longitude) }
@@ -1093,7 +1119,7 @@ internal fun WalkMap(
     // Framing waits for the map to load: before that the panel's padding is not applied,
     // and the first build framed the destination straight under the panel.
     var mapLoaded by remember { mutableStateOf(false) }
-    LaunchedEffect(target, destination, routeLine.size, mapLoaded) {
+    LaunchedEffect(target, destination, routeLine.size, mapLoaded, recenterKey) {
         if (target == null || !mapLoaded) return@LaunchedEffect
         val place = destination
         if (place != null) {
@@ -1331,9 +1357,11 @@ internal fun walkInitials(name: String): String? {
 
 @Composable
 private fun GroupedCard(content: @Composable () -> Unit) {
+    // White, as iOS's `.dsCard(.pink)` is. The grey grouped fill it had sat on the pale pink
+    // panel like a disabled block, and it was the one grey thing on a pink screen.
     Surface(
-        color = sakhiGroupedBackground(),
-        shape = RoundedCornerShape(SakhiRadius.xxl),
+        color = sakhiProfileCardBackground(),
+        shape = RoundedCornerShape(SakhiRadius.lg),
         modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space6),
     ) {
         Column { content() }

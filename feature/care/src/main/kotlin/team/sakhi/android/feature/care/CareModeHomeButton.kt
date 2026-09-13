@@ -1,5 +1,13 @@
 package team.sakhi.android.feature.care
 
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -119,12 +127,23 @@ fun CareModeHomeButton(
     val selfUserId = sessionManager.current?.userId
     val pair = partnership?.let { p ->
         val otherId = if (p.userId == selfUserId) p.partnerId else p.userId
-        CareAvatars.indexFor(selfUserId.orEmpty()) to CareAvatars.indexFor(otherId)
+        CareAvatars.selfIndex(context, selfUserId.orEmpty()) to CareAvatars.indexFor(otherId)
     }
 
     val walk = mine ?: watching
-    val phase = walk?.phase(stayWithMeStore.now())
+    // The ring moves with her time, so this has to redraw on its own. Every half minute is
+    // enough to see it move and costs nothing.
+    var now by remember { mutableStateOf(stayWithMeStore.now()) }
+    LaunchedEffect(walk?.id) {
+        while (walk != null) {
+            now = stayWithMeStore.now()
+            delay(RING_TICK_MS)
+        }
+    }
+    val phase = walk?.phase(now)
     val late = phase == StayWithMePhase.LATE || phase == StayWithMePhase.GRACE
+    // How much of her time has gone. The ring fills toward home as it does.
+    val progress = walk?.progress(now)?.toFloat()?.coerceIn(0f, 1f) ?: 0f
 
     val pulse = rememberInfiniteTransition(label = "careButton")
     val blink by pulse.animateFloat(
@@ -134,13 +153,14 @@ fun CareModeHomeButton(
         label = "careButtonBlink",
     )
 
-    // A ring only when there is something to say. The grey hairline it used to wear at rest
-    // made a quiet button look like a disabled one, next to a solid pink log button.
-    val ring = when {
-        late -> AppleSystemColors.red
-        walk != null -> MaterialTheme.colorScheme.primary
-        else -> Color.Transparent
-    }
+    // A ring only while a walk is on. At rest the button has none: the grey hairline it used
+    // to wear made a quiet button look like a disabled one, next to a solid pink log button.
+    //
+    // During a walk it is two rings in one: a faint full circle, and over it a solid slice
+    // that fills clockwise from the top as her time goes, so a glance at Home says how far
+    // into the walk she is. Green while she is on time, because they are together and all is
+    // well; red, and full, once she is late.
+    val ringColor = if (late) AppleSystemColors.red else AppleSystemColors.green
 
     Box(
         modifier = modifier
@@ -154,7 +174,32 @@ fun CareModeHomeButton(
                 CircleShape,
             )
             .alpha(if (late) blink else 1f)
-            .border(BorderStroke(if (walk != null) 3.dp else 0.dp, ring), CircleShape)
+            .drawWithContent {
+                drawContent()
+                if (walk != null) {
+                    val stroke = 3.dp.toPx()
+                    val arcTopLeft = Offset(stroke / 2, stroke / 2)
+                    val arcSize = Size(size.width - stroke, size.height - stroke)
+                    drawArc(
+                        color = ringColor.copy(alpha = 0.25f),
+                        startAngle = 0f,
+                        sweepAngle = 360f,
+                        useCenter = false,
+                        topLeft = arcTopLeft,
+                        size = arcSize,
+                        style = Stroke(width = stroke),
+                    )
+                    drawArc(
+                        color = ringColor,
+                        startAngle = -90f,
+                        sweepAngle = if (late) 360f else 360f * progress,
+                        useCenter = false,
+                        topLeft = arcTopLeft,
+                        size = arcSize,
+                        style = Stroke(width = stroke, cap = StrokeCap.Round),
+                    )
+                }
+            }
             .clickable(onClick = onOpen)
             .semantics { contentDescription = name ?: "Care Mode" },
         contentAlignment = Alignment.Center,
@@ -187,6 +232,9 @@ fun CareModeHomeButton(
  * walk screen, and the walk screen polls at ten seconds while it is open.
  */
 private const val HOME_WALK_REFRESH_MS = 30_000L
+
+/** How often the walk ring redraws. It moves by minutes, so half a minute is plenty. */
+private const val RING_TICK_MS = 30_000L
 
 /** One small face inside the 46dp button: 22dp, with a thin collar so the two separate. */
 @Composable
