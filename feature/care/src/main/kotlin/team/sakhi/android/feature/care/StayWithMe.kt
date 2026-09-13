@@ -649,6 +649,9 @@ private fun RefreshButton(onClick: () -> Unit, label: String) {
     }
 }
 
+/** The closest the walk map frames itself when her and her destination are near. */
+private const val MAX_FRAMING_ZOOM = 16.5f
+
 /** How much of the screen each side's panel takes. The map is the rest, and behind it. */
 private const val OWNER_PANEL_FRACTION = 0.58f
 private const val WATCHER_PANEL_FRACTION = 0.52f
@@ -869,7 +872,8 @@ internal fun StayWithMeWatcherLive(
                         session.locationAgeSeconds(now)?.let { age ->
                             InfoChip(icon = Icons.Filled.Schedule, text = updatedText(age), tint = sakhiLabel())
                         }
-                        session.note?.let { note ->
+                        // The destination card below already names where she is going.
+                        session.note?.takeIf { session.destination == null }?.let { note ->
                             InfoChip(icon = Icons.Filled.Place, text = note, tint = sakhiLabel())
                         }
                         Spacer(Modifier.weight(1f))
@@ -1070,14 +1074,22 @@ private fun WalkMap(
             glide.animateTo(1f, tween(1_200, easing = FastOutSlowInEasing))
         }
     }
-    LaunchedEffect(target, destination, routeLine.size) {
-        if (target == null) return@LaunchedEffect
+    // Framing waits for the map to load: before that the panel's padding is not applied,
+    // and the first build framed the destination straight under the panel.
+    var mapLoaded by remember { mutableStateOf(false) }
+    LaunchedEffect(target, destination, routeLine.size, mapLoaded) {
+        if (target == null || !mapLoaded) return@LaunchedEffect
         val place = destination
         if (place != null) {
             // With somewhere to go, the whole of it is in view: her, and where she is headed.
-            val bounds = LatLngBounds.builder().include(target).include(LatLng(place.latitude, place.longitude))
+            val there = LatLng(place.latitude, place.longitude)
+            val bounds = LatLngBounds.builder().include(target).include(there)
             routeLine.forEach { bounds.include(LatLng(it.first, it.second)) }
-            runCatching { cameraState.animate(CameraUpdateFactory.newLatLngBounds(bounds.build(), 140), 1_000) }
+            runCatching { cameraState.animate(CameraUpdateFactory.newLatLngBounds(bounds.build(), 160), 1_000) }
+            // Points a few steps apart would zoom to the kerb. Street level is enough.
+            if (cameraState.position.zoom > MAX_FRAMING_ZOOM) {
+                runCatching { cameraState.animate(CameraUpdateFactory.zoomTo(MAX_FRAMING_ZOOM), 600) }
+            }
         } else {
             val zoom = cameraState.position.zoom.coerceAtLeast(15.5f)
             runCatching { cameraState.animate(CameraUpdateFactory.newLatLngZoom(target, zoom), 1_000) }
@@ -1089,6 +1101,7 @@ private fun WalkMap(
         modifier = modifier,
         cameraPositionState = cameraState,
         contentPadding = PaddingValues(bottom = bottomPadding.coerceAtLeast(0.dp)),
+        onMapLoaded = { mapLoaded = true },
         properties = MapProperties(isMyLocationEnabled = false),
         uiSettings = MapUiSettings(
             zoomControlsEnabled = false,
