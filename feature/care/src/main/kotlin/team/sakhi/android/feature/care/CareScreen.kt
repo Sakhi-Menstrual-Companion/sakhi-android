@@ -157,11 +157,10 @@ fun CareScreen(
         stayWithMeViewModel.onVisible()
         onDispose { stayWithMeViewModel.onHidden() }
     }
-    var showPermissionsEdit by remember { mutableStateOf(false) }
-    var showHistory by remember { mutableStateOf(false) }
-    /** Leaving (or removing), as its own screen with what changes spelled out. */
-    var showLeave by remember { mutableStateOf(false) }
-    var showSheShares by remember { mutableStateOf(false) }
+    // Which page of Care is showing, as ONE value, the way Profile keeps its sub-screens.
+    // It used to be four flags, each ANDed with live connection state, so a care refresh that
+    // briefly had no partnership popped the page and pushed it back.
+    var careScreen by remember { mutableStateOf(CareSubScreen.Root) }
     /** Her side: the duration, the destination and the ask, raised by the footer button. */
     var showStartWalk by remember { mutableStateOf(false) }
     var showOwnerInviteFlow by remember(prefillInviteCode) { mutableStateOf(false) }
@@ -214,6 +213,20 @@ fun CareScreen(
         connectedPartnership?.id?.let(stayWithMeViewModel::loadPartnerCard)
     }
     val partnerCard by stayWithMeViewModel.partnerCard.collectAsStateWithLifecycle()
+    // What her person did that reached her: this phone's inbox, the same rows the bell shows.
+    val inboxStore = koinInject<team.sakhi.notifications.InAppNotificationStore>()
+    val inbox by inboxStore.state.collectAsStateWithLifecycle()
+    LaunchedEffect(connectedPartnership?.id) { if (connectedPartnership != null) inboxStore.refresh() }
+    val careActions = remember(inbox.items, ownerConnected?.partnership?.partnerId) {
+        val partnerId = ownerConnected?.partnership?.partnerId
+        if (partnerId == null) {
+            emptyList()
+        } else {
+            inbox.items.filter { row ->
+                row.type in CARE_ACTION_TYPES && row.actorUserId.equals(partnerId, ignoreCase = true)
+            }
+        }
+    }
     val sessionManager = koinInject<team.sakhi.session.SessionManager>()
     val selfAvatarIndex = remember(sessionManager.current?.userId) {
         CareAvatars.selfIndex(careContext, sessionManager.current?.userId.orEmpty())
@@ -270,14 +283,22 @@ fun CareScreen(
     // Every screen opened from inside Care pushes in and slides back out, the way Profile's
     // sub-screens do (Karan, 2026-09-13). They used to swap in with no motion at all, which
     // read as the sheet changing into something else rather than going one step deeper.
-    val subScreen = when {
-        showInviteFlowRoute -> CareSubScreen.InviteFlow
-        showSheShares && partnerConnected != null -> CareSubScreen.SheShares
-        showLeave && connectedPartnership != null -> CareSubScreen.Leave
-        showHistory && connectedPartnership != null -> CareSubScreen.History
-        showPermissionsEdit && ownerConnected != null -> CareSubScreen.Permissions
-        else -> CareSubScreen.Root
+    // The partnership a page was opened with, kept while it slides out even if a refresh
+    // briefly has none. If the connection really ends, the page goes back to Care once.
+    var pagePartnership by remember { mutableStateOf<CarePartnership?>(null) }
+    LaunchedEffect(connectedPartnership) { connectedPartnership?.let { pagePartnership = it } }
+    val shownPartnership = connectedPartnership ?: pagePartnership
+    val shownIsPartner = partnerConnected != null ||
+        (connectedPartnership == null && pagePartnership?.let { it.userId != sessionManager.current?.userId } == true)
+    LaunchedEffect(uiState.careState is CareRuntimeState.Disconnected) {
+        if (uiState.careState is CareRuntimeState.Disconnected) careScreen = CareSubScreen.Root
     }
+    // One back handler, outside the transition, as Profile has. Handlers inside each page were
+    // left registered while pages slid, so back did nothing or the wrong thing.
+    BackHandler(enabled = !showInviteFlowRoute && careScreen != CareSubScreen.Root) {
+        careScreen = CareSubScreen.Root
+    }
+    val subScreen = if (showInviteFlowRoute) CareSubScreen.InviteFlow else careScreen
     SheetSurface {
         SakhiScreenTransition(
             targetState = subScreen,
@@ -309,47 +330,44 @@ fun CareScreen(
                     },
                 )
 
-                CareSubScreen.SheShares -> partnerConnected?.let { connected ->
-                    BackHandler { showSheShares = false }
+                CareSubScreen.SheShares -> shownPartnership?.let { partnership ->
                     SheSharesContent(
-                        partnership = connected.partnership,
-                        onBack = { showSheShares = false },
+                        partnership = partnership,
+                        onBack = { careScreen = CareSubScreen.Root },
                     )
                 }
 
-                CareSubScreen.Leave -> connectedPartnership?.let { connected ->
-                    BackHandler { showLeave = false }
+                CareSubScreen.Leave -> shownPartnership?.let { partnership ->
                     LeaveConnectionContent(
-                        isPartnerRole = partnerConnected != null,
-                        name = careDisplayName(connected, isPartnerRole = partnerConnected != null),
+                        isPartnerRole = shownIsPartner,
+                        name = careDisplayName(partnership, isPartnerRole = shownIsPartner),
                         isRemoving = uiState.isRemovingPartnership,
-                        onBack = { showLeave = false },
+                        onBack = { careScreen = CareSubScreen.Root },
                         onConfirm = {
                             hapticManager.impact(HapticImpact.MEDIUM)
-                            viewModel.removePartnership(connected.id)
+                            viewModel.removePartnership(partnership.id)
                         },
                     )
                 }
 
-                CareSubScreen.History -> connectedPartnership?.let { connected ->
-                    BackHandler { showHistory = false }
+                CareSubScreen.History -> shownPartnership?.let { partnership ->
                     PartnerHistoryContent(
-                        partnership = connected,
-                        isPartnerRole = partnerConnected != null,
+                        partnership = partnership,
+                        isPartnerRole = shownIsPartner,
                         walks = walkHistory,
-                        onBack = { showHistory = false },
+                        actions = careActions,
+                        onBack = { careScreen = CareSubScreen.Root },
                     )
                 }
 
-                CareSubScreen.Permissions -> ownerConnected?.let { owner ->
-                    BackHandler { showPermissionsEdit = false }
+                CareSubScreen.Permissions -> shownPartnership?.let { partnership ->
                     PartnerPermissionsEditContent(
-                        partnership = owner.partnership,
+                        partnership = partnership,
                         isSaving = uiState.isSavingPermissions,
-                        onBack = { showPermissionsEdit = false },
+                        onBack = { careScreen = CareSubScreen.Root },
                         onSave = { permissions ->
-                            viewModel.updatePermissions(owner.partnership.id, permissions) { saved ->
-                                if (saved) showPermissionsEdit = false
+                            viewModel.updatePermissions(partnership.id, permissions) { saved ->
+                                if (saved) careScreen = CareSubScreen.Root
                             }
                         },
                     )
@@ -381,8 +399,15 @@ fun CareScreen(
                         is CareRuntimeState.OwnerConnected -> {
                             val walk = stayWithMe.mine
                             val personName = careDisplayName(state.partnership, isPartnerRole = false)
-                            val moments = remember(walkHistory, loggedDays, personName) {
-                                careMoments(careContext, walkHistory, loggedDays, isPartnerRole = false, otherName = personName)
+                            val moments = remember(walkHistory, loggedDays, personName, careActions) {
+                                careMoments(
+                                    careContext,
+                                    walkHistory,
+                                    loggedDays,
+                                    isPartnerRole = false,
+                                    otherName = personName,
+                                    actions = careActions,
+                                )
                             }
                             ConnectedCare(
                                 partnership = state.partnership,
@@ -431,9 +456,9 @@ fun CareScreen(
                                         )
                                     }
                                 },
-                                onHistory = { showHistory = true },
-                                onManagePermissions = { showPermissionsEdit = true },
-                                onRemove = { showLeave = true },
+                                onHistory = { careScreen = CareSubScreen.History },
+                                onManagePermissions = { careScreen = CareSubScreen.Permissions },
+                                onRemove = { careScreen = CareSubScreen.Leave },
                                 onClose = onClose,
                             )
                         }
@@ -491,10 +516,10 @@ fun CareScreen(
                                         )
                                     }
                                 },
-                                onHistory = { showHistory = true },
+                                onHistory = { careScreen = CareSubScreen.History },
                                 // His side reads what she shares; only she can change it.
-                                onManagePermissions = { showSheShares = true },
-                                onRemove = { showLeave = true },
+                                onManagePermissions = { careScreen = CareSubScreen.SheShares },
+                                onRemove = { careScreen = CareSubScreen.Leave },
                                 onClose = onClose,
                             )
                         }
@@ -1813,6 +1838,8 @@ private fun PartnerHistoryContent(
     isPartnerRole: Boolean,
     /** The walks this connection has done, from the Stay With Me store. */
     walks: List<team.sakhi.staywithme.StayWithMeWalkRecord>,
+    /** Her person's other care actions, from the inbox. Empty on his side. */
+    actions: List<team.sakhi.notifications.InAppNotification> = emptyList(),
     onBack: () -> Unit,
     periodLogRepository: team.sakhi.repositories.PeriodLogRepository = org.koin.compose.koinInject(),
 ) {
@@ -1834,8 +1861,8 @@ private fun PartnerHistoryContent(
         }
         isLoaded = true
     }
-    val moments = remember(walks, logs, name, isPartnerRole) {
-        careMoments(context, walks, logs.map { careLoggedDay(it.logDate) }, isPartnerRole, name)
+    val moments = remember(walks, logs, name, isPartnerRole, actions) {
+        careMoments(context, walks, logs.map { careLoggedDay(it.logDate) }, isPartnerRole, name, actions)
     }
 
     val pageTop = sakhiLightPink()

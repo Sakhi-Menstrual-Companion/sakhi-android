@@ -20,8 +20,13 @@
     <string name="care_section_moments_partner">What you did for her</string>
     <string name="care_moments_see_all">See all</string>
     <string name="care_moments_show_all">Show all</string>
-    <string name="care_moments_empty_owner">When %1$s stays with you on your way home, or logs a day for you, it shows up here.</string>
-    <string name="care_moments_empty_partner">When you stay with her on her way home, or log a day for her, it shows up here.</string>
+    <string name="care_moments_empty_title">Nothing here yet</string>
+    <string name="care_moment_ask_owner">Asked to stay with you on your way home</string>
+    <string name="care_moment_log_request_owner">Asked you to log your day</string>
+    <string name="care_moment_message_owner">Sent you a message</string>
+    <string name="care_moment_joined_owner">%1$s became your Sakhi</string>
+    <string name="care_moments_empty_owner">Whatever %1$s does for you shows up here: a walk home, a logged day, an ask.</string>
+    <string name="care_moments_empty_partner">Whatever you do for her shows up here: a walk home, a logged day.</string>
     <string name="care_moment_walk_owner">Stayed with you until you were home</string>
     <string name="care_moment_walk_partner">Stayed with her until she was home</string>
     <string name="care_moment_walk_late_owner">You were past your time, so %1$s was told</string>

@@ -131,7 +131,9 @@ private fun CareFace(avatarIndex: Int, size: Int) {
         Image(
             painter = painterResource(CareAvatars.drawable(avatarIndex)),
             contentDescription = null,
-            modifier = Modifier.fillMaxSize().scale(CareAvatars.scale(avatarIndex)),
+            // 80% of the artwork's own fill, so the face sits inside its circle rather than
+            // pressing on the edge (Karan, 2026-09-13).
+            modifier = Modifier.fillMaxSize().scale(CareAvatars.scale(avatarIndex) * 0.8f),
         )
     }
 }
@@ -162,6 +164,13 @@ internal fun careMoments(
     loggedDays: List<Pair<Instant, String>>,
     isPartnerRole: Boolean,
     otherName: String,
+    /**
+     * Everything else the other person did, from this phone's inbox: rows they caused and
+     * that were addressed here (asked to stay, asked her to log, a message, joining). Only
+     * types in [CARE_ACTION_TYPES]; logged days come from the logs themselves, not from here,
+     * so a day is never listed twice.
+     */
+    actions: List<team.sakhi.notifications.InAppNotification> = emptyList(),
 ): List<CareMoment> {
     val walkTitle = context.getString(
         if (isPartnerRole) R.string.care_moment_walk_partner else R.string.care_moment_walk_owner,
@@ -192,8 +201,21 @@ internal fun careMoments(
             icon = Icons.Filled.EditCalendar,
         )
     }
-    return (fromWalks + fromLogs).sortedByDescending { it.at }
+    val fromActions = if (isPartnerRole) emptyList() else actions.mapNotNull { row ->
+        val (title, icon) = when (row.type) {
+            "stay_with_me_ask" -> context.getString(R.string.care_moment_ask_owner) to Icons.Filled.Favorite
+            "log_request" -> context.getString(R.string.care_moment_log_request_owner) to Icons.Filled.EditCalendar
+            "care_message" -> context.getString(R.string.care_moment_message_owner) to Icons.Filled.Favorite
+            "invitation_accepted" -> context.getString(R.string.care_moment_joined_owner, otherName) to Icons.Filled.Favorite
+            else -> return@mapNotNull null
+        }
+        CareMoment(at = row.createdAt, title = title, detail = "", icon = icon)
+    }
+    return (fromWalks + fromLogs + fromActions).sortedByDescending { it.at }
 }
+
+/** The inbox rows that are something the other person did for her. */
+internal val CARE_ACTION_TYPES = setOf("stay_with_me_ask", "log_request", "care_message", "invitation_accepted")
 
 /**
  * What happened between them, as a timeline: a thin rail down the left with a dot for each
@@ -213,12 +235,39 @@ internal fun CareMoments(
     onShowAll: (() -> Unit)? = null,
 ) {
     if (moments.isEmpty()) {
-        Text(
-            text = emptyText,
-            style = MaterialTheme.typography.bodyMedium,
-            color = sakhiSecondaryLabel(),
-            modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
-        )
+        // Nothing yet: the card keeps its size and says so calmly, rather than shrinking to a
+        // one-line note that reads like something failed to load.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space8),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Box(
+                modifier = Modifier.size(56.dp).background(sakhiLightPink(), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Favorite,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp),
+                )
+            }
+            Text(
+                text = androidx.compose.ui.res.stringResource(R.string.care_moments_empty_title),
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                color = sakhiLabel(),
+                modifier = Modifier.padding(top = SakhiSpacing.space4),
+            )
+            Text(
+                text = emptyText,
+                style = MaterialTheme.typography.bodySmall,
+                color = sakhiSecondaryLabel(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(top = SakhiSpacing.space1),
+            )
+        }
         return
     }
     val shown = limit?.let { moments.take(it) } ?: moments
@@ -307,12 +356,14 @@ private fun TimelineRow(moment: CareMoment, time: String, isFirst: Boolean, isLa
                     color = sakhiSecondaryLabel(),
                 )
             }
-            Text(
-                text = moment.detail,
-                style = MaterialTheme.typography.bodySmall,
-                color = sakhiSecondaryLabel(),
-                modifier = Modifier.padding(top = 2.dp),
-            )
+            if (moment.detail.isNotBlank()) {
+                Text(
+                    text = moment.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = sakhiSecondaryLabel(),
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
         }
     }
 }
