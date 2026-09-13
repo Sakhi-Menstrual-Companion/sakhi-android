@@ -9,6 +9,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -260,12 +261,18 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
             )
 
             val built = NotificationCompat.Builder(context, presentation.channelId)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setSmallIcon(R.drawable.ic_stat_sakhi)
+                .setColor(ContextCompat.getColor(context, R.color.platform_notification_accent))
                 .setContentTitle(presentation.title)
                 .setContentText(presentation.body)
                 .setPriority(if (presentation.highPriority) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .setContentIntent(contentIntent)
+                // Its own group, so the system never bundles it with other Sakhi notifications.
+                // An automatic bundle has no tap action of its own: on a Redmi, tapping the
+                // collapsed bundle did nothing, and a walk alert is the one notification that
+                // must open on the first tap.
+                .apply { if (presentation.channelId != CHANNEL_ID) setGroup(presentation.channelId + notificationId) }
                 // Keeps the generic copy generic on a locked screen: without this, an OEM
                 // or user setting that hides sensitive content has nothing to fall back to
                 // and some launchers will still render the full text.

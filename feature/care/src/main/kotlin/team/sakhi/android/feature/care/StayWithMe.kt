@@ -24,6 +24,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.unit.Dp
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -84,6 +91,9 @@ import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.JointType
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.android.gms.maps.model.Gap
+import com.google.android.gms.maps.model.Dot
 import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.RoundCap
 import com.google.maps.android.compose.Circle
@@ -94,6 +104,7 @@ import com.google.maps.android.compose.Marker
 import com.google.maps.android.compose.Polyline
 import com.google.maps.android.compose.rememberCameraPositionState
 import com.google.maps.android.compose.rememberMarkerState
+import kotlinx.coroutines.delay
 import kotlinx.datetime.Instant
 import team.sakhi.android.designsystem.AppleSystemColors
 import team.sakhi.android.designsystem.SakhiRadius
@@ -115,6 +126,7 @@ import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SakhiTextField
 import team.sakhi.emergency.EmergencySafePlace
 import team.sakhi.emergency.EmergencySafePlaceKind
+import team.sakhi.staywithme.StayWithMeDestination
 import team.sakhi.staywithme.StayWithMeDurations
 import team.sakhi.staywithme.StayWithMeLocation
 import team.sakhi.staywithme.StayWithMePhase
@@ -139,17 +151,27 @@ internal fun StayWithMeStartSection(
     personName: String,
     isBusy: Boolean,
     error: String?,
-    onStart: (minutes: Int, note: String) -> Unit,
+    onStart: (minutes: Int, note: String, destination: StayWithMeDestination?) -> Unit,
 ) {
     val context = LocalContext.current
     var minutes by rememberSaveable { mutableStateOf(StayWithMeDurations.DEFAULT_MINUTES) }
     var note by rememberSaveable { mutableStateOf("") }
+    // Where she is going, once picked from the suggestions. Typed but not picked stays her
+    // own words, the way the field always worked, rather than being guessed into a pin.
+    var destination by remember { mutableStateOf<StayWithMeDestination?>(null) }
+    val search = remember { StayWithMeDestinationSearch(context.applicationContext) }
+    var suggestions by remember { mutableStateOf<List<StayWithMeDestinationSearch.Suggestion>>(emptyList()) }
+    LaunchedEffect(note, destination) {
+        if (destination != null) { suggestions = emptyList(); return@LaunchedEffect }
+        delay(350)
+        suggestions = search.search(note)
+    }
 
     // Asked at the moment she needs them, never on first open. If she says no to location,
     // the walk still starts: her person still gets told if she does not reach.
     var pending by remember { mutableStateOf(false) }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        if (pending) onStart(minutes, note)
+        if (pending) onStart(minutes, note, destination)
         pending = false
     }
 
@@ -196,11 +218,71 @@ internal fun StayWithMeStartSection(
                 DurationPicker(selected = minutes, onSelect = { minutes = it })
 
                 Spacer(Modifier.height(SakhiSpacing.space3))
-                SakhiTextField(
-                    value = note,
-                    onValueChange = { note = it.take(StayWithMeDurations.MAX_NOTE_LENGTH) },
-                    placeholder = stringResource(R.string.care_swm_where_placeholder),
-                )
+                val picked = destination
+                if (picked != null) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(sakhiLightPink(), RoundedCornerShape(SakhiRadius.lg))
+                            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Place,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(SakhiSpacing.space2))
+                        Text(
+                            text = picked.name,
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = sakhiLabel(),
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f),
+                        )
+                        IconButton(onClick = { destination = null; note = "" }, modifier = Modifier.size(32.dp)) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = stringResource(R.string.care_swm_clear_where),
+                                tint = sakhiSecondaryLabel(),
+                                modifier = Modifier.size(18.dp),
+                            )
+                        }
+                    }
+                } else {
+                    SakhiTextField(
+                        value = note,
+                        onValueChange = { note = it.take(StayWithMeDurations.MAX_NOTE_LENGTH) },
+                        placeholder = stringResource(R.string.care_swm_where_placeholder),
+                    )
+                    suggestions.forEach { suggestion ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    destination = suggestion.destination
+                                    note = suggestion.title
+                                }
+                                .padding(horizontal = SakhiSpacing.space2, vertical = SakhiSpacing.space2),
+                        ) {
+                            Text(
+                                text = suggestion.title,
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = sakhiLabel(),
+                                maxLines = 1,
+                            )
+                            suggestion.subtitle?.let {
+                                Text(
+                                    text = it,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = sakhiSecondaryLabel(),
+                                    maxLines = 1,
+                                )
+                            }
+                        }
+                    }
+                }
 
                 Spacer(Modifier.height(SakhiSpacing.space4))
                 PrimaryButton(
@@ -209,7 +291,7 @@ internal fun StayWithMeStartSection(
                     onClick = {
                         val missing = requiredPermissions().filterNot { granted(context, it) }
                         if (missing.isEmpty()) {
-                            onStart(minutes, note)
+                            onStart(minutes, note, destination)
                         } else {
                             pending = true
                             launcher.launch(missing.toTypedArray())
@@ -313,6 +395,8 @@ internal fun StayWithMeOwnerLive(
     onExtend: () -> Unit,
     onStop: () -> Unit,
     onClose: () -> Unit,
+    onRefresh: () -> Unit = {},
+    route: WalkRoute? = null,
 ) {
     val context = LocalContext.current
     val phase = session.phase(now)
@@ -322,51 +406,37 @@ internal fun StayWithMeOwnerLive(
     val sharing = StayWithMeLocationService.hasLocationPermission(context)
     val location = session.lastLocation
 
-    Box(modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground())) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.fillMaxWidth().weight(0.46f)) {
-                WalkMap(
-                    location = location,
-                    accent = accent,
-                    initial = "",
-                    trail = trail,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                if (location == null) {
-                    MapNotice(
-                        text = if (sharing) stringResource(R.string.care_swm_finding) else stringResource(R.string.care_swm_not_sharing),
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                }
-            }
-            Spacer(Modifier.weight(0.54f))
-        }
-
-        Box(
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(SakhiSpacing.space4)
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(sakhiSystemBackground())
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = stringResource(R.string.care_swm_close),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground())) {
+        // The map is the whole screen, as on Emergency Assistance. It frames her in the part
+        // the panel leaves uncovered rather than centring her underneath it.
+        WalkMap(
+            location = location,
+            accent = accent,
+            initial = "",
+            trail = trail,
+            modifier = Modifier.fillMaxSize(),
+            bottomPadding = maxHeight * OWNER_PANEL_FRACTION - 28.dp,
+            destination = session.destination,
+            routeLine = route?.points.orEmpty(),
+        )
+        if (location == null) {
+            MapNotice(
+                text = if (sharing) stringResource(R.string.care_swm_finding) else stringResource(R.string.care_swm_not_sharing),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = maxHeight * 0.22f),
             )
         }
 
+        LiveWalkTopBar(onClose = onClose, modifier = Modifier.align(Alignment.TopCenter))
+
+        // Sakhi's own background, the one Emergency Assistance's sheet sits on, with white
+        // cards on top. Plain white made the panel read as a system screen.
         Surface(
-            color = sakhiSystemBackground(),
+            color = MaterialTheme.colorScheme.background,
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .fillMaxHeight(0.58f),
+                .fillMaxHeight(OWNER_PANEL_FRACTION),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(modifier = Modifier.weight(1f)) {
@@ -424,18 +494,32 @@ internal fun StayWithMeOwnerLive(
                                         modifier = Modifier.size(18.dp),
                                     )
                                     Spacer(Modifier.width(SakhiSpacing.space2))
-                                    Text(
-                                        text = when {
-                                            !sharing -> stringResource(R.string.care_swm_not_sharing)
-                                            battery != null -> stringResource(R.string.care_swm_sharing_battery, battery)
-                                            else -> stringResource(R.string.care_swm_sharing)
-                                        },
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = sakhiLabel(),
-                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = when {
+                                                !sharing -> stringResource(R.string.care_swm_not_sharing)
+                                                battery != null -> stringResource(R.string.care_swm_sharing_battery, battery)
+                                                else -> stringResource(R.string.care_swm_sharing)
+                                            },
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = sakhiLabel(),
+                                        )
+                                        session.locationAgeSeconds(now)?.let { age ->
+                                            Text(
+                                                text = updatedText(age),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = sakhiSecondaryLabel(),
+                                            )
+                                        }
+                                    }
+                                    if (sharing) RefreshButton(onClick = onRefresh, label = stringResource(R.string.care_swm_refresh_mine))
                                 }
                             }
                         }
+                    }
+
+                    session.destination?.let { place ->
+                        item(key = "swm-destination") { DestinationCard(place, route, session) }
                     }
 
                     item(key = "near-label") { SwmSectionLabel(stringResource(R.string.care_swm_help_near_you), top = SakhiSpacing.space5) }
@@ -504,6 +588,134 @@ internal fun StayWithMeOwnerLive(
     }
 }
 
+/** Where she is going and how far is left, from the route when there is one. */
+@Composable
+private fun DestinationCard(place: StayWithMeDestination, route: WalkRoute?, session: StayWithMeSession) {
+    val metres = route?.distanceMeters ?: session.metresToDestination()
+    val distance = metres?.let { if (it < 1000) "${it.toInt()} m" else String.format("%.1f km", it / 1000) }
+    val minutes = route?.durationSeconds?.let { ((it + 59) / 60).coerceAtLeast(1) }
+    Row(
+        modifier = Modifier
+            .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2)
+            .fillMaxWidth()
+            .background(sakhiSystemBackground(), RoundedCornerShape(SakhiRadius.xl))
+            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Place,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(22.dp),
+        )
+        Spacer(Modifier.width(SakhiSpacing.space3))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.care_swm_going_to, place.name),
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                color = sakhiLabel(),
+                maxLines = 1,
+            )
+            if (distance != null) {
+                Text(
+                    text = listOfNotNull(
+                        stringResource(R.string.care_swm_left_distance, distance),
+                        minutes?.let { stringResource(R.string.care_swm_minutes_on_foot, it) },
+                    ).joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = sakhiSecondaryLabel(),
+                )
+            }
+        }
+    }
+}
+
+/** A round refresh control: her phone sends where she is now, or his asks for the newest. */
+@Composable
+private fun RefreshButton(onClick: () -> Unit, label: String) {
+    Surface(
+        shape = CircleShape,
+        color = sakhiLightPink(),
+        modifier = Modifier.size(36.dp),
+    ) {
+        IconButton(onClick = onClick, modifier = Modifier.size(36.dp)) {
+            Icon(
+                imageVector = Icons.Filled.Refresh,
+                contentDescription = label,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+/** How much of the screen each side's panel takes. The map is the rest, and behind it. */
+private const val OWNER_PANEL_FRACTION = 0.58f
+private const val WATCHER_PANEL_FRACTION = 0.52f
+
+/**
+ * The controls over the map, where Emergency Assistance puts them and drawn the same way:
+ * a 35dp white disc at the top left, and Contact Police as a white capsule opposite it.
+ * The disc carries a cross, because this screen closes rather than steps back. Closing is
+ * not stopping: the walk carries on, and Home's ring shows it.
+ */
+@Composable
+private fun LiveWalkTopBar(onClose: () -> Unit, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = SakhiSpacing.space2),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Surface(
+            shape = CircleShape,
+            color = sakhiSystemBackground(),
+            shadowElevation = 2.dp,
+            modifier = Modifier.size(35.dp),
+        ) {
+            IconButton(onClick = onClose, modifier = Modifier.size(35.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.care_swm_close),
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        Surface(
+            shape = CircleShape,
+            color = sakhiSystemBackground(),
+            shadowElevation = 2.dp,
+            modifier = Modifier.height(38.dp),
+        ) {
+            Row(
+                modifier = Modifier
+                    .clickable { dial(context, "112") }
+                    .padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Phone,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    text = stringResource(R.string.care_swm_contact_police),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                    color = sakhiLabel(),
+                )
+            }
+        }
+    }
+}
+
 /** "Rahul is with you", with a live dot, or the quieter line when he has not opened it yet. */
 @Composable
 private fun PresenceRow(name: String, present: Boolean, late: Boolean, modifier: Modifier = Modifier) {
@@ -520,7 +732,7 @@ private fun PresenceRow(name: String, present: Boolean, late: Boolean, modifier:
         else -> sakhiTertiaryLabel()
     }
     Row(modifier = modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        InitialAvatar(initial = name.take(1).uppercase(), size = 40)
+        WalkAvatar(name = name, size = 40)
         Spacer(Modifier.width(SakhiSpacing.space3))
         Text(
             text = when {
@@ -562,6 +774,8 @@ internal fun StayWithMeWatcherLive(
     placesLoading: Boolean,
     trail: List<StayWithMeLocation>,
     onClose: () -> Unit,
+    onRefresh: () -> Unit = {},
+    route: WalkRoute? = null,
 ) {
     val context = LocalContext.current
     val phase = session.phase(now)
@@ -569,53 +783,37 @@ internal fun StayWithMeWatcherLive(
     val accent = if (isLate) AppleSystemColors.red else MaterialTheme.colorScheme.primary
     val location = session.lastLocation
 
-    Box(modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground())) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            Box(modifier = Modifier.fillMaxWidth().weight(0.52f)) {
-                WalkMap(
-                    location = location,
-                    accent = accent,
-                    initial = herName.take(1).uppercase(),
-                    trail = trail,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                if (location == null) {
-                    MapNotice(
-                        text = stringResource(R.string.care_swm_waiting_location),
-                        modifier = Modifier.align(Alignment.Center),
-                    )
-                }
-            }
-            Spacer(Modifier.weight(0.48f))
-        }
-
-        // Close, over the map.
-        Box(
-            modifier = Modifier
-                .statusBarsPadding()
-                .padding(SakhiSpacing.space4)
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(sakhiSystemBackground())
-                .clickable(onClick = onClose),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = stringResource(R.string.care_swm_close),
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground())) {
+        WalkMap(
+            location = location,
+            accent = accent,
+            initial = walkInitials(herName) ?: "",
+            avatarWithoutName = true,
+            trail = trail,
+            modifier = Modifier.fillMaxSize(),
+            bottomPadding = maxHeight * WATCHER_PANEL_FRACTION - 28.dp,
+            destination = session.destination,
+            routeLine = route?.points.orEmpty(),
+        )
+        if (location == null) {
+            MapNotice(
+                text = stringResource(R.string.care_swm_waiting_location),
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = maxHeight * 0.22f),
             )
         }
 
+        LiveWalkTopBar(onClose = onClose, modifier = Modifier.align(Alignment.TopCenter))
+
         // The panel rises 24dp over the map's bottom edge.
+        // Sakhi's own background, the one Emergency Assistance's sheet sits on, with white
+        // cards on top. Plain white made the panel read as a system screen.
         Surface(
-            color = sakhiSystemBackground(),
+            color = MaterialTheme.colorScheme.background,
             shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .fillMaxHeight(0.52f),
+                .fillMaxHeight(WATCHER_PANEL_FRACTION),
         ) {
             LazyColumn(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
                 item(key = "who") {
@@ -627,7 +825,7 @@ internal fun StayWithMeWatcherLive(
                         ),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        InitialAvatar(initial = herName.take(1).uppercase(), size = 48, fill = accent)
+                        WalkAvatar(name = herName, size = 48, fill = accent)
                         Spacer(Modifier.width(SakhiSpacing.space3))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
@@ -674,6 +872,8 @@ internal fun StayWithMeWatcherLive(
                         session.note?.let { note ->
                             InfoChip(icon = Icons.Filled.Place, text = note, tint = sakhiLabel())
                         }
+                        Spacer(Modifier.weight(1f))
+                        RefreshButton(onClick = onRefresh, label = stringResource(R.string.care_swm_refresh_hers))
                     }
                 }
 
@@ -690,6 +890,10 @@ internal fun StayWithMeWatcherLive(
                                 .padding(SakhiSpacing.space4),
                         )
                     }
+                }
+
+                session.destination?.let { place ->
+                    item(key = "destination") { DestinationCard(place, route, session) }
                 }
 
                 item(key = "near-label") { SwmSectionLabel(stringResource(R.string.care_swm_help_near_her), top = SakhiSpacing.space5) }
@@ -835,6 +1039,13 @@ private fun WalkMap(
     initial: String,
     modifier: Modifier = Modifier,
     trail: List<StayWithMeLocation> = emptyList(),
+    /** Her person's map draws her as an avatar even when there is no name for initials. */
+    avatarWithoutName: Boolean = false,
+    destination: StayWithMeDestination? = null,
+    /** The way ahead, from her to [destination]. */
+    routeLine: List<Pair<Double, Double>> = emptyList(),
+    /** How much of the map's bottom the panel covers, so the camera frames above it. */
+    bottomPadding: Dp = 0.dp,
 ) {
     val context = LocalContext.current
     val target = location?.let { LatLng(it.latitude, it.longitude) }
@@ -859,16 +1070,25 @@ private fun WalkMap(
             glide.animateTo(1f, tween(1_200, easing = FastOutSlowInEasing))
         }
     }
-    LaunchedEffect(target) {
+    LaunchedEffect(target, destination, routeLine.size) {
         if (target == null) return@LaunchedEffect
-        val zoom = cameraState.position.zoom.coerceAtLeast(15.5f)
-        runCatching { cameraState.animate(CameraUpdateFactory.newLatLngZoom(target, zoom), 1_000) }
+        val place = destination
+        if (place != null) {
+            // With somewhere to go, the whole of it is in view: her, and where she is headed.
+            val bounds = LatLngBounds.builder().include(target).include(LatLng(place.latitude, place.longitude))
+            routeLine.forEach { bounds.include(LatLng(it.first, it.second)) }
+            runCatching { cameraState.animate(CameraUpdateFactory.newLatLngBounds(bounds.build(), 140), 1_000) }
+        } else {
+            val zoom = cameraState.position.zoom.coerceAtLeast(15.5f)
+            runCatching { cameraState.animate(CameraUpdateFactory.newLatLngZoom(target, zoom), 1_000) }
+        }
     }
     val shown = interpolate(from, to, glide.value)
 
     GoogleMap(
         modifier = modifier,
         cameraPositionState = cameraState,
+        contentPadding = PaddingValues(bottom = bottomPadding.coerceAtLeast(0.dp)),
         properties = MapProperties(isMyLocationEnabled = false),
         uiSettings = MapUiSettings(
             zoomControlsEnabled = false,
@@ -877,6 +1097,27 @@ private fun WalkMap(
             compassEnabled = false,
         ),
     ) {
+        // The way ahead, dotted, under everything else.
+        if (routeLine.size >= 2) {
+            val ahead = remember(routeLine) { routeLine.map { LatLng(it.first, it.second) } }
+            Polyline(
+                points = ahead,
+                color = accent.copy(alpha = 0.9f),
+                width = 10f,
+                pattern = listOf(Dot(), Gap(18f)),
+                jointType = JointType.ROUND,
+            )
+        }
+        destination?.let { place ->
+            val pinState = rememberMarkerState(position = LatLng(place.latitude, place.longitude))
+            pinState.position = LatLng(place.latitude, place.longitude)
+            Marker(
+                state = pinState,
+                title = place.name,
+                icon = remember { BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ROSE) },
+            )
+        }
+
         // The way she has come. Drawn under her dot, and only from the second point, so a
         // walk that has just started shows a dot rather than a line of length zero.
         if (trail.size >= 2) {
@@ -911,8 +1152,8 @@ private fun WalkMap(
             )
             val markerState = rememberMarkerState(position = shown)
             markerState.position = shown
-            val icon = remember(accent, initial) {
-                BitmapDescriptorFactory.fromBitmap(markerBitmap(context, accent.toArgb(), initial))
+            val icon = remember(accent, initial, avatarWithoutName) {
+                BitmapDescriptorFactory.fromBitmap(markerBitmap(context, accent.toArgb(), initial, avatar = initial.isNotEmpty() || avatarWithoutName))
             }
             Marker(state = markerState, icon = icon, anchor = Offset(0.5f, 0.5f), flat = true)
         }
@@ -927,9 +1168,9 @@ private fun interpolate(from: LatLng?, to: LatLng?, fraction: Float): LatLng? {
 }
 
 /** Her dot: a filled circle with a white collar, her initial on it when there is one. */
-private fun markerBitmap(context: Context, color: Int, initial: String): Bitmap {
+private fun markerBitmap(context: Context, color: Int, initial: String, avatar: Boolean): Bitmap {
     val density = context.resources.displayMetrics.density
-    val size = (if (initial.isEmpty()) 22 else 40) * density
+    val size = (if (avatar) 40 else 22) * density
     val bitmap = Bitmap.createBitmap(size.toInt(), size.toInt(), Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     val radius = size / 2f
@@ -943,6 +1184,14 @@ private fun markerBitmap(context: Context, color: Int, initial: String): Bitmap 
             textAlign = Paint.Align.CENTER
         }
         canvas.drawText(initial, radius, radius - (text.descent() + text.ascent()) / 2f, text)
+    } else if (avatar) {
+        // No name to take initials from: a head and shoulders, the profile's person glyph.
+        val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = android.graphics.Color.WHITE }
+        canvas.drawCircle(radius, radius - 4 * density, 5.5f * density, white)
+        canvas.drawArc(
+            radius - 9 * density, radius + 3 * density, radius + 9 * density, radius + 19 * density,
+            180f, 180f, true, white,
+        )
     }
     return bitmap
 }
@@ -996,18 +1245,48 @@ private fun InfoChip(icon: ImageVector, text: String, tint: Color) {
     }
 }
 
+/**
+ * The other person's face on the walk: the same avatar their profile shows, their initials
+ * (first letters of the first two words of their name) in a circle, and a person glyph when
+ * there is no real name to take them from. A stand-in label like "Your Sakhi" is not a
+ * name, and drawing its first letter showed a "Y" that belonged to nobody.
+ */
 @Composable
-private fun InitialAvatar(initial: String, size: Int, fill: Color = MaterialTheme.colorScheme.primary) {
+private fun WalkAvatar(name: String, size: Int, fill: Color = MaterialTheme.colorScheme.primary) {
+    val initials = walkInitials(name)
     Box(
         modifier = Modifier.size(size.dp).background(fill, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = initial,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold, fontSize = (size * 0.4f).sp),
-            color = Color.White,
-        )
+        if (initials != null) {
+            Text(
+                text = initials,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = (size * if (initials.length > 1) 0.36f else 0.42f).sp,
+                ),
+                color = Color.White,
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Person,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size((size * 0.5f).dp),
+            )
+        }
     }
+}
+
+/** Labels the app puts in when it does not know a name. */
+private val STAND_IN_NAMES = setOf("your sakhi", "her", "she", "you", "your person", "sakhi")
+
+/** The profile's rule for initials, or null when there is no real name. */
+internal fun walkInitials(name: String): String? {
+    val trimmed = name.trim()
+    if (trimmed.isEmpty() || trimmed.lowercase() in STAND_IN_NAMES) return null
+    return trimmed.split(" ").filter { it.isNotEmpty() }.take(2).joinToString("") { it.first().uppercase() }
+        .takeIf { it.isNotEmpty() }
 }
 
 @Composable

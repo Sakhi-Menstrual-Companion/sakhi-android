@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The pink the Sakhi symbol itself is drawn in (Logo-Minimal.pdf, 0.9647 0.0941 0.5294).
+         Android uses it to tint the notification icon and its accents. -->
+    <color name="platform_notification_accent">#F61887</color>
+</resources>

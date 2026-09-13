@@ -21,6 +21,7 @@ import team.sakhi.emergency.EmergencySafePlace
 import team.sakhi.emergency.EmergencySafePlaceKind
 import team.sakhi.emergency.EmergencySafePlacesProvider
 import team.sakhi.session.SessionManager
+import team.sakhi.staywithme.StayWithMeDestination
 import team.sakhi.staywithme.StayWithMeLocation
 import team.sakhi.staywithme.StayWithMeRealtimeCoordinator
 import team.sakhi.staywithme.StayWithMeSession
@@ -68,6 +69,12 @@ class StayWithMeViewModel(
     private var placesAnchor: Pair<Double, Double>? = null
     private var pollJob: Job? = null
 
+    private val _route = MutableStateFlow<WalkRoute?>(null)
+    /** The way from where she is to where she is going, when she said where. */
+    internal val route: StateFlow<WalkRoute?> = _route
+    private var routeFrom: Pair<Double, Double>? = null
+    private var routeTo: StayWithMeDestination? = null
+
     private val base = combine(now, store.mine, store.watching, store.isBusy, store.lastError) { n, mine, watching, busy, error ->
         StayWithMeUiState(now = n, mine = mine, watching = watching, isBusy = busy, error = error)
     }
@@ -96,6 +103,27 @@ class StayWithMeViewModel(
             combine(store.mine, store.watching) { mine, watching -> mine ?: watching }.collect { walk ->
                 val location = walk?.lastLocation ?: return@collect
                 refreshPlacesIfMoved(location.latitude, location.longitude)
+            }
+        }
+        // The way ahead. Asked for again only once she has moved sixty metres or the
+        // destination changes, so a fix every fifteen seconds is not a route request every
+        // fifteen seconds.
+        viewModelScope.launch {
+            combine(store.mine, store.watching) { mine, watching -> mine ?: watching }.collect { walk ->
+                val destination = walk?.destination
+                val here = walk?.lastLocation
+                if (destination == null || here == null) {
+                    _route.value = null
+                    routeFrom = null
+                    routeTo = null
+                    return@collect
+                }
+                val from = here.latitude to here.longitude
+                val moved = routeFrom?.let { distanceMeters(it.first, it.second, from.first, from.second) } ?: Double.MAX_VALUE
+                if (destination == routeTo && moved < ROUTE_REFRESH_METERS) return@collect
+                routeFrom = from
+                routeTo = destination
+                _route.value = StayWithMeRoutes.walking(appContext, from, destination)
             }
         }
         // One socket, following whichever walks this phone is part of. A walk that ends
@@ -143,10 +171,10 @@ class StayWithMeViewModel(
         super.onCleared()
     }
 
-    fun start(partnershipId: String, minutes: Int, note: String) {
+    fun start(partnershipId: String, minutes: Int, note: String, destination: StayWithMeDestination? = null) {
         hapticManager.impact(HapticImpact.MEDIUM)
         viewModelScope.launch {
-            store.start(partnershipId, minutes, note).onSuccess {
+            store.start(partnershipId, minutes, note, destination).onSuccess {
                 // No location, no service: the walk and its timer still protect her, her
                 // screen just says location is off.
                 if (StayWithMeLocationService.hasLocationPermission(appContext)) {
@@ -168,6 +196,22 @@ class StayWithMeViewModel(
 
     fun stop() {
         viewModelScope.launch { store.cancel().onSuccess { StayWithMeLocationService.stop(appContext) } }
+    }
+
+    /** Her refresh: a fresh fix from her phone, now, past the throttle. */
+    fun refreshMyLocation() {
+        hapticManager.selection()
+        if (StayWithMeLocationService.hasLocationPermission(appContext)) {
+            StayWithMeLocationService.refreshNow(appContext)
+        }
+    }
+
+    /** Her person's refresh: the newest the server has, now, rather than at the next beat. */
+    fun refreshWalk() {
+        hapticManager.selection()
+        viewModelScope.launch {
+            sessionManager.current?.userId?.let { store.refresh(it) }
+        }
     }
 
     fun clearError() = store.clearError()
@@ -200,6 +244,7 @@ class StayWithMeViewModel(
         /** The socket is carrying the walk, so this is only there for when it is not. */
         const val SOCKET_POLL_MS = 60_000L
         const val PLACES_REFRESH_METERS = 300.0
+        const val ROUTE_REFRESH_METERS = 60.0
         const val MAX_PLACES = 6
         val NEARBY_KINDS = listOf(
             EmergencySafePlaceKind.POLICE,

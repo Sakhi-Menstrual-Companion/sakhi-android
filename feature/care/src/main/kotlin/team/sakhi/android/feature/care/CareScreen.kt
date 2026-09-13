@@ -118,6 +118,12 @@ fun CareScreen(
     prefillInviteCode: String? = null,
     viewModel: CareViewModel = koinViewModel(),
     onClose: () -> Unit = {},
+    /**
+     * A walk is live on either side. The host swaps this sheet for the full-screen walk
+     * ([StayWithMeLiveLayer]), the way Emergency Assistance is full screen rather than a
+     * pane inside a sheet.
+     */
+    onOpenLiveWalk: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val hapticManager = koinInject<AndroidHapticManager>()
@@ -244,21 +250,8 @@ fun CareScreen(
                 is CareRuntimeState.OwnerConnected -> {
                     val walk = stayWithMe.mine
                     val personName = careDisplayName(state.partnership, isPartnerRole = false)
-                    if (walk != null) {
-                        StayWithMeOwnerLive(
-                            session = walk,
-                            personName = personName,
-                            now = stayWithMe.now,
-                            isBusy = stayWithMe.isBusy,
-                            trail = stayWithMe.mineTrail,
-                            places = stayWithMe.places,
-                            placesLoading = stayWithMe.placesLoading,
-                            onArrive = stayWithMeViewModel::arrive,
-                            onExtend = stayWithMeViewModel::extend,
-                            onStop = stayWithMeViewModel::stop,
-                            onClose = onClose,
-                        )
-                    } else PartnerDetailContent(
+                    LaunchedEffect(walk?.id) { if (walk != null) onOpenLiveWalk() }
+                    PartnerDetailContent(
                     partnership = state.partnership,
                     isPartnerRole = false,
                     stayWithMeSlot = {
@@ -266,8 +259,8 @@ fun CareScreen(
                             personName = personName,
                             isBusy = stayWithMe.isBusy,
                             error = stayWithMe.error,
-                            onStart = { minutes, note ->
-                                stayWithMeViewModel.start(state.partnership.id, minutes, note)
+                            onStart = { minutes, note, destination ->
+                                stayWithMeViewModel.start(state.partnership.id, minutes, note, destination)
                             },
                         )
                     },
@@ -284,17 +277,8 @@ fun CareScreen(
 
                 is CareRuntimeState.PartnerConnected -> {
                     val walk = stayWithMe.watching
-                    if (walk != null) {
-                        StayWithMeWatcherLive(
-                            session = walk,
-                            herName = careDisplayName(state.partnership, isPartnerRole = true),
-                            now = stayWithMe.now,
-                            places = stayWithMe.places,
-                            placesLoading = stayWithMe.placesLoading,
-                            trail = stayWithMe.watchingTrail,
-                            onClose = onClose,
-                        )
-                    } else PartnerDetailContent(
+                    LaunchedEffect(walk?.id) { if (walk != null) onOpenLiveWalk() }
+                    PartnerDetailContent(
                     partnership = state.partnership,
                     isPartnerRole = true,
                     isRemoving = uiState.isRemovingPartnership,
@@ -324,7 +308,7 @@ private fun LoadingContent() {
 
 /** The other person's name, or a plain stand-in when she has not set one. */
 @Composable
-private fun careDisplayName(partnership: CarePartnership, isPartnerRole: Boolean): String {
+internal fun careDisplayName(partnership: CarePartnership, isPartnerRole: Boolean): String {
     val resolved = partnership.partnerName.takeIf { name ->
         name.isNotEmpty() &&
             !name.lowercase().contains("partner") &&

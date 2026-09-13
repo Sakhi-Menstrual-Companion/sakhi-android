@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -294,7 +295,8 @@ class AndroidNotificationReminderManager(
             )
 
             val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_info)
+                .setSmallIcon(R.drawable.ic_stat_sakhi)
+                .setColor(ContextCompat.getColor(context, R.color.platform_notification_accent))
                 .setContentTitle(context.getString(R.string.platform_notification_app_name))
                 .setContentText(context.getString(R.string.platform_reminder_open_today))
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)

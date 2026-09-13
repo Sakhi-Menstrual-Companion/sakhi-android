@@ -132,7 +132,7 @@
     <string name="care_swm_section">STAY WITH ME</string>
     <string name="care_swm_heading_home">Heading home?</string>
     <string name="care_swm_ask_subtitle">Ask %1$s to stay with you until you reach.</string>
-    <string name="care_swm_where_placeholder">Where to? (optional)</string>
+    <string name="care_swm_where_placeholder">Where to? Search a place</string>
     <string name="care_swm_ask_button">Ask %1$s to stay</string>
     <string name="care_swm_consent">%1$s sees your location and battery until you mark yourself home.</string>
     <string name="care_swm_minutes">%1$d min</string>
@@ -179,4 +179,11 @@
     <string name="care_swm_places_empty_you">Nothing found close to you yet</string>
     <string name="care_swm_privacy_note">Her location is shared with you only while this walk is on.</string>
     <string name="care_swm_close">Close</string>
+    <string name="care_swm_contact_police">Contact Police</string>
+    <string name="care_swm_clear_where">Clear where to</string>
+    <string name="care_swm_going_to">Going to %1$s</string>
+    <string name="care_swm_left_distance">%1$s left</string>
+    <string name="care_swm_minutes_on_foot">about %1$d min on foot</string>
+    <string name="care_swm_refresh_mine">Send my location now</string>
+    <string name="care_swm_refresh_hers">Get her newest location</string>
 </resources>

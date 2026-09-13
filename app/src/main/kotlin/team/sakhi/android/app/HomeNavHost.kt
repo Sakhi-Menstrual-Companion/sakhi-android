@@ -36,6 +36,8 @@ import team.sakhi.android.feature.ai.ChatScreen
 import team.sakhi.android.feature.emergency.EmergencyFlowScreen
 import team.sakhi.android.feature.calendar.CalendarScreen
 import team.sakhi.android.feature.care.CareScreen
+import team.sakhi.android.feature.care.StayWithMeLiveLayer
+import team.sakhi.staywithme.StayWithMeStore
 import team.sakhi.android.feature.home.HomeScreen
 import team.sakhi.android.feature.home.HomeViewModel
 import team.sakhi.android.feature.logging.LoggingSheet
@@ -103,6 +105,8 @@ private sealed interface HomeOverlaySheet {
     // own "Log" button/quick-log menu, matching iOS's real per-date `calendarLogVM`.
     data class Logging(val initialDate: LocalDate? = null) : HomeOverlaySheet
     data class Care(val prefillInviteCode: String? = null) : HomeOverlaySheet
+    /** A live Stay With Me walk, full screen like Emergency. Also `sakhi://care/stay/{id}`. */
+    data object StayWithMe : HomeOverlaySheet
 }
 
 private enum class ProfileSheetScreen {
@@ -160,6 +164,11 @@ fun HomeNavHost() {
     val homeViewModel: HomeViewModel = koinViewModel()
     // Needed to resolve the partnership the log request is sent against.
     val careRuntimeState by koinInject<CareStore>().careState.collectAsStateWithLifecycle()
+    // Home's Care button goes straight to a live walk, on either side, instead of to the
+    // sheet that would only hand off to it.
+    val stayWithMeStore = koinInject<StayWithMeStore>()
+    val liveWalkMine by stayWithMeStore.mine.collectAsStateWithLifecycle()
+    val liveWalkWatching by stayWithMeStore.watching.collectAsStateWithLifecycle()
     val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
     fun finishOverlaySheetDismiss(dismissedSheet: HomeOverlaySheet?) {
@@ -179,6 +188,13 @@ fun HomeNavHost() {
         activeOverlaySheet = sheet
     }
 
+    val openCareOrWalk = {
+        presentOverlaySheet(
+            if (liveWalkMine != null || liveWalkWatching != null) HomeOverlaySheet.StayWithMe
+            else HomeOverlaySheet.Care(),
+        )
+    }
+
     // Signed-in deep links resolve here, not in RootNavHost: Care/Reports/Chat/
     // Profile are all routes this graph owns, and Home is guaranteed mounted by
     // the time this composes. Signed-out invite/onboarding links are intercepted
@@ -191,9 +207,9 @@ fun HomeNavHost() {
         when (val link = pending.link) {
             is SakhiDeepLink.AcceptInvite -> activeOverlaySheet = HomeOverlaySheet.Care(prefillInviteCode = link.code)
             is SakhiDeepLink.OpenCareMode -> activeOverlaySheet = HomeOverlaySheet.Care()
-            // sakhi://care/stay/{id}, from a Stay With Me notification. Care Mode opens on the
-            // live walk by itself, so there is nothing extra to pass: the store already holds it.
-            is SakhiDeepLink.OpenStayWithMe -> activeOverlaySheet = HomeOverlaySheet.Care()
+            // sakhi://care/stay/{id}, from a Stay With Me notification: straight to the live
+            // walk, full screen. The store already holds the walk, so nothing is passed.
+            is SakhiDeepLink.OpenStayWithMe -> activeOverlaySheet = HomeOverlaySheet.StayWithMe
             is SakhiDeepLink.OpenReport -> activeOverlaySheet = HomeOverlaySheet.Profile(initialScreen = ProfileSheetScreen.Reports)
             is SakhiDeepLink.OpenAIChat -> activeOverlaySheet = HomeOverlaySheet.Chat
             is SakhiDeepLink.OpenProfile -> activeOverlaySheet = HomeOverlaySheet.Profile()
@@ -241,7 +257,7 @@ fun HomeNavHost() {
                         HomeOverlaySheet.Profile(initialScreen = ProfileSheetScreen.LogHistory),
                     )
                 },
-                onOpenCare = { presentOverlaySheet(HomeOverlaySheet.Care()) },
+                onOpenCare = openCareOrWalk,
                 onOpenNotifications = { presentOverlaySheet(HomeOverlaySheet.Notifications) },
                 unreadNotificationCount = inboxState.unreadCount,
                 onOpenCalendar = { showCalendar = true },
@@ -270,7 +286,7 @@ fun HomeNavHost() {
             onOpenEmergency = { openInbox ->
                 presentOverlaySheet(HomeOverlaySheet.Emergency(openResponderInbox = openInbox))
             },
-            onOpenCare = { presentOverlaySheet(HomeOverlaySheet.Care()) },
+            onOpenCare = openCareOrWalk,
             onLog = { date -> presentOverlaySheet(HomeOverlaySheet.Logging(initialDate = date)) },
             onDaySelected = homeViewModel::selectDate,
             // Detent and year mode are the same concept on iOS: dragging the sheet
@@ -311,8 +327,20 @@ fun HomeNavHost() {
         }
     }
 
+    // A live walk is full screen too, for the same reason Emergency is: the map is the
+    // screen, not a pane inside a sheet over Home. Its own layout carries the panel.
+    if (activeOverlaySheet == HomeOverlaySheet.StayWithMe) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            StayWithMeLiveLayer(onClose = ::dismissOverlaySheet)
+        }
+    }
+
     activeOverlaySheet
-        ?.takeIf { it !is HomeOverlaySheet.Calendar && it !is HomeOverlaySheet.Emergency }
+        ?.takeIf {
+            it !is HomeOverlaySheet.Calendar &&
+                it !is HomeOverlaySheet.Emergency &&
+                it != HomeOverlaySheet.StayWithMe
+        }
         ?.let { sheet ->
         SakhiModalSheet(
             onDismissRequest = {
@@ -344,8 +372,9 @@ fun HomeNavHost() {
                 label = "home_overlay_sheet_transition",
             ) { targetSheet ->
                 when (targetSheet) {
-                    // Handled above as a full-screen layer, never in this sheet host.
+                    // Handled above as full-screen layers, never in this sheet host.
                     is HomeOverlaySheet.Emergency -> Unit
+                    HomeOverlaySheet.StayWithMe -> Unit
                     is HomeOverlaySheet.Profile -> ProfileOverlaySheet(
                         initialScreen = targetSheet.initialScreen,
                         onDismiss = ::dismissOverlaySheet,
@@ -408,6 +437,7 @@ fun HomeNavHost() {
                         CareScreen(
                             prefillInviteCode = targetSheet.prefillInviteCode,
                             onClose = ::dismissOverlaySheet,
+                            onOpenLiveWalk = { activeOverlaySheet = HomeOverlaySheet.StayWithMe },
                         )
                     }
                 }

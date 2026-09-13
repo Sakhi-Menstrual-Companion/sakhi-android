@@ -33,6 +33,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.suspendCancellableCoroutine
 import org.koin.core.context.GlobalContext
 import team.sakhi.care.CareRuntimeState
 import team.sakhi.care.CareStore
@@ -102,6 +105,13 @@ class StayWithMeLocationService : Service() {
         // where she is, and her screen says so.
         if (!started) return stopNow()
 
+        if (intent?.action == ACTION_REFRESH) {
+            // She tapped refresh: one fresh, accurate fix now, sent past the throttle.
+            freshFix(Priority.PRIORITY_HIGH_ACCURACY)
+            if (runJob?.isActive != true) runJob = scope.launch { run(store) }
+            return START_STICKY
+        }
+
         if (intent?.action == ACTION_ARRIVE) {
             if (!isEnding) {
                 isEnding = true
@@ -137,6 +147,9 @@ class StayWithMeLocationService : Service() {
                 delay(TICK_MS)
                 store.checkLate()
                 store.mine.value?.let(::postOngoing)
+                // Standing still sends nothing, which on her person's screen looks like a
+                // dead phone. The shared rule says when to resend where she is.
+                if (store.needsHeartbeat()) withContext(Dispatchers.Main) { lastKnownFix() }
             }
         }
 
@@ -176,6 +189,27 @@ class StayWithMeLocationService : Service() {
         // instead of waiting for her to walk twenty metres.
         runCatching {
             fused.getCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY, null)
+                .addOnSuccessListener { location -> location?.let { scope.launch { report(it, force = true) } } }
+        }
+    }
+
+    /** The last position the phone already has, resent past the throttle. No GPS is woken. */
+    @SuppressLint("MissingPermission")
+    private fun lastKnownFix() {
+        if (!hasLocationPermission(this)) return
+        runCatching {
+            fused.lastLocation.addOnSuccessListener { location ->
+                if (location != null) scope.launch { report(location, force = true) } else freshFix(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
+            }
+        }
+    }
+
+    /** One fix now, at the given accuracy, sent past the throttle. */
+    @SuppressLint("MissingPermission")
+    private fun freshFix(priority: Int) {
+        if (!hasLocationPermission(this)) return
+        runCatching {
+            fused.getCurrentLocation(priority, null)
                 .addOnSuccessListener { location -> location?.let { scope.launch { report(it, force = true) } } }
         }
     }
@@ -238,7 +272,8 @@ class StayWithMeLocationService : Service() {
         )
 
         return NotificationCompat.Builder(this, StayWithMeNotifications.ONGOING_CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_menu_mylocation)
+            .setSmallIcon(R.drawable.ic_stat_sakhi)
+            .setColor(ContextCompat.getColor(this, R.color.platform_notification_accent))
             .setContentTitle(title)
             .setContentText(text)
             .setOngoing(true)
@@ -274,9 +309,11 @@ class StayWithMeLocationService : Service() {
 
     companion object {
         const val ACTION_ARRIVE = "team.sakhi.android.platform.stay_with_me.ARRIVE"
+        const val ACTION_REFRESH = "team.sakhi.android.platform.stay_with_me.REFRESH"
 
         private const val ONGOING_NOTIFICATION_ID = 2_001
-        private const val TICK_MS = 30_000L
+        /** Often enough that a heartbeat is never much later than the minute it is due. */
+        private const val TICK_MS = 20_000L
         private const val UPDATE_INTERVAL_MS = 30_000L
         private const val MIN_UPDATE_INTERVAL_MS = 15_000L
         private const val MAX_UPDATE_DELAY_MS = 60_000L
@@ -286,8 +323,34 @@ class StayWithMeLocationService : Service() {
             ContextCompat.startForegroundService(context, Intent(context, StayWithMeLocationService::class.java))
         }
 
+        /** Her refresh button: send where she is right now. */
+        fun refreshNow(context: Context) {
+            ContextCompat.startForegroundService(
+                context,
+                Intent(context, StayWithMeLocationService::class.java).setAction(ACTION_REFRESH),
+            )
+        }
+
         fun stop(context: Context) {
             context.stopService(Intent(context, StayWithMeLocationService::class.java))
+        }
+
+        /**
+         * Where the phone already thinks it is, without waking GPS, or null. Used to draw
+         * "Where to?" suggestions towards her, never to share anything.
+         */
+        @SuppressLint("MissingPermission")
+        suspend fun lastKnownLatLng(context: Context): Pair<Double, Double>? {
+            if (!hasLocationPermission(context)) return null
+            return withTimeoutOrNull(1_500) {
+                suspendCancellableCoroutine { cont ->
+                    runCatching {
+                        LocationServices.getFusedLocationProviderClient(context).lastLocation
+                            .addOnSuccessListener { loc -> if (cont.isActive) cont.resume(loc?.let { it.latitude to it.longitude }) }
+                            .addOnFailureListener { if (cont.isActive) cont.resume(null) }
+                    }.onFailure { if (cont.isActive) cont.resume(null) }
+                }
+            }
         }
 
         fun hasLocationPermission(context: Context): Boolean =

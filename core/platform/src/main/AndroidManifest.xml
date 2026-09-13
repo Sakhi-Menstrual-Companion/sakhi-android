@@ -25,6 +25,15 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 
     <application>
+        <!-- The icon and colour FCM uses for any message it draws itself (a notification
+             payload while the app is closed). Ours are data-only and drawn by
+             SakhiFirebaseMessagingService with the same two, so both paths look alike. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_sakhi" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/platform_notification_accent" />
         <service
             android:name=".StayWithMeLocationService"
             android:exported="false"

@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Sakhi symbol for the status bar and notifications: the head and the two petals.
+
+  Converted from the brand vector itself (01-iOS Assets.xcassets/BrandMedia/
+  sakhiSymbolAccent.imageset/Logo-Minimal.pdf), so it is the same shape as the app icon,
+  not a redraw. White on transparent because Android draws notification icons as a
+  silhouette and tints them; the pink comes from setColor. The viewport is the glyph's
+  own bounds plus about 6% each side, the keyline a 24dp notification icon expects, so
+  the mark fills the slot instead of sitting small in the middle of it.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="88.351"
+    android:viewportHeight="88.351">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M57.684,18.244C57.684,25.705 51.635,31.754 44.174,31.754C36.712,31.754 30.663,25.705 30.663,18.244C30.663,10.782 36.712,4.733 44.174,4.733C51.635,4.733 57.684,10.782 57.684,18.244Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M73.965,37.084C77.532,39.144 79.995,42.779 80.811,47.191C81.627,51.602 80.73,56.428 78.318,60.608C72.252,71.113 45.387,83.618 45.387,83.618C45.387,83.618 45.252,69.839 45.387,66.184C45.709,57.4 47.133,52.495 51.416,45.076C53.829,40.897 57.56,37.707 61.789,36.209C66.018,34.71 70.397,35.025 73.965,37.084Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14.386,37.084C10.819,39.144 8.356,42.779 7.54,47.191C6.723,51.602 7.62,56.428 10.033,60.608C16.098,71.113 42.964,83.618 42.964,83.618C42.964,83.618 43.098,69.839 42.964,66.184C42.642,57.4 41.217,52.495 36.934,45.076C34.521,40.897 30.79,37.707 26.562,36.209C22.333,34.71 17.953,35.025 14.386,37.084Z" />
+</vector>
