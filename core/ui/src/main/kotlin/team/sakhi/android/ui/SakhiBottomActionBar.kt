@@ -1,6 +1,11 @@
 package team.sakhi.android.ui
 
 import android.content.Context
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -53,7 +58,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -158,44 +162,58 @@ fun SakhiBottomActionBar(
      */
     logStrokeColor: Color? = null,
 ) {
-    val context = LocalContext.current
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (leadingSlot != null) {
-            leadingSlot()
-        } else if (showCalendarButton && onCalendarClick != null) {
-            IconButton(
-                onClick = onCalendarClick,
-                modifier = Modifier
-                    .size(50.dp)
-                    .background(accentColor.copy(alpha = 0.12f), CircleShape),
-            ) {
-                Icon(
-                    Icons.Filled.CalendarMonth,
-                    contentDescription = stringResource(R.string.sakhi_action_bar_calendar_content_description),
-                    tint = accentColor,
-                )
+    val haptics = LocalHapticFeedback.current
+    var trayOpen by remember { mutableStateOf(false) }
+    // Another day, a saved log or a lost permission ends an open quick log.
+    LaunchedEffect(selectedDate, hasLoggedForDate, canLog) { trayOpen = false }
+    val tray by animateFloatAsState(
+        targetValue = if (trayOpen) 1f else 0f,
+        animationSpec = spring(dampingRatio = 0.9f, stiffness = 420f),
+        label = "quickLogTray",
+    )
+    BackHandler(enabled = trayOpen) { trayOpen = false }
+    val logButtonFill = logFill ?: accentColor
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Tray: everything beside the log button slides out to the left while it opens.
+            val slideAside = Modifier.graphicsLayer {
+                translationX = -tray * (size.width + 24.dp.toPx())
+                alpha = (1f - tray * 1.3f).coerceIn(0f, 1f)
             }
-        }
+            if (leadingSlot != null) {
+                Box(modifier = slideAside) { leadingSlot() }
+            } else if (showCalendarButton && onCalendarClick != null) {
+                IconButton(
+                    onClick = onCalendarClick,
+                    modifier = slideAside
+                        .size(50.dp)
+                        .background(accentColor.copy(alpha = 0.12f), CircleShape),
+                ) {
+                    Icon(
+                        Icons.Filled.CalendarMonth,
+                        contentDescription = stringResource(R.string.sakhi_action_bar_calendar_content_description),
+                        tint = accentColor,
+                    )
+                }
+            }
 
-        SakhiAskSakhiBar(
-            phase = phase,
-            isPartnerMode = isPartnerMode,
-            accentColor = accentColor,
-            onTap = onAskSakhiClick,
-            modifier = Modifier.weight(1f),
-        )
+            SakhiAskSakhiBar(
+                phase = phase,
+                isPartnerMode = isPartnerMode,
+                accentColor = accentColor,
+                onTap = onAskSakhiClick,
+                modifier = Modifier.weight(1f).then(slideAside),
+            )
 
-        var showQuickLogMenu by remember { mutableStateOf(false) }
-
-        Box {
             Box(
                 modifier = Modifier
                     .size(50.dp)
-                    .background(logFill ?: accentColor, CircleShape)
+                    .background(logButtonFill, CircleShape)
                     .then(
                         if (logStrokeColor != null) {
                             Modifier.border(1.dp, logStrokeColor, CircleShape)
@@ -205,102 +223,85 @@ fun SakhiBottomActionBar(
                     )
                     .combinedClickable(
                         enabled = (canLog || onLockedLogClick != null) && !isLogSaving,
-                        // iOS wraps this button in a `Menu`, so a *tap* opens the quick-log
-                        // menu and the sheet is reached from its "Other symptoms" row -- the
-                        // `onTap` closure is never called in that branch
-                        // (`HomeLogButton.body`). Android opened the sheet on tap and hid the
-                        // menu behind a long-press, so the same tap did two different things
-                        // on the two platforms and the menu was effectively undiscoverable.
-                        // A partner without permission still never reaches the menu.
-                        // Logging is always the quick menu; UPDATING is always the full
-                        // sheet. Once a day has anything on it, the menu can only offer
-                        // flow levels and would hide whatever else is already recorded,
-                        // so editing opens the sheet instead. This is the same condition
-                        // that picks the icon, so the button reads honestly: "+" opens
-                        // the quick menu, the pencil opens the sheet.
+                        // A tap on "+" opens the quick log, as iOS's `Menu` does; a partner
+                        // without permission is offered the request instead, and a day that
+                        // already has a log opens the full sheet (the pencil), since the
+                        // quick log would hide what is already recorded. While the tray is
+                        // open this button is "more symptoms", the way into the full sheet.
                         onClick = {
                             when {
+                                trayOpen -> {
+                                    trayOpen = false
+                                    onLogClick()
+                                }
                                 !canLog -> onLockedLogClick?.invoke()
                                 hasLoggedForDate -> onLogClick()
-                                else -> showQuickLogMenu = true
+                                else -> {
+                                    haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    trayOpen = true
+                                }
                             }
                         },
-                        onLongClick = { if (canLog) showQuickLogMenu = true },
+                        onLongClick = { if (canLog && !hasLoggedForDate) trayOpen = true },
                     ),
                 contentAlignment = Alignment.Center,
             ) {
-                if (isLogSaving) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
-                        color = logIconColor,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Icon(
-                        imageVector = if (hasLoggedForDate) Icons.Filled.Edit else Icons.Filled.Add,
-                        contentDescription = stringResource(R.string.sakhi_action_bar_log_content_description),
-                        tint = logIconColor,
-                    )
+                val glyph = when {
+                    isLogSaving -> LogGlyph.Saving
+                    trayOpen -> LogGlyph.More
+                    hasLoggedForDate -> LogGlyph.Edit
+                    else -> LogGlyph.Add
+                }
+                AnimatedContent(
+                    targetState = glyph,
+                    transitionSpec = {
+                        (fadeIn(tween(160)) + scaleIn(tween(220), initialScale = 0.5f)) togetherWith
+                            (fadeOut(tween(120)) + scaleOut(tween(160), targetScale = 0.5f))
+                    },
+                    label = "logButtonGlyph",
+                ) { shownGlyph ->
+                    when (shownGlyph) {
+                        LogGlyph.Saving -> CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            color = logIconColor,
+                            strokeWidth = 2.dp,
+                        )
+                        LogGlyph.More -> Icon(
+                            painter = painterResource(R.drawable.ic_circle_hexagonpath),
+                            contentDescription = stringResource(R.string.sakhi_quick_log_more),
+                            tint = logIconColor,
+                            modifier = Modifier.size(22.dp),
+                        )
+                        LogGlyph.Edit -> Icon(
+                            imageVector = Icons.Filled.Edit,
+                            contentDescription = stringResource(R.string.sakhi_action_bar_log_content_description),
+                            tint = logIconColor,
+                        )
+                        LogGlyph.Add -> Icon(
+                            imageVector = Icons.Filled.Add,
+                            contentDescription = stringResource(R.string.sakhi_action_bar_log_content_description),
+                            tint = logIconColor,
+                        )
+                    }
                 }
             }
+        }
 
-            SakhiQuickLogMenu(
-                expanded = showQuickLogMenu,
-                onDismiss = { showQuickLogMenu = false },
-                selectedDate = selectedDate,
+        if (tray > 0.002f) {
+            QuickLogTrayLayer(
+                progress = tray,
+                open = trayOpen,
+                accent = accentColor,
                 selectedFlow = selectedFlow,
-                onPickFlow = { level ->
-                    showQuickLogMenu = false
-                    onQuickLogFlow(level)
-                },
-                onOtherSymptoms = {
-                    showQuickLogMenu = false
-                    onLogClick()
-                },
+                onPick = onQuickLogFlow,
+                onClose = { trayOpen = false },
+                modifier = Modifier.matchParentSize(),
             )
         }
     }
 }
 
-
-/**
- * The droplet run iOS draws for each flow level (`FlowLevelMenuIcon`): one droplet per
- * point on its scale, outlined normally and filled once the level is selected.
- */
-@Composable
-private fun QuickLogFlowDrops(level: FlowIntensity, isSelected: Boolean) {
-    val count = when (level) {
-        FlowIntensity.SPOTTING -> 1
-        FlowIntensity.LIGHT -> 2
-        FlowIntensity.MEDIUM -> 3
-        FlowIntensity.HEAVY -> 4
-    }
-    // Brand-tinted rather than inheriting the default content colour, so the droplets
-    // belong to the Sakhi menu instead of reading as stock dark Material glyphs. Unselected
-    // levels sit back at a low alpha; the selected one is solid brand.
-    val brand = MaterialTheme.colorScheme.primary
-    val dropTint = if (isSelected) brand else brand.copy(alpha = 0.45f)
-    Row(horizontalArrangement = Arrangement.spacedBy((-1).dp)) {
-        repeat(count) {
-            Icon(
-                imageVector = if (isSelected) Icons.Filled.WaterDrop else Icons.Outlined.WaterDrop,
-                contentDescription = null,
-                tint = dropTint,
-                modifier = Modifier.size(13.dp),
-            )
-        }
-    }
-}
-
-/** iOS `logMenuDateTitle` — DateFormatter `"d MMM, EEEE"`. */
-@Composable
-private fun quickLogMenuDateTitle(date: LocalDate): String {
-    val pattern = stringResource(R.string.sakhi_action_bar_menu_date_format)
-    return remember(date, pattern) {
-        java.time.LocalDate.of(date.year, date.monthNumber, date.dayOfMonth)
-            .format(java.time.format.DateTimeFormatter.ofPattern(pattern, java.util.Locale.getDefault()))
-    }
-}
+private enum class LogGlyph { Add, Edit, More, Saving }
 
 /** Android port of iOS `HomeAskSakhiBar` — see [SakhiBottomActionBar] doc comment. */
 @Composable
@@ -477,302 +478,3 @@ fun sakhiAskSakhiPlaceholders(
         }
     }
 }
-
-/**
- * Quick-log menu chrome. iOS's `Menu` floats as a compact card over the action bar
- * rather than filling the width, so the panel is bounded instead of hugging its
- * longest row exactly, and carries a real shadow so it reads as attached to the
- * button it opened from.
- */
-private val QuickLogMenuMinWidth = 220.dp
-private val QuickLogMenuMaxWidth = 300.dp
-private val QuickLogMenuCornerRadius = 24.dp
-private val QuickLogRowInset = SakhiSpacing.space3
-private val QuickLogMenuContentPadding = SakhiSpacing.space2
-// Room for the shadow to fall outside the surface without the popup window clipping it.
-// Must comfortably exceed QuickLogMenuShadowElevation on every side.
-private val QuickLogMenuShadowInset = 28.dp
-// Visible gap between the panel and the button it opens from.
-private val QuickLogMenuAnchorGap = 6.dp
-private val QuickLogMenuShadowElevation = 18.dp
-
-/**
- * Sakhi's own quick-log menu.
- *
- * Material3's `DropdownMenu` supplies only the plumbing here (anchoring, outside-tap
- * dismissal, back handling). All of the chrome is overridden: brand pink accents, a soft
- * pink rim, generous [SakhiRadius.xxl] corners, and a selected row that fills with the
- * brand tint rather than relying on a tick glyph alone -- the stock Material panel
- * (4dp corners, `surfaceContainer` lavender fill) is what Karan rejected.
- *
- * Order is date-first, top down: the date this menu writes to, then the flow levels,
- * then the way out to the full sheet. iOS puts the date last; Karan asked for it on top
- * so the date you are about to log against is the first thing read, not a footnote
- * discovered after choosing.
- */
-@Composable
-private fun SakhiQuickLogMenu(
-    expanded: Boolean,
-    onDismiss: () -> Unit,
-    selectedDate: LocalDate,
-    selectedFlow: FlowIntensity?,
-    onPickFlow: (FlowIntensity?) -> Unit,
-    onOtherSymptoms: () -> Unit,
-) {
-    val context = LocalContext.current
-    val brand = MaterialTheme.colorScheme.primary
-    val shape = RoundedCornerShape(QuickLogMenuCornerRadius)
-
-    if (!expanded) return
-
-    // A raw `Popup`, not Material's `DropdownMenu`. Two of its internals proved
-    // unworkable here, both confirmed on device:
-    //
-    //  * Position. `DropdownMenu` pins the popup's bottom to the anchor's top and
-    //    ignores its own `offset` for that flipped placement -- measured, +24dp and
-    //    -24dp produced pixel-identical output -- so the panel could not be brought
-    //    closer to the button it opens from.
-    //  * Shadow. Its content sits in a scrolling, clipping container, which sliced the
-    //    drop shadow off at a hard vertical edge down the side of the panel.
-    //
-    // The earlier attempt at a raw `Popup` dismissed itself the instant it opened: with
-    // `focusable = true`, the ACTION_UP of the very tap that opened it landed outside the
-    // popup and triggered dismiss-on-click-outside. That is fixed here by arming
-    // dismissal only after the opening gesture has finished, rather than by going back
-    // to a component that cannot be positioned.
-    var dismissArmed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(QuickLogMenuDismissArmDelayMs)
-        dismissArmed = true
-    }
-
-    val density = LocalDensity.current
-    val positionProvider = remember(density) {
-        with(density) {
-            QuickLogMenuPositionProvider(
-                shadowInsetPx = QuickLogMenuShadowInset.roundToPx(),
-                anchorGapPx = QuickLogMenuAnchorGap.roundToPx(),
-            )
-        }
-    }
-
-    Popup(
-        popupPositionProvider = positionProvider,
-        onDismissRequest = { if (dismissArmed) onDismiss() },
-        properties = PopupProperties(focusable = true),
-    ) {
-        Box(modifier = Modifier.widthIn(min = QuickLogMenuMinWidth, max = QuickLogMenuMaxWidth)) {
-        Box(
-            modifier = Modifier
-                // The inset is what makes the shadow visible at all. A popup window is
-                // sized to its content, so anything drawn outside that content -- which
-                // is exactly what a shadow is -- gets clipped by the window edge.
-                // Verified by sampling pixels around the panel: without this the
-                // surrounding pixels were pure #FFFFFF on all four sides, i.e. no shadow
-                // reached the screen.
-                //
-                // Deliberately ASYMMETRIC. This popup is bottom-anchored and grows
-                // upward, so every pixel of bottom inset lifts the whole panel away from
-                // the button -- a uniform 24dp inset visibly shoved the menu up the
-                // screen. `DropdownMenu`'s `offset` cannot claw that back: measured on
-                // device, +24dp and -24dp both produced a pixel-identical result,
-                // because the position provider ignores it for the flipped placement.
-                // So the bottom keeps just enough room to read as a shadow while the
-                // sides and top, where the panel meets the white calendar and separation
-                // actually matters, get the full spread.
-                // Uniform now. The bottom used to be starved to stop the panel drifting
-                // up the screen, but this menu owns its own position provider, which adds
-                // the inset back -- so the shadow can have equal room on every side
-                // without moving the panel at all.
-                .padding(QuickLogMenuShadowInset)
-                .shadow(
-                    elevation = QuickLogMenuShadowElevation,
-                    shape = shape,
-                    clip = false,
-                    // Neutral black at low alpha, not brand pink. A pink shadow over a
-                    // white sheet is very close to invisible; a soft shadow reads as
-                    // soft because of its spread and low opacity, not its hue.
-                    // Deeper, but spread wide so it stays soft: darkness comes from
-                    // alpha, softness from the elevation's falloff distance.
-                    ambientColor = Color.Black.copy(alpha = 0.22f),
-                    spotColor = Color.Black.copy(alpha = 0.30f),
-                )
-                .background(sakhiSystemBackground(), shape),
-        ) {
-            Column(modifier = Modifier.padding(QuickLogMenuContentPadding)) {
-                // Date first, top down -- the date you are about to log against should be
-                // the first thing read, not a footnote after the choice. iOS puts it last.
-                QuickLogDateHeader(selectedDate = selectedDate)
-
-                Spacer(modifier = Modifier.height(SakhiSpacing.space2))
-
-                // Lightest first, heaviest last. iOS lists these heaviest-first; Karan
-                // asked for the reverse so the scale climbs down the menu towards the
-                // button you opened it from.
-                listOf(
-                    FlowIntensity.SPOTTING,
-                    FlowIntensity.LIGHT,
-                    FlowIntensity.MEDIUM,
-                    FlowIntensity.HEAVY,
-                ).forEach { level ->
-                    val isSelected = selectedFlow == level
-                    QuickLogFlowRow(
-                        label = flowDisplayName(context, level),
-                        level = level,
-                        isSelected = isSelected,
-                        brand = brand,
-                        // Tapping the selected level again clears it, same as before.
-                        onClick = { onPickFlow(if (isSelected) null else level) },
-                    )
-                }
-
-                // One hairline, only where the menu actually changes purpose (quick flow
-                // choice -> the full sheet). The previous design boxed every group in its
-                // own divider, which is what made it look like a form rather than a menu.
-                SakhiListDivider(
-                    modifier = Modifier.padding(
-                        horizontal = QuickLogRowInset,
-                        vertical = SakhiSpacing.space2,
-                    ),
-                    color = brand.copy(alpha = 0.08f),
-                )
-
-                QuickLogOtherSymptomsRow(brand = brand, onClick = onOtherSymptoms)
-            }
-        }
-        }
-    }
-}
-
-/** The date these flow taps write to. First thing in the menu, as a soft brand chip. */
-@Composable
-private fun QuickLogDateHeader(selectedDate: LocalDate) {
-    // Quiet grey caption, not a brand chip. This line only says WHICH day the taps
-    // below write to -- it is context, not the thing being chosen, so highlighting it
-    // in brand pink competed with the actual selection for attention.
-    Row(
-        modifier = Modifier.padding(
-            horizontal = QuickLogRowInset,
-            vertical = SakhiSpacing.space2,
-        ),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-    ) {
-        Icon(
-            imageVector = Icons.Filled.CalendarMonth,
-            contentDescription = null,
-            tint = sakhiSecondaryLabel(),
-            modifier = Modifier.size(15.dp),
-        )
-        Text(
-            text = quickLogMenuDateTitle(selectedDate),
-            style = MaterialTheme.typography.labelLarge,
-            color = sakhiSecondaryLabel(),
-        )
-    }
-}
-
-/**
- * One flow level. Selected rows fill with a soft brand tint and bold the label, rather
- * than depending on a trailing tick to carry the whole state.
- */
-@Composable
-private fun QuickLogFlowRow(
-    label: String,
-    level: FlowIntensity,
-    isSelected: Boolean,
-    brand: Color,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(SakhiRadius.lg))
-            .background(if (isSelected) brand.copy(alpha = 0.10f) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = QuickLogRowInset, vertical = SakhiSpacing.space3),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-    ) {
-        QuickLogFlowDrops(level = level, isSelected = isSelected)
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-            color = if (isSelected) brand else sakhiLabel(),
-            modifier = Modifier.weight(1f),
-        )
-        if (isSelected) {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = brand,
-                modifier = Modifier.size(17.dp),
-            )
-        }
-    }
-}
-
-/** Way out to the full logging sheet. */
-@Composable
-private fun QuickLogOtherSymptomsRow(brand: Color, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(SakhiRadius.lg))
-            .clickable(onClick = onClick)
-            .padding(horizontal = QuickLogRowInset, vertical = SakhiSpacing.space3),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-    ) {
-        Icon(
-            // The real SF Symbol iOS uses here (`circle.hexagonpath`), redrawn as a
-            // vector -- Material's plain Hexagon is a different glyph.
-            painter = painterResource(R.drawable.ic_circle_hexagonpath),
-            contentDescription = null,
-            tint = brand,
-            modifier = Modifier.size(20.dp),
-        )
-        Text(
-            text = stringResource(R.string.sakhi_action_bar_other_symptoms),
-            style = MaterialTheme.typography.bodyLarge,
-            color = sakhiLabel(),
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-
-/**
- * Places the quick-log menu directly above the button that opened it, aligned to that
- * button's right edge, and keeps it on screen.
- *
- * This exists because Material's `DropdownMenu` gives no usable control here: it pins the
- * popup's bottom to the anchor's top and ignores its `offset` for that placement, which
- * left the panel stranded well above the button with no way to pull it down.
- */
-private class QuickLogMenuPositionProvider(
-    private val shadowInsetPx: Int,
-    private val anchorGapPx: Int,
-) : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-    ): IntOffset {
-        // The popup is bigger than the panel by [shadowInsetPx] on every side, because
-        // the shadow needs somewhere to land. Both axes add that back, so the placement
-        // below describes where the VISIBLE panel goes, not where its invisible margin
-        // does.
-        val x = (anchorBounds.right - popupContentSize.width + shadowInsetPx)
-            .coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
-        val y = (anchorBounds.top - popupContentSize.height + shadowInsetPx - anchorGapPx)
-            .coerceIn(0, (windowSize.height - popupContentSize.height).coerceAtLeast(0))
-        return IntOffset(x, y)
-    }
-}
-
-// Long enough for the opening tap's ACTION_UP to land before outside-tap dismissal turns
-// on. Without this the menu closed itself the moment it opened.
-private const val QuickLogMenuDismissArmDelayMs = 120L

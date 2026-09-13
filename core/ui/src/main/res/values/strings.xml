@@ -26,6 +26,9 @@
 
     <string name="sakhi_action_bar_calendar_content_description">Calendar</string>
     <string name="sakhi_action_bar_log_content_description">Log</string>
+    <!-- Quick log tray (2026-09-13). -->
+    <string name="sakhi_quick_log_close">Close</string>
+    <string name="sakhi_quick_log_more">More symptoms</string>
     <string name="sakhi_action_bar_other_symptoms">Other symptoms  ›</string>
     <string name="sakhi_action_bar_flow_selected">%1$s  ✓</string>
     <!-- iOS repeats this header over both the flow rows and the read-only date row

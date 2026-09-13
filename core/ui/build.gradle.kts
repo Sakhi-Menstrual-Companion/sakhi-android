@@ -11,6 +11,8 @@ dependencies {
     implementation("team.sakhi:SakhiCore:1.0.0")
     implementation(project(":core:common"))
     implementation(project(":core:designsystem"))
+    // BackHandler, so back closes the quick-log tray.
+    implementation(libs.androidx.activity.compose)
 
     implementation(libs.compose.material.icons.extended)
     // collectAsStateWithLifecycle, so FeatureAccessGate re-evaluates on state changes.
