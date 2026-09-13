@@ -1,5 +1,7 @@
 package team.sakhi.android.feature.home.inbox
 
+import team.sakhi.notifications.NotificationRouting
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import android.text.format.DateFormat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -270,6 +272,10 @@ private fun NotificationRow(
     // A request she has not answered is answered with its buttons; tapping the row
     // itself would only mark it read and retire them, so the row is not tappable then.
     val isActionable = unread && item.kind is SakhiNotification.LogRequestReceived && item.actorUserId != null
+    // A chevron on every row that actually opens something, so a row reads as a door rather
+    // than a notice (Karan, 2026-09-13). A row that leads nowhere does not get one.
+    val opensSomething = !isActionable &&
+        NotificationRouting.deepLink(notification = item.kind) != null
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val unreadDescription = stringResource(R.string.inbox_unread_content_description)
@@ -343,6 +349,15 @@ private fun NotificationRow(
                 Spacer(modifier = Modifier.height(SakhiSpacing.space3))
                 RequestActions(state = answerState, onAnswer = onAnswer)
             }
+        }
+        if (opensSomething) {
+            Spacer(modifier = Modifier.width(SakhiSpacing.space2))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = sakhiTertiaryLabel(),
+                modifier = Modifier.padding(top = 2.dp).size(20.dp),
+            )
         }
     }
 }

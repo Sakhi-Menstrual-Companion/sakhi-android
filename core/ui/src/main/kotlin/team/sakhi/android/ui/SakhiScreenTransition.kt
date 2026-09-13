@@ -1,5 +1,6 @@
 package team.sakhi.android.ui
 
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedContentScope
 import androidx.compose.animation.ContentTransform
@@ -159,9 +160,10 @@ fun <T> SakhiScreenTransition(
 
 /**
  * For swapping content inside an already-open sheet. Sheets already enter/leave
- * vertically, so their internal peer swaps should not add another direction or a
- * size animation. This mirrors the Raindrop reference pattern for lightweight
- * modal content: a 300ms ease-in-out opacity fade while the host owns the motion.
+ * vertically, so their internal peer swaps should not add another direction: the new
+ * content fades up from just under full size while the old one fades out, which reads as
+ * one step forward rather than a cut. Tapping a notification row swaps this sheet from the
+ * inbox to what the row opens, and iOS's sheet host does the same (Karan, 2026-09-13).
  */
 @Composable
 fun <T> SakhiSheetContentTransition(
@@ -170,14 +172,21 @@ fun <T> SakhiSheetContentTransition(
     label: String = "sakhi_sheet_content_transition",
     content: @Composable (T) -> Unit,
 ) {
-    Crossfade(
+    val spec = tween<Float>(SHEET_CONTENT_TRANSITION_DURATION_MS, easing = screenTransitionEasing)
+    AnimatedContent(
         targetState = targetState,
         modifier = modifier,
-        animationSpec = tween(SHEET_CONTENT_TRANSITION_DURATION_MS, easing = screenTransitionEasing),
         label = label,
-        content = content,
+        transitionSpec = {
+            (fadeIn(spec) + scaleIn(spec, initialScale = SHEET_CONTENT_INCOMING_SCALE))
+                .togetherWith(fadeOut(spec))
+        },
+        content = { state -> content(state) },
     )
 }
+
+/** How small the incoming sheet content starts. Enough to read as a step, not a jump. */
+private const val SHEET_CONTENT_INCOMING_SCALE = 0.96f
 
 /**
  * The raw push/pop/fade [ContentTransform] used by [SakhiScreenTransition], exposed
