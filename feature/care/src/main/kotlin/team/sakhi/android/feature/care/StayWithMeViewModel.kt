@@ -21,11 +21,13 @@ import team.sakhi.emergency.EmergencySafePlace
 import team.sakhi.emergency.EmergencySafePlaceKind
 import team.sakhi.emergency.EmergencySafePlacesProvider
 import team.sakhi.session.SessionManager
+import team.sakhi.staywithme.CarePartnerCard
 import team.sakhi.staywithme.StayWithMeDestination
 import team.sakhi.staywithme.StayWithMeLocation
 import team.sakhi.staywithme.StayWithMeRealtimeCoordinator
 import team.sakhi.staywithme.StayWithMeSession
 import team.sakhi.staywithme.StayWithMeStore
+import team.sakhi.staywithme.StayWithMeWalkRecord
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.sin
@@ -197,6 +199,40 @@ class StayWithMeViewModel(
     fun stop() {
         viewModelScope.launch { store.cancel().onSuccess { StayWithMeLocationService.stop(appContext) } }
     }
+
+    /** Who the other person is: the name they set, and the face the server keeps for them. */
+    val partnerCard: StateFlow<CarePartnerCard?> = store.partnerCard
+
+    fun loadPartnerCard(partnershipId: String) {
+        viewModelScope.launch { store.loadPartnerCard(partnershipId) }
+    }
+
+    /** The walks this connection has already done, for the connection screen. */
+    val history: StateFlow<List<StayWithMeWalkRecord>> = store.history
+
+    fun loadHistory(partnershipId: String) {
+        viewModelScope.launch { store.loadHistory(partnershipId) }
+    }
+
+    /**
+     * Her person asking to stay with her. Sends a question to her phone and nothing else:
+     * no walk starts here, because it is her walk to start.
+     */
+    fun askToStay(partnershipId: String) {
+        hapticManager.impact(HapticImpact.MEDIUM)
+        viewModelScope.launch {
+            val message = store.askToStay(partnershipId).fold(
+                onSuccess = { appContext.getString(R.string.care_ask_sent) },
+                onFailure = { appContext.getString(R.string.care_ask_failed) },
+            )
+            _askResult.value = message
+        }
+    }
+
+    private val _askResult = MutableStateFlow<String?>(null)
+    /** What to tell her person after they asked. Cleared once shown. */
+    val askResult: StateFlow<String?> = _askResult
+    fun clearAskResult() { _askResult.value = null }
 
     /** Her refresh: a fresh fix from her phone, now, past the throttle. */
     fun refreshMyLocation() {

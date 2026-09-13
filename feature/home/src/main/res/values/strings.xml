@@ -246,6 +246,8 @@
     <string name="inbox_error_title">Couldn\'t load notifications</string>
     <string name="inbox_error_body">Please check your connection and try again.</string>
     <string name="inbox_retry">Try again</string>
+    <string name="inbox_swm_ask_title">%1$s wants to stay with you</string>
+    <string name="inbox_swm_ask_body">Heading home? Tap to start, and they will see you until you are in.</string>
     <string name="inbox_someone">Your partner</string>
     <string name="inbox_partner_logged_period_title">%1$s logged a period day</string>
     <string name="inbox_partner_logged_period_body">Open Care to see the latest update.</string>

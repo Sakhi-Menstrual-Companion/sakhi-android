@@ -183,6 +183,14 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
             context.getString(R.string.platform_push_swm_late_title, walkName(context, notification.ownerName)),
             context.getString(R.string.platform_push_swm_late_body),
         )
+        // Her person asking to stay with her. On the walk channel because it is the same
+        // moment and she should see it, and keyed to the connection so a second ask
+        // replaces the first rather than stacking.
+        is SakhiNotification.StayWithMeAsk -> walkPresentation(
+            notification.partnershipId,
+            context.getString(R.string.platform_push_swm_ask_title, walkName(context, notification.askerName)),
+            context.getString(R.string.platform_push_swm_ask_body),
+        )
         is SakhiNotification.FeatureAvailable -> null
         SakhiNotification.Unknown -> null
     }

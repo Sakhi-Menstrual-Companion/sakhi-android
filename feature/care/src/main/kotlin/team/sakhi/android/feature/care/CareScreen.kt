@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.HeartBroken
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
@@ -52,6 +53,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import kotlinx.datetime.toInstant
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -87,6 +89,7 @@ import team.sakhi.android.ui.PartnerAvatarCloud
 import team.sakhi.android.ui.SakhiAlertKind
 import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.SakhiFooter
+import team.sakhi.android.ui.SakhiModalSheet
 import team.sakhi.android.ui.SakhiListDivider
 import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SakhiSwitch
@@ -98,6 +101,9 @@ import team.sakhi.date.DateConverter
 import team.sakhi.models.CarePartnership
 import team.sakhi.models.ParentChildPermissions
 import team.sakhi.models.PartnerInvitation
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiLightPink
+import androidx.compose.ui.graphics.Brush
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
@@ -137,6 +143,8 @@ fun CareScreen(
     }
     var showPermissionsEdit by remember { mutableStateOf(false) }
     var showHistory by remember { mutableStateOf(false) }
+    /** Her side: the duration, the destination and the ask, raised by the footer button. */
+    var showStartWalk by remember { mutableStateOf(false) }
     var showOwnerInviteFlow by remember(prefillInviteCode) { mutableStateOf(false) }
     var autoLaunchInviteFlow by remember(prefillInviteCode) {
         mutableStateOf(prefillInviteCode.isNullOrBlank())
@@ -149,9 +157,47 @@ fun CareScreen(
     LaunchedEffect(prefillInviteCode) {
         prefillInviteCode?.let(viewModel::onAcceptInviteCodeChanged)
     }
+    // The real things that happened between them: walks her person stayed for, and days
+    // they logged for her. Read here, where both are already available, and handed to the
+    // screen; nothing on that screen invents a moment of its own.
+    val careContext = LocalContext.current
+    val walkHistory by stayWithMeViewModel.history.collectAsStateWithLifecycle()
+    val periodLogRepository = koinInject<team.sakhi.repositories.PeriodLogRepository>()
+    var loggedDays by remember { mutableStateOf<List<Pair<kotlinx.datetime.Instant, String>>>(emptyList()) }
+
     val ownerConnected = uiState.careState as? CareRuntimeState.OwnerConnected
     val partnerConnected = uiState.careState as? CareRuntimeState.PartnerConnected
     val connectedPartnership = ownerConnected?.partnership ?: partnerConnected?.partnership
+    // Her person hears back after they ask: it went, or it did not.
+    val askResult by stayWithMeViewModel.askResult.collectAsStateWithLifecycle()
+    LaunchedEffect(askResult) {
+        askResult?.let {
+            android.widget.Toast.makeText(careContext, it, android.widget.Toast.LENGTH_SHORT).show()
+            stayWithMeViewModel.clearAskResult()
+        }
+    }
+
+    LaunchedEffect(connectedPartnership?.id) {
+        connectedPartnership?.id?.let(stayWithMeViewModel::loadHistory)
+        connectedPartnership?.id?.let(stayWithMeViewModel::loadPartnerCard)
+    }
+    val partnerCard by stayWithMeViewModel.partnerCard.collectAsStateWithLifecycle()
+    val sessionManager = koinInject<team.sakhi.session.SessionManager>()
+    val selfAvatarIndex = remember(sessionManager.current?.userId) {
+        CareAvatars.indexFor(sessionManager.current?.userId.orEmpty())
+    }
+    LaunchedEffect(connectedPartnership?.userId) {
+        val userId = connectedPartnership?.userId ?: return@LaunchedEffect
+        loggedDays = periodLogRepository.getAll(userId).getOrNull().orEmpty()
+            .filter { it.loggedBy == team.sakhi.models.LogSource.PARTNER }
+            .sortedByDescending { it.logDate.toString() }
+            .take(6)
+            .map { log ->
+                kotlinx.datetime.LocalDateTime(log.logDate, kotlinx.datetime.LocalTime(12, 0))
+                    .toInstant(kotlinx.datetime.TimeZone.currentSystemDefault()) to log.logDate.toString()
+            }
+    }
+
     val shouldAutoShowInviteFlow = autoLaunchInviteFlow &&
         prefillInviteCode.isNullOrBlank() &&
         uiState.careState is CareRuntimeState.Disconnected
@@ -251,19 +297,19 @@ fun CareScreen(
                     val walk = stayWithMe.mine
                     val personName = careDisplayName(state.partnership, isPartnerRole = false)
                     LaunchedEffect(walk?.id) { if (walk != null) onOpenLiveWalk() }
+                    val moments = remember(walkHistory, loggedDays, personName) {
+                        careMoments(careContext, walkHistory, loggedDays, isPartnerRole = false, otherName = personName)
+                    }
                     PartnerDetailContent(
                     partnership = state.partnership,
                     isPartnerRole = false,
-                    stayWithMeSlot = {
-                        StayWithMeStartSection(
-                            personName = personName,
-                            isBusy = stayWithMe.isBusy,
-                            error = stayWithMe.error,
-                            onStart = { minutes, note, destination ->
-                                stayWithMeViewModel.start(state.partnership.id, minutes, note, destination)
-                            },
-                        )
-                    },
+                    moments = moments,
+                    selfAvatarIndex = selfAvatarIndex,
+                    otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
+                    serverName = partnerCard?.name,
+                    primaryLabel = stringResource(R.string.care_swm_ask_button, personName),
+                    onPrimary = { showStartWalk = true },
+                    primaryEnabled = !stayWithMe.isBusy,
                     isRemoving = uiState.isRemovingPartnership,
                     onHistory = { showHistory = true },
                     onManagePermissions = { showPermissionsEdit = true },
@@ -278,9 +324,20 @@ fun CareScreen(
                 is CareRuntimeState.PartnerConnected -> {
                     val walk = stayWithMe.watching
                     LaunchedEffect(walk?.id) { if (walk != null) onOpenLiveWalk() }
+                    val herName = careDisplayName(state.partnership, isPartnerRole = true)
+                    val moments = remember(walkHistory, loggedDays, herName) {
+                        careMoments(careContext, walkHistory, loggedDays, isPartnerRole = true, otherName = herName)
+                    }
                     PartnerDetailContent(
                     partnership = state.partnership,
                     isPartnerRole = true,
+                    moments = moments,
+                    selfAvatarIndex = selfAvatarIndex,
+                    otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
+                    serverName = partnerCard?.name,
+                    primaryLabel = stringResource(R.string.care_ask_to_stay_with_her),
+                    onPrimary = { stayWithMeViewModel.askToStay(state.partnership.id) },
+                    primaryEnabled = !stayWithMe.isBusy,
                     isRemoving = uiState.isRemovingPartnership,
                     onHistory = { showHistory = true },
                     onManagePermissions = null,
@@ -290,6 +347,26 @@ fun CareScreen(
                     },
                     onClose = onClose,
                 )
+                }
+            }
+        }
+    }
+
+    // Her side: duration, where to, and the ask, raised by the footer button rather than
+    // sitting in the page. The page is about the two of them; this is the doing.
+    if (showStartWalk && ownerConnected != null) {
+        SakhiModalSheet(onDismissRequest = { showStartWalk = false }) {
+            SheetSurface {
+                Column(modifier = Modifier.padding(bottom = SakhiSpacing.space6)) {
+                    StayWithMeStartSection(
+                        personName = careDisplayName(ownerConnected.partnership, isPartnerRole = false),
+                        isBusy = stayWithMe.isBusy,
+                        error = stayWithMe.error,
+                        onStart = { minutes, note, destination ->
+                            stayWithMeViewModel.start(ownerConnected.partnership.id, minutes, note, destination)
+                            showStartWalk = false
+                        },
+                    )
                 }
             }
         }
@@ -326,8 +403,17 @@ private fun PartnerDetailContent(
     partnership: CarePartnership,
     isPartnerRole: Boolean,
     isRemoving: Boolean,
-    /** Stay With Me sits above DETAILS: the one thing on this screen she opens with something to do. */
-    stayWithMeSlot: (@Composable () -> Unit)? = null,
+    /** The one action this screen is for, pinned at the bottom. */
+    primaryLabel: String,
+    onPrimary: () -> Unit,
+    primaryEnabled: Boolean = true,
+    /** The real things that happened between them: walks stayed for, days logged. */
+    moments: List<CareMoment> = emptyList(),
+    /** Her own face, and the other person's, both from the server's five (migration 063). */
+    selfAvatarIndex: Int = 0,
+    otherAvatarIndex: Int = 0,
+    /** The name on their profile, which the partnership row may not have. */
+    serverName: String? = null,
     onHistory: () -> Unit,
     onManagePermissions: (() -> Unit)?,
     onRemove: () -> Unit,
@@ -336,7 +422,7 @@ private fun PartnerDetailContent(
     val context = LocalContext.current
     var showConfirmRemove by remember { mutableStateOf(false) }
 
-    val resolvedName = partnership.partnerName.takeIf { name ->
+    val resolvedName = (serverName ?: partnership.partnerName).takeIf { name ->
         name.isNotEmpty() &&
             !name.lowercase().contains("partner") &&
             !name.lowercase().contains("sakhi") &&
@@ -367,7 +453,20 @@ private fun PartnerDetailContent(
         else -> pluralStringResource(R.plurals.care_days_plural, daysOfCare, daysOfCare)
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    // One surface for the whole screen: the soft pink of the picture at the top easing into
+    // the page below it. Everything sits on this, with hairlines between rows, instead of a
+    // stack of white cards.
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    0f to sakhiLightPink(),
+                    0.32f to sakhiSystemBackground(),
+                    1f to sakhiSystemBackground(),
+                ),
+            ),
+    ) {
         // iOS gets its way out of this screen from the sheet's own drag indicator
         // (`PartnerDetailView` hides the nav bar and is presented as a `.sheet`).
         // Android pushes it into the care nav host with no indicator, so without this
@@ -381,105 +480,119 @@ private fun PartnerDetailContent(
             modifier = Modifier.weight(1f),
             flingBehavior = rememberSakhiFlingBehavior(),
         ) {
-            item(key = "care-detail-1") {
+            item(key = "care-detail-header") {
+                // The page opens with the picture itself, edge to edge. It used to sit in a
+                // card, inside a sheet, above more cards, which read as a stack of boxes.
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CareConnectionArt(
+                        selfAvatarIndex = selfAvatarIndex,
+                        otherAvatarIndex = otherAvatarIndex,
+                    )
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(
+                            start = SakhiSpacing.space6,
+                            end = SakhiSpacing.space6,
+                            bottom = SakhiSpacing.space6,
+                        ),
+                    ) {
+                        Text(
+                            text = if (isPartnerRole) {
+                                stringResource(R.string.care_header_you_are_with, displayLabel)
+                            } else {
+                                stringResource(R.string.care_header_is_with_you, displayLabel)
+                            },
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                            color = sakhiLabel(),
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            text = stringResource(R.string.care_in_care_mode_since, dateString, daysValue),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = sakhiSecondaryLabel(),
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(top = SakhiSpacing.space1),
+                        )
+                    }
+                }
+            }
+
+            item(key = "care-moments-label") {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space5),
+                        .padding(start = SakhiSpacing.space6, end = SakhiSpacing.space6, top = SakhiSpacing.space2),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    AvatarPair(partnerInitial = partnerInitial)
-                }
-            }
-
-            item(key = "care-detail-2") {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = SakhiSpacing.space6)
-                        .padding(bottom = SakhiSpacing.space8),
-                ) {
-                    Text(
-                        text = headerTitle,
-                        style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
+                    SectionHeader(
                         text = if (isPartnerRole) {
-                            stringResource(R.string.care_subtitle_you_are_her_sakhi)
+                            stringResource(R.string.care_section_moments_partner, displayLabel)
                         } else {
-                            stringResource(R.string.care_subtitle_trusted_sakhi)
+                            stringResource(R.string.care_section_moments_owner, displayLabel)
                         },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = sakhiSecondaryLabel(),
-                        modifier = Modifier.padding(top = SakhiSpacing.space1),
+                        modifier = Modifier.weight(1f),
                     )
-                }
-            }
-
-            if (stayWithMeSlot != null) {
-                item(key = "care-detail-stay") {
-                    Box(modifier = Modifier.padding(bottom = SakhiSpacing.space6)) { stayWithMeSlot() }
-                }
-            }
-
-            item(key = "care-detail-3") {
-                SectionHeader(text = stringResource(R.string.care_section_details))
-            }
-            item(key = "care-detail-4") {
-                Surface(
-                    color = sakhiSystemBackground(),
-                    shape = RoundedCornerShape(SakhiRadius.xxl),
-                    tonalElevation = SakhiSpacing.space1,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = SakhiSpacing.space6),
-                ) {
-                    Column {
-                        InfoRow(
-                            icon = { SparkleGlyph() },
-                            label = stringResource(R.string.care_label_days_of_care),
-                            value = daysValue,
-                        )
-                        SakhiListDivider(startInset = SakhiSpacing.space10)
-                        InfoRow(
-                            icon = { InfoSymbolIcon(Icons.Filled.CalendarToday) },
-                            label = stringResource(R.string.care_label_connected_since),
-                            value = dateString,
+                    if (moments.isNotEmpty()) {
+                        Text(
+                            text = stringResource(R.string.care_moments_see_all),
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.clickable(onClick = onHistory),
                         )
                     }
                 }
             }
-
-            item(key = "care-detail-5") {
-                SectionHeader(
-                    text = stringResource(R.string.care_section_actions),
-                    modifier = Modifier.padding(top = SakhiSpacing.space6),
+            item(key = "care-moments") {
+                CareMoments(
+                    moments = moments.take(4),
+                    emptyText = if (isPartnerRole) {
+                        stringResource(R.string.care_moments_empty_partner)
+                    } else {
+                        stringResource(R.string.care_moments_empty_owner, displayLabel)
+                    },
+                    dayLabel = { momentDayLabel(it, context) },
                 )
             }
+
             item(key = "care-detail-6") {
-                Surface(
-                    color = sakhiSystemBackground(),
-                    shape = RoundedCornerShape(SakhiRadius.xxl),
-                    tonalElevation = SakhiSpacing.space1,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = SakhiSpacing.space6),
-                ) {
-                    Column {
-                        ActionRow(
-                            icon = Icons.Filled.History,
-                            label = stringResource(R.string.care_action_history),
-                            onClick = onHistory,
-                        )
-                        if (!isPartnerRole && onManagePermissions != null) {
-                            SakhiListDivider(startInset = SakhiSpacing.space10)
-                            ActionRow(
-                                icon = Icons.Filled.Shield,
-                                label = stringResource(R.string.care_action_manage_permissions),
-                                onClick = onManagePermissions,
-                            )
-                        }
-                    }
+                Column(modifier = Modifier.padding(top = SakhiSpacing.space6)) {
+                    // What the other person can see comes first: on her side because it is
+                    // hers to change, on his because it is the promise she was made.
+                    CareLinkRow(
+                        icon = Icons.Filled.Shield,
+                        title = if (isPartnerRole) {
+                            stringResource(R.string.care_link_she_shares)
+                        } else {
+                            stringResource(R.string.care_link_what_can_see, displayLabel)
+                        },
+                        subtitle = if (isPartnerRole) {
+                            stringResource(R.string.care_link_she_shares_sub)
+                        } else {
+                            stringResource(R.string.care_link_what_can_see_sub)
+                        },
+                        onClick = if (!isPartnerRole) onManagePermissions else null,
+                    )
+                    SakhiListDivider(startInset = SakhiSpacing.space6 + 34.dp + SakhiSpacing.space3)
+                    CareLinkRow(
+                        icon = Icons.Filled.History,
+                        title = stringResource(R.string.care_action_history),
+                        subtitle = null,
+                        onClick = onHistory,
+                    )
+                    SakhiListDivider(startInset = SakhiSpacing.space6 + 34.dp + SakhiSpacing.space3)
+                    // Ending the connection lives here, at the end of what there is to read,
+                    // rather than as a button under everything: it is the rarest thing on
+                    // this screen and the least like the others.
+                    CareLinkRow(
+                        icon = Icons.Filled.HeartBroken,
+                        title = if (isPartnerRole) {
+                            stringResource(R.string.care_leave_her)
+                        } else {
+                            stringResource(R.string.care_remove_name, displayLabel)
+                        },
+                        subtitle = stringResource(R.string.care_remove_sub),
+                        onClick = { showConfirmRemove = true },
+                    )
                 }
             }
 
@@ -488,32 +601,14 @@ private fun PartnerDetailContent(
             }
         }
 
-        SakhiListDivider()
-        // Was a bare TextButton, which is why this row sat hard against the gesture bar:
-        // it carried none of the shared footer chrome. SakhiFooter is what every other
-        // screen uses and it owns the navigation-bar inset, matching iOS's sticky bottom
-        // (`separator` + button + `.padding(.bottom, DS.Spacing.s)`).
+        // The one action, where every other Sakhi screen keeps its one action. Ending the
+        // connection used to sit here, which gave the quietest thing on the screen the
+        // loudest place on it.
         SakhiFooter(
-            primaryLabel = "",
-            onPrimaryClick = {},
+            primaryLabel = primaryLabel,
+            onPrimaryClick = onPrimary,
+            primaryEnabled = primaryEnabled && !isRemoving,
             showSecondarySlot = false,
-            primarySlot = {
-                TextButton(
-                    onClick = { showConfirmRemove = true },
-                    enabled = !isRemoving,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = if (isPartnerRole) {
-                            stringResource(R.string.care_leave_her)
-                        } else {
-                            stringResource(R.string.care_remove_name, displayLabel)
-                        },
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
-                    )
-                }
-            },
         )
     }
 

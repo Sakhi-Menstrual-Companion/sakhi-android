@@ -559,6 +559,10 @@ private fun rowCopy(kind: SakhiNotification): RowCopy {
                 stringResource(R.string.inbox_swm_cancelled_body),
             )
         }
+        is SakhiNotification.StayWithMeAsk -> RowCopy(
+            stringResource(R.string.inbox_swm_ask_title, name(kind.askerName)),
+            stringResource(R.string.inbox_swm_ask_body),
+        )
         is SakhiNotification.StayWithMeLate -> RowCopy(
             stringResource(R.string.inbox_swm_late_title, name(kind.ownerName)),
             stringResource(R.string.inbox_swm_late_body),
