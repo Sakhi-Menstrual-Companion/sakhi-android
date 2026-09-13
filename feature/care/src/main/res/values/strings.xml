@@ -13,7 +13,7 @@
     <string name="care_label_days_of_care">Days of care</string>
     <string name="care_label_connected_since">Connected since</string>
     <string name="care_connected_since_date_format">d MMM, yyyy</string>
-    <string name="care_in_care_mode_since">In Care Mode since %1$s · %2$s</string>
+    <string name="care_taking_care_since">Taking care since %1$s</string>
     <string name="care_header_is_with_you">%1$s is with you</string>
     <string name="care_header_you_are_with">You are with %1$s</string>
     <string name="care_section_moments_owner">WHAT %1$s DID FOR YOU</string>

@@ -507,7 +507,7 @@ private fun PartnerDetailContent(
                             textAlign = TextAlign.Center,
                         )
                         Text(
-                            text = stringResource(R.string.care_in_care_mode_since, dateString, daysValue),
+                            text = stringResource(R.string.care_taking_care_since, dateString),
                             style = MaterialTheme.typography.bodyMedium,
                             color = sakhiSecondaryLabel(),
                             textAlign = TextAlign.Center,
