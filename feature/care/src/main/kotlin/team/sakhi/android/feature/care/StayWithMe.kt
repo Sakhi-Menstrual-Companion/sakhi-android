@@ -601,7 +601,8 @@ private fun DestinationCard(place: StayWithMeDestination, route: WalkRoute?, ses
         modifier = Modifier
             .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2)
             .fillMaxWidth()
-            .background(sakhiSystemBackground(), RoundedCornerShape(SakhiRadius.xl))
+            // Tonal, not a white card: it is one line about where she is going.
+            .background(sakhiLightPink(), RoundedCornerShape(SakhiRadius.lg))
             .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1351,14 +1352,10 @@ internal fun walkInitials(name: String): String? {
 
 @Composable
 private fun GroupedCard(content: @Composable () -> Unit) {
-    // White, as iOS's `.dsCard(.pink)` is. The grey grouped fill it had sat on the pale pink
-    // panel like a disabled block, and it was the one grey thing on a pink screen.
-    Surface(
-        color = sakhiProfileCardBackground(),
-        shape = RoundedCornerShape(SakhiRadius.lg),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space6),
-    ) {
-        Column { content() }
+    // No card. The panel over the map is already a surface, so these rows sit on it with a
+    // hairline between them; a white card inside it is a box inside a box (Karan, 2026-09-13).
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space2)) {
+        content()
     }
 }
 

@@ -427,6 +427,7 @@ fun CareScreen(
                                 },
                                 stayIdleLabel = stringResource(R.string.care_swm_ask_button, personName),
                                 onStayButton = {},
+                                openFullWalk = onOpenLiveWalk,
                                 startContent = {
                                     StayWithMeStartSection(
                                         personName = personName,
@@ -607,6 +608,8 @@ private fun ConnectedCare(
     liveWalk: (@Composable (onClose: () -> Unit) -> Unit)?,
     /** Her side's start form, shown in the panel over the map. Null on his side. */
     startContent: (@Composable () -> Unit)? = null,
+    /** Opens the walk as a full-screen layer, outside this sheet. */
+    openFullWalk: (() -> Unit)? = null,
     onHistory: () -> Unit,
     onManagePermissions: (() -> Unit)?,
     onRemove: () -> Unit,
@@ -648,12 +651,14 @@ private fun ConnectedCare(
                             },
                             line = stayLine,
                             idleLabel = stayIdleLabel,
-                            onButton = if (startContent != null && stayState == CareStayState.Idle) {
-                                { expanded = true }
+                            // Both the button and the map open the walk full screen: a map
+                            // inside this sheet is not full screen (Karan, 2026-09-13).
+                            onButton = if (openFullWalk != null && stayState != CareStayState.Waiting) {
+                                openFullWalk
                             } else {
                                 onStayButton
                             },
-                            onExpand = { expanded = true },
+                            onExpand = openFullWalk ?: { expanded = true },
                             mapModifier = sharedMap,
                         ) {
                             WalkMap(
