@@ -1,5 +1,15 @@
 package team.sakhi.android.feature.care
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.saveable.rememberSaveable
 import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -168,8 +178,19 @@ fun CareScreen(
     val ownerConnected = uiState.careState as? CareRuntimeState.OwnerConnected
     val partnerConnected = uiState.careState as? CareRuntimeState.PartnerConnected
     val connectedPartnership = ownerConnected?.partnership ?: partnerConnected?.partnership
-    // Her person hears back after they ask: it went, or it did not.
+    // Her person hears back after they ask, only when it did not go. When it did, the button
+    // turns into "Waiting for her to start".
     val askResult by stayWithMeViewModel.askResult.collectAsStateWithLifecycle()
+    val askedAt by stayWithMeViewModel.askedAt.collectAsStateWithLifecycle()
+    val route by stayWithMeViewModel.route.collectAsStateWithLifecycle()
+    // Where this phone is, for the card's map before any walk. Read once, from the last fix
+    // the system already has, so opening the screen never switches the GPS on.
+    var here by remember { mutableStateOf<team.sakhi.staywithme.StayWithMeLocation?>(null) }
+    LaunchedEffect(Unit) {
+        here = team.sakhi.android.platform.StayWithMeLocationService.lastKnownLatLng(careContext)?.let { (lat, lng) ->
+            team.sakhi.staywithme.StayWithMeLocation(lat, lng, null, null, null, kotlinx.datetime.Clock.System.now())
+        }
+    }
     LaunchedEffect(askResult) {
         askResult?.let {
             android.widget.Toast.makeText(careContext, it, android.widget.Toast.LENGTH_SHORT).show()
@@ -296,57 +317,123 @@ fun CareScreen(
                 is CareRuntimeState.OwnerConnected -> {
                     val walk = stayWithMe.mine
                     val personName = careDisplayName(state.partnership, isPartnerRole = false)
-                    LaunchedEffect(walk?.id) { if (walk != null) onOpenLiveWalk() }
                     val moments = remember(walkHistory, loggedDays, personName) {
                         careMoments(careContext, walkHistory, loggedDays, isPartnerRole = false, otherName = personName)
                     }
-                    PartnerDetailContent(
-                    partnership = state.partnership,
-                    isPartnerRole = false,
-                    moments = moments,
-                    selfAvatarIndex = selfAvatarIndex,
-                    otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
-                    serverName = partnerCard?.name,
-                    primaryLabel = stringResource(R.string.care_swm_ask_button, personName),
-                    onPrimary = { showStartWalk = true },
-                    primaryEnabled = !stayWithMe.isBusy,
-                    isRemoving = uiState.isRemovingPartnership,
-                    onHistory = { showHistory = true },
-                    onManagePermissions = { showPermissionsEdit = true },
-                    onRemove = {
-                        hapticManager.impact(HapticImpact.MEDIUM)
-                        viewModel.removePartnership(state.partnership.id)
-                    },
-                    onClose = onClose,
-                )
+                    ConnectedCare(
+                        partnership = state.partnership,
+                        isPartnerRole = false,
+                        isRemoving = uiState.isRemovingPartnership,
+                        moments = moments,
+                        selfAvatarIndex = selfAvatarIndex,
+                        otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
+                        serverName = partnerCard?.name,
+                        stayState = when {
+                            walk != null -> CareStayState.Live
+                            stayWithMe.isBusy -> CareStayState.Working
+                            else -> CareStayState.Idle
+                        },
+                        stayLine = if (walk != null) {
+                            stringResource(R.string.care_stay_live_owner, personName)
+                        } else {
+                            stringResource(R.string.care_section_stay_line_owner, personName)
+                        },
+                        stayIdleLabel = stringResource(R.string.care_swm_ask_button, personName),
+                        onStayButton = { showStartWalk = true },
+                        mapLocation = walk?.lastLocation ?: here,
+                        mapTrail = if (walk != null) stayWithMe.mineTrail else emptyList(),
+                        mapDestination = walk?.destination,
+                        mapRoute = if (walk != null) route?.points.orEmpty() else emptyList(),
+                        mapInitial = "",
+                        mapAvatarWithoutName = false,
+                        liveWalk = walk?.let { session ->
+                            { close ->
+                                StayWithMeOwnerLive(
+                                    session = session,
+                                    personName = personName,
+                                    now = stayWithMe.now,
+                                    isBusy = stayWithMe.isBusy,
+                                    trail = stayWithMe.mineTrail,
+                                    places = stayWithMe.places,
+                                    placesLoading = stayWithMe.placesLoading,
+                                    onArrive = stayWithMeViewModel::arrive,
+                                    onExtend = stayWithMeViewModel::extend,
+                                    onStop = stayWithMeViewModel::stop,
+                                    onClose = close,
+                                    onRefresh = stayWithMeViewModel::refreshMyLocation,
+                                    route = route,
+                                )
+                            }
+                        },
+                        onHistory = { showHistory = true },
+                        onManagePermissions = { showPermissionsEdit = true },
+                        onRemove = {
+                            hapticManager.impact(HapticImpact.MEDIUM)
+                            viewModel.removePartnership(state.partnership.id)
+                        },
+                        onClose = onClose,
+                    )
                 }
 
                 is CareRuntimeState.PartnerConnected -> {
                     val walk = stayWithMe.watching
-                    LaunchedEffect(walk?.id) { if (walk != null) onOpenLiveWalk() }
                     val herName = careDisplayName(state.partnership, isPartnerRole = true)
                     val moments = remember(walkHistory, loggedDays, herName) {
                         careMoments(careContext, walkHistory, loggedDays, isPartnerRole = true, otherName = herName)
                     }
-                    PartnerDetailContent(
-                    partnership = state.partnership,
-                    isPartnerRole = true,
-                    moments = moments,
-                    selfAvatarIndex = selfAvatarIndex,
-                    otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
-                    serverName = partnerCard?.name,
-                    primaryLabel = stringResource(R.string.care_ask_to_stay_with_her),
-                    onPrimary = { stayWithMeViewModel.askToStay(state.partnership.id) },
-                    primaryEnabled = !stayWithMe.isBusy,
-                    isRemoving = uiState.isRemovingPartnership,
-                    onHistory = { showHistory = true },
-                    onManagePermissions = null,
-                    onRemove = {
-                        hapticManager.impact(HapticImpact.MEDIUM)
-                        viewModel.removePartnership(state.partnership.id)
-                    },
-                    onClose = onClose,
-                )
+                    val stayState = when {
+                        walk != null -> CareStayState.Live
+                        stayWithMe.isBusy -> CareStayState.Working
+                        askedAt != null -> CareStayState.Waiting
+                        else -> CareStayState.Idle
+                    }
+                    ConnectedCare(
+                        partnership = state.partnership,
+                        isPartnerRole = true,
+                        isRemoving = uiState.isRemovingPartnership,
+                        moments = moments,
+                        selfAvatarIndex = selfAvatarIndex,
+                        otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
+                        serverName = partnerCard?.name,
+                        stayState = stayState,
+                        stayLine = when (stayState) {
+                            CareStayState.Live -> stringResource(R.string.care_stay_live_partner)
+                            CareStayState.Waiting -> stringResource(R.string.care_stay_waiting_line)
+                            else -> stringResource(R.string.care_section_stay_line_partner)
+                        },
+                        stayIdleLabel = stringResource(R.string.care_ask_to_stay_with_her),
+                        onStayButton = { stayWithMeViewModel.askToStay(state.partnership.id) },
+                        // Before she starts, this phone's own position: her person sees a real
+                        // map, never where she is until she chooses to share it.
+                        mapLocation = walk?.lastLocation ?: here,
+                        mapTrail = if (walk != null) stayWithMe.watchingTrail else emptyList(),
+                        mapDestination = walk?.destination,
+                        mapRoute = if (walk != null) route?.points.orEmpty() else emptyList(),
+                        mapInitial = if (walk != null) walkInitials(herName) ?: "" else "",
+                        mapAvatarWithoutName = walk != null,
+                        liveWalk = walk?.let { session ->
+                            { close ->
+                                StayWithMeWatcherLive(
+                                    session = session,
+                                    herName = herName,
+                                    now = stayWithMe.now,
+                                    places = stayWithMe.places,
+                                    placesLoading = stayWithMe.placesLoading,
+                                    trail = stayWithMe.watchingTrail,
+                                    onClose = close,
+                                    onRefresh = stayWithMeViewModel::refreshWalk,
+                                    route = route,
+                                )
+                            }
+                        },
+                        onHistory = { showHistory = true },
+                        onManagePermissions = null,
+                        onRemove = {
+                            hapticManager.impact(HapticImpact.MEDIUM)
+                            viewModel.removePartnership(state.partnership.id)
+                        },
+                        onClose = onClose,
+                    )
                 }
             }
         }
@@ -398,15 +485,183 @@ internal fun careDisplayName(partnership: CarePartnership, isPartnerRole: Boolea
 
 // ── Connected: PartnerDetailView parity ────────────────────────────────────
 
+/** The link between the card's map and the full screen map it opens into. */
+private const val CARE_STAY_MAP_KEY = "care-stay-map"
+
+/**
+ * The connected screen, and the Stay With Me map growing out of it.
+ *
+ * Tapping the card's map, or its corner button, opens the map full screen with the card's own
+ * bounds animating out to the screen's, and closing it shrinks it back into the card. Both are
+ * in one [SharedTransitionLayout] for that reason: the map is the same thing in both places,
+ * and it should look like it.
+ *
+ * A live walk is shown right here, in the card, as it happens. Nothing jumps away from the
+ * page when her walk starts; the card turns live and the button opens it.
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun ConnectedCare(
+    partnership: CarePartnership,
+    isPartnerRole: Boolean,
+    isRemoving: Boolean,
+    moments: List<CareMoment>,
+    selfAvatarIndex: Int,
+    otherAvatarIndex: Int,
+    serverName: String?,
+    stayState: CareStayState,
+    stayLine: String,
+    stayIdleLabel: String,
+    onStayButton: () -> Unit,
+    mapLocation: team.sakhi.staywithme.StayWithMeLocation?,
+    mapTrail: List<team.sakhi.staywithme.StayWithMeLocation>,
+    mapDestination: team.sakhi.staywithme.StayWithMeDestination?,
+    mapRoute: List<Pair<Double, Double>>,
+    mapInitial: String,
+    mapAvatarWithoutName: Boolean,
+    /** The full screen walk, when there is one. Given the way to close back into the card. */
+    liveWalk: (@Composable (onClose: () -> Unit) -> Unit)?,
+    onHistory: () -> Unit,
+    onManagePermissions: (() -> Unit)?,
+    onRemove: () -> Unit,
+    onClose: () -> Unit,
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = expanded) { expanded = false }
+    val listState = rememberLazyListState()
+    val accent = MaterialTheme.colorScheme.primary
+
+    SharedTransitionLayout {
+        AnimatedContent(
+            targetState = expanded,
+            transitionSpec = { fadeIn(tween(260)) togetherWith fadeOut(tween(200)) },
+            label = "careStayExpand",
+        ) { isExpanded ->
+            val sharedMap = Modifier.sharedBounds(
+                sharedContentState = rememberSharedContentState(key = CARE_STAY_MAP_KEY),
+                animatedVisibilityScope = this@AnimatedContent,
+                clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(SakhiRadius.lg)),
+            )
+            if (!isExpanded) {
+                PartnerDetailContent(
+                    partnership = partnership,
+                    isPartnerRole = isPartnerRole,
+                    isRemoving = isRemoving,
+                    moments = moments,
+                    selfAvatarIndex = selfAvatarIndex,
+                    otherAvatarIndex = otherAvatarIndex,
+                    serverName = serverName,
+                    listState = listState,
+                    stayCard = {
+                        CareStayCard(
+                            state = stayState,
+                            title = stringResource(R.string.care_section_stay_with_me),
+                            line = stayLine,
+                            idleLabel = stayIdleLabel,
+                            onButton = onStayButton,
+                            onExpand = { expanded = true },
+                            mapModifier = sharedMap,
+                        ) {
+                            WalkMap(
+                                location = mapLocation,
+                                accent = accent,
+                                initial = mapInitial,
+                                modifier = Modifier.fillMaxSize(),
+                                trail = mapTrail,
+                                avatarWithoutName = mapAvatarWithoutName,
+                                destination = mapDestination,
+                                routeLine = mapRoute,
+                                topPadding = 0.dp,
+                                interactive = false,
+                            )
+                        }
+                    },
+                    onHistory = onHistory,
+                    onManagePermissions = onManagePermissions,
+                    onRemove = onRemove,
+                    onClose = onClose,
+                )
+            } else {
+                Box(modifier = Modifier.fillMaxSize().then(sharedMap)) {
+                    if (liveWalk != null) {
+                        liveWalk { expanded = false }
+                    } else {
+                        CareStayExpandedIdle(
+                            state = stayState,
+                            line = stayLine,
+                            idleLabel = stayIdleLabel,
+                            onButton = onStayButton,
+                            onClose = { expanded = false },
+                        ) {
+                            WalkMap(
+                                location = mapLocation,
+                                accent = accent,
+                                initial = mapInitial,
+                                modifier = Modifier.fillMaxSize(),
+                                bottomPadding = 180.dp,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The map full screen before any walk: the map, the way out, and the same button as the card,
+ * so opening it never strands her without the thing she opened it for.
+ */
+@Composable
+private fun CareStayExpandedIdle(
+    state: CareStayState,
+    line: String,
+    idleLabel: String,
+    onButton: () -> Unit,
+    onClose: () -> Unit,
+    map: @Composable () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize().background(sakhiSystemBackground())) {
+        map()
+        LiveWalkTopBar(onClose = onClose, modifier = Modifier.align(Alignment.TopCenter))
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = SakhiRadius.xl, topEnd = SakhiRadius.xl),
+            color = sakhiSystemBackground(),
+            shadowElevation = 8.dp,
+        ) {
+            Column(modifier = Modifier.navigationBarsPadding().padding(top = SakhiSpacing.space5)) {
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = sakhiSecondaryLabel(),
+                    modifier = Modifier.padding(horizontal = SakhiSpacing.space5),
+                )
+                CareStayButton(
+                    state = state,
+                    idleLabel = idleLabel,
+                    onClick = onButton,
+                    modifier = Modifier.padding(
+                        start = SakhiSpacing.space4,
+                        end = SakhiSpacing.space4,
+                        top = SakhiSpacing.space4,
+                        bottom = SakhiSpacing.space5,
+                    ),
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun PartnerDetailContent(
     partnership: CarePartnership,
     isPartnerRole: Boolean,
     isRemoving: Boolean,
-    /** The one action this screen is for, pinned at the bottom. */
-    primaryLabel: String,
-    onPrimary: () -> Unit,
-    primaryEnabled: Boolean = true,
+    /** The Stay With Me block, built by the caller so it can link to the full screen map. */
+    stayCard: @Composable () -> Unit,
+    /** Hoisted so the page comes back where she left it after the map closes. */
+    listState: androidx.compose.foundation.lazy.LazyListState,
     /** The real things that happened between them: walks stayed for, days logged. */
     moments: List<CareMoment> = emptyList(),
     /** Her own face, and the other person's, both from the server's five (migration 063). */
@@ -483,6 +738,7 @@ private fun PartnerDetailContent(
             // Lazily built, so the blocks below the fold are not composed before the sheet's
             // push animation starts.
             modifier = Modifier.weight(1f),
+            state = listState,
             flingBehavior = rememberSakhiFlingBehavior(),
         ) {
             item(key = "care-detail-header") {
@@ -519,44 +775,10 @@ private fun PartnerDetailContent(
 
             // ── The one thing she came here to do ────────────────────────────────
             //
-            // First, and with the drawn map above it, because everything else on this
-            // screen is something to read. Before this the action was a bare pink bar
-            // pinned to the bottom with nothing around it, and there was no picture of
-            // what it would do.
+            // First, because everything else on this screen is something to read. A real
+            // map, live the moment a walk is, that opens full screen from where it sits.
             item(key = "care-stay-with-me") {
-                CareSection {
-                    CareSectionTitle(text = stringResource(R.string.care_section_stay_with_me))
-                    CareWalkPreview(
-                        modifier = Modifier.padding(horizontal = SakhiSpacing.space5),
-                    )
-                    Text(
-                        text = if (isPartnerRole) {
-                            stringResource(R.string.care_section_stay_line_partner)
-                        } else {
-                            stringResource(R.string.care_section_stay_line_owner, displayLabel)
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = sakhiSecondaryLabel(),
-                        modifier = Modifier.padding(
-                            start = SakhiSpacing.space5,
-                            end = SakhiSpacing.space5,
-                            top = SakhiSpacing.space3,
-                        ),
-                    )
-                    PrimaryButton(
-                        text = primaryLabel,
-                        onClick = onPrimary,
-                        enabled = primaryEnabled && !isRemoving,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                start = SakhiSpacing.space4,
-                                end = SakhiSpacing.space4,
-                                top = SakhiSpacing.space4,
-                                bottom = SakhiSpacing.space5,
-                            ),
-                    )
-                }
+                stayCard()
                 Spacer(modifier = Modifier.height(SakhiSpacing.space4))
             }
 

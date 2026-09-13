@@ -145,6 +145,8 @@ class StayWithMeViewModel(
      * on both phones, which on her side is battery she needs to still have when she is home.
      */
     fun onVisible() {
+        // Came back to the screen with an ask still out: keep listening for her answer.
+        if (store.isAskPending()) followAsk()
         if (pollJob?.isActive == true) return
         pollJob = viewModelScope.launch {
             while (isActive) {
@@ -166,6 +168,8 @@ class StayWithMeViewModel(
     fun onHidden() {
         pollJob?.cancel()
         pollJob = null
+        askJob?.cancel()
+        askJob = null
     }
 
     override fun onCleared() {
@@ -221,12 +225,24 @@ class StayWithMeViewModel(
     fun askToStay(partnershipId: String) {
         hapticManager.impact(HapticImpact.MEDIUM)
         viewModelScope.launch {
-            val message = store.askToStay(partnershipId).fold(
-                onSuccess = { appContext.getString(R.string.care_ask_sent) },
-                onFailure = { appContext.getString(R.string.care_ask_failed) },
-            )
-            _askResult.value = message
+            // Success needs no toast: the button itself turns into "Waiting for her to
+            // start" and then into her walk. Only a failure is worth a word.
+            store.askToStay(partnershipId)
+                .onSuccess { followAsk() }
+                .onFailure { _askResult.value = appContext.getString(R.string.care_ask_failed) }
         }
+    }
+
+    /** When her person asked, while it still waits on her. Drives the waiting button. */
+    val askedAt: StateFlow<Instant?> = store.askedAt
+
+    private var askJob: Job? = null
+
+    /** Watches for her answer while this screen is open. One at a time. */
+    private fun followAsk() {
+        if (askJob?.isActive == true) return
+        val userId = sessionManager.current?.userId ?: return
+        askJob = viewModelScope.launch { store.followAsk(userId) }
     }
 
     private val _askResult = MutableStateFlow<String?>(null)

@@ -669,7 +669,7 @@ private const val WATCHER_PANEL_FRACTION = 0.52f
  * not stopping: the walk carries on, and Home's ring shows it.
  */
 @Composable
-private fun LiveWalkTopBar(onClose: () -> Unit, modifier: Modifier = Modifier) {
+internal fun LiveWalkTopBar(onClose: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     Row(
         modifier = modifier
@@ -1043,7 +1043,7 @@ private fun StatusRow(text: String, loading: Boolean) {
  * The soft circle is the fix's accuracy, capped so a poor fix never paints half the city.
  */
 @Composable
-private fun WalkMap(
+internal fun WalkMap(
     location: StayWithMeLocation?,
     accent: Color,
     initial: String,
@@ -1056,6 +1056,16 @@ private fun WalkMap(
     routeLine: List<Pair<Double, Double>> = emptyList(),
     /** How much of the map's bottom the panel covers, so the camera frames above it. */
     bottomPadding: Dp = 0.dp,
+    /**
+     * How much of the top is covered. Null is the full-screen default: the status bar and
+     * the close / Contact Police row. The card on the connection screen has neither.
+     */
+    topPadding: Dp? = null,
+    /**
+     * False for the card: a map inside a scrolling page must not take the page's drags,
+     * or the page stops scrolling wherever the map is. Tapping the card opens it instead.
+     */
+    interactive: Boolean = true,
 ) {
     val context = LocalContext.current
     val target = location?.let { LatLng(it.latitude, it.longitude) }
@@ -1091,7 +1101,9 @@ private fun WalkMap(
             val there = LatLng(place.latitude, place.longitude)
             val bounds = LatLngBounds.builder().include(target).include(there)
             routeLine.forEach { bounds.include(LatLng(it.first, it.second)) }
-            runCatching { cameraState.animate(CameraUpdateFactory.newLatLngBounds(bounds.build(), 160), 1_000) }
+            // Less margin in the card, which is a fraction of the screen tall.
+            val margin = if (interactive) 160 else 80
+            runCatching { cameraState.animate(CameraUpdateFactory.newLatLngBounds(bounds.build(), margin), 1_000) }
             // Points a few steps apart would zoom to the kerb. Street level is enough.
             if (cameraState.position.zoom > MAX_FRAMING_ZOOM) {
                 runCatching { cameraState.animate(CameraUpdateFactory.zoomTo(MAX_FRAMING_ZOOM), 600) }
@@ -1109,7 +1121,7 @@ private fun WalkMap(
         // Top too: the close button and Contact Police sit over the map, and her own marker
         // was framed straight under Contact Police.
         contentPadding = PaddingValues(
-            top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + TOP_BAR_HEIGHT,
+            top = topPadding ?: (WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + TOP_BAR_HEIGHT),
             bottom = bottomPadding.coerceAtLeast(0.dp),
         ),
         onMapLoaded = { mapLoaded = true },
@@ -1119,6 +1131,10 @@ private fun WalkMap(
             myLocationButtonEnabled = false,
             mapToolbarEnabled = false,
             compassEnabled = false,
+            scrollGesturesEnabled = interactive,
+            zoomGesturesEnabled = interactive,
+            tiltGesturesEnabled = interactive,
+            rotationGesturesEnabled = interactive,
         ),
     ) {
         // The way ahead, dotted, under everything else.

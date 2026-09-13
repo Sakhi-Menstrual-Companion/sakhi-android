@@ -27,6 +27,9 @@ import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.runtime.getValue
+import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -416,93 +419,205 @@ internal fun CareSinceChip(text: String, modifier: Modifier = Modifier) {
     }
 }
 
+/** Where the Stay With Me card is: nothing yet, a round trip, an ask out, or a live walk. */
+internal enum class CareStayState { Idle, Working, Waiting, Live }
+
 /**
- * The picture on the Stay With Me card: a drawn map, not a real one.
+ * The Stay With Me block: a real map, what is happening, and the one button.
  *
- * There is nothing true to plot here -- she is not walking yet, and that is the whole point
- * of the card -- so this is a few blocks, two roads and a dotted way to a pin. It says what
- * the button does before she presses it. The moment a walk starts, the real map takes the
- * whole screen (`StayWithMeLiveLayer`), and none of this is on it.
+ * The map is live the moment a walk is: her dot, the way she has come, the way ahead. Before
+ * that it shows where this phone is, so it is a map of somewhere real rather than a drawing.
+ * The whole map is a tap target that opens it full screen, and the small button in its corner
+ * says so, since a map in a list does not otherwise look like it opens.
  *
- * Drawn rather than loaded so it costs no map tile, no key and no network.
+ * [mapModifier] is the caller's, so it can carry the shared-bounds link to the full screen map
+ * the card grows into.
  */
 @Composable
-internal fun CareWalkPreview(modifier: Modifier = Modifier) {
+internal fun CareStayCard(
+    state: CareStayState,
+    title: String,
+    line: String,
+    idleLabel: String,
+    onButton: () -> Unit,
+    onExpand: () -> Unit,
+    mapModifier: Modifier = Modifier,
+    map: @Composable () -> Unit,
+) {
+    CareSection {
+        CareSectionTitle(text = title)
+        Box(
+            modifier = Modifier
+                .padding(horizontal = SakhiSpacing.space4)
+                .then(mapModifier)
+                .fillMaxWidth()
+                .height(184.dp)
+                .clip(RoundedCornerShape(SakhiRadius.lg))
+                .background(sakhiLightPink()),
+        ) {
+            map()
+            // Over the map, so a tap anywhere on it opens it, and the map itself never takes
+            // the drag that should scroll the page.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(onClick = onExpand),
+            )
+            if (state == CareStayState.Live) {
+                LiveBadge(modifier = Modifier.align(Alignment.TopStart).padding(10.dp))
+            }
+            Surface(
+                shape = CircleShape,
+                color = sakhiSystemBackground(),
+                shadowElevation = 2.dp,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp)
+                    .size(34.dp),
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxSize().clickable(onClick = onExpand),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.OpenInFull,
+                        contentDescription = androidx.compose.ui.res.stringResource(R.string.care_stay_expand),
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+        androidx.compose.animation.AnimatedContent(
+            targetState = line,
+            label = "careStayLine",
+        ) { text ->
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = SakhiSpacing.space5, end = SakhiSpacing.space5, top = SakhiSpacing.space3),
+            )
+        }
+        CareStayButton(
+            state = state,
+            idleLabel = idleLabel,
+            onClick = if (state == CareStayState.Live) onExpand else onButton,
+            modifier = Modifier.padding(
+                start = SakhiSpacing.space4,
+                end = SakhiSpacing.space4,
+                top = SakhiSpacing.space4,
+                bottom = SakhiSpacing.space5,
+            ),
+        )
+    }
+}
+
+/**
+ * The card's one button, through each thing it can be.
+ *
+ * Asking: a spinner in the pink, so the press is answered at once. Waiting: the pink goes soft
+ * and a small dot breathes beside "Waiting for her to start", because nothing is wrong and
+ * nothing more is needed from them. Live: it opens the map.
+ */
+@Composable
+internal fun CareStayButton(
+    state: CareStayState,
+    idleLabel: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val pink = MaterialTheme.colorScheme.primary
-    // The roads are the white, the blocks are the pink. The other way round, which is how
-    // this was drawn first, gave white boxes on a pale pink ground and the roads between
-    // them vanished -- it read as a grid, not as a place.
-    val paper = androidx.compose.ui.graphics.lerp(sakhiLightPink(), Color.White, 0.5f)
-    val block = androidx.compose.ui.graphics.lerp(sakhiLightPink(), pink, 0.12f)
+    val waiting = state == CareStayState.Waiting
+    val fill by androidx.compose.animation.animateColorAsState(
+        targetValue = if (waiting) pink.copy(alpha = 0.10f) else pink,
+        label = "careStayButtonFill",
+    )
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(132.dp)
-            .clip(RoundedCornerShape(SakhiRadius.lg))
-            .background(paper),
+            .height(52.dp)
+            .clip(RoundedCornerShape(SakhiRadius.full))
+            .background(fill)
+            .clickable(
+                enabled = state == CareStayState.Idle || state == CareStayState.Live,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
     ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            val w = size.width
-            val h = size.height
-
-            // Blocks: the shapes between the roads, kept pale so the route stays the
-            // brightest thing in the picture.
-            listOf(
-                Offset(0.04f, 0.08f) to Size(0.30f, 0.34f),
-                Offset(0.40f, 0.04f) to Size(0.24f, 0.26f),
-                Offset(0.72f, 0.12f) to Size(0.24f, 0.30f),
-                Offset(0.06f, 0.58f) to Size(0.26f, 0.32f),
-                Offset(0.42f, 0.56f) to Size(0.30f, 0.34f),
-                Offset(0.80f, 0.60f) to Size(0.16f, 0.30f),
-            ).forEach { (at, box) ->
-                drawRoundRect(
-                    color = block,
-                    topLeft = Offset(at.x * w, at.y * h),
-                    size = Size(box.width * w, box.height * h),
-                    cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx()),
+        androidx.compose.animation.AnimatedContent(
+            targetState = state,
+            label = "careStayButton",
+        ) { shown ->
+            when (shown) {
+                CareStayState.Working -> androidx.compose.material3.CircularProgressIndicator(
+                    color = Color.White,
+                    strokeWidth = 2.5.dp,
+                    modifier = Modifier.size(22.dp),
+                )
+                CareStayState.Waiting -> Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    BreathingDot(color = sakhiDeepRose())
+                    Text(
+                        text = androidx.compose.ui.res.stringResource(R.string.care_stay_waiting_button),
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = sakhiDeepRose(),
+                    )
+                }
+                CareStayState.Live -> Text(
+                    text = androidx.compose.ui.res.stringResource(R.string.care_stay_open_live),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White,
+                )
+                CareStayState.Idle -> Text(
+                    text = idleLabel,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White,
                 )
             }
-
-            // Two roads, one across and one down, left as the paper showing through.
-
-            // Her way: a dotted line from where she stands to where she is going.
-            val dots = androidx.compose.ui.graphics.PathEffect.dashPathEffect(
-                floatArrayOf(7.dp.toPx(), 7.dp.toPx()),
-            )
-            val path = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * 0.16f, h * 0.80f)
-                lineTo(w * 0.16f, h * 0.50f)
-                lineTo(w * 0.68f, h * 0.50f)
-                lineTo(w * 0.68f, h * 0.24f)
-                lineTo(w * 0.86f, h * 0.24f)
-            }
-            drawPath(
-                path = path,
-                color = pink,
-                style = Stroke(width = 3.dp.toPx(), cap = StrokeCap.Round, pathEffect = dots),
-            )
-
-            // Where she stands now.
-            drawCircle(Color.White, radius = 9.dp.toPx(), center = Offset(w * 0.16f, h * 0.80f))
-            drawCircle(pink, radius = 5.dp.toPx(), center = Offset(w * 0.16f, h * 0.80f))
         }
+    }
+}
 
-        // Where she is going. A real glyph rather than a drawn pin, so it reads as the same
-        // marker the live map uses.
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(end = 8.dp, top = 6.dp)
-                .size(30.dp)
-                .background(MaterialTheme.colorScheme.primary, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Home,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(16.dp),
-            )
-        }
+/** A small dot that fades in and out, for "waiting" and for "live". */
+@Composable
+private fun BreathingDot(color: Color, size: Int = 8) {
+    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "breathingDot")
+    val alpha by transition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            androidx.compose.animation.core.tween(900),
+            androidx.compose.animation.core.RepeatMode.Reverse,
+        ),
+        label = "breathingDotAlpha",
+    )
+    Box(
+        modifier = Modifier
+            .size(size.dp)
+            .background(color.copy(alpha = alpha), CircleShape),
+    )
+}
+
+/** "LIVE", with a breathing dot, on the map while a walk is on. */
+@Composable
+private fun LiveBadge(modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .background(sakhiSystemBackground(), RoundedCornerShape(SakhiRadius.full))
+            .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        BreathingDot(color = MaterialTheme.colorScheme.primary, size = 7)
+        Text(
+            text = androidx.compose.ui.res.stringResource(R.string.care_stay_live_badge),
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
+            color = MaterialTheme.colorScheme.primary,
+        )
     }
 }

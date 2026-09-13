@@ -41,6 +41,13 @@
     <string name="care_section_stay_with_me">STAY WITH ME</string>
     <string name="care_section_stay_line_owner">Tell %1$s where you are going. They see your way home until you reach.</string>
     <string name="care_section_stay_line_partner">She will get a gentle ask. Nothing is shared until she says yes.</string>
+    <string name="care_stay_waiting_line">Asked. The moment she starts, her way home shows here.</string>
+    <string name="care_stay_waiting_button">Waiting for her to start</string>
+    <string name="care_stay_live_owner">You are on your way. %1$s is with you.</string>
+    <string name="care_stay_live_partner">She is on her way home. You are with her.</string>
+    <string name="care_stay_open_live">Open live map</string>
+    <string name="care_stay_live_badge">LIVE</string>
+    <string name="care_stay_expand">Open the map full screen</string>
     <string name="care_ask_sent">Asked. She decides whether to start.</string>
     <string name="care_ask_failed">Could not ask just now. Try again.</string>
     <string name="care_remove_sub">Ends what they can see, for both of you</string>
