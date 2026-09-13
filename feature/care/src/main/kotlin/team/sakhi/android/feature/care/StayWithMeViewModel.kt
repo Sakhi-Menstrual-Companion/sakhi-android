@@ -123,7 +123,7 @@ class StayWithMeViewModel(
                 if (destination == routeTo && moved < ROUTE_REFRESH_METERS) return@collect
                 routeFrom = from
                 routeTo = destination
-                _route.value = StayWithMeRoutes.walking(appContext, from, destination)
+                _route.value = StayWithMeRoutes.road(appContext, from, destination)
             }
         }
         // One socket, following whichever walks this phone is part of. A walk that ends

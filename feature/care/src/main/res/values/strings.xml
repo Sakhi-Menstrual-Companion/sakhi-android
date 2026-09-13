@@ -183,7 +183,7 @@
     <string name="care_swm_clear_where">Clear where to</string>
     <string name="care_swm_going_to">Going to %1$s</string>
     <string name="care_swm_left_distance">%1$s left</string>
-    <string name="care_swm_minutes_on_foot">about %1$d min on foot</string>
+    <string name="care_swm_minutes_by_car">about %1$d min by car</string>
     <string name="care_swm_refresh_mine">Send my location now</string>
     <string name="care_swm_refresh_hers">Get her newest location</string>
 </resources>

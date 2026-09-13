@@ -25,8 +25,12 @@ internal data class WalkRoute(
 )
 
 /**
- * A walking route from Google's Routes API, with a straight line standing in when there is
+ * The road route from Google's Routes API, with a straight line standing in when there is
  * none. The line still tells her person which way home is, which is most of what they need.
+ *
+ * Driving, not walking, at Karan's call: the route follows the main roads, so it reads
+ * clearly on the map, and most of these trips home are an auto or a cab anyway. The time
+ * that comes with it is a driving time, and the screens say so.
  *
  * The key is Android-restricted, so every request says which app it comes from (package
  * and signing certificate), the way Google checks it. Until the Routes API is enabled on
@@ -34,7 +38,7 @@ internal data class WalkRoute(
  */
 internal object StayWithMeRoutes {
 
-    suspend fun walking(context: Context, from: Pair<Double, Double>, to: StayWithMeDestination): WalkRoute =
+    suspend fun road(context: Context, from: Pair<Double, Double>, to: StayWithMeDestination): WalkRoute =
         withContext(Dispatchers.IO) {
             runCatching { request(context, from, to) }.getOrNull() ?: straight(from, to)
         }
@@ -44,7 +48,7 @@ internal object StayWithMeRoutes {
         val body = JSONObject()
             .put("origin", JSONObject().put("location", JSONObject().put("latLng", latLng(from.first, from.second))))
             .put("destination", JSONObject().put("location", JSONObject().put("latLng", latLng(to.latitude, to.longitude))))
-            .put("travelMode", "WALK")
+            .put("travelMode", "DRIVE")
             .toString()
 
         val connection = (URL(ENDPOINT).openConnection() as HttpURLConnection).apply {

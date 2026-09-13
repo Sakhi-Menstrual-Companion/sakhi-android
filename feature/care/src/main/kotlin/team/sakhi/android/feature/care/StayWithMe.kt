@@ -24,6 +24,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.unit.Dp
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
@@ -620,7 +623,7 @@ private fun DestinationCard(place: StayWithMeDestination, route: WalkRoute?, ses
                 Text(
                     text = listOfNotNull(
                         stringResource(R.string.care_swm_left_distance, distance),
-                        minutes?.let { stringResource(R.string.care_swm_minutes_on_foot, it) },
+                        minutes?.let { stringResource(R.string.care_swm_minutes_by_car, it) },
                     ).joinToString(" · "),
                     style = MaterialTheme.typography.bodySmall,
                     color = sakhiSecondaryLabel(),
@@ -648,6 +651,9 @@ private fun RefreshButton(onClick: () -> Unit, label: String) {
         }
     }
 }
+
+/** The height of the close button and Contact Police row over the map. */
+private val TOP_BAR_HEIGHT = 56.dp
 
 /** The closest the walk map frames itself when her and her destination are near. */
 private const val MAX_FRAMING_ZOOM = 16.5f
@@ -1100,7 +1106,12 @@ private fun WalkMap(
     GoogleMap(
         modifier = modifier,
         cameraPositionState = cameraState,
-        contentPadding = PaddingValues(bottom = bottomPadding.coerceAtLeast(0.dp)),
+        // Top too: the close button and Contact Police sit over the map, and her own marker
+        // was framed straight under Contact Police.
+        contentPadding = PaddingValues(
+            top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + TOP_BAR_HEIGHT,
+            bottom = bottomPadding.coerceAtLeast(0.dp),
+        ),
         onMapLoaded = { mapLoaded = true },
         properties = MapProperties(isMyLocationEnabled = false),
         uiSettings = MapUiSettings(
