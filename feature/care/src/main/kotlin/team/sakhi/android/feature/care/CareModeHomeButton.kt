@@ -1,5 +1,12 @@
 package team.sakhi.android.feature.care
 
+import com.google.android.gms.maps.GoogleMapOptions
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.maps.android.compose.GoogleMap
+import com.google.maps.android.compose.MapProperties
+import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.rememberCameraPositionState
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.geometry.Size
@@ -65,14 +72,17 @@ import team.sakhi.staywithme.StayWithMePhase
 import team.sakhi.staywithme.StayWithMeStore
 
 /**
- * The leading control in the bottom bar: her Care Mode person.
+ * The leading control in the calendar's bottom bar: where she is, and the way into the walk.
  *
- * This slot used to open Emergency Assistance and drew a live map of strangers nearby. It
- * draws a person now, because the thing behind it is a person: the same person who can see
- * what she shares is the one who stays with her on the way home.
+ * iOS's `HomeNearbyButton`, which Karan moved back into this slot on 2026-09-14: a 46 circle
+ * holding a live map of where she is with her own face over it, a white band and a hairline
+ * around it so it sits on the page like a sticker, and the walk's ring over that when one is
+ * running. Care moved to Home's top right the same day, and this stopped being the Care
+ * button; Android kept drawing the two faces here and opening Care, which left the two
+ * phones meaning different things by the same corner.
  *
- * It is the only place on Home that can turn red, and red here means one thing only: a walk
- * is past its time. Never that somebody else needs something from her.
+ * It is the only place on Home that can turn orange or red, and that means one thing only: a
+ * walk is past its time. Never that somebody else needs something from her.
  */
 @Composable
 fun CareModeHomeButton(
@@ -128,6 +138,14 @@ fun CareModeHomeButton(
     val pair = partnership?.let { p ->
         val otherId = if (p.userId == selfUserId) p.partnerId else p.userId
         CareAvatars.selfIndex(context, selfUserId.orEmpty()) to CareAvatars.indexFor(otherId)
+    }
+
+    // Where she is, for the tiles. The fix the system already has, never a new request:
+    // this is a picture behind a button, not a reason to wake the GPS.
+    var here by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+    LaunchedEffect(mine?.id, watching?.id) {
+        here = (mine ?: watching)?.lastLocation?.let { it.latitude to it.longitude }
+            ?: StayWithMeLocationService.lastKnownLatLng(context)
     }
 
     val walk = mine ?: watching
@@ -214,14 +232,17 @@ fun CareModeHomeButton(
             .semantics { contentDescription = name ?: "Care Mode" },
         contentAlignment = Alignment.Center,
     ) {
+        // The map under everything, when there is a fix to draw. iOS puts its own map
+        // tiles here; this is the same idea with the map Android has.
+        if (here != null) {
+            NearbyMapThumbnail(
+                latitude = here!!.first,
+                longitude = here!!.second,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
         when {
-            pair != null -> Row(
-                horizontalArrangement = Arrangement.spacedBy((-8).dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                HomeButtonFace(avatarIndex = pair.first)
-                HomeButtonFace(avatarIndex = pair.second)
-            }
+            pair != null -> HomeButtonFace(avatarIndex = pair.first)
             name != null -> Text(
                 text = name.take(1).uppercase(),
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
@@ -235,6 +256,39 @@ fun CareModeHomeButton(
             )
         }
     }
+}
+
+/**
+ * The map tiles behind the button: where she is, still, and not touchable.
+ *
+ * Lite mode on purpose. This is a 46dp picture of a street corner, not a map anyone pans,
+ * and a full map view in a bottom bar costs a surface and a frame budget for nothing.
+ */
+@Composable
+private fun NearbyMapThumbnail(
+    latitude: Double,
+    longitude: Double,
+    modifier: Modifier = Modifier,
+) {
+    val position = rememberCameraPositionState {
+        this.position = CameraPosition.fromLatLngZoom(LatLng(latitude, longitude), 15f)
+    }
+    GoogleMap(
+        modifier = modifier,
+        cameraPositionState = position,
+        googleMapOptionsFactory = { GoogleMapOptions().liteMode(true) },
+        properties = MapProperties(mapStyleOptions = null),
+        uiSettings = MapUiSettings(
+            compassEnabled = false,
+            mapToolbarEnabled = false,
+            myLocationButtonEnabled = false,
+            rotationGesturesEnabled = false,
+            scrollGesturesEnabled = false,
+            tiltGesturesEnabled = false,
+            zoomControlsEnabled = false,
+            zoomGesturesEnabled = false,
+        ),
+    )
 }
 
 /**

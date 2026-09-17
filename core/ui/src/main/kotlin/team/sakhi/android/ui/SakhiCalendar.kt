@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.datetime.LocalDate
+import team.sakhi.android.designsystem.LocalSakhiCalendarAccent
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
@@ -216,7 +217,9 @@ private fun SakhiMiniMonthDayCell(
     }
 
     val periodColor = SakhiUIColors.BRAND_PERIOD_RED.toComposeColor()
-    val accentColor = MaterialTheme.colorScheme.primary
+    // The phase colour the sheet is wearing, not the brand pink. See
+    // [LocalSakhiCalendarAccent]; the fallback is what this drew before anyone provided one.
+    val accentColor = LocalSakhiCalendarAccent.current ?: MaterialTheme.colorScheme.primary
     val isDarkTheme = LocalSakhiDarkTheme.current
     val isPeriod = day.markerType == SakhiCalendarMarkerType.PERIOD
     val ovulationRingColor = remember(isDarkTheme) {
@@ -322,6 +325,21 @@ private fun SakhiMiniMonthDayCell(
                 color = labelColor,
             )
         }
+
+        // The same "she logged something" dot the month grid draws, in the same brand pink
+        // and in the same place relative to the circle: under it, clear of the fill and of
+        // the selection ring. The year grid had no dot at all, so a day she had written
+        // about looked empty until the month was opened.
+        if (day.hasLogDetail) {
+            Box(
+                modifier = Modifier
+                    .offset(y = yearGridLogDotOffsetY)
+                    .size(CalendarLogDotSize)
+                    // Brand pink, like the month grid's, not the accent: iOS draws this one
+                    // as `DS.Colors.pink` in both grids whatever phase she is in.
+                    .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape),
+            )
+        }
     }
 }
 
@@ -337,7 +355,9 @@ private fun SakhiCalendarDayCell(
     }
 
     val periodColor = SakhiUIColors.BRAND_PERIOD_RED.toComposeColor()
-    val accentColor = MaterialTheme.colorScheme.primary
+    // The phase colour the sheet is wearing, not the brand pink. See
+    // [LocalSakhiCalendarAccent]; the fallback is what this drew before anyone provided one.
+    val accentColor = LocalSakhiCalendarAccent.current ?: MaterialTheme.colorScheme.primary
     val isDarkTheme = LocalSakhiDarkTheme.current
     val ovulationRingColor = remember(isDarkTheme) {
         SakhiColors.resolved(isDarkTheme).forPhase(CyclePhase.OVULATION).ring.toComposeColor()
@@ -453,12 +473,11 @@ private fun SakhiCalendarDayCell(
                     .padding(bottom = CalendarLogDotBottomInset)
                     .size(CalendarLogDotSize)
                     .background(
-                        color = if (day.markerType == SakhiCalendarMarkerType.PERIOD) {
-                            // On a filled period cell the brand pink would disappear.
-                            Color.White
-                        } else {
-                            MaterialTheme.colorScheme.primary
-                        },
+                        // Always the brand pink, including on a day she also logged a period
+                        // (Karan, 2026-09-17: "dot gayaab ho jaa raha hai"). White was right
+                        // when this dot sat inside the filled circle; it sits under the
+                        // circle now, on the page, where white is invisible.
+                        color = MaterialTheme.colorScheme.primary,
                         shape = androidx.compose.foundation.shape.CircleShape,
                     ),
             )
@@ -483,6 +502,8 @@ private const val PredictedPeriodFillAlpha = 0.16f
 private val CalendarLogDotSize = 4.dp
 private val CalendarLogDotBottomInset = 1.dp
 private val CalendarLogDotOffsetY = 8.dp
+/** iOS `DS.CalendarStyle.logDotGap`. */
+private val yearGridLogDotGap = 3.dp
 private val calendarDotSize = SakhiSpacing.space8 + SakhiSpacing.space1 / 2
 // iOS `SakhiCalendarView` day cell: the ring is `dotSize + 8`, where
 // `dotSize = min(cellHeight - 10, 36)`. The Calendar tab uses the view's default
@@ -503,12 +524,23 @@ private val calendarRingStroke = SakhiSpacing.space1 / 2 + SakhiSpacing.space1 /
 //   `.font(.lato(14, ...))` -- label
 // Android had a 24dp cell with a 20dp dot and an 11sp label, which rendered the year
 // view far denser and smaller than iOS's.
-private val yearGridCellHeight = 36.dp
+// The row is taller than the circle on purpose. The "she logged something" dot goes under
+// the circle, and at the old 36 there was no room for it: it landed on the circle's own
+// edge (Karan, 2026-09-17, "year view mai dot circle ke andar chale jaa raha hai"). iOS
+// `YearDayCell` now reads `circleSize: 32`, `cellHeight: 44`, and this is that.
+private val yearGridCellHeight = 44.dp
 private val yearGridDotSize = 32.dp
-// MUST stay below `yearGridCellHeight` (36.dp) or CircleShape renders a stadium.
-// Was 40.dp, i.e. larger than its own cell, on every device.
-private val yearGridRingSize = 34.dp
+// iOS's own `Circle().stroke(accent, lineWidth: 2.5).frame(width: 40, height: 40)`. It had
+// to be cut to 34 while the cell was 36, because a circle bigger than its own cell renders
+// as a stadium. At 44 the real number fits.
+private val yearGridRingSize = 40.dp
 private val yearGridRingStroke = 2.5.dp
 private val yearGridMultiSelectHintSize = 34.dp
+// Clear of the selection ring, not just of the day circle. Measured from the ring because
+// the ring is the bigger of the two: at half the circle the dot landed on the ring's own
+// stroke and vanished into it on the selected day. iOS `YearDayCell.logDotOffset` is this
+// same sum.
+private val yearGridLogDotOffsetY =
+    yearGridRingSize / 2 + yearGridRingStroke / 2 + yearGridLogDotGap + CalendarLogDotSize / 2
 private val yearGridFontSize = 14.sp
 private const val disabledSemanticOpacity = 0.68f

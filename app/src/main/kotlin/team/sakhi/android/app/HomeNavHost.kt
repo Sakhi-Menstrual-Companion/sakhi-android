@@ -191,12 +191,15 @@ fun HomeNavHost() {
         activeOverlaySheet = sheet
     }
 
-    val openCareOrWalk = {
-        presentOverlaySheet(
-            if (liveWalkMine != null || liveWalkWatching != null) HomeOverlaySheet.StayWithMe
-            else HomeOverlaySheet.Care(),
-        )
-    }
+    /**
+     * Home's top right. Care, and only Care (Karan, 2026-09-17), even while a walk is live:
+     * it used to jump to the walk instead, which meant the one way into Care quietly stopped
+     * being that for the length of a ride.
+     */
+    val openCare = { presentOverlaySheet(HomeOverlaySheet.Care()) }
+
+    /** The nearby button on the calendar's bar: the walk when there is one, else starting it. */
+    val openWalk = { presentOverlaySheet(HomeOverlaySheet.StayWithMe) }
 
     // Signed-in deep links resolve here, not in RootNavHost: Care/Reports/Chat/
     // Profile are all routes this graph owns, and Home is guaranteed mounted by
@@ -260,7 +263,7 @@ fun HomeNavHost() {
                         HomeOverlaySheet.Profile(initialScreen = ProfileSheetScreen.LogHistory),
                     )
                 },
-                onOpenCare = openCareOrWalk,
+                onOpenCare = openCare,
                 onOpenNotifications = { presentOverlaySheet(HomeOverlaySheet.Notifications) },
                 unreadNotificationCount = inboxState.unreadCount,
                 onOpenCalendar = { showCalendar = true },
@@ -294,7 +297,8 @@ fun HomeNavHost() {
             onOpenEmergency = { openInbox ->
                 presentOverlaySheet(HomeOverlaySheet.Emergency(openResponderInbox = openInbox))
             },
-            onOpenCare = openCareOrWalk,
+            onOpenCare = openCare,
+            onOpenWalk = openWalk,
             onLog = { date -> presentOverlaySheet(HomeOverlaySheet.Logging(initialDate = date)) },
             onDaySelected = homeViewModel::selectDate,
             // Detent and year mode are the same concept on iOS: dragging the sheet

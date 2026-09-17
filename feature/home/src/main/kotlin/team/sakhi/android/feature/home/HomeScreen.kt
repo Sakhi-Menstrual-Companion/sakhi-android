@@ -68,6 +68,7 @@ import androidx.compose.material.icons.filled.MonitorWeight
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.NightsStay
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Opacity
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
@@ -378,9 +379,9 @@ fun HomeScreen(
                     hapticManager.selection()
                     onOpenProfile()
                 },
-                onOpenNotifications = {
+                onOpenCare = {
                     hapticManager.selection()
-                    onOpenNotifications()
+                    onOpenCare()
                 },
                 unreadNotificationCount = unreadNotificationCount,
                 onOpenCalendar = {
@@ -3100,7 +3101,7 @@ private fun HomeTopBar(
     heroScrollProgress: () -> Float,
     phasePalette: SakhiPhasePalette,
     onOpenProfile: () -> Unit,
-    onOpenNotifications: () -> Unit,
+    onOpenCare: () -> Unit,
     unreadNotificationCount: Int,
     onOpenCalendar: () -> Unit,
     onResetToToday: () -> Unit,
@@ -3194,22 +3195,24 @@ private fun HomeTopBar(
                 stroke = iconStroke,
                 onClick = onOpenProfile,
             )
-            // The bell takes the place the Care (people) button used to hold: Karan's call on
-            // 2026-09-12, so Home's top right is the inbox on both platforms.
+            // Care, top right, with the two-person glyph, as iOS has had it since
+            // 2026-09-14. The bell held this place here for two days longer and never moved
+            // back, which is how Home's top right came to mean two different things on the
+            // two phones.
+            //
+            // It is the Care button and nothing else, even while a walk is live (Karan,
+            // 2026-09-17): "vo hamesha care partner wala he rahega". The walk has its own
+            // way in, the nearby button on the calendar's bar.
             TopBarIconButton(
-                icon = Icons.Filled.Notifications,
-                contentDescription = if (unreadNotificationCount > 0) {
-                    stringResource(R.string.home_notifications_unread_content_description, unreadNotificationCount)
-                } else {
-                    stringResource(R.string.home_open_notifications_content_description)
-                },
+                icon = Icons.Filled.People,
+                contentDescription = stringResource(R.string.home_open_care_content_description),
                 foreground = foreground,
                 background = iconBackground,
                 stroke = iconStroke,
-                onClick = onOpenNotifications,
+                onClick = onOpenCare,
+                // The unread mark rides on Care now, so a push she has not read is still
+                // visible from Home even though the bell has gone.
                 showDot = unreadNotificationCount > 0,
-                // Brand pink on every phase, as on iOS. The dot sits on the bell glyph itself,
-                // which is white on a period day, so a white dot there disappeared.
                 dotFill = MaterialTheme.colorScheme.primary,
             )
         }

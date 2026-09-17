@@ -60,6 +60,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -97,7 +98,9 @@ import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.phaseCardFill
 import team.sakhi.android.designsystem.phasePrimaryColor
+import team.sakhi.android.designsystem.LocalSakhiCalendarAccent
 import team.sakhi.android.designsystem.LocalSakhiDarkTheme
+import team.sakhi.android.designsystem.calendarSelectionAccent
 import team.sakhi.android.feature.logging.LoggingViewModel
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
@@ -147,8 +150,14 @@ fun CalendarScreen(
     /** Opens Emergency Assistance from the bottom bar's leading slot. */
     /** `true` opens straight onto a request waiting for her, rather than the picker. */
     onOpenEmergency: (openInbox: Boolean) -> Unit = {},
-    /** Opens Care Mode from the bottom bar's leading slot, where her person lives. */
+    /** Opens Care Mode. Home's top right owns this now; kept for callers that still pass it. */
     onOpenCare: () -> Unit = {},
+    /**
+     * Opens Stay With Me from the bottom bar's leading slot: the walk when one is running,
+     * else the screen she starts one from. iOS's `HomeCalendarSheet` wires the same slot to
+     * the same place.
+     */
+    onOpenWalk: () -> Unit = {},
     onLog: (LocalDate) -> Unit = {},
     // Year mode is hoistable so the host can bind it to a sheet detent. iOS ties the
     // two together explicitly -- `HomeCalendarSheet.swift`'s header states
@@ -298,295 +307,299 @@ fun CalendarScreen(
         isMonthAnimating = false
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            // No TOP padding. iOS's month content is explicitly `.padding(.top, 0)`
-            // (HomeCalendarSheet.swift) because the 36dp drag-handle row above already
-            // provides that spacing. Android was adding another 16dp on top of the
-            // handle, which pushed the month bar ~52dp down the sheet and read as a
-            // band of dead space above it.
-            .padding(
-                start = SakhiSpacing.space5,
-                end = SakhiSpacing.space5,
-                bottom = SakhiSpacing.space4,
-            ),
+    // Everything below draws its accent from the phase she is in, the way iOS's
+    // `HomeCalendarSheet.calendarAccent` does: the selected day's ring and number, the
+    // month labels in the year view, and the chevron beside the title.
+    CompositionLocalProvider(
+        LocalSakhiCalendarAccent provides calendarSelectionAccent(currentPhase),
     ) {
-        if (isYearExpanded) {
-            CalendarYearHeader(
-                viewingYear = viewingYear,
-                isCurrentYear = viewingYear == compactToday.year,
-                onPreviousYear = {
-                    hapticManager.selection()
-                    yearSlideDirection = -1
-                    resetYearSelection()
-                    viewingYear -= 1
-                },
-                onNextYear = {
-                    hapticManager.selection()
-                    yearSlideDirection = 1
-                    resetYearSelection()
-                    viewingYear += 1
-                },
-                onCollapse = { setYearExpanded(false) },
-                onResetToCurrentYear = {
-                    hapticManager.selection()
-                    yearSlideDirection = if (compactToday.year > viewingYear) 1 else -1
-                    resetYearSelection()
-                    viewingYear = compactToday.year
-                },
-            )
-            SakhiWeekdayHeaderRow(labels = expandedHeaders)
-        } else {
-            CalendarHeader(
-                visibleMonth = uiState.visibleMonth,
-                selectedDate = uiState.selectedDate,
-                onPreviousMonth = { scope.launch { animateMonthChange(direction = -1) } },
-                onNextMonth = { scope.launch { animateMonthChange(direction = 1) } },
-                onJumpToToday = viewModel::jumpToToday,
-                onExpandYear = {
-                    viewingYear = uiState.visibleMonth.year
-                    setYearExpanded(true)
-                },
-            )
-            SakhiWeekdayHeaderRow(labels = compactHeaders)
-        }
-
-        AnimatedContent(
-            targetState = isYearExpanded,
-            modifier = Modifier.weight(1f),
-            transitionSpec = {
-                if (targetState) {
-                    (fadeIn() + slideInVertically { it / 6 }).togetherWith(
-                        fadeOut() + slideOutVertically { -it / 8 },
-                    )
-                } else {
-                    (fadeIn() + slideInVertically { -it / 8 }).togetherWith(
-                        fadeOut() + slideOutVertically { it / 6 },
-                    )
-                }
-            },
-            label = "calendar_content_mode",
-        ) { expanded ->
-            if (expanded) {
-                CalendarYearView(
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                // No TOP padding. iOS's month content is explicitly `.padding(.top, 0)`
+                // (HomeCalendarSheet.swift) because the 36dp drag-handle row above already
+                // provides that spacing. Android was adding another 16dp on top of the
+                // handle, which pushed the month bar ~52dp down the sheet and read as a
+                // band of dead space above it.
+                .padding(
+                    start = SakhiSpacing.space5,
+                    end = SakhiSpacing.space5,
+                    bottom = SakhiSpacing.space4,
+                ),
+        ) {
+            if (isYearExpanded) {
+                CalendarYearHeader(
                     viewingYear = viewingYear,
-                    visibleMonth = uiState.visibleMonth,
-                    monthCache = uiState.monthCache,
-                    slideDirection = yearSlideDirection,
-                    isMultiSelectMode = isMultiSelectMode,
-                    yearSelection = yearSelection,
-                    onMonthSelected = { month ->
-                        viewModel.jumpToMonth(month)
-                        setYearExpanded(false)
-                    },
-                    // Same effect as the header chevrons, including clearing any
-                    // in-progress multi-selection, exactly as iOS's `changeYear` does.
-                    onChangeYear = { delta ->
+                    isCurrentYear = viewingYear == compactToday.year,
+                    onPreviousYear = {
                         hapticManager.selection()
-                        yearSlideDirection = delta
+                        yearSlideDirection = -1
                         resetYearSelection()
-                        viewingYear += delta
+                        viewingYear -= 1
                     },
-                    onToggleDate = { date ->
-                        hapticManager.impact(HapticImpact.LIGHT)
-                        if (yearSelection.contains(date)) {
-                            yearSelection = yearSelection - date
-                            selectionHistory = selectionHistory + (date to false)
-                        } else {
-                            yearSelection = yearSelection + date
-                            selectionHistory = selectionHistory + (date to true)
-                        }
+                    onNextYear = {
+                        hapticManager.selection()
+                        yearSlideDirection = 1
+                        resetYearSelection()
+                        viewingYear += 1
+                    },
+                    onCollapse = { setYearExpanded(false) },
+                    onResetToCurrentYear = {
+                        hapticManager.selection()
+                        yearSlideDirection = if (compactToday.year > viewingYear) 1 else -1
+                        resetYearSelection()
+                        viewingYear = compactToday.year
                     },
                 )
+                SakhiWeekdayHeaderRow(labels = expandedHeaders)
             } else {
-                SwipeableMonthPager(
+                CalendarHeader(
                     visibleMonth = uiState.visibleMonth,
                     selectedDate = uiState.selectedDate,
-                    monthCache = uiState.monthCache,
-                    dragOffsetPx = monthDragOffsetPx,
-                    onDragOffsetChanged = { next ->
-                        if (!isMonthAnimating) {
-                            monthDragOffsetPx = next
-                        }
-                    },
-                    onWidthResolved = { width -> monthPanelWidthPx = width },
-                    onMonthCommit = { direction ->
-                        scope.launch { animateMonthChange(direction) }
-                    },
-                    onDateSelected = { date ->
-                        viewModel.selectDate(date)
-                        onDaySelected(date)
+                    onPreviousMonth = { scope.launch { animateMonthChange(direction = -1) } },
+                    onNextMonth = { scope.launch { animateMonthChange(direction = 1) } },
+                    onJumpToToday = viewModel::jumpToToday,
+                    onExpandYear = {
+                        viewingYear = uiState.visibleMonth.year
+                        setYearExpanded(true)
                     },
                 )
+                SakhiWeekdayHeaderRow(labels = compactHeaders)
             }
-        }
 
-        when {
-            uiState.error != null -> {
-                Text(
-                    text = uiState.error.orEmpty(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = SakhiSpacing.space4),
-                )
-            }
-            !uiState.hasAnyCalendarAccess -> {
-                Text(
-                    text = stringResource(R.string.calendar_no_access),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = sakhiSecondaryLabel(),
-                    modifier = Modifier.padding(top = SakhiSpacing.space4),
-                )
-            }
-        }
-
-        // Matches iOS's real `HomeCalendarSheet.bottomBar` -- the sheet's own
-        // "Ask Sakhi"/"Log" action bar, previously entirely absent from Android's
-        // Calendar sheet (confirmed on-device in the second parity sweep: the
-        // sheet was just the grid over empty space with no way to log or ask
-        // Sakhi about the selected date without first closing the sheet).
-        // `showCalendarButton = false` matches iOS's own convenience init used
-        // specifically by the calendar sheet (`CalendarBtn == EmptyView`) -- no
-        // point showing a calendar button from inside the calendar itself.
-        //
-        // iOS nests `bottomBar` inside `monthContent` only (line 548) -- `yearContent`
-        // renders `editControl` (the multi-select "Edit Period Dates" toggle)
-        // instead, never `SakhiBottomActionBar`. Mirrored below with the same
-        // `!isYearExpanded`/`isYearExpanded` split.
-        val canEditPeriodDates = logUiState.session?.isViewingOwnData == true
-        if (!isYearExpanded) {
-            // Falls back to the CURRENT cycle phase, not UNKNOWN -- iOS's own
-            // `selectedDatePhase` ends `return phase` for exactly this case
-            // (HomeCalendarSheet.swift). Most days carry no mark, so the old
-            // `?: CyclePhase.UNKNOWN` meant the bar took UNKNOWN's primary (#1F2833) on
-            // nearly every day: the log button rendered as a near-black circle on a pink
-            // sheet, whatever phase the user was actually in.
-            val selectedDatePhase = uiState.days
-                .firstOrNull { it.date == uiState.selectedDate }
-                ?.mark
-                ?.phase
-                ?: currentPhase
-            // UNKNOWN (nothing read yet, or no data) takes the follicular colour, the one
-            // Home's page and skeleton wear in the same state. UNKNOWN's own primary is
-            // near-black.
-            val barPhaseUnknown = selectedDatePhase == CyclePhase.UNKNOWN
-            val barAccent = phasePrimaryColor(if (barPhaseUnknown) CyclePhase.FOLLICULAR else selectedDatePhase)
-            // Claims the navigation-bar inset, exactly as iOS reserves
-            // `.padding(.bottom, max(safeBottom, 16))` for this same bar. Home's copy
-            // already did this; the calendar's did not, because it used to live inside a
-            // `ModalBottomSheet` which reserved the inset for it. That stopped being true
-            // when the calendar became an in-tree overlay drawn over Home, and the stale
-            // comment on Home's copy still claimed otherwise. Invisible on gesture
-            // navigation, but on 3-button navigation (Karan's Xiaomi) the OS
-            // back/home/recents buttons sat right on top of the Ask Sakhi bar.
-            Box(
-                modifier = Modifier
-                    // Separates the bar from the last row of dates. The gap that used
-                    // to sit above the month bar belongs here instead.
-                    .padding(top = SakhiSpacing.space5)
-                    .navigationBarsPadding(),
-            ) {
-            SakhiBottomActionBar(
-                phase = selectedDatePhase,
-                accentColor = barAccent,
-                // Nothing read yet: the soft follicular button Home's own bar uses (tinted
-                // fill, accent glyph), not a solid circle of the follicular primary, which is
-                // a deep plum and read as a dark button under the skeleton (Karan, 2026-09-13).
-                logFill = if (barPhaseUnknown) phaseCardFill(CyclePhase.FOLLICULAR, hasCycleData = true) else null,
-                logStrokeColor = if (barPhaseUnknown) barAccent.copy(alpha = 0.14f) else null,
-                // The dark theme's phase primary is near-white, so the log button fills
-                // white there. iOS's adaptive CTA is the same: a white button with a black
-                // glyph in dark mode. Left at the default white, the + vanished into it.
-                logIconColor = when {
-                    barPhaseUnknown -> barAccent
-                    LocalSakhiDarkTheme.current -> Color.Black
-                    else -> Color.White
-                },
-                isPartnerMode = logUiState.session?.isViewingOwnData == false,
-                canLog = logUiState.canLogPeriod && logUiState.canMutateSelectedDate,
-                hasLoggedForDate = logUiState.hasAnyData,
-                isLogSaving = logUiState.isSaving,
-                selectedFlow = logUiState.selectedFlow,
-                selectedDate = uiState.selectedDate,
-                showCalendarButton = false,
-                // iOS `HomeCalendarSheet` fills this slot with `HomeNearbyButton`: the
-                // little live map that is the way into Emergency Assistance. Android had a
-                // calendar glyph here on Home and nothing at all here, so the whole flow
-                // was only reachable from inside the AI chat.
-                leadingSlot = {
-                    // The 46dp circle, not the chat header's wide capsule. iOS has two
-                    // separate controls and this slot takes `HomeNearbyButton`.
-                    // The version that knows what is live for her: a blinking red ring
-                    // when she has been asked for help, green once she is connected.
-                    CareModeHomeButton(
-                        onOpen = {
-                            hapticManager.selection()
-                            onOpenCare()
-                        },
-                    )
-                },
-                onAskSakhiClick = {
-                    hapticManager.selection()
-                    onAskSakhi()
-                },
-                onLogClick = {
-                    hapticManager.impact(HapticImpact.MEDIUM)
-                    onLog(uiState.selectedDate)
-                },
-                onQuickLogFlow = { level ->
-                    hapticManager.selection()
-                    logViewModel.onFlowSelected(level)
-                    logViewModel.save()
-                },
-            )
-            }
-        } else if (canEditPeriodDates) {
-            // Matches iOS's `canEditPeriodDates: Bool { partnerUserId == nil }` --
-            // own data only, stricter than the quick-log bar's permission-based
-            // `canLogPeriod` gate: a care viewer can quick-log a single flow entry
-            // if granted that permission, but bulk-editing someone else's period
-            // history is never allowed here, regardless of permissions.
-            // iOS renders this as `.overlay(alignment: .bottom)` with
-            // `.padding(.horizontal, 24).padding(.bottom, max(safeBottom, 16))`.
-            // Android had no wrapper at all: the `navigationBarsPadding()` Box above
-            // wraps only the month view's action bar, so in the year view the pill sat
-            // directly on the gesture bar and covered the last month's first row.
-            // Given the same treatment as its sibling bar, whose position Karan has
-            // already signed off on.
-            Box(
-                modifier = Modifier
-                    .padding(top = SakhiSpacing.space5)
-                    .padding(horizontal = EditPeriodDatesBarHorizontalPadding)
-                    .navigationBarsPadding(),
-            ) {
-            EditPeriodDatesBar(
-                isMultiSelectMode = isMultiSelectMode,
-                selectionCount = yearSelection.size,
-                canUndo = selectionHistory.isNotEmpty(),
-                isSaving = logUiState.isSavingYearSelection,
-                onStart = {
-                    hapticManager.impact(HapticImpact.LIGHT)
-                    isMultiSelectMode = true
-                },
-                onCancel = {
-                    hapticManager.impact(HapticImpact.LIGHT)
-                    resetYearSelection()
-                },
-                onUndo = {
-                    val last = selectionHistory.lastOrNull() ?: return@EditPeriodDatesBar
-                    hapticManager.impact(HapticImpact.LIGHT)
-                    selectionHistory = selectionHistory.dropLast(1)
-                    yearSelection = if (last.second) yearSelection - last.first else yearSelection + last.first
-                },
-                onSave = {
-                    val datesToSave = yearSelection.toList()
-                    scope.launch {
-                        logViewModel.saveYearSelection(datesToSave)
-                        resetYearSelection()
+            AnimatedContent(
+                targetState = isYearExpanded,
+                modifier = Modifier.weight(1f),
+                transitionSpec = {
+                    if (targetState) {
+                        (fadeIn() + slideInVertically { it / 6 }).togetherWith(
+                            fadeOut() + slideOutVertically { -it / 8 },
+                        )
+                    } else {
+                        (fadeIn() + slideInVertically { -it / 8 }).togetherWith(
+                            fadeOut() + slideOutVertically { it / 6 },
+                        )
                     }
                 },
-            )
+                label = "calendar_content_mode",
+            ) { expanded ->
+                if (expanded) {
+                    CalendarYearView(
+                        viewingYear = viewingYear,
+                        visibleMonth = uiState.visibleMonth,
+                        selectedDate = uiState.selectedDate,
+                        monthCache = uiState.monthCache,
+                        slideDirection = yearSlideDirection,
+                        isMultiSelectMode = isMultiSelectMode,
+                        yearSelection = yearSelection,
+                        onMonthSelected = { month ->
+                            viewModel.jumpToMonth(month)
+                            setYearExpanded(false)
+                        },
+                        // Same effect as the header chevrons, including clearing any
+                        // in-progress multi-selection, exactly as iOS's `changeYear` does.
+                        onChangeYear = { delta ->
+                            hapticManager.selection()
+                            yearSlideDirection = delta
+                            resetYearSelection()
+                            viewingYear += delta
+                        },
+                        onToggleDate = { date ->
+                            hapticManager.impact(HapticImpact.LIGHT)
+                            if (yearSelection.contains(date)) {
+                                yearSelection = yearSelection - date
+                                selectionHistory = selectionHistory + (date to false)
+                            } else {
+                                yearSelection = yearSelection + date
+                                selectionHistory = selectionHistory + (date to true)
+                            }
+                        },
+                    )
+                } else {
+                    SwipeableMonthPager(
+                        visibleMonth = uiState.visibleMonth,
+                        selectedDate = uiState.selectedDate,
+                        monthCache = uiState.monthCache,
+                        dragOffsetPx = monthDragOffsetPx,
+                        onDragOffsetChanged = { next ->
+                            if (!isMonthAnimating) {
+                                monthDragOffsetPx = next
+                            }
+                        },
+                        onWidthResolved = { width -> monthPanelWidthPx = width },
+                        onMonthCommit = { direction ->
+                            scope.launch { animateMonthChange(direction) }
+                        },
+                        onDateSelected = { date ->
+                            viewModel.selectDate(date)
+                            onDaySelected(date)
+                        },
+                    )
+                }
+            }
+
+            when {
+                uiState.error != null -> {
+                    Text(
+                        text = uiState.error.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = SakhiSpacing.space4),
+                    )
+                }
+                !uiState.hasAnyCalendarAccess -> {
+                    Text(
+                        text = stringResource(R.string.calendar_no_access),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = sakhiSecondaryLabel(),
+                        modifier = Modifier.padding(top = SakhiSpacing.space4),
+                    )
+                }
+            }
+
+            // Matches iOS's real `HomeCalendarSheet.bottomBar` -- the sheet's own
+            // "Ask Sakhi"/"Log" action bar, previously entirely absent from Android's
+            // Calendar sheet (confirmed on-device in the second parity sweep: the
+            // sheet was just the grid over empty space with no way to log or ask
+            // Sakhi about the selected date without first closing the sheet).
+            // `showCalendarButton = false` matches iOS's own convenience init used
+            // specifically by the calendar sheet (`CalendarBtn == EmptyView`) -- no
+            // point showing a calendar button from inside the calendar itself.
+            //
+            // iOS nests `bottomBar` inside `monthContent` only (line 548) -- `yearContent`
+            // renders `editControl` (the multi-select "Edit Period Dates" toggle)
+            // instead, never `SakhiBottomActionBar`. Mirrored below with the same
+            // `!isYearExpanded`/`isYearExpanded` split.
+            val canEditPeriodDates = logUiState.session?.isViewingOwnData == true
+            if (!isYearExpanded) {
+                // Falls back to the CURRENT cycle phase, not UNKNOWN -- iOS's own
+                // `selectedDatePhase` ends `return phase` for exactly this case
+                // (HomeCalendarSheet.swift). Most days carry no mark, so the old
+                // `?: CyclePhase.UNKNOWN` meant the bar took UNKNOWN's primary (#1F2833) on
+                // nearly every day: the log button rendered as a near-black circle on a pink
+                // sheet, whatever phase the user was actually in.
+                val selectedDatePhase = uiState.days
+                    .firstOrNull { it.date == uiState.selectedDate }
+                    ?.mark
+                    ?.phase
+                    ?: currentPhase
+                // UNKNOWN (nothing read yet, or no data) takes the follicular colour, the one
+                // Home's page and skeleton wear in the same state. UNKNOWN's own primary is
+                // near-black.
+                val barPhaseUnknown = selectedDatePhase == CyclePhase.UNKNOWN
+                val barAccent = phasePrimaryColor(if (barPhaseUnknown) CyclePhase.FOLLICULAR else selectedDatePhase)
+                // Claims the navigation-bar inset, exactly as iOS reserves
+                // `.padding(.bottom, max(safeBottom, 16))` for this same bar. Home's copy
+                // already did this; the calendar's did not, because it used to live inside a
+                // `ModalBottomSheet` which reserved the inset for it. That stopped being true
+                // when the calendar became an in-tree overlay drawn over Home, and the stale
+                // comment on Home's copy still claimed otherwise. Invisible on gesture
+                // navigation, but on 3-button navigation (Karan's Xiaomi) the OS
+                // back/home/recents buttons sat right on top of the Ask Sakhi bar.
+                Box(
+                    modifier = Modifier
+                        // Separates the bar from the last row of dates. The gap that used
+                        // to sit above the month bar belongs here instead.
+                        .padding(top = SakhiSpacing.space5)
+                        .navigationBarsPadding(),
+                ) {
+                SakhiBottomActionBar(
+                    phase = selectedDatePhase,
+                    accentColor = barAccent,
+                    // Nothing read yet: the soft follicular button Home's own bar uses (tinted
+                    // fill, accent glyph), not a solid circle of the follicular primary, which is
+                    // a deep plum and read as a dark button under the skeleton (Karan, 2026-09-13).
+                    logFill = if (barPhaseUnknown) phaseCardFill(CyclePhase.FOLLICULAR, hasCycleData = true) else null,
+                    logStrokeColor = if (barPhaseUnknown) barAccent.copy(alpha = 0.14f) else null,
+                    // The dark theme's phase primary is near-white, so the log button fills
+                    // white there. iOS's adaptive CTA is the same: a white button with a black
+                    // glyph in dark mode. Left at the default white, the + vanished into it.
+                    logIconColor = when {
+                        barPhaseUnknown -> barAccent
+                        LocalSakhiDarkTheme.current -> Color.Black
+                        else -> Color.White
+                    },
+                    isPartnerMode = logUiState.session?.isViewingOwnData == false,
+                    canLog = logUiState.canLogPeriod && logUiState.canMutateSelectedDate,
+                    hasLoggedForDate = logUiState.hasAnyData,
+                    isLogSaving = logUiState.isSaving,
+                    selectedFlow = logUiState.selectedFlow,
+                    selectedDate = uiState.selectedDate,
+                    showCalendarButton = false,
+                    // iOS `HomeCalendarSheet` fills this slot with `HomeNearbyButton`: the
+                    // little live map of where she is, and the way into Stay With Me. It opened
+                    // Care here until 2026-09-17, which left Home with two ways into Care and
+                    // none into the walk.
+                    leadingSlot = {
+                        CareModeHomeButton(
+                            onOpen = {
+                                hapticManager.selection()
+                                onOpenWalk()
+                            },
+                        )
+                    },
+                    onAskSakhiClick = {
+                        hapticManager.selection()
+                        onAskSakhi()
+                    },
+                    onLogClick = {
+                        hapticManager.impact(HapticImpact.MEDIUM)
+                        onLog(uiState.selectedDate)
+                    },
+                    onQuickLogFlow = { level ->
+                        hapticManager.selection()
+                        logViewModel.onFlowSelected(level)
+                        logViewModel.save()
+                    },
+                )
+                }
+            } else if (canEditPeriodDates) {
+                // Matches iOS's `canEditPeriodDates: Bool { partnerUserId == nil }` --
+                // own data only, stricter than the quick-log bar's permission-based
+                // `canLogPeriod` gate: a care viewer can quick-log a single flow entry
+                // if granted that permission, but bulk-editing someone else's period
+                // history is never allowed here, regardless of permissions.
+                // iOS renders this as `.overlay(alignment: .bottom)` with
+                // `.padding(.horizontal, 24).padding(.bottom, max(safeBottom, 16))`.
+                // Android had no wrapper at all: the `navigationBarsPadding()` Box above
+                // wraps only the month view's action bar, so in the year view the pill sat
+                // directly on the gesture bar and covered the last month's first row.
+                // Given the same treatment as its sibling bar, whose position Karan has
+                // already signed off on.
+                Box(
+                    modifier = Modifier
+                        .padding(top = SakhiSpacing.space5)
+                        .padding(horizontal = EditPeriodDatesBarHorizontalPadding)
+                        .navigationBarsPadding(),
+                ) {
+                EditPeriodDatesBar(
+                    isMultiSelectMode = isMultiSelectMode,
+                    selectionCount = yearSelection.size,
+                    canUndo = selectionHistory.isNotEmpty(),
+                    isSaving = logUiState.isSavingYearSelection,
+                    onStart = {
+                        hapticManager.impact(HapticImpact.LIGHT)
+                        isMultiSelectMode = true
+                    },
+                    onCancel = {
+                        hapticManager.impact(HapticImpact.LIGHT)
+                        resetYearSelection()
+                    },
+                    onUndo = {
+                        val last = selectionHistory.lastOrNull() ?: return@EditPeriodDatesBar
+                        hapticManager.impact(HapticImpact.LIGHT)
+                        selectionHistory = selectionHistory.dropLast(1)
+                        yearSelection = if (last.second) yearSelection - last.first else yearSelection + last.first
+                    },
+                    onSave = {
+                        val datesToSave = yearSelection.toList()
+                        scope.launch {
+                            logViewModel.saveYearSelection(datesToSave)
+                            resetYearSelection()
+                        }
+                    },
+                )
+                }
             }
         }
     }
@@ -1069,6 +1082,15 @@ private fun mondayFirstMonthCells(
 private fun CalendarYearView(
     viewingYear: Int,
     visibleMonth: LocalDate,
+    /**
+     * The day the compact grid has picked, so the year grid can ring it too.
+     *
+     * iOS `YearDayCell` takes `isSelected: cal.isDate(date, inSameDayAs: selectedDate)`
+     * and draws the accent ring around it. Android built its year days with the default
+     * `selectedDate = null`, so `isSelected` was false for every day of every month and
+     * the ring the cell knows how to draw never once appeared.
+     */
+    selectedDate: LocalDate,
     monthCache: CalendarMonthCache,
     slideDirection: Int,
     onMonthSelected: (LocalDate) -> Unit,
@@ -1133,6 +1155,7 @@ private fun CalendarYearView(
                 CalendarYearMonthCard(
                     month = monthStart,
                     days = monthCache[monthStart].ifEmpty { fallbackMonthCells(monthStart) },
+                    selectedDate = selectedDate,
                     isVisibleMonth = monthStart.year == visibleMonth.year && monthStart.month == visibleMonth.month,
                     // Whole-card tap-to-jump is a distinct interaction from
                     // per-day tap-to-toggle -- matching iOS, which only ever
@@ -1169,6 +1192,7 @@ private fun AnimatedContentTransitionScope<Int>.yearSlideTransition(
 private fun CalendarYearMonthCard(
     month: LocalDate,
     days: List<CalendarDayUiState>,
+    selectedDate: LocalDate,
     isVisibleMonth: Boolean,
     onClick: () -> Unit,
     isMultiSelectMode: Boolean = false,
@@ -1191,11 +1215,15 @@ private fun CalendarYearMonthCard(
             .clickable(onClick = onClick),
     ) {
         Text(
-            text = monthLabel(month),
+            // The month's name alone. iOS's `monthLabel(at:)` in the year view is
+            // `DateFormatter` with `"MMMM"` -- the year is already the header above the
+            // whole scroll, so repeating it on all twelve labels only says it again.
+            text = Month.of(month.monthNumber).getDisplayName(TextStyle.FULL, Locale.getDefault()),
             fontSize = 15.sp,
             fontWeight = FontWeight.Bold,
+            // iOS: `isCurrentCalendarMonth(at:) ? calendarAccent : DS.Colors.label`.
             color = if (month.year == gridToday.year && month.month == gridToday.month) {
-                MaterialTheme.colorScheme.primary
+                LocalSakhiCalendarAccent.current ?: MaterialTheme.colorScheme.primary
             } else {
                 MaterialTheme.colorScheme.onSurface
             },
@@ -1207,8 +1235,8 @@ private fun CalendarYearMonthCard(
         // Same reason as `MonthPanel` above, multiplied by twelve: the year view renders one
         // of these per month, so an unremembered transform here rebuilt ~500 objects and
         // blocked every mini-grid from skipping on any recomposition of the year screen.
-        val miniGridDays = remember(days, gridToday) {
-            days.toSakhiCalendarDays()
+        val miniGridDays = remember(days, gridToday, selectedDate) {
+            days.toSakhiCalendarDays(selectedDate = selectedDate)
         }
         SakhiMiniMonthGrid(
             days = miniGridDays,
@@ -1345,7 +1373,8 @@ private fun CalendarHeaderGlyph(
             Icon(
                 imageVector = if (primary) primaryIcon else secondaryIcon,
                 contentDescription = if (primary) primaryDescription else secondaryDescription,
-                tint = MaterialTheme.colorScheme.primary,
+                // iOS tints both states `.foregroundColor(calendarAccent)`.
+                tint = LocalSakhiCalendarAccent.current ?: MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(CalendarHeaderGlyphIconSize),
             )
         }

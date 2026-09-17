@@ -401,6 +401,42 @@ fun phasePrimaryColor(phase: CyclePhase): androidx.compose.ui.graphics.Color {
  */
 val LocalSakhiDarkTheme = compositionLocalOf { false }
 
+/**
+ * The calendar's accent: the selected day's ring and number, the month label in the year
+ * view, and the chevron beside the month title.
+ *
+ * iOS reads all four from `HomeCalendarSheet.calendarAccent`, which is
+ * `PhaseColorManager.homeSelectionAccent(for: phase)` -- the phase's own colour, not the
+ * brand pink. Android drew every one of them in `colorScheme.primary`, so its calendar read
+ * bright pink against iOS's deep maroon in the follicular phase (Karan, 2026-09-17, on
+ * matching iOS colour for colour).
+ *
+ * A CompositionLocal, like [LocalSakhiDarkTheme], because the ring is drawn four composables
+ * below the one that knows the phase. Null means "nobody said", and the calendar falls back
+ * to what it used to do.
+ */
+val LocalSakhiCalendarAccent =
+    compositionLocalOf<androidx.compose.ui.graphics.Color?> { null }
+
+/**
+ * iOS `PhaseColorManager.homeSelectionAccent(for:)`, rule for rule.
+ *
+ * Menstrual keeps its own primary in both modes. Every other phase takes its light primary
+ * in light mode and plain white in dark, because those primaries are dark enough that they
+ * would disappear into a dark sheet.
+ */
+@Composable
+fun calendarSelectionAccent(phase: CyclePhase): androidx.compose.ui.graphics.Color {
+    // UNKNOWN's own primary is near-black (#1F2833), which would put a black ring on a pink
+    // sheet before anything has been read. The rest of this screen already substitutes
+    // follicular in that state, so this does too.
+    val resolved = if (phase == CyclePhase.UNKNOWN) CyclePhase.FOLLICULAR else phase
+    if (LocalSakhiDarkTheme.current && PhaseVisualStyle.family(resolved) != PhaseColorFamily.MENSTRUAL) {
+        return androidx.compose.ui.graphics.Color.White
+    }
+    return phasePrimaryColor(resolved)
+}
+
 @Composable
 fun SakhiTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
