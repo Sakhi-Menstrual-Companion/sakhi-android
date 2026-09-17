@@ -297,6 +297,15 @@
     <string name="care_swm_fact_home_note">Where she is going</string>
     <string name="care_swm_fact_her_location">Her location</string>
     <string name="care_swm_fact_her_battery">Her battery</string>
+    <string name="care_swm_status_add_time">Add time?</string>
+    <string name="care_swm_status_past_your_time">Past your time</string>
+    <string name="care_swm_status_alert_sent">Alert sent</string>
+    <string name="care_swm_to_place">To %1$s</string>
+    <string name="care_swm_your_ride_home">Your ride home</string>
+    <string name="care_swm_is_with_you">%1$s is with you</string>
+    <string name="care_swm_person_has_been_told">%1$s has been told</string>
+    <string name="care_swm_until_person_told">Until %1$s is told</string>
+    <string name="care_swm_extend_15">+15 min</string>
     <string name="care_swm_places_loading">Looking for help near her</string>
     <string name="care_swm_places_empty">Nothing found close to her yet</string>
     <string name="care_swm_places_loading_you">Looking for help near you</string>

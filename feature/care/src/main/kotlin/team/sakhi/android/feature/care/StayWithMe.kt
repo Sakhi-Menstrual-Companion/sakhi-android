@@ -421,7 +421,7 @@ internal fun StayWithMeOwnerLive(
             initial = "",
             trail = trail,
             modifier = Modifier.fillMaxSize(),
-            bottomPadding = maxHeight * OWNER_PANEL_FRACTION - 28.dp,
+            bottomPadding = 216.dp,
             destination = session.destination,
             routeLine = route?.points.orEmpty(),
             recenterKey = recenterKey,
@@ -433,100 +433,91 @@ internal fun StayWithMeOwnerLive(
             )
         }
 
-        LiveWalkTopBar(onClose = onClose, modifier = Modifier.align(Alignment.TopCenter))
+        RideTopBar(
+            onClose = onClose,
+            // On her own screen the pill says who is with her, not how old her own fix is.
+            freshness = if (session.isWatcherPresent(now)) {
+                stringResource(R.string.care_swm_is_with_you, personName)
+            } else {
+                null
+            },
+            onCallPolice = { dial(context, "112") },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
 
-        // Sakhi's own background, the one Emergency Assistance's sheet sits on, with white
-        // cards on top. Plain white made the panel read as a system screen.
+        var expanded by remember(session.id) { mutableStateOf(false) }
+        val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val panelHeight by animateDpAsState(
+            targetValue = if (expanded) maxHeight - 64.dp else 318.dp + bottomInset,
+            label = "ownerPanelHeight",
+        )
         Surface(
-            color = MaterialTheme.colorScheme.background,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            color = RideStyle.ground,
+            shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
+            shadowElevation = 12.dp,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .fillMaxHeight(OWNER_PANEL_FRACTION),
+                .height(panelHeight),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp, bottom = 2.dp)
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures { _, dragAmount ->
+                                if (dragAmount < -6f) expanded = true
+                                if (dragAmount > 6f) expanded = false
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 36.dp, height = 5.dp)
+                            .background(RideStyle.hairline, CircleShape),
+                    )
+                }
                 LazyColumn(modifier = Modifier.weight(1f)) {
-                    item(key = "swm-presence") {
-                        PresenceRow(
-                            name = personName,
-                            present = session.isWatcherPresent(now),
-                            late = isLate,
-                            modifier = Modifier.padding(
-                                start = SakhiSpacing.space6,
-                                end = SakhiSpacing.space6,
-                                top = SakhiSpacing.space6,
-                                bottom = SakhiSpacing.space4,
+                    item(key = "summary") {
+                        val status = rideOwnerStatus(session, now, route)
+                        val hero = rideOwnerHero(session, now, route, personName)
+                        RideSummary(
+                            heading = session.destination?.name?.let { stringResource(R.string.care_swm_to_place, it) }
+                                ?: session.note?.takeIf { it.isNotBlank() }?.let { stringResource(R.string.care_swm_to_place, it) }
+                                ?: stringResource(R.string.care_swm_your_ride_home),
+                            alerted = phase == StayWithMePhase.LATE,
+                            statusLabel = stringResource(status.ownerLabelRes),
+                            statusTint = status.trackTint(),
+                            heroValue = hero.value,
+                            heroUnit = hero.unit,
+                            heroDetail = hero.detail,
+                            heroTint = if (phase == StayWithMePhase.LATE) RideStyle.alert else sakhiLabel(),
+                            faceIndex = CareAvatars.indexFor(session.watcherUserId),
+                            faceCaption = personName,
+                            facePresent = session.isWatcherPresent(now),
+                            progress = rideProgress(session, now),
+                            startedAt = session.startedAt,
+                            endCaption = stringResource(
+                                when (phase) {
+                                    StayWithMePhase.WALKING -> R.string.care_swm_track_reach_by
+                                    StayWithMePhase.GRACE -> R.string.care_swm_track_alert_at
+                                    else -> R.string.care_swm_track_was_due
+                                },
                             ),
+                            endAt = if (phase == StayWithMePhase.GRACE) session.alertAt else session.expectedArrival,
                         )
                     }
 
-                    item(key = "swm-time") {
-                        GroupedCard {
-                            Column(modifier = Modifier.padding(SakhiSpacing.space5)) {
-                                val big = when (phase) {
-                                    StayWithMePhase.WALKING -> stringResource(R.string.care_swm_minutes_left, minutesUp(session.secondsRemaining(now)))
-                                    else -> stringResource(R.string.care_swm_past_time)
-                                }
-                                Text(
-                                    text = big,
-                                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                                    color = if (phase == StayWithMePhase.WALKING) sakhiLabel() else AppleSystemColors.red,
-                                )
-                                Spacer(Modifier.height(SakhiSpacing.space1))
-                                Text(
-                                    text = when (phase) {
-                                        StayWithMePhase.GRACE -> stringResource(
-                                            R.string.care_swm_grace_left,
-                                            minutesUp(session.secondsRemaining(now)),
-                                            personName,
-                                        )
-                                        StayWithMePhase.LATE -> stringResource(R.string.care_swm_person_told_late, personName)
-                                        else -> stringResource(R.string.care_swm_home_by, timeOf(session.expectedArrival))
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = sakhiSecondaryLabel(),
-                                )
-                                Spacer(Modifier.height(SakhiSpacing.space4))
-                                WalkProgress(progress = session.progress(now).toFloat(), color = accent)
-                                Spacer(Modifier.height(SakhiSpacing.space4))
-                                SakhiListDivider()
-                                Spacer(Modifier.height(SakhiSpacing.space3))
-                                val battery = location?.batteryPercent
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Place,
-                                        contentDescription = null,
-                                        tint = if (sharing) MaterialTheme.colorScheme.primary else sakhiTertiaryLabel(),
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                    Spacer(Modifier.width(SakhiSpacing.space2))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = when {
-                                                !sharing -> stringResource(R.string.care_swm_not_sharing)
-                                                battery != null -> stringResource(R.string.care_swm_sharing_battery, battery)
-                                                else -> stringResource(R.string.care_swm_sharing)
-                                            },
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = sakhiLabel(),
-                                        )
-                                        session.locationAgeSeconds(now)?.let { age ->
-                                            Text(
-                                                text = updatedText(age),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = sakhiSecondaryLabel(),
-                                            )
-                                        }
-                                    }
-                                    if (sharing) RefreshButton(onClick = onRefresh, label = stringResource(R.string.care_swm_refresh_mine), refreshing = refreshing)
-                                }
-                            }
-                        }
-                    }
-
-                    session.destination?.let { place ->
-                        item(key = "swm-destination") { DestinationCard(place, route, session) }
+                    item(key = "facts") {
+                        RideFactsCard(
+                            destinationName = session.destination?.name ?: session.note,
+                            freshness = if (sharing) session.locationAgeSeconds(now)?.let { updatedText(it) } else stringResource(R.string.care_swm_not_sharing),
+                            batteryPercent = location?.batteryPercent,
+                            onRefresh = onRefresh,
+                            refreshing = refreshing,
+                        )
                     }
 
                     item(key = "near-label") { SwmSectionLabel(stringResource(R.string.care_swm_help_near_you), top = SakhiSpacing.space5) }
@@ -565,13 +556,13 @@ internal fun StayWithMeOwnerLive(
                     }
                 }
 
-                SakhiFooter(
-                    primaryLabel = stringResource(R.string.care_swm_im_home),
-                    onPrimaryClick = onArrive,
-                    primaryEnabled = !isBusy,
-                    secondaryLabel = stringResource(R.string.care_swm_extend),
-                    onSecondaryClick = onExtend,
-                    secondaryEnabled = !isBusy,
+                // iOS's two buttons, side by side: a 112 wide white "+15 min" and "I'm home"
+                // taking the rest, both 58 tall.
+                RideFooterButtons(
+                    onExtend = onExtend,
+                    onArrive = onArrive,
+                    enabled = !isBusy,
+                    busy = isBusy,
                 )
             }
         }

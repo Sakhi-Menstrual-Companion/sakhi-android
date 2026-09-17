@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.NearMe
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -41,6 +43,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import team.sakhi.android.designsystem.sakhiLabel
@@ -401,6 +404,7 @@ internal fun RideTopBar(
         if (freshness != null) {
             Row(
                 modifier = Modifier
+                    .weight(1f, fill = false)
                     .height(36.dp)
                     .background(RideStyle.floating, CircleShape)
                     .border(0.5.dp, RideStyle.hairline, CircleShape)
@@ -415,6 +419,7 @@ internal fun RideTopBar(
                     fontWeight = FontWeight.Bold,
                     color = sakhiLabel(),
                     maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -436,7 +441,14 @@ internal fun RideTopBar(
                 tint = Color.White,
                 modifier = Modifier.size(13.dp),
             )
-            Text(text = "112", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Text(
+                text = "112",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+                maxLines = 1,
+                softWrap = false,
+            )
         }
     }
 }
@@ -651,4 +663,128 @@ internal fun rideProgress(session: StayWithMeSession, now: Instant): Float {
     if (total <= 0f) return 0f
     val gone = (now - session.startedAt).inWholeSeconds.toFloat()
     return (gone / total).coerceIn(0f, 1f)
+}
+
+/** The same status, said from her side: iOS's `statusLabel` for the walking role. */
+internal val RideWatcherStatus.ownerLabelRes: Int
+    get() = when (this) {
+        RideWatcherStatus.ON_TIME -> R.string.care_swm_status_on_time
+        RideWatcherStatus.TIGHT -> R.string.care_swm_status_add_time
+        RideWatcherStatus.GRACE -> R.string.care_swm_status_past_your_time
+        RideWatcherStatus.ALERTED -> R.string.care_swm_status_alert_sent
+    }
+
+internal fun rideOwnerStatus(
+    session: StayWithMeSession,
+    now: Instant,
+    route: WalkRoute?,
+): RideWatcherStatus = rideWatcherStatus(session, now, route)
+
+/** The big number on her own screen. iOS's `heroParts`, walking side. */
+@Composable
+internal fun rideOwnerHero(
+    session: StayWithMeSession,
+    now: Instant,
+    route: WalkRoute?,
+    personName: String,
+): RideHeroParts = when (session.phase(now)) {
+    StayWithMePhase.LATE, StayWithMePhase.ENDED -> RideHeroParts(
+        value = stringResource(R.string.care_swm_status_late),
+        unit = "",
+        detail = stringResource(R.string.care_swm_person_has_been_told, personName),
+    )
+    StayWithMePhase.GRACE -> RideHeroParts(
+        value = minutesUp(session.secondsRemaining(now)).toString(),
+        unit = stringResource(R.string.care_swm_min),
+        detail = stringResource(R.string.care_swm_until_person_told, personName),
+    )
+    StayWithMePhase.WALKING -> {
+        val seconds = route?.durationSeconds
+        if (seconds != null) {
+            val minutes = maxOf(1, ((seconds / 60.0)).roundToInt())
+            RideHeroParts(
+                value = if (minutes < 60) "$minutes" else "${minutes / 60}h ${minutes % 60}",
+                unit = stringResource(R.string.care_swm_min),
+                detail = stringResource(R.string.care_swm_away_by_car, rideDistanceText(route.distanceMeters)),
+            )
+        } else {
+            RideHeroParts(
+                value = minutesUp(session.secondsRemaining(now)).toString(),
+                unit = stringResource(R.string.care_swm_min_left),
+                detail = stringResource(R.string.care_swm_reach_by_detail, timeOf(session.expectedArrival)),
+            )
+        }
+    }
+}
+
+/**
+ * Her two buttons: fifteen more minutes, and "I'm home".
+ *
+ * iOS's own shape: a 112 wide white capsule with a hairline beside a pink one that takes
+ * the rest, both 58 tall, ten apart. The label stays while it works, because a spinner on
+ * its own read as a broken button.
+ */
+@Composable
+internal fun RideFooterButtons(
+    onExtend: () -> Unit,
+    onArrive: () -> Unit,
+    enabled: Boolean,
+    busy: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(112.dp)
+                .height(58.dp)
+                .background(RideStyle.card, CircleShape)
+                .border(0.5.dp, RideStyle.hairline, CircleShape)
+                .clickable(enabled = enabled, onClick = onExtend),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(R.string.care_swm_extend_15),
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = sakhiLabel(),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .height(58.dp)
+                .background(RideStyle.pink, CircleShape)
+                .clickable(enabled = enabled, onClick = onArrive),
+            horizontalArrangement = Arrangement.spacedBy(9.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (busy) {
+                CircularProgressIndicator(
+                    color = Color.White,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(18.dp),
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Filled.Home,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(15.dp),
+                )
+            }
+            Text(
+                text = stringResource(R.string.care_swm_im_home),
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+        }
+    }
 }
