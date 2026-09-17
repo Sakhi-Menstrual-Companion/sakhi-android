@@ -27,6 +27,7 @@ import team.sakhi.ai.AIQueryClassifier
 import team.sakhi.ai.ChatMoodDetector
 import team.sakhi.ai.ChatSymptomDetector
 import team.sakhi.ai.SafePlaceRanker
+import team.sakhi.ai.ChatTopicMemory
 import team.sakhi.android.feature.reports.ReportDateRangePreset
 import team.sakhi.android.feature.reports.ReportDocument
 import team.sakhi.android.feature.reports.ReportPdfExporter
@@ -134,6 +135,7 @@ class ChatViewModel(
     private val widgetSnapshotManager: AndroidWidgetSnapshotManager,
     private val localStore: SakhiPhaseALocalStore,
     private val appContext: Context,
+    private val topicMemory: ChatTopicMemory,
     private val nearbyPlacesFetcher: NearbyPlacesFetcher = NearbyPlacesFetcher(),
 ) : ViewModel() {
 
@@ -713,11 +715,37 @@ class ChatViewModel(
             }
         }
 
+        // What Sakhi has learned about this girl's own topics, in the phase she is in now.
+        // Her own chat only: a care partner never sees what she talks about. Counts and
+        // topic names, on this phone, never her words. Same class iOS calls, so the Sakhi
+        // that knows her here is the one that knows her there.
+        val herContext = if (context.isPartnerMode) {
+            null
+        } else {
+            val today = DateConverter.today().toEpochDays().toLong()
+            topicMemory.note(
+                userId = session.userId,
+                phase = context.currentPhase,
+                message = text,
+                todayEpochDay = today,
+            )
+            buildList {
+                topicMemory.contextSummary(session.userId, context.currentPhase, today)?.let { add(it) }
+                if (topicMemory.isOutOfWords(text)) {
+                    add(
+                        "She does not have anything particular to say right now. Do not ask her what is " +
+                            "wrong again. Stay with her, or gently open something that is hers.",
+                    )
+                }
+            }.joinToString("\n").takeIf { it.isNotBlank() }
+        }
+
         aiRepository.sendMessage(
             context = context,
             userMessage = text,
             intent = intent,
             history = priorHistory,
+            herContext = herContext,
         ).onSuccess { response ->
             if (activeSessionKey(sessionManager.current) != requestedSessionKey) return@onSuccess
 

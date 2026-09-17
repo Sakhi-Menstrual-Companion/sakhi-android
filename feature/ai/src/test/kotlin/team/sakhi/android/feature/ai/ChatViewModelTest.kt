@@ -50,6 +50,7 @@ import team.sakhi.network.NetworkException
 import team.sakhi.repositories.AIRepository
 import team.sakhi.repositories.CycleDataRepository
 import team.sakhi.repositories.PeriodLogRepository
+import team.sakhi.ai.ChatTopicMemory
 import team.sakhi.ai.SafePlaceRanker
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
@@ -224,6 +225,10 @@ class ChatViewModelTest {
             coEvery { upsertConversationMessage(any()) } returns Unit
         },
         appContext: Context = mockContext(),
+        // What she likes talking about is learned from real use over weeks; none of these
+        // tests are about that, so a relaxed mock says "nothing known yet", which is also
+        // the honest state for a new girl.
+        topicMemory: ChatTopicMemory = mockk(relaxed = true),
         nearbyPlacesFetcher: NearbyPlacesFetcher = mockk(),
     ) = ChatViewModel(
         sessionManager,
@@ -238,6 +243,7 @@ class ChatViewModelTest {
         widgetSnapshotManager,
         localStore,
         appContext,
+        topicMemory,
         nearbyPlacesFetcher,
     ).also(createdViewModels::add)
 
@@ -428,7 +434,7 @@ class ChatViewModelTest {
             }
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(any()) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), any(), any(), any()) } returns Result.success("Assistant reply")
+            coEvery { it.sendMessage(any(), any(), any(), any(), any()) } returns Result.success("Assistant reply")
         }
         val localStore = mockk<SakhiPhaseALocalStore>().also {
             coEvery { it.exportRecords(OfflineUpgradeDataset.AI_MESSAGES) } returns listOf(
@@ -463,7 +469,7 @@ class ChatViewModelTest {
             coEvery { it.getConversationHistory(any(), any(), any()) } returns Result.success(emptyList())
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(any()) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), any(), any(), any()) } returns Result.failure(RuntimeException("network down"))
+            coEvery { it.sendMessage(any(), any(), any(), any(), any()) } returns Result.failure(RuntimeException("network down"))
         }
         val viewModel = newViewModel(sessionManager, aiRepository = aiRepository)
         awaitUiState(viewModel) { !it.isLoading && it.messages.size == 2 }
@@ -499,7 +505,7 @@ class ChatViewModelTest {
         viewModel.sendCurrentMessage()
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { aiRepository.sendMessage(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { aiRepository.sendMessage(any(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -511,7 +517,7 @@ class ChatViewModelTest {
             coEvery { it.generateWelcomeMessage(any()) } returns Result.success("Hi")
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(any()) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), any(), AIQueryIntent.HEALTH, any()) } returns
+            coEvery { it.sendMessage(any(), any(), AIQueryIntent.HEALTH, any(), any()) } returns
                 Result.success("Rest is good for cramps. A warm compress can help too.")
         }
         val viewModel = newViewModel(sessionManager, aiRepository = aiRepository)
@@ -521,7 +527,7 @@ class ChatViewModelTest {
         viewModel.sendCurrentMessage()
         awaitUiState(viewModel) { !it.isSending && it.messages.count { message -> message.sessionId != "welcome" } == 3 }
 
-        coVerify(exactly = 1) { aiRepository.sendMessage(any(), any(), AIQueryIntent.HEALTH, any()) }
+        coVerify(exactly = 1) { aiRepository.sendMessage(any(), any(), AIQueryIntent.HEALTH, any(), any()) }
         val assistantReplies = viewModel.uiState.value.messages.filter { it.isAssistant && it.sessionId != "welcome" }
         assertEquals(listOf("Rest is good for cramps.", "A warm compress can help too."), assistantReplies.map { it.content })
         assertTrue(assistantReplies.all { it.cardType == AICardType.CRAMP_RELIEF })
@@ -536,7 +542,7 @@ class ChatViewModelTest {
             coEvery { it.getConversationHistory(any(), any(), any()) } returns Result.success(emptyList())
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(capture(savedMessages)) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), "How should I think about this?", AIQueryIntent.GENERAL, any()) } returns
+            coEvery { it.sendMessage(any(), "How should I think about this?", AIQueryIntent.GENERAL, any(), any()) } returns
                 Result.success("First sentence. Second sentence! Third sentence?")
         }
         val viewModel = newViewModel(sessionManager, aiRepository = aiRepository)
@@ -571,7 +577,7 @@ class ChatViewModelTest {
             coEvery { it.generateWelcomeMessage(any()) } returns Result.success("Hi")
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(any()) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), any(), AIQueryIntent.HEALTH, any()) } returns Result.success("Take rest.")
+            coEvery { it.sendMessage(any(), any(), AIQueryIntent.HEALTH, any(), any()) } returns Result.success("Take rest.")
         }
         val savedLog = slot<team.sakhi.models.PeriodLog>()
         val periodLogRepository = mockk<PeriodLogRepository>().also {
@@ -613,7 +619,7 @@ class ChatViewModelTest {
         advanceUntilIdle()
 
         assertTrue(viewModel.uiState.value.reportSession != null)
-        coVerify(exactly = 0) { aiRepository.sendMessage(any(), any(), any(), any()) }
+        coVerify(exactly = 0) { aiRepository.sendMessage(any(), any(), any(), any(), any()) }
         coVerify(exactly = 1) { aiRepository.saveMessage(match { it.role == "user" }) }
     }
 
@@ -639,7 +645,7 @@ class ChatViewModelTest {
         val state = viewModel.uiState.value
         assertNull(state.reportSession)
         assertTrue(state.messages.last().isAssistant)
-        coVerify(exactly = 1) { aiRepository.sendMessage(any(), "please generate report for me", any(), any()) }
+        coVerify(exactly = 1) { aiRepository.sendMessage(any(), "please generate report for me", any(), any(), any()) }
     }
 
     @Test
@@ -651,7 +657,7 @@ class ChatViewModelTest {
             coEvery { it.generateWelcomeMessage(any()) } returns Result.success("Hi")
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(any()) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), any(), any(), any()) } returns Result.failure(RuntimeException("bad request"))
+            coEvery { it.sendMessage(any(), any(), any(), any(), any()) } returns Result.failure(RuntimeException("bad request"))
         }
         val viewModel = newViewModel(sessionManager, aiRepository = aiRepository)
         awaitUiState(viewModel) { !it.isLoading && it.messages.size == 2 }
@@ -681,7 +687,7 @@ class ChatViewModelTest {
             coEvery { it.generateWelcomeMessage(any()) } returns Result.success("Hi")
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(any()) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), any(), any(), any()) } returnsMany listOf(
+            coEvery { it.sendMessage(any(), any(), any(), any(), any()) } returnsMany listOf(
                 Result.failure(NetworkException(NetworkException.NO_CONNECTION, "No internet connection")),
                 Result.success("Retried reply"),
             )
@@ -756,7 +762,7 @@ class ChatViewModelTest {
             coEvery { it.generateWelcomeMessage(any()) } returns Result.success("Hi")
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(any()) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), any(), any(), any()) } returns Result.success("Here's a place")
+            coEvery { it.sendMessage(any(), any(), any(), any(), any()) } returns Result.success("Here's a place")
         }
         val safePlaceRanker = mockk<SafePlaceRanker>()
         val locationProvider = mockk<AndroidLocationProvider> { every { hasPermission() } returns false }
@@ -786,7 +792,7 @@ class ChatViewModelTest {
             coEvery { it.generateWelcomeMessage(any()) } returns Result.success("Hi")
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(any()) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), any(), any(), any()) } returns Result.success("Found a hospital nearby")
+            coEvery { it.sendMessage(any(), any(), any(), any(), any()) } returns Result.success("Found a hospital nearby")
         }
         var permissionGranted = false
         val safePlaceRanker = mockk<SafePlaceRanker> {
@@ -826,7 +832,7 @@ class ChatViewModelTest {
         assertFalse(resumedUser.isFailed)
         assertEquals("Found a hospital nearby", state.messages.last().content)
         assertEquals(places, state.messages.last().places)
-        coVerify(exactly = 1) { aiRepository.sendMessage(any(), "where is the nearest hospital", any(), any()) }
+        coVerify(exactly = 1) { aiRepository.sendMessage(any(), "where is the nearest hospital", any(), any(), any()) }
         coVerify(exactly = 1) { safePlaceRanker.findNearby(12.0, 77.0, "hospital") }
     }
 
@@ -839,7 +845,7 @@ class ChatViewModelTest {
             coEvery { it.generateWelcomeMessage(any()) } returns Result.success("Hi")
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(any()) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), any(), any(), any()) } coAnswers {
+            coEvery { it.sendMessage(any(), any(), any(), any(), any()) } coAnswers {
                 Result.success("Reply for ${secondArg<String>()}")
             }
         }
@@ -891,8 +897,8 @@ class ChatViewModelTest {
         val assistantContents = state.messages.filter(ConversationMessage::isAssistant).map(ConversationMessage::content)
         assertTrue("Reply for where is the nearest hospital" in assistantContents)
         assertTrue("Reply for where is the nearest police station" in assistantContents)
-        coVerify(exactly = 1) { aiRepository.sendMessage(any(), "where is the nearest hospital", any(), any()) }
-        coVerify(exactly = 1) { aiRepository.sendMessage(any(), "where is the nearest police station", any(), any()) }
+        coVerify(exactly = 1) { aiRepository.sendMessage(any(), "where is the nearest hospital", any(), any(), any()) }
+        coVerify(exactly = 1) { aiRepository.sendMessage(any(), "where is the nearest police station", any(), any(), any()) }
         coVerify(exactly = 1) { safePlaceRanker.findNearby(12.0, 77.0, "hospital") }
         coVerify(exactly = 1) { safePlaceRanker.findNearby(12.0, 77.0, "police_station") }
     }
@@ -907,7 +913,7 @@ class ChatViewModelTest {
             coEvery { it.generateWelcomeMessage(any()) } returns Result.success("Hi")
             coEvery { it.generateSuggestionChips(any()) } returns Result.success(emptyList())
             coEvery { it.saveMessage(any()) } returns Result.success(Unit)
-            coEvery { it.sendMessage(any(), any(), any(), any()) } returns Result.success("Found a hospital nearby")
+            coEvery { it.sendMessage(any(), any(), any(), any(), any()) } returns Result.success("Found a hospital nearby")
         }
         val safePlaceRanker = mockk<SafePlaceRanker> {
             coEvery { findNearby(12.0, 77.0, "hospital") } returns Result.success(places)

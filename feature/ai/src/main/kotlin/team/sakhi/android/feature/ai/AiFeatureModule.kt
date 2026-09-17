@@ -19,6 +19,7 @@ val aiFeatureModule = module {
             widgetSnapshotManager = get(),
             localStore = get(),
             appContext = get(),
+            topicMemory = get(),
         )
     }
 }

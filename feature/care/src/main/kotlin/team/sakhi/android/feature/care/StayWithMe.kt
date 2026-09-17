@@ -541,11 +541,10 @@ internal fun StayWithMeOwnerLive(
 
                     item(key = "lines-label") { SwmSectionLabel(stringResource(R.string.care_swm_helplines), top = SakhiSpacing.space5) }
                     item(key = "lines") {
-                        GroupedCard {
-                            HelplineRow(label = stringResource(R.string.care_swm_emergency), number = "112") { dial(context, "112") }
-                            SakhiListDivider(startInset = 56.dp)
-                            HelplineRow(label = stringResource(R.string.care_swm_women_helpline), number = "181") { dial(context, "181") }
-                        }
+                        // Three buttons read by their picture, not two rows of text. In an
+                        // emergency nobody reads (Karan, 2026-09-16), and the ambulance was
+                        // missing from this list entirely.
+                        EmergencyCallButtons(onCall = { number -> dial(context, number) })
                     }
 
                     item(key = "swm-stop") {
@@ -940,11 +939,7 @@ internal fun StayWithMeWatcherLive(
 
                 item(key = "lines-label") { SwmSectionLabel(stringResource(R.string.care_swm_helplines), top = SakhiSpacing.space5) }
                 item(key = "lines") {
-                    GroupedCard {
-                        HelplineRow(label = stringResource(R.string.care_swm_emergency), number = "112") { dial(context, "112") }
-                        SakhiListDivider(startInset = 56.dp)
-                        HelplineRow(label = stringResource(R.string.care_swm_women_helpline), number = "181") { dial(context, "181") }
-                    }
+                    EmergencyCallButtons(onCall = { number -> dial(context, number) })
                 }
 
                 item(key = "privacy") {
@@ -1002,38 +997,6 @@ private fun PlaceRow(place: EmergencySafePlace, onClick: () -> Unit) {
             imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
             contentDescription = null,
             tint = sakhiTertiaryLabel(),
-        )
-    }
-}
-
-@Composable
-private fun HelplineRow(label: String, number: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(
-            modifier = Modifier
-                .size(32.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(SakhiRadius.sm)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Call,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
-        }
-        Spacer(Modifier.width(SakhiSpacing.space3))
-        Text(text = label, style = MaterialTheme.typography.bodyLarge, color = sakhiLabel(), modifier = Modifier.weight(1f))
-        Text(
-            text = number,
-            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.primary,
         )
     }
 }

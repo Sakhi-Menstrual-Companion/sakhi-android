@@ -24,6 +24,7 @@ import team.sakhi.notifications.SakhiNotification
 import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.repositories.DeviceRepository
 import team.sakhi.session.SessionManager
+import team.sakhi.staywithme.StayWithMeStore
 
 /**
  * FCM transport for Android -- the platform-specific counterpart to iOS's raw
@@ -87,6 +88,20 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         // a type the inbox does not hold.
         runCatching { GlobalContext.getOrNull()?.getOrNull<InAppNotificationStore>()?.refresh() }
 
+        // A walk push means the row has already changed. Read it now rather than wait for a
+        // socket the OS has very likely already killed, so the screen behind the banner is
+        // right the moment she opens it. Same rule as iOS: the push is a reason to go and
+        // read, never the truth itself.
+        if (notification.isStayWithMe) {
+            scope.launch {
+                runCatching {
+                    val koin = GlobalContext.getOrNull() ?: return@launch
+                    val userId = koin.getOrNull<SessionManager>()?.current?.userId
+                    if (!userId.isNullOrBlank()) koin.getOrNull<StayWithMeStore>()?.refresh(userId)
+                }
+            }
+        }
+
         if (notification == SakhiNotification.Unknown) return
 
         ensureChannel(applicationContext)
@@ -95,6 +110,14 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         // Where a tap goes is decided in ONE place, shared with iOS and with the inbox.
         postPushNotification(applicationContext, presentation, NotificationRouting.deepLinkUri(notification))
     }
+
+    /** Every push that says something about a live walk. */
+    private val SakhiNotification.isStayWithMe: Boolean
+        get() = this is SakhiNotification.StayWithMeStarted ||
+            this is SakhiNotification.StayWithMeExtended ||
+            this is SakhiNotification.StayWithMeEnded ||
+            this is SakhiNotification.StayWithMeLate ||
+            this is SakhiNotification.StayWithMeAsk
 
     private data class PushPresentation(
         val title: String,

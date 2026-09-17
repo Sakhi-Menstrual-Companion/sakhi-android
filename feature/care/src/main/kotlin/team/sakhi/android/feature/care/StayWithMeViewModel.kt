@@ -328,7 +328,12 @@ class StayWithMeViewModel(
         const val POLL_MS = 10_000L
 
         /** The socket is carrying the walk, so this is only there for when it is not. */
-        const val SOCKET_POLL_MS = 60_000L
+        /**
+         * Once the socket is up, every change arrives pushed, including the start and the
+         * end, so this is only a watchdog against a broken trigger or a silently dead
+         * channel. Five minutes, the same as iOS.
+         */
+        const val SOCKET_POLL_MS = 300_000L
         const val PLACES_REFRESH_METERS = 300.0
         const val ROUTE_REFRESH_METERS = 60.0
         const val MAX_PLACES = 6

@@ -54,6 +54,8 @@ import team.sakhi.appstate.AppStateStore
 import team.sakhi.auth.AuthRepository
 import team.sakhi.auth.resolvedUserId
 import team.sakhi.care.CareRealtimeCoordinator
+import team.sakhi.staywithme.StayWithMeRealtimeCoordinator
+import team.sakhi.staywithme.StayWithMeStore
 import team.sakhi.care.CareRuntimeState
 import team.sakhi.care.CareStore
 import team.sakhi.sync.SyncStore
@@ -485,6 +487,8 @@ private fun HomeSessionGate(
     sessionManager: SessionManager = koinInject(),
     careStore: CareStore = koinInject(),
     careRealtimeCoordinator: CareRealtimeCoordinator = koinInject(),
+    stayWithMeRealtime: StayWithMeRealtimeCoordinator = koinInject(),
+    stayWithMeStore: StayWithMeStore = koinInject(),
     widgetSnapshotManager: AndroidWidgetSnapshotManager = koinInject(),
     syncStore: SyncStore = koinInject(),
 ) {
@@ -546,6 +550,15 @@ private fun HomeSessionGate(
                 }
             }
 
+            // A walk has to reach this phone wherever it happens to be. The listener starts
+            // with the session, not with the Care screen: her person can be on Home doing
+            // nothing and still be told the moment she sets off. It rides the private
+            // per-user topic Care has just joined, so it opens no socket of its own.
+            runCatching {
+                stayWithMeRealtime.start(session.userId)
+                stayWithMeStore.refresh(session.userId)
+            }
+
             widgetSnapshotManager.refreshAsync()
             // markIdle, NOT markSuccess: this bootstrap settles the session and care state,
             // it does not fetch cycle data. `markSuccess` publishes a new `lastSyncedAt`,
@@ -573,6 +586,7 @@ private fun HomeSessionGate(
     DisposableEffect(session.userId) {
         onDispose {
             scope.launch { careRealtimeCoordinator.stop() }
+            scope.launch { stayWithMeRealtime.stop() }
             sessionManager.stop()
             syncStore.clearPartnerHealth()
         }

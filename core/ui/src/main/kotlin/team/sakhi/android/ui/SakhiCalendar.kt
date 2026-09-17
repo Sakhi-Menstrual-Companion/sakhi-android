@@ -234,13 +234,13 @@ private fun SakhiMiniMonthDayCell(
         isMultiSelectMode && isInSelection && isPeriod -> Color.Transparent
         isMultiSelectMode && (isInSelection || isPeriod) -> periodColor
         isMultiSelectMode -> Color.Transparent
-        // Future days are dimmed here exactly as the compact grid dims them. Without
-        // these two branches a predicted period in a coming month drew at full strength
-        // and read as something that had already happened.
-        day.markerType == SakhiCalendarMarkerType.PERIOD ->
-            if (day.isFuture) periodColor.copy(alpha = 0.12f) else periodColor
+        // Two fills, and only two (Karan, 2026-09-17). Solid means she logged that day
+        // herself. A prediction is the light fill and stays the light fill whether it is
+        // behind her or ahead of her, because a prediction does not become a fact by
+        // passing. Matches iOS's `SakhiCalendarView` exactly.
+        day.markerType == SakhiCalendarMarkerType.PERIOD -> periodColor
         day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD ->
-            periodColor.copy(alpha = if (day.isFuture) 0.12f else 0.16f)
+            periodColor.copy(alpha = PredictedPeriodFillAlpha)
         else -> Color.Transparent
     }
     val labelColor = when {
@@ -261,12 +261,10 @@ private fun SakhiMiniMonthDayCell(
             ovulationRingColor.copy(alpha = disabledSemanticOpacity)
         day.isFuture && day.markerType == SakhiCalendarMarkerType.FERTILE ->
             ovulationRingColor.copy(alpha = disabledSemanticOpacity)
-        day.isFuture && day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD ->
-            periodColor.copy(alpha = disabledSemanticOpacity)
+        day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor
         day.isFuture -> sakhiSecondaryLabel()
         day.markerType == SakhiCalendarMarkerType.OVULATION -> ovulationRingColor
         day.markerType == SakhiCalendarMarkerType.FERTILE -> ovulationRingColor
-        day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor
         day.isToday -> accentColor
         else -> MaterialTheme.colorScheme.onSurface
     }
@@ -352,22 +350,16 @@ private fun SakhiCalendarDayCell(
     val fertileWindowLabel = stringResource(R.string.calendar_a11y_fertile_window)
 
     val fillColor = when (day.markerType) {
-        SakhiCalendarMarkerType.PERIOD -> {
-            if (day.isFuture) periodColor.copy(alpha = 0.12f) else periodColor
-        }
+        SakhiCalendarMarkerType.PERIOD -> periodColor
         SakhiCalendarMarkerType.PREDICTED_PERIOD -> {
-            periodColor.copy(alpha = if (day.isFuture) 0.12f else 0.16f)
+            periodColor.copy(alpha = PredictedPeriodFillAlpha)
         }
         else -> Color.Transparent
     }
 
     val labelColor = when {
-        day.markerType == SakhiCalendarMarkerType.PERIOD -> {
-            if (day.isFuture) periodColor.copy(alpha = disabledSemanticOpacity) else Color.White
-        }
-        isDarkTheme && day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> {
-            if (day.isFuture) Color.White.copy(alpha = disabledSemanticOpacity) else Color.White
-        }
+        day.markerType == SakhiCalendarMarkerType.PERIOD -> Color.White
+        isDarkTheme && day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> Color.White
         day.isSelected -> accentColor
         // iOS's compact `dayCell` calls these out as "Fixed semantic colors — independent
         // of phase accent" and labels them with `PhaseColorManager.ovulation` /
@@ -376,7 +368,9 @@ private fun SakhiCalendarDayCell(
         // selection on the screen users see most.
         day.isFuture && day.markerType == SakhiCalendarMarkerType.OVULATION -> ovulationRingColor.copy(alpha = disabledSemanticOpacity)
         day.isFuture && day.markerType == SakhiCalendarMarkerType.FERTILE -> ovulationRingColor.copy(alpha = disabledSemanticOpacity)
-        day.isFuture && day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor.copy(alpha = disabledSemanticOpacity)
+        // A predicted day reads the same on both sides of today, for the same reason its
+        // fill does.
+        day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor
         // A future day with no marker. iOS ends its `isFuture` branch with
         // `DS.Colors.secondaryLabel`; Android had no such branch, so a plain future date
         // fell through to full-strength `onSurface` and read exactly as solid as a day
@@ -385,7 +379,6 @@ private fun SakhiCalendarDayCell(
         day.isFuture -> sakhiSecondaryLabel()
         day.markerType == SakhiCalendarMarkerType.OVULATION -> ovulationRingColor
         day.markerType == SakhiCalendarMarkerType.FERTILE -> ovulationRingColor
-        day.markerType == SakhiCalendarMarkerType.PREDICTED_PERIOD -> periodColor
         day.isToday -> accentColor
         else -> MaterialTheme.colorScheme.onSurface
     }
@@ -395,7 +388,10 @@ private fun SakhiCalendarDayCell(
         if (day.isToday) add(todayLabel)
         if (day.isSelected) add(selectedLabel)
         when (day.markerType) {
-            SakhiCalendarMarkerType.PERIOD -> add(if (day.isFuture) predictedPeriodLabel else periodDayLabel)
+            // A logged day is a logged day. It is never in the future, and calling it a
+            // prediction in the spoken description was the screen reader's version of the
+            // lighter fill this cell no longer draws.
+            SakhiCalendarMarkerType.PERIOD -> add(periodDayLabel)
             SakhiCalendarMarkerType.PREDICTED_PERIOD -> add(predictedPeriodLabel)
             SakhiCalendarMarkerType.OVULATION -> add(ovulationDayLabel)
             SakhiCalendarMarkerType.FERTILE -> add(fertileWindowLabel)
@@ -481,6 +477,9 @@ private data class SakhiCalendarWeekRows(
 // slightly smaller today ring instead, which costs no layout.
 private val calendarCellHeight = SakhiSpacing.space10 + SakhiSpacing.space1 * 2
 private val CalendarDayFontSize = 15.sp
+/** The one predicted-period fill, past or future. Mirrors iOS's `DS.CalendarStyle`. */
+private const val PredictedPeriodFillAlpha = 0.16f
+
 private val CalendarLogDotSize = 4.dp
 private val CalendarLogDotBottomInset = 1.dp
 private val CalendarLogDotOffsetY = 8.dp

@@ -24,8 +24,10 @@ import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.R
 import team.sakhi.android.designsystem.SakhiTheme
 import team.sakhi.care.CareRealtimeCoordinator
+import team.sakhi.staywithme.StayWithMeStore
 import team.sakhi.notifications.InAppNotificationStore
 import team.sakhi.preferences.ThemeMode
+import team.sakhi.session.SessionManager
 import team.sakhi.preferences.ThemePreferenceStore
 
 /**
@@ -157,6 +159,16 @@ class MainActivity : FragmentActivity() {
             runCatching {
                 KoinPlatform.getKoin().get<CareRealtimeCoordinator>().recoverAfterAuthOrReconnect()
             }.onFailure { Log.w("SakhiRealtime", "resume recovery failed: $it") }
+        }
+        // And the same reason for a live walk: whatever was broadcast while the socket was
+        // away is gone and will not be resent, so coming back to the front is exactly when
+        // to re-read who is walking and where they are.
+        lifecycleScope.launch {
+            runCatching {
+                val koin = KoinPlatform.getKoin()
+                val userId = koin.getOrNull<SessionManager>()?.current?.userId
+                if (!userId.isNullOrBlank()) koin.get<StayWithMeStore>().refresh(userId)
+            }.onFailure { Log.w("SakhiRealtime", "walk resume refresh failed: $it") }
         }
         // Same reason for the inbox: a push that arrived while MIUI had the app frozen may
         // never have reached `onMessageReceived`, but its row is on the server regardless.

@@ -246,6 +246,12 @@
     <string name="care_swm_helplines">HELPLINES</string>
     <string name="care_swm_emergency">Emergency</string>
     <string name="care_swm_women_helpline">Women Helpline</string>
+    <!-- The three buttons on the walk and alarm screens. Read by their picture first, so
+         the name under the number stays one short word. Mirrors iOS's EmergencyCallButtons. -->
+    <string name="care_swm_help_police">Police</string>
+    <string name="care_swm_help_ambulance">Ambulance</string>
+    <string name="care_swm_help_women">Women</string>
+    <string name="care_swm_help_call_a11y">Call %1$s, %2$s. Opens the phone with the number filled in</string>
     <string name="care_swm_places_loading">Looking for help near her</string>
     <string name="care_swm_places_empty">Nothing found close to her yet</string>
     <string name="care_swm_places_loading_you">Looking for help near you</string>

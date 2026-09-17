@@ -5,6 +5,7 @@ import com.getswipe.sakhi.prediction.model.PeriodLogEntry
 import kotlinx.datetime.LocalDate
 import team.sakhi.config.AppConfig
 import team.sakhi.cycle.CalendarMarker
+import team.sakhi.cycle.CalendarWindows
 import team.sakhi.cycle.CycleGeometry
 import team.sakhi.cycle.CycleLengthPreference
 import team.sakhi.cycle.CyclePhaseInsight
@@ -152,24 +153,54 @@ object CycleInsightAdapter {
         // the rest come from the same engine's forecast; Android's calendar went blank after
         // next month (Karan, 2026-09-13).
         val todayEpoch = today.toEpochDays().toLong()
-        val forecastEpochDays: Set<Long> = SakhiPredictionEngine
+        // A predicted period that has already passed without a log is exactly what she
+        // wants to see, so the forecast is no longer filtered to today onwards (Karan,
+        // 2026-09-17: a prediction stays a prediction whether it is behind her or ahead).
+        val forecast = SakhiPredictionEngine
             .forecast(entries, horizonMonths = PredictionHorizonMonths, todayEpochDay = todayEpoch)
-            .periods
-            .flatMapTo(mutableSetOf()) { period -> (period.startEpochDay..period.endEpochDay).filter { it >= todayEpoch } }
+        val forecastEpochDays: Set<Long> = forecast.periods
+            .flatMapTo(mutableSetOf()) { period -> (period.startEpochDay..period.endEpochDay) }
+        // One closed cycle before any fertile or ovulation day is drawn, the rule iOS holds
+        // in `PeriodManager.refreshCalendarCache` (`hasCycleData`). Where a fertile window
+        // falls depends on the length of a cycle, and before one has closed there is no
+        // length, only a default. Android drew them anyway, so the same girl saw a fertile
+        // week on one phone and nothing on the other (seen on two devices, 2026-09-17).
+        // Saying nothing is the honest answer until her own body has answered once.
+        // The forecast above says nothing until she has one complete cycle, so a girl who
+        // has logged a single period used to get one predicted window and then blank months.
+        // This projects a window per cycle from her own resolved lengths out to the same
+        // nine-month horizon, shared with iOS so neither calendar can predict differently.
+        val loggedEpochDays: Set<Long> = periodLogDates.mapTo(mutableSetOf()) { it.toEpochDays().toLong() }
+        val projectedEpochDays: Set<Long> = CalendarWindows.expectedPeriodWindows(
+            mostRecentLoggedStartEpochDay = markGeometry?.cycleStartEpochDay,
+            avgCycleLength = markGeometry?.cycleLength ?: 0,
+            avgPeriodLength = markGeometry?.periodLength ?: 0,
+            loggedPeriodEpochDays = loggedEpochDays,
+            todayEpochDay = todayEpoch,
+            horizonDays = CalendarWindows.DEFAULT_HORIZON_DAYS,
+        )
+        // Nothing inside the physiological minimum cycle counts as a prediction. Without
+        // this the engine's continuation window for a single-log user lands on days that are
+        // not predictions at all. iOS rejects the same days in `isPredictedPeriodDate`.
+        val predictedCutoff: Long? = CalendarWindows.predictedEligibilityCutoff(markGeometry?.cycleStartEpochDay)
         val marks = mutableMapOf<LocalDate, CalendarMarker.DayMark>()
         var day = from
         while (day <= to) {
             val epoch = day.toEpochDays().toLong()
             val isPeriod = epoch in state.periodEpochDays
             val isPredicted = !isPeriod &&
-                (epoch in state.predictedPeriodEpochDays || epoch in forecastEpochDays)
+                (predictedCutoff == null || epoch >= predictedCutoff) &&
+                (epoch in state.predictedPeriodEpochDays ||
+                    epoch in forecastEpochDays ||
+                    epoch in projectedEpochDays)
             // Projected from the shared geometry rather than read off `CalendarState`.
             // The engine emits ovulation and the fertile window for the **current cycle
             // only**, so every other month came back with nothing to colour -- page back
             // a month and the fertile window simply was not there. `CycleGeometry` answers
             // for any date by projecting a whole cycle at a time, as iOS's calendar does.
-            val isFertile = markGeometry?.isFertile(epoch) ?: (epoch in state.fertileWindowEpochDays)
-            val isOvulation = markGeometry?.isOvulation(epoch) ?: (state.ovulationEpochDay == epoch)
+            val hasClosedCycle = forecast.completeCycleCount > 0
+            val isFertile = hasClosedCycle && (markGeometry?.isFertile(epoch) ?: (epoch in state.fertileWindowEpochDays))
+            val isOvulation = hasClosedCycle && (markGeometry?.isOvulation(epoch) ?: (state.ovulationEpochDay == epoch))
             val isPms = epoch in state.pmsWindowEpochDays
             if (isPeriod || isPredicted || isFertile || isOvulation || isPms) {
                 marks[day] = CalendarMarker.DayMark(
@@ -237,7 +268,16 @@ object CycleInsightAdapter {
         // Her own edited lengths win over the engine's averages, resolved through the one
         // shared store. The engine still owns *where* the cycle starts; only the lengths
         // are hers. iOS resolves identically in `PeriodManager.computePhaseGeometry`.
-        val resolved = resolveLengths(userId, analysis.avgCycleLength, analysis.avgPeriodLength)
+        //
+        // The averages come from `getCycleStats`, which is the call iOS resolves from, and
+        // not from `analyzePhase`'s own. The two disagree before her first cycle closes:
+        // `analyzePhase` reads the period she is still logging, which is by definition
+        // shorter than it will end up, while `getCycleStats` holds a neutral length until
+        // a cycle actually closes. Reading different ones is why the same girl's calendar
+        // predicted a five day period on iOS and a four day one here (seen on two devices,
+        // 2026-09-17).
+        val stats = SakhiPredictionEngine.getCycleStats(entries)
+        val resolved = resolveLengths(userId, stats.avgCycleLength, stats.avgPeriodLength)
         return CycleGeometry(
             cycleStartEpochDay = start,
             cycleLength = resolved.cycleLength,
