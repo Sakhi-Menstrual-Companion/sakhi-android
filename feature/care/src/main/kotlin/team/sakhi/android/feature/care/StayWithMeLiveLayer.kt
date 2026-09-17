@@ -1,5 +1,7 @@
 package team.sakhi.android.feature.care
 
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.size
 import team.sakhi.staywithme.StayWithMeLocation
 import team.sakhi.android.platform.StayWithMeLocationService
 import team.sakhi.android.designsystem.sakhiSystemBackground
@@ -179,7 +181,8 @@ private fun StayWithMeStartLayer(
     onClose: () -> Unit,
     onStart: (minutes: Int, note: String, destination: team.sakhi.staywithme.StayWithMeDestination?) -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize().background(sakhiSystemBackground())) {
+    val context = LocalContext.current
+    Box(modifier = Modifier.fillMaxSize().background(RideStyle.ground)) {
         WalkMap(
             location = here,
             accent = MaterialTheme.colorScheme.primary,
@@ -187,19 +190,33 @@ private fun StayWithMeStartLayer(
             modifier = Modifier.fillMaxSize(),
             bottomPadding = 320.dp,
         )
-        LiveWalkTopBar(onClose = onClose, modifier = Modifier.align(Alignment.TopCenter))
+        RideTopBar(
+            onClose = onClose,
+            freshness = null,
+            onCallPolice = { dial(context, "112") },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
         Surface(
             modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-            shape = RoundedCornerShape(topStart = SakhiRadius.xl, topEnd = SakhiRadius.xl),
-            color = sakhiSystemBackground(),
-            shadowElevation = 0.dp,
+            shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
+            color = RideStyle.ground,
+            shadowElevation = 12.dp,
         ) {
             Column(
                 modifier = Modifier
                     .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState())
-                    .padding(top = SakhiSpacing.space5),
+                    .verticalScroll(rememberScrollState()),
             ) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 36.dp, height = 5.dp)
+                            .background(RideStyle.hairline, CircleShape),
+                    )
+                }
                 StayWithMeStartSection(
                     personName = personName,
                     isBusy = isBusy,

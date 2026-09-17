@@ -313,6 +313,16 @@
     <string name="care_swm_checkin_okay">I\'m okay</string>
     <string name="care_swm_checkin_help">Get help</string>
     <string name="care_swm_checkin_reason">Confirm that you are okay</string>
+    <!-- The screen she starts a walk from. Same words as iOS's StayWithMeCard. -->
+    <string name="care_swm_search_destination">Search, set destination</string>
+    <string name="care_swm_edit">Edit</string>
+    <string name="care_swm_reach_by_row">Reach by</string>
+    <string name="care_swm_check_in_row">Check in</string>
+    <string name="care_swm_every_minutes">Every %1$d min</string>
+    <string name="care_swm_minutes_short">%1$d min</string>
+    <string name="care_swm_emergency_contacts">Emergency contacts</string>
+    <string name="care_swm_sees_your_way_home">Your Sakhi \u00b7 sees your way home</string>
+    <string name="care_swm_start_button">Stay with me</string>
     <string name="care_swm_places_loading">Looking for help near her</string>
     <string name="care_swm_places_empty">Nothing found close to her yet</string>
     <string name="care_swm_places_loading_you">Looking for help near you</string>

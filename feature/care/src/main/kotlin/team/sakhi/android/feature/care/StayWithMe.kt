@@ -1,5 +1,17 @@
 package team.sakhi.android.feature.care
 
+import androidx.compose.foundation.Image
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.VerifiedUser
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.res.painterResource
+import kotlinx.datetime.Clock
+import kotlinx.datetime.DateTimeUnit
+import kotlinx.datetime.plus
+import org.koin.compose.koinInject
+import team.sakhi.staywithme.StayWithMeCheckInPreference
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
@@ -183,138 +195,321 @@ internal fun StayWithMeStartSection(
         pending = false
     }
 
-    // Laid out on the sheet itself, not in a card on it: the sheet is already a surface, and
-    // a card inside it is a box inside a box (Karan, 2026-09-13).
-    Column(modifier = Modifier.padding(horizontal = SakhiSpacing.space5)) {
-        Column {
-            Column {
+    // iOS's shape, in iOS's order (`StayWithMeCard`): the destination on its own at the top
+    // as a search field, then Reach by and Check in together as two settings rows, then who
+    // is being asked, then the button. Every size here is read off that screen.
+    val checkInPreference = koinInject<StayWithMeCheckInPreference>()
+    var checkInMinutes by remember { mutableIntStateOf(checkInPreference.minutes()) }
+    var pickingDuration by remember { mutableStateOf(false) }
+    var pickingCheckIn by remember { mutableStateOf(false) }
+    val reachBy = remember(minutes) { Clock.System.now().plus(minutes.toLong(), DateTimeUnit.MINUTE) }
+
+    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        // 1. Where she is going.
+        val picked = destination
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(58.dp)
+                .background(RideStyle.card, RoundedCornerShape(20.dp))
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = null,
+                tint = sakhiTertiaryLabel(),
+                modifier = Modifier.size(18.dp),
+            )
+            if (picked != null) {
                 Text(
-                    text = stringResource(R.string.care_swm_heading_home),
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    text = picked.name,
+                    fontSize = 16.sp,
                     color = sakhiLabel(),
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = stringResource(R.string.care_swm_ask_subtitle, personName),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = sakhiSecondaryLabel(),
-                    modifier = Modifier.padding(top = 2.dp),
+                    text = stringResource(R.string.care_swm_edit),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = RideStyle.rose,
+                    modifier = Modifier.clickable { destination = null; note = "" },
                 )
-
-                Spacer(Modifier.height(SakhiSpacing.space5))
-                SwmFormLabel(stringResource(R.string.care_swm_how_long))
-                Spacer(Modifier.height(SakhiSpacing.space2))
-                DurationPicker(selected = minutes, onSelect = { minutes = it })
-                Spacer(Modifier.height(SakhiSpacing.space5))
-                SwmFormLabel(stringResource(R.string.care_swm_where_to))
-
-                Spacer(Modifier.height(SakhiSpacing.space2))
-                val picked = destination
-                if (picked != null) {
-                    Row(
+            } else {
+                SakhiTextField(
+                    value = note,
+                    onValueChange = { note = it.take(StayWithMeDurations.MAX_NOTE_LENGTH) },
+                    placeholder = stringResource(R.string.care_swm_search_destination),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        if (picked == null && suggestions.isNotEmpty()) {
+            Spacer(Modifier.height(6.dp))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(RideStyle.card, RoundedCornerShape(20.dp)),
+            ) {
+                suggestions.take(5).forEachIndexed { index, suggestion ->
+                    if (index > 0) SakhiListDivider(startInset = 48.dp)
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .background(sakhiLightPink(), RoundedCornerShape(SakhiRadius.lg))
-                            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space3),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Place,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(SakhiSpacing.space2))
-                        Text(
-                            text = picked.name,
-                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = sakhiLabel(),
-                            maxLines = 1,
-                            modifier = Modifier.weight(1f),
-                        )
-                        IconButton(onClick = { destination = null; note = "" }, modifier = Modifier.size(32.dp)) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = stringResource(R.string.care_swm_clear_where),
-                                tint = sakhiSecondaryLabel(),
-                                modifier = Modifier.size(18.dp),
-                            )
-                        }
-                    }
-                } else {
-                    SakhiTextField(
-                        value = note,
-                        onValueChange = { note = it.take(StayWithMeDurations.MAX_NOTE_LENGTH) },
-                        placeholder = stringResource(R.string.care_swm_where_placeholder),
-                    )
-                    suggestions.forEach { suggestion ->
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    destination = suggestion.destination
-                                    note = suggestion.title
-                                }
-                                .padding(horizontal = SakhiSpacing.space2, vertical = SakhiSpacing.space2),
-                        ) {
-                            Text(
-                                text = suggestion.title,
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = sakhiLabel(),
-                                maxLines = 1,
-                            )
-                            suggestion.subtitle?.let {
-                                Text(
-                                    text = it,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = sakhiSecondaryLabel(),
-                                    maxLines = 1,
-                                )
+                            .clickable {
+                                destination = suggestion.destination
+                                note = suggestion.title
                             }
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                    ) {
+                        Text(text = suggestion.title, fontSize = 16.sp, color = sakhiLabel(), maxLines = 1)
+                        suggestion.subtitle?.let {
+                            Text(text = it, fontSize = 13.sp, color = sakhiSecondaryLabel(), maxLines = 1)
                         }
                     }
                 }
+            }
+        }
 
-                Spacer(Modifier.height(SakhiSpacing.space5))
-                PrimaryButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    text = stringResource(R.string.care_swm_ask_button, personName),
-                    enabled = !isBusy,
-                    onClick = {
-                        val missing = requiredPermissions().filterNot { granted(context, it) }
-                        if (missing.isEmpty()) {
-                            onStart(minutes, note, destination)
-                        } else {
-                            pending = true
-                            launcher.launch(missing.toTypedArray())
-                        }
+        Spacer(Modifier.height(14.dp))
+
+        // 2. When she should be there, and how often Sakhi asks.
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(RideStyle.card, RoundedCornerShape(20.dp)),
+        ) {
+            SwmSettingRow(
+                icon = Icons.Filled.Schedule,
+                label = stringResource(R.string.care_swm_reach_by_row),
+                value = timeOf(reachBy),
+                expanded = pickingDuration,
+                onClick = { pickingDuration = !pickingDuration; pickingCheckIn = false },
+            )
+            if (pickingDuration) {
+                SwmChoiceRow(
+                    choices = StayWithMeDurations.presetMinutes.map { it to stringResource(R.string.care_swm_minutes_short, it) },
+                    selected = minutes,
+                    onSelect = { minutes = it; pickingDuration = false },
+                )
+            }
+            SakhiListDivider(startInset = 62.dp)
+            SwmSettingRow(
+                icon = Icons.Filled.VerifiedUser,
+                label = stringResource(R.string.care_swm_check_in_row),
+                value = stringResource(R.string.care_swm_every_minutes, checkInMinutes),
+                expanded = pickingCheckIn,
+                onClick = { pickingCheckIn = !pickingCheckIn; pickingDuration = false },
+            )
+            if (pickingCheckIn) {
+                SwmChoiceRow(
+                    choices = CHECK_IN_CHOICES.map { it to stringResource(R.string.care_swm_minutes_short, it) },
+                    selected = checkInMinutes,
+                    onSelect = {
+                        checkInMinutes = it
+                        checkInPreference.setMinutes(it)
+                        pickingCheckIn = false
                     },
                 )
+            }
+        }
 
-                Spacer(Modifier.height(SakhiSpacing.space3))
+        Spacer(Modifier.height(18.dp))
+
+        // 3. Who is being asked.
+        Text(
+            text = stringResource(R.string.care_swm_emergency_contacts),
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            color = sakhiLabel(),
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(RideStyle.card, RoundedCornerShape(20.dp))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Image(
+                painter = painterResource(CareAvatars.drawable(CareAvatars.indexFor(personName))),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(RideStyle.soft, CircleShape),
+            )
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(R.string.care_swm_consent, personName),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = sakhiSecondaryLabel(),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
+                    text = personName,
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = sakhiLabel(),
+                    maxLines = 1,
                 )
-                if (error != null) {
-                    Spacer(Modifier.height(SakhiSpacing.space2))
-                    Text(
-                        text = error,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = AppleSystemColors.red,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
+                Text(
+                    text = stringResource(R.string.care_swm_sees_your_way_home),
+                    fontSize = 15.sp,
+                    color = sakhiSecondaryLabel(),
+                    maxLines = 1,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(18.dp))
+
+        // 4. The button, with the consent line under it.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(58.dp)
+                .background(RideStyle.pink.copy(alpha = if (isBusy) 0.4f else 1f), CircleShape)
+                .clickable(enabled = !isBusy) {
+                    val missing = requiredPermissions().filterNot { granted(context, it) }
+                    if (missing.isEmpty()) {
+                        onStart(minutes, note, destination)
+                    } else {
+                        pending = true
+                        launcher.launch(missing.toTypedArray())
+                    }
+                },
+            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (isBusy) {
+                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+            } else {
+                // iOS puts Sakhi's own mark here, not a heart: `Image("BrandMedia/
+                // sakhiSymbolAccent")` at 20, tinted white.
+                Image(
+                    painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_symbol_accent),
+                    contentDescription = null,
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White),
+                    modifier = Modifier.size(20.dp),
+                )
+                Text(
+                    text = stringResource(R.string.care_swm_start_button),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+        Text(
+            text = stringResource(R.string.care_swm_consent, personName),
+            fontSize = 13.sp,
+            color = sakhiSecondaryLabel(),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        if (error != null) {
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = error,
+                fontSize = 13.sp,
+                color = RideStyle.alert,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+/** One settings row: a pink disc, the label, the value, and a chevron that turns. */
+@Composable
+private fun SwmSettingRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    expanded: Boolean,
+    onClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp)
+            .height(52.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Box(
+            modifier = Modifier.size(34.dp).background(RideStyle.soft, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = RideStyle.rose,
+                modifier = Modifier.size(15.dp),
+            )
+        }
+        Text(text = label, fontSize = 16.sp, color = sakhiLabel())
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = value,
+            fontSize = 16.sp,
+            color = if (expanded) RideStyle.pink else sakhiSecondaryLabel(),
+        )
+        Icon(
+            imageVector = Icons.Filled.ChevronRight,
+            contentDescription = null,
+            tint = sakhiTertiaryLabel(),
+            modifier = Modifier
+                .size(13.dp)
+                .rotate(if (expanded) 90f else 0f),
+        )
+    }
+}
+
+/** The choices under a settings row, as pills, the way the duration picker always was. */
+@Composable
+private fun SwmChoiceRow(
+    choices: List<Pair<Int, String>>,
+    selected: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 14.dp)
+            .padding(bottom = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        choices.forEach { (value, label) ->
+            val isSelected = value == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(40.dp)
+                    .background(
+                        if (isSelected) RideStyle.pink else RideStyle.soft,
+                        CircleShape,
                     )
-                }
-                Spacer(Modifier.height(SakhiSpacing.space4))
+                    .clickable { onSelect(value) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isSelected) Color.White else sakhiLabel(),
+                    maxLines = 1,
+                )
             }
         }
     }
 }
 
-/** The small grey heading over a group in the walk form. */
+/** iOS's `StayWithMeCard.checkInChoices`. */
+private val CHECK_IN_CHOICES = listOf(5, 10, 15, 30)
+
 @Composable
 private fun SwmFormLabel(text: String) {
     Text(
