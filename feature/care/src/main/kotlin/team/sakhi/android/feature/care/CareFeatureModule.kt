@@ -20,6 +20,8 @@ val careFeatureModule = module {
             realtime = get(),
             placesProvider = get(),
             hapticManager = get(),
+            alarmPreference = get(),
+            kvStore = get(),
         )
     }
     viewModel {

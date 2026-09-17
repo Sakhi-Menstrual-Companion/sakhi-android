@@ -51,6 +51,7 @@ import team.sakhi.android.feature.profile.HelpSupportScreen
 import team.sakhi.android.feature.profile.LegalScreen
 import team.sakhi.android.feature.profile.ManageAccountScreen
 import team.sakhi.android.feature.profile.NotificationsScreen
+import team.sakhi.android.feature.profile.RideAlarmScreen
 import team.sakhi.android.feature.profile.PrivacySecurityScreen
 import team.sakhi.android.feature.profile.ProfileScreen
 import team.sakhi.android.feature.reports.ReportsScreen
@@ -116,6 +117,8 @@ private enum class ProfileSheetScreen {
     LogHistory,
     AppIntegration,
     Notifications,
+    /** iOS `ProfileRoute.rideAlarm`, the partner-only "Alarm if she is not home". */
+    RideAlarm,
     Appearance,
     HelpSupport,
     PrivacySecurity,
@@ -493,6 +496,7 @@ private fun ProfileOverlaySheet(
                 onLogHistoryClick = { screen = ProfileSheetScreen.LogHistory },
                 onAppIntegrationClick = { screen = ProfileSheetScreen.AppIntegration },
                 onNotificationsClick = { screen = ProfileSheetScreen.Notifications },
+                onRideAlarmClick = { screen = ProfileSheetScreen.RideAlarm },
                 onAppearanceClick = { screen = ProfileSheetScreen.Appearance },
                 onHelpSupportClick = { screen = ProfileSheetScreen.HelpSupport },
                 onPrivacySecurityClick = { screen = ProfileSheetScreen.PrivacySecurity },
@@ -510,6 +514,7 @@ private fun ProfileOverlaySheet(
             ProfileSheetScreen.LogHistory -> ActivityLogScreen(onBack = { screen = ProfileSheetScreen.Root })
             ProfileSheetScreen.AppIntegration -> AppIntegrationScreen(onBack = { screen = ProfileSheetScreen.Root })
             ProfileSheetScreen.Notifications -> NotificationsScreen(onBack = { screen = ProfileSheetScreen.Root })
+            ProfileSheetScreen.RideAlarm -> RideAlarmScreen(onBack = { screen = ProfileSheetScreen.Root })
             ProfileSheetScreen.Appearance -> AppearanceScreen(onBack = { screen = ProfileSheetScreen.Root })
             ProfileSheetScreen.HelpSupport -> HelpSupportScreen(onBack = { screen = ProfileSheetScreen.Root })
             ProfileSheetScreen.PrivacySecurity -> PrivacySecurityScreen(onBack = { screen = ProfileSheetScreen.Root })

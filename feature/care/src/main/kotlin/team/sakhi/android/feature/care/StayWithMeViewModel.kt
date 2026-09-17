@@ -23,7 +23,10 @@ import team.sakhi.emergency.EmergencySafePlace
 import team.sakhi.emergency.EmergencySafePlaceKind
 import team.sakhi.emergency.EmergencySafePlacesProvider
 import team.sakhi.session.SessionManager
+import team.sakhi.platform.PlatformKeyValueStore
 import team.sakhi.staywithme.CarePartnerCard
+import team.sakhi.staywithme.StayWithMeAlarm
+import team.sakhi.staywithme.StayWithMeAlarmPreference
 import team.sakhi.staywithme.StayWithMeDestination
 import team.sakhi.staywithme.StayWithMeLocation
 import team.sakhi.staywithme.StayWithMeRealtimeCoordinator
@@ -52,6 +55,13 @@ data class StayWithMeUiState(
     val watchingTrail: List<StayWithMeLocation> = emptyList(),
     /** True while the walk is arriving on a socket rather than being asked for. */
     val isLiveSocket: Boolean = false,
+    /**
+     * True when this phone should be showing "she has not reached yet", with the alarm.
+     *
+     * The rule is `StayWithMeAlarm`, shared with iOS, so the same walk raises the alarm at
+     * the same moment on both phones.
+     */
+    val alarmRaised: Boolean = false,
 )
 
 /**
@@ -65,7 +75,15 @@ class StayWithMeViewModel(
     private val realtime: StayWithMeRealtimeCoordinator,
     private val placesProvider: EmergencySafePlacesProvider,
     private val hapticManager: AndroidHapticManager,
+    private val alarmPreference: StayWithMeAlarmPreference,
+    private val kvStore: PlatformKeyValueStore,
 ) : ViewModel() {
+
+    /**
+     * The walk whose alarm he has already slid away. Kept on the phone, because an alarm
+     * that comes back the moment the screen redraws is worse than one that never fired.
+     */
+    private val acknowledgedAlarmId = MutableStateFlow(kvStore.get(ACKNOWLEDGED_ALARM_KEY))
 
     private val now = MutableStateFlow(store.now())
     private val places = MutableStateFlow<List<EmergencySafePlace>>(emptyList())
@@ -87,10 +105,30 @@ class StayWithMeViewModel(
         state.copy(places = found, placesLoading = loading)
     }
 
-    val uiState: StateFlow<StayWithMeUiState> =
+    private val withTrails =
         combine(withPlaces, store.mineTrail, store.watchingTrail, realtime.isLive) { state, mine, watching, live ->
             state.copy(mineTrail = mine, watchingTrail = watching, isLiveSocket = live)
+        }
+
+    val uiState: StateFlow<StayWithMeUiState> =
+        combine(withTrails, acknowledgedAlarmId) { state, acknowledged ->
+            state.copy(
+                alarmRaised = StayWithMeAlarm.isRaised(
+                    session = state.watching,
+                    now = state.now,
+                    afterMinutes = alarmPreference.minutes(),
+                    acknowledgedSessionId = acknowledged,
+                ),
+            )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StayWithMeUiState(now = store.now()))
+
+    /** He slid it away. This walk does not raise the alarm again. */
+    fun acknowledgeAlarm() {
+        val id = store.watching.value?.id ?: return
+        kvStore.set(ACKNOWLEDGED_ALARM_KEY, id)
+        acknowledgedAlarmId.value = id
+        hapticManager.impact(HapticImpact.HEAVY)
+    }
 
     init {
         // The countdown's clock. One tick a second, only while someone is subscribed.
@@ -325,6 +363,9 @@ class StayWithMeViewModel(
         private const val REFRESH_WAIT_MS = 10_000L
         /** The least a refresh spins, so a fast answer does not read as a flicker. */
         private const val REFRESH_MIN_SPIN_MS = 450L
+        /** The walk whose alarm he has already slid away, on this phone. */
+        const val ACKNOWLEDGED_ALARM_KEY = "stayWithMe.notReached.acknowledged"
+
         const val POLL_MS = 10_000L
 
         /** The socket is carrying the walk, so this is only there for when it is not. */

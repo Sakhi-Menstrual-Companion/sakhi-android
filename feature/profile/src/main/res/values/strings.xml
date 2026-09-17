@@ -917,4 +917,23 @@
     <string name="profile_manage_account_partner_loss_row_care">Your care connection with her</string>
     <string name="profile_manage_account_partner_loss_row_walks">Stay With Me walks and her alerts on this phone</string>
     <string name="profile_manage_account_delete_confirm_body_partner">This deletes your account and ends your care connection with her. You will not be able to care for her in Sakhi unless she invites you again.</string>
+
+    <!-- "Ride alarm": when this phone starts ringing if she is not home. Word for word the
+         same as iOS's RideAlarmSettingsView. -->
+    <string name="profile_ride_alarm_title">Ride alarm</string>
+    <string name="profile_ride_alarm_subtitle">When this phone rings if she is not home</string>
+    <string name="profile_ride_alarm_section">RING ME</string>
+    <string name="profile_ride_alarm_at_her_time">At her time</string>
+    <string name="profile_ride_alarm_after">%1$d min after her time</string>
+    <string name="profile_ride_alarm_detail_0">The moment she is past it</string>
+    <string name="profile_ride_alarm_detail_5">A short wait for traffic</string>
+    <string name="profile_ride_alarm_detail_10">What most people pick</string>
+    <string name="profile_ride_alarm_detail_15">A longer wait before waking you</string>
+    <string name="profile_ride_alarm_detail_long">Only if she is properly late</string>
+    <string name="profile_ride_alarm_hear">Hear the alarm</string>
+    <string name="profile_ride_alarm_hear_note">It rings even with the phone on silent</string>
+    <string name="profile_ride_alarm_stop">Stop</string>
+    <string name="profile_ride_alarm_note">This only moves the alarm on this phone. It does not change her walk, her time, or when Sakhi tells you she is late.</string>
+    <string name="profile_ride_alarm_row">Alarm if she is not home</string>
+    <string name="profile_ride_alarm_row_subtitle">Wakes this phone after her time</string>
 </resources>

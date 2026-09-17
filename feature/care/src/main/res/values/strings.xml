@@ -252,6 +252,24 @@
     <string name="care_swm_help_ambulance">Ambulance</string>
     <string name="care_swm_help_women">Women</string>
     <string name="care_swm_help_call_a11y">Call %1$s, %2$s. Opens the phone with the number filled in</string>
+
+    <!-- "She has not reached yet": the alarm screen on her person's phone. Word for word
+         the same as iOS's StayWithMeNotReachedScreen, because the two phones must not tell
+         him different things about the same walk. -->
+    <string name="care_swm_alarm_title">She has not reached yet</string>
+    <string name="care_swm_alarm_subject_fallback">She</string>
+    <string name="care_swm_alarm_body">%1$s is %2$d min past the time she gave you, and has not said she is home.</string>
+    <string name="care_swm_alarm_first_step">Most of the time this is traffic. Try calling her first.</string>
+    <string name="care_swm_alarm_was_due">Was due</string>
+    <string name="care_swm_alarm_last_seen">Last seen</string>
+    <string name="care_swm_alarm_her_battery">Her battery</string>
+    <string name="care_swm_alarm_just_now">Just now</string>
+    <string name="care_swm_alarm_minutes_ago">%1$d min</string>
+    <string name="care_swm_alarm_hours_ago">%1$d hr</string>
+    <string name="care_swm_alarm_none">None</string>
+    <string name="care_swm_alarm_call_label">If you cannot reach her</string>
+    <string name="care_swm_alarm_disclaimer">Sakhi cannot reach her for you. Her location is here because she asked you to stay with her.</string>
+    <string name="care_swm_alarm_slide">Slide to say you\'ve got it</string>
     <string name="care_swm_places_loading">Looking for help near her</string>
     <string name="care_swm_places_empty">Nothing found close to her yet</string>
     <string name="care_swm_places_loading_you">Looking for help near you</string>

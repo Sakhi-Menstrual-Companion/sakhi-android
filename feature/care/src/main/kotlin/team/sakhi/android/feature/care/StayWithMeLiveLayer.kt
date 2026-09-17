@@ -113,6 +113,18 @@ fun StayWithMeLiveLayer(
             refreshing = refreshing,
             recenterKey = recenterTick,
         )
+        // Past her time by his own delay, and she has not said she is home. This takes the
+        // whole screen with the alarm going, and he has to slide it away. The rule for when
+        // is `StayWithMeAlarm`, shared with iOS.
+        watching != null && partner != null && state.alarmRaised -> StayWithMeNotReachedScreen(
+            session = watching,
+            personName = careDisplayName(partner.partnership, isPartnerRole = true),
+            faceIndex = CareAvatars.indexFor(watching.ownerUserId),
+            now = state.now,
+            trail = state.watchingTrail,
+            onAcknowledged = viewModel::acknowledgeAlarm,
+            onClose = onClose,
+        )
         watching != null && partner != null -> StayWithMeWatcherLive(
             session = watching,
             herName = careDisplayName(partner.partnership, isPartnerRole = true),

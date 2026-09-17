@@ -1341,7 +1341,8 @@ private fun updatedText(ageSeconds: Long): String = when {
 
 private fun minutesUp(seconds: Long): Int = ((seconds + 59) / 60).toInt().coerceAtLeast(0)
 
-private fun timeOf(instant: Instant): String =
+/** A wall clock time in her own locale. Shared with the alarm screen. */
+internal fun timeOf(instant: Instant): String =
     DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(instant.toEpochMilliseconds()))
 
 private fun requiredPermissions(): List<String> = buildList {
@@ -1354,7 +1355,7 @@ private fun granted(context: Context, permission: String): Boolean =
     ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
 
 /** Only fills in the number. The call is always theirs to place. */
-private fun dial(context: Context, number: String) {
+internal fun dial(context: Context, number: String) {
     runCatching {
         context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }

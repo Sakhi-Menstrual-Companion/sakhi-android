@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.Favorite
@@ -113,6 +114,7 @@ fun ProfileScreen(
     onAppIntegrationClick: () -> Unit = {},
     onHealthDataClick: () -> Unit = {},
     onNotificationsClick: () -> Unit = {},
+    onRideAlarmClick: () -> Unit = {},
     onAppearanceClick: () -> Unit = {},
     onHelpSupportClick: () -> Unit = {},
     onPrivacySecurityClick: () -> Unit = {},
@@ -142,6 +144,7 @@ fun ProfileScreen(
         onAppIntegrationClick = onAppIntegrationClick,
         onHealthDataClick = onHealthDataClick,
         onNotificationsClick = onNotificationsClick,
+        onRideAlarmClick = onRideAlarmClick,
         onAppearanceClick = onAppearanceClick,
         onHelpSupportClick = onHelpSupportClick,
         onPrivacySecurityClick = onPrivacySecurityClick,
@@ -505,6 +508,7 @@ private fun profileSettingGroups(
     onAppIntegrationClick: () -> Unit,
     onHealthDataClick: () -> Unit,
     onNotificationsClick: () -> Unit,
+    onRideAlarmClick: () -> Unit,
     onAppearanceClick: () -> Unit,
     onHelpSupportClick: () -> Unit,
     onPrivacySecurityClick: () -> Unit,
@@ -543,15 +547,22 @@ private fun profileSettingGroups(
 
     groups += ProfileSettingGroup(
         label = context.getString(R.string.profile_group_preferences),
-        items = listOf(
-            ProfileSettingItem(Icons.Filled.Notifications, context.getString(R.string.profile_item_notifications), onNotificationsClick),
-            ProfileSettingItem(
-                Icons.Filled.Brush,
-                context.getString(R.string.profile_item_appearance),
-                onAppearanceClick,
-                value = appearanceModeLabel,
-            ),
-        ),
+        items = buildList {
+            add(ProfileSettingItem(Icons.Filled.Notifications, context.getString(R.string.profile_item_notifications), onNotificationsClick))
+            // His alarm, so it belongs on his phone and nowhere near hers. iOS shows this
+            // row on the partner side only, in the same group.
+            if (isPartnerRole) {
+                add(ProfileSettingItem(Icons.Filled.Alarm, context.getString(R.string.profile_ride_alarm_row), onRideAlarmClick))
+            }
+            add(
+                ProfileSettingItem(
+                    Icons.Filled.Brush,
+                    context.getString(R.string.profile_item_appearance),
+                    onAppearanceClick,
+                    value = appearanceModeLabel,
+                ),
+            )
+        },
     )
 
     groups += ProfileSettingGroup(
