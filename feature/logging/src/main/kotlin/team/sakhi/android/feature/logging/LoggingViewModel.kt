@@ -105,6 +105,18 @@ data class LoggingUiState(
     // year-view multi-select "Edit Period Dates" bar reads this for its own
     // save-button spinner, independent of the single-date `isSaving` flag above.
     val isSavingYearSelection: Boolean = false,
+    /**
+     * Something is recorded for this date that no field of this state carries.
+     *
+     * iOS's `hasAnyData` also counts `sexualActivity`, `medications` and clots. Android has
+     * no editor for the first two (they are carried through from the canonical row) and
+     * never decoded the clots token here, so a date holding only those read as empty: the
+     * log button showed "+" instead of the pencil and opened the quick flow tray, which
+     * cannot show or change any of the three. Read straight off the row and ungated, because
+     * it says only that something is there, never what -- which the calendar's log dot
+     * already shows.
+     */
+    val hasUneditableRecordedDetail: Boolean = false,
 ) {
     /**
      * Matches iOS's real `LoggingViewModel.hasAnyData` (checks every real logged
@@ -122,7 +134,8 @@ data class LoggingUiState(
             bbtCelsius != null ||
             dischargeColor != null ||
             painkillerTaken ||
-            doctorVisited
+            doctorVisited ||
+            hasUneditableRecordedDetail
 }
 
 /**
@@ -800,6 +813,9 @@ class LoggingViewModel(
                 },
                 painkillerTaken = canViewMedications && LogTokenEncoder.hasPainkiller(joinedSymptoms),
                 doctorVisited = canViewMedications && LogTokenEncoder.hasDoctorVisit(joinedSymptoms),
+                hasUneditableRecordedDetail = LogTokenEncoder.hasClots(joinedSymptoms) ||
+                    (existing?.sexualActivity?.takeIf { it.isNotBlank() && it != "none" } != null) ||
+                    existing?.medications?.isNotEmpty() == true,
                 notes = if (canEditNotes) existing?.notes.orEmpty() else "",
                 canLogPeriod = session.can(Permission.LOG_PERIOD),
                 canEditMoods = canEditMoods,
