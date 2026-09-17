@@ -1,5 +1,8 @@
 package team.sakhi.android.feature.care
 
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.ui.input.pointer.pointerInput
 import team.sakhi.android.designsystem.sakhiProfileCardBackground
 import android.Manifest
 import android.content.Context
@@ -25,6 +28,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.WindowInsets
@@ -639,7 +643,7 @@ private fun DestinationCard(place: StayWithMeDestination, route: WalkRoute?, ses
  * visible for up to ten seconds while the phone found a fresh fix, and got tapped again.
  */
 @Composable
-private fun RefreshButton(onClick: () -> Unit, label: String, refreshing: Boolean = false) {
+internal fun RefreshButton(onClick: () -> Unit, label: String, refreshing: Boolean = false) {
     Surface(
         shape = CircleShape,
         color = sakhiLightPink(),
@@ -814,9 +818,10 @@ internal fun StayWithMeWatcherLive(
             // whatever her profile happens to be called ("U" for "User").
             initial = "",
             avatarWithoutName = true,
+            faceIndex = CareAvatars.indexFor(session.ownerUserId),
             trail = trail,
             modifier = Modifier.fillMaxSize(),
-            bottomPadding = maxHeight * WATCHER_PANEL_FRACTION - 28.dp,
+            bottomPadding = 216.dp,
             destination = session.destination,
             routeLine = route?.points.orEmpty(),
             recenterKey = recenterKey,
@@ -828,102 +833,123 @@ internal fun StayWithMeWatcherLive(
             )
         }
 
-        LiveWalkTopBar(onClose = onClose, modifier = Modifier.align(Alignment.TopCenter))
+        // iOS puts three things over the map: the way out, how fresh her position is, and
+        // the one number worth a tap without reading.
+        RideTopBar(
+            onClose = onClose,
+            freshness = session.locationAgeSeconds(now)?.let { updatedText(it) },
+            onCallPolice = { dial(context, "112") },
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
 
-        // The panel rises 24dp over the map's bottom edge.
-        // Sakhi's own background, the one Emergency Assistance's sheet sits on, with white
-        // cards on top. Plain white made the panel read as a system screen.
+        // iOS rests this at 216 and lets it be pulled up. The corners are the app's own
+        // bottom-sheet radius, 40, not the 28 this screen used to draw.
+        var expanded by remember(session.id) { mutableStateOf(false) }
+        val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val panelHeight by animateDpAsState(
+            targetValue = if (expanded) maxHeight - 64.dp else 216.dp + bottomInset,
+            label = "ridePanelHeight",
+        )
         Surface(
-            color = MaterialTheme.colorScheme.background,
-            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            color = RideStyle.ground,
+            shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
+            shadowElevation = 12.dp,
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .fillMaxHeight(WATCHER_PANEL_FRACTION),
+                .height(panelHeight),
         ) {
             LazyColumn(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
-                item(key = "who") {
-                    Row(
-                        modifier = Modifier.padding(
-                            start = SakhiSpacing.space6,
-                            end = SakhiSpacing.space6,
-                            top = SakhiSpacing.space6,
-                        ),
-                        verticalAlignment = Alignment.CenterVertically,
+                item(key = "grabber") {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 10.dp, bottom = 2.dp)
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures { _, dragAmount ->
+                                    if (dragAmount < -6f) expanded = true
+                                    if (dragAmount > 6f) expanded = false
+                                }
+                            },
+                        contentAlignment = Alignment.Center,
                     ) {
-                        WalkAvatar(name = herName, size = 48, fill = accent)
-                        Spacer(Modifier.width(SakhiSpacing.space3))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = if (isLate) {
-                                    stringResource(R.string.care_swm_her_late)
-                                } else {
-                                    stringResource(R.string.care_swm_her_walking)
-                                },
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                                color = if (isLate) AppleSystemColors.red else sakhiLabel(),
-                            )
-                            Text(
-                                text = if (phase == StayWithMePhase.WALKING) {
-                                    stringResource(
-                                        R.string.care_swm_her_home_by,
-                                        timeOf(session.expectedArrival),
-                                        minutesUp(session.secondsRemaining(now)),
-                                    )
-                                } else {
-                                    stringResource(R.string.care_swm_her_due, timeOf(session.expectedArrival))
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = sakhiSecondaryLabel(),
-                            )
-                        }
-                    }
-                }
-
-                item(key = "chips") {
-                    Row(
-                        modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space4),
-                        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
-                    ) {
-                        location?.batteryPercent?.let { battery ->
-                            InfoChip(
-                                icon = if (location.isCharging == true) Icons.Filled.BatteryChargingFull else Icons.Filled.BatteryStd,
-                                text = "$battery%",
-                                tint = if (battery <= 15 && location.isCharging != true) AppleSystemColors.red else sakhiLabel(),
-                            )
-                        }
-                        session.locationAgeSeconds(now)?.let { age ->
-                            InfoChip(icon = Icons.Filled.Schedule, text = updatedText(age), tint = sakhiLabel())
-                        }
-                        // The destination card below already names where she is going.
-                        session.note?.takeIf { session.destination == null }?.let { note ->
-                            InfoChip(icon = Icons.Filled.Place, text = note, tint = sakhiLabel())
-                        }
-                        Spacer(Modifier.weight(1f))
-                        RefreshButton(onClick = onRefresh, label = stringResource(R.string.care_swm_refresh_hers), refreshing = refreshing)
-                    }
-                }
-
-                if (isLate) {
-                    item(key = "late") {
-                        Text(
-                            text = stringResource(R.string.care_swm_late_banner),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = sakhiLabel(),
+                        Box(
                             modifier = Modifier
-                                .padding(horizontal = SakhiSpacing.space6)
-                                .fillMaxWidth()
-                                .background(AppleSystemColors.red.copy(alpha = 0.10f), RoundedCornerShape(SakhiRadius.lg))
-                                .padding(SakhiSpacing.space4),
+                                .size(width = 36.dp, height = 5.dp)
+                                .background(RideStyle.hairline, CircleShape),
                         )
                     }
                 }
 
-                session.destination?.let { place ->
-                    item(key = "destination") { DestinationCard(place, route, session) }
+                item(key = "summary") {
+                    val status = rideWatcherStatus(session, now, route)
+                    val hero = rideWatcherHero(session, now, route)
+                    RideSummary(
+                        heading = when {
+                            phase == StayWithMePhase.LATE -> stringResource(R.string.care_swm_not_reached_heading)
+                            session.destination != null && !session.destination!!.name.equals("home", true) ->
+                                stringResource(R.string.care_swm_going_to, session.destination!!.name)
+                            else -> stringResource(R.string.care_swm_going_home)
+                        },
+                        alerted = phase == StayWithMePhase.LATE,
+                        statusLabel = stringResource(status.labelRes),
+                        statusTint = status.trackTint(),
+                        heroValue = hero.value,
+                        heroUnit = hero.unit,
+                        heroDetail = hero.detail,
+                        heroTint = if (phase == StayWithMePhase.LATE) RideStyle.alert else sakhiLabel(),
+                        faceIndex = CareAvatars.indexFor(session.ownerUserId),
+                        faceCaption = stringResource(R.string.care_swm_her),
+                        facePresent = (session.locationAgeSeconds(now)?.toLong() ?: Long.MAX_VALUE) < 120L,
+                        progress = rideProgress(session, now),
+                        startedAt = session.startedAt,
+                        endCaption = stringResource(
+                            when (phase) {
+                                StayWithMePhase.WALKING -> R.string.care_swm_track_reach_by
+                                StayWithMePhase.GRACE -> R.string.care_swm_track_alert_at
+                                else -> R.string.care_swm_track_was_due
+                            },
+                        ),
+                        endAt = if (phase == StayWithMePhase.GRACE) session.alertAt else session.expectedArrival,
+                    )
                 }
 
-                item(key = "near-label") { SwmSectionLabel(stringResource(R.string.care_swm_help_near_her), top = SakhiSpacing.space5) }
+                item(key = "facts") {
+                    RideFactsCard(
+                        destinationName = session.destination?.name ?: session.note,
+                        freshness = session.locationAgeSeconds(now)?.let { updatedText(it) },
+                        batteryPercent = location?.batteryPercent,
+                        onRefresh = onRefresh,
+                        refreshing = refreshing,
+                    )
+                }
+
+                item(key = "call-label") { SwmSectionLabel(stringResource(R.string.care_swm_call_for_help), top = SakhiSpacing.space5) }
+                item(key = "lines") {
+                    EmergencyCallButtons(onCall = { number -> dial(context, number) })
+                }
+
+                item(key = "near-label") {
+                    Column(
+                        modifier = Modifier.padding(
+                            start = SakhiSpacing.space5,
+                            end = SakhiSpacing.space5,
+                            top = SakhiSpacing.space5,
+                        ),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.care_swm_help_near_her),
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = sakhiLabel(),
+                        )
+                        Text(
+                            text = stringResource(R.string.care_swm_help_near_her_note),
+                            fontSize = 15.sp,
+                            color = sakhiSecondaryLabel(),
+                        )
+                    }
+                }
                 item(key = "near") {
                     GroupedCard {
                         when {
@@ -935,11 +961,6 @@ internal fun StayWithMeWatcherLive(
                             else -> StatusRow(text = stringResource(R.string.care_swm_places_empty), loading = false)
                         }
                     }
-                }
-
-                item(key = "lines-label") { SwmSectionLabel(stringResource(R.string.care_swm_helplines), top = SakhiSpacing.space5) }
-                item(key = "lines") {
-                    EmergencyCallButtons(onCall = { number -> dial(context, number) })
                 }
 
                 item(key = "privacy") {
@@ -1050,6 +1071,11 @@ internal fun WalkMap(
     interactive: Boolean = true,
     /** Changing it frames her again, for after a refresh, whether or not she has moved. */
     recenterKey: Int = 0,
+    /**
+     * Her actual face on the map, the way iOS draws it. Null falls back to the glyph, which
+     * is what her own screen uses for herself.
+     */
+    faceIndex: Int? = null,
 ) {
     val context = LocalContext.current
     val target = location?.let { LatLng(it.latitude, it.longitude) }
@@ -1135,10 +1161,14 @@ internal fun WalkMap(
         destination?.let { place ->
             val pinState = rememberMarkerState(position = LatLng(place.latitude, place.longitude))
             pinState.position = LatLng(place.latitude, place.longitude)
+            val homeIcon = remember(accent) {
+                BitmapDescriptorFactory.fromBitmap(homeMarkerBitmap(context, accent.toArgb()))
+            }
             Marker(
                 state = pinState,
                 title = place.name,
-                icon = remember { BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ROSE) },
+                icon = homeIcon,
+                anchor = Offset(0.5f, 0.5f),
             )
         }
 
@@ -1176,8 +1206,13 @@ internal fun WalkMap(
             )
             val markerState = rememberMarkerState(position = shown)
             markerState.position = shown
-            val icon = remember(accent, initial, avatarWithoutName) {
-                BitmapDescriptorFactory.fromBitmap(markerBitmap(context, accent.toArgb(), initial, avatar = initial.isNotEmpty() || avatarWithoutName))
+            val icon = remember(accent, initial, avatarWithoutName, faceIndex) {
+                val bitmap = if (faceIndex != null) {
+                    faceMarkerBitmap(context, faceIndex, accent.toArgb())
+                } else {
+                    markerBitmap(context, accent.toArgb(), initial, avatar = initial.isNotEmpty() || avatarWithoutName)
+                }
+                BitmapDescriptorFactory.fromBitmap(bitmap)
             }
             Marker(state = markerState, icon = icon, anchor = Offset(0.5f, 0.5f), flat = true)
         }
@@ -1192,6 +1227,59 @@ private fun interpolate(from: LatLng?, to: LatLng?, fraction: Float): LatLng? {
 }
 
 /** Her dot: a filled circle with a white collar, her initial on it when there is one. */
+/**
+ * Her face on the map, inside a white ring, the way iOS's `WalkRidePuck` draws it. Forty
+ * across like the glyph marker it replaces, so the map's framing does not change.
+ */
+private fun faceMarkerBitmap(context: Context, faceIndex: Int, ringColor: Int): Bitmap {
+    val density = context.resources.displayMetrics.density
+    val size = (44 * density).toInt()
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val radius = size / 2f
+    canvas.drawCircle(radius, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ringColor })
+    canvas.drawCircle(radius, radius, radius - 2.5f * density, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE })
+    val face = androidx.core.content.ContextCompat.getDrawable(context, CareAvatars.drawable(faceIndex))
+    if (face != null) {
+        val inset = (3.5f * density).toInt()
+        face.setBounds(inset, inset, size - inset, size - inset)
+        val saved = canvas.save()
+        val clip = android.graphics.Path().apply {
+            addCircle(radius, radius, radius - 3.5f * density, android.graphics.Path.Direction.CW)
+        }
+        canvas.clipPath(clip)
+        face.draw(canvas)
+        canvas.restoreToCount(saved)
+    }
+    return bitmap
+}
+
+/** Where she is going: a disc with a house in it, as iOS draws the destination. */
+private fun homeMarkerBitmap(context: Context, color: Int): Bitmap {
+    val density = context.resources.displayMetrics.density
+    val size = (32 * density).toInt()
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+    val radius = size / 2f
+    canvas.drawCircle(radius, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = android.graphics.Color.WHITE })
+    canvas.drawCircle(radius, radius, radius - 2.5f * density, Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = color })
+    val white = Paint(Paint.ANTI_ALIAS_FLAG).apply { this.color = android.graphics.Color.WHITE }
+    // A small house: a roof over a square, centred.
+    val roof = android.graphics.Path().apply {
+        moveTo(radius, radius - 6.5f * density)
+        lineTo(radius + 6f * density, radius - 0.5f * density)
+        lineTo(radius - 6f * density, radius - 0.5f * density)
+        close()
+    }
+    canvas.drawPath(roof, white)
+    canvas.drawRect(
+        radius - 4f * density, radius - 0.5f * density,
+        radius + 4f * density, radius + 6f * density,
+        white,
+    )
+    return bitmap
+}
+
 private fun markerBitmap(context: Context, color: Int, initial: String, avatar: Boolean): Bitmap {
     val density = context.resources.displayMetrics.density
     val size = (if (avatar) 40 else 22) * density
@@ -1339,7 +1427,7 @@ private fun updatedText(ageSeconds: Long): String = when {
     else -> stringResource(R.string.care_swm_updated_minutes, (ageSeconds / 60).toInt())
 }
 
-private fun minutesUp(seconds: Long): Int = ((seconds + 59) / 60).toInt().coerceAtLeast(0)
+internal fun minutesUp(seconds: Long): Int = ((seconds + 59) / 60).toInt().coerceAtLeast(0)
 
 /** A wall clock time in her own locale. Shared with the alarm screen. */
 internal fun timeOf(instant: Instant): String =
