@@ -2,6 +2,7 @@ package team.sakhi.android.feature.care
 
 import android.content.Context
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
@@ -9,6 +10,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +40,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -121,11 +124,19 @@ internal fun StayWithMeNotReachedScreen(
 
         LiveWalkTopBar(onClose = onClose, modifier = Modifier.align(Alignment.TopStart))
 
+        // Pull it up for the rest. iOS's panel does the same, and in an emergency the last
+        // thing to ask of someone is a scroll they cannot see the bottom of.
+        var expanded by remember { mutableStateOf(false) }
+        val panelHeight by animateDpAsState(
+            targetValue = if (expanded) ExpandedPanelHeight else PanelHeight,
+            label = "alarmPanelHeight",
+        )
+
         Surface(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
-                .height(PanelHeight),
+                .height(panelHeight),
             shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
             color = sakhiSystemBackground(),
             // The one shadow Sakhi allows, and only over a map: the panel has to read as
@@ -133,6 +144,25 @@ internal fun StayWithMeNotReachedScreen(
             shadowElevation = 12.dp,
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
+                // The grabber, and the whole thing it belongs to, answers a drag either way.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp, bottom = 2.dp)
+                        .pointerInput(Unit) {
+                            detectVerticalDragGestures { _, dragAmount ->
+                                if (dragAmount < -6f) expanded = true
+                                if (dragAmount > 6f) expanded = false
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 36.dp, height = 5.dp)
+                            .background(sakhiTertiaryLabel().copy(alpha = 0.35f), CircleShape),
+                    )
+                }
                 Column(
                     modifier = Modifier
                         .weight(1f)
@@ -389,4 +419,6 @@ internal fun SlideToConfirm(
 /** iOS uses `UIColor.systemRed` here, and only here. Nothing else on a walk screen is red. */
 private val AlarmRed = Color(0xFFFF3B30)
 private val PanelHeight = 430.dp
+/** Pulled up: everything, including the three numbers to call. */
+private val ExpandedPanelHeight = 680.dp
 private val KnobSize = 52.dp
