@@ -3,6 +3,7 @@ package team.sakhi.android.feature.care
 import android.content.Context
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.tween
@@ -10,6 +11,7 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -17,20 +19,27 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -54,6 +63,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
@@ -63,7 +74,11 @@ import kotlinx.datetime.Instant
 import team.sakhi.android.platform.StayWithMeAlarmPlayer
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiLightPink
+import team.sakhi.android.designsystem.sakhiDeepRose
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
+import team.sakhi.android.designsystem.sakhiProfileCardBackground
+import team.sakhi.android.designsystem.sakhiSeparator
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 import team.sakhi.staywithme.StayWithMeLocation
@@ -110,7 +125,7 @@ internal fun StayWithMeNotReachedScreen(
 
     val minutesLate = max(1, ((now - session.expectedArrival).inWholeMinutes).toInt())
 
-    Box(modifier = Modifier.fillMaxSize().background(sakhiSystemBackground())) {
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         WalkMap(
             location = session.lastLocation,
             accent = AlarmRed,
@@ -122,13 +137,23 @@ internal fun StayWithMeNotReachedScreen(
             modifier = Modifier.fillMaxSize(),
         )
 
-        LiveWalkTopBar(onClose = onClose, modifier = Modifier.align(Alignment.TopStart))
+        // iOS puts a plain white circle with a cross on the left and a deep-rose 112 pill
+        // on the right, not the "Contact Police" pill the rest of the walk screens use.
+        AlarmTopBar(
+            onClose = onClose,
+            onCallPolice = { dial(context, "112") },
+            modifier = Modifier.align(Alignment.TopStart),
+        )
 
         // Pull it up for the rest. iOS's panel does the same, and in an emergency the last
         // thing to ask of someone is a scroll they cannot see the bottom of.
         var expanded by remember { mutableStateOf(false) }
+        // iOS's 430 is 430 of content: its panel runs under the home indicator and adds the
+        // safe area below. Android's gesture bar would otherwise eat that same 430 from the
+        // inside, which pushed the three numbers' captions below the fold.
+        val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         val panelHeight by animateDpAsState(
-            targetValue = if (expanded) ExpandedPanelHeight else PanelHeight,
+            targetValue = (if (expanded) ExpandedPanelHeight else PanelHeight) + bottomInset,
             label = "alarmPanelHeight",
         )
 
@@ -138,7 +163,8 @@ internal fun StayWithMeNotReachedScreen(
                 .fillMaxWidth()
                 .height(panelHeight),
             shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
-            color = sakhiSystemBackground(),
+            // iOS fills this with `DS.Colors.background`, the app's own pink, not white.
+            color = MaterialTheme.colorScheme.background,
             // The one shadow Sakhi allows, and only over a map: the panel has to read as
             // separate from what is under it. Same value as iOS's `WalkBottomPanel`.
             shadowElevation = 12.dp,
@@ -169,29 +195,33 @@ internal fun StayWithMeNotReachedScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(horizontal = 20.dp),
                 ) {
-                    Spacer(Modifier.height(SakhiSpacing.space3))
+                    Spacer(Modifier.height(6.dp))
                     AlarmFace(faceIndex = faceIndex, modifier = Modifier.align(Alignment.CenterHorizontally))
                     Spacer(Modifier.height(14.dp))
                     AlarmHeadline(personName = personName, minutesLate = minutesLate)
                     Spacer(Modifier.height(20.dp))
                     AlarmFacts(session = session, now = now)
                     Spacer(Modifier.height(20.dp))
+                    // iOS: a 17pt bold heading, ten points above the buttons, inset four.
                     Text(
                         text = stringResource(R.string.care_swm_alarm_call_label),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = sakhiSecondaryLabel(),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = sakhiLabel(),
+                        modifier = Modifier.padding(start = 4.dp),
                     )
-                    Spacer(Modifier.height(SakhiSpacing.space2))
+                    Spacer(Modifier.height(10.dp))
                     EmergencyCallButtons(onCall = { number -> dial(context, number) })
                     Spacer(Modifier.height(18.dp))
                     Text(
                         text = stringResource(R.string.care_swm_alarm_disclaimer),
-                        style = MaterialTheme.typography.bodySmall,
+                        fontSize = 13.sp,
+                        lineHeight = 17.sp,
                         color = sakhiTertiaryLabel(),
                         textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
                     )
-                    Spacer(Modifier.height(SakhiSpacing.space4))
+                    Spacer(Modifier.height(24.dp))
                 }
 
                 SlideToConfirm(
@@ -206,6 +236,71 @@ internal fun StayWithMeNotReachedScreen(
                         .navigationBarsPadding(),
                 )
             }
+        }
+    }
+}
+
+/**
+ * The way out, and the one number worth a tap without reading.
+ *
+ * iOS's alarm screen uses a plain white circle with a cross and a deep-rose 112 pill, not
+ * the "Contact Police" pill the other walk screens carry. Same sizes: a 40pt circle with a
+ * half-point hairline, and a 40pt-tall capsule with 16 of padding either side.
+ */
+@Composable
+private fun AlarmTopBar(
+    onClose: () -> Unit,
+    onCallPolice: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val closeLabel = stringResource(R.string.care_swm_alarm_back)
+    val policeLabel = stringResource(R.string.care_swm_alarm_call_police_a11y)
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .background(sakhiSystemBackground(), CircleShape)
+                .border(0.5.dp, sakhiSeparator(), CircleShape)
+                .clickable(onClick = onClose)
+                .semantics { contentDescription = closeLabel },
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = null,
+                tint = sakhiLabel(),
+                modifier = Modifier.size(15.dp),
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        Row(
+            modifier = Modifier
+                .height(40.dp)
+                .background(sakhiDeepRose(), CircleShape)
+                .clickable(onClick = onCallPolice)
+                .padding(horizontal = 16.dp)
+                .semantics { contentDescription = policeLabel },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Phone,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(13.dp),
+            )
+            Text(
+                text = "112",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
         }
     }
 }
@@ -238,7 +333,7 @@ private fun AlarmFace(faceIndex: Int, modifier: Modifier = Modifier) {
             modifier = Modifier
                 .size(84.dp)
                 .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant, CircleShape)
+                .background(sakhiLightPink(), CircleShape)
                 .scale(CareAvatars.scale(faceIndex)),
         )
     }
@@ -255,22 +350,26 @@ private fun AlarmHeadline(personName: String, minutesLate: Int) {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Text(
             text = stringResource(R.string.care_swm_alarm_title),
-            style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold, fontSize = 28.sp),
+            fontSize = 28.sp,
+            lineHeight = 34.sp,
+            fontWeight = FontWeight.Bold,
             color = sakhiLabel(),
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(SakhiSpacing.space2))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = stringResource(R.string.care_swm_alarm_body, subject, minutesLate),
-            style = MaterialTheme.typography.bodyLarge,
+            fontSize = 16.sp,
+            lineHeight = 21.sp,
             color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(SakhiSpacing.space1))
+        Spacer(Modifier.height(2.dp))
         // Never a fright without a first step. Most of these are traffic.
         Text(
             text = stringResource(R.string.care_swm_alarm_first_step),
-            style = MaterialTheme.typography.bodyMedium,
+            fontSize = 15.sp,
+            lineHeight = 20.sp,
             color = sakhiLabel(),
             textAlign = TextAlign.Center,
         )
@@ -282,7 +381,7 @@ private fun AlarmHeadline(personName: String, minutesLate: Int) {
 private fun AlarmFacts(session: StayWithMeSession, now: Instant) {
     Surface(
         shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        color = sakhiProfileCardBackground(),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -323,15 +422,18 @@ private fun AlarmFact(value: String, caption: String, modifier: Modifier = Modif
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = modifier) {
         Text(
             text = value,
-            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold, fontSize = 20.sp),
+            fontSize = 20.sp,
+            lineHeight = 24.sp,
+            fontWeight = FontWeight.Bold,
             color = sakhiLabel(),
             maxLines = 1,
         )
         Spacer(Modifier.height(4.dp))
         Text(
             text = caption,
-            style = MaterialTheme.typography.bodySmall,
-            color = sakhiTertiaryLabel(),
+            fontSize = 13.sp,
+            lineHeight = 16.sp,
+            color = sakhiSecondaryLabel(),
             maxLines = 1,
         )
     }
@@ -339,11 +441,12 @@ private fun AlarmFact(value: String, caption: String, modifier: Modifier = Modif
 
 @Composable
 private fun AlarmFactDivider() {
+    // iOS: a half-point separator, 36 tall.
     Box(
         modifier = Modifier
-            .width(1.dp)
+            .width(0.5.dp)
             .height(36.dp)
-            .background(sakhiTertiaryLabel().copy(alpha = 0.25f)),
+            .background(sakhiSeparator()),
     )
 }
 
@@ -351,7 +454,12 @@ private fun AlarmFactDivider() {
  * Drag the knob the whole way to confirm.
  *
  * A tap is something a phone in a pocket can do by itself, and "got it" has to mean he read
- * it. The knob springs back if he lets go early.
+ * it. The knob springs back if he lets go early, and it takes three quarters of the way to
+ * count, exactly as iOS's `SlideToConfirm` does.
+ *
+ * Its numbers are iOS's: a 64 tall white capsule, a five point inset, the knob filling the
+ * rest, the title bold sixteen in secondary ink, fading as he slides, and the track filling
+ * behind it in the alarm's own red at 14%.
  */
 @Composable
 internal fun SlideToConfirm(
@@ -362,55 +470,72 @@ internal fun SlideToConfirm(
     val density = LocalDensity.current
     var trackWidth by remember { mutableFloatStateOf(0f) }
     var offset by remember { mutableFloatStateOf(0f) }
-    var done by remember { mutableFloatStateOf(0f) }
-    val knobPx = with(density) { KnobSize.toPx() }
+    var confirmed by remember { mutableStateOf(false) }
+    val knob = TrackHeight - TrackInset * 2
+    val knobPx = with(density) { knob.toPx() }
+    val insetPx = with(density) { TrackInset.toPx() }
+    val span = (trackWidth - knobPx - insetPx * 2).coerceAtLeast(1f)
+    val slid by animateFloatAsState(targetValue = offset, label = "slideOffset")
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(KnobSize + 12.dp)
+            .height(TrackHeight)
             .clip(CircleShape)
-            .background(AlarmRed.copy(alpha = 0.12f))
-            .onSizeChanged { trackWidth = it.width.toFloat() },
+            .background(sakhiProfileCardBackground())
+            .onSizeChanged { trackWidth = it.width.toFloat() }
+            .semantics { contentDescription = title },
         contentAlignment = Alignment.CenterStart,
     ) {
+        // What has been slid so far, in the alarm's own colour.
+        Box(
+            modifier = Modifier
+                .padding(TrackInset)
+                .height(knob)
+                .width(with(density) { (knobPx + slid).toDp() })
+                .clip(CircleShape)
+                .background(AlarmRed.copy(alpha = 0.14f)),
+        )
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
-            color = AlarmRed,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = sakhiSecondaryLabel().copy(
+                alpha = (1f - (slid / span) * 1.4f).coerceIn(0f, 1f),
+            ),
             textAlign = TextAlign.Center,
             modifier = Modifier.fillMaxWidth(),
         )
         Box(
             modifier = Modifier
-                .offset { IntOffset(offset.roundToInt(), 0) }
-                .padding(6.dp)
-                .size(KnobSize)
+                .offset { IntOffset((insetPx + slid).roundToInt(), 0) }
+                .size(knob)
                 .background(AlarmRed, CircleShape)
                 .pointerInput(trackWidth) {
                     detectHorizontalDragGestures(
                         onDragEnd = {
-                            val limit = (trackWidth - knobPx - 12f).coerceAtLeast(1f)
-                            if (offset >= limit * 0.9f && done == 0f) {
-                                done = 1f
+                            if (confirmed) return@detectHorizontalDragGestures
+                            if (offset > span * 0.75f) {
+                                confirmed = true
+                                offset = span
                                 onConfirmed()
                             } else {
                                 offset = 0f
                             }
                         },
-                        onDragCancel = { offset = 0f },
+                        onDragCancel = { if (!confirmed) offset = 0f },
                     ) { _, dragAmount ->
-                        val limit = (trackWidth - knobPx - 12f).coerceAtLeast(1f)
-                        offset = (offset + dragAmount).coerceIn(0f, limit)
+                        if (confirmed) return@detectHorizontalDragGestures
+                        offset = (offset + dragAmount).coerceIn(0f, span)
                     }
                 },
             contentAlignment = Alignment.Center,
         ) {
             Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                imageVector = if (confirmed) Icons.Filled.Check else Icons.Filled.ChevronRight,
                 contentDescription = null,
                 tint = Color.White,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(18.dp),
             )
         }
     }
@@ -421,4 +546,6 @@ private val AlarmRed = Color(0xFFFF3B30)
 private val PanelHeight = 430.dp
 /** Pulled up: everything, including the three numbers to call. */
 private val ExpandedPanelHeight = 680.dp
-private val KnobSize = 52.dp
+/** iOS: a 64 tall track with a five point inset, so the knob is 54. */
+private val TrackHeight = 64.dp
+private val TrackInset = 5.dp
