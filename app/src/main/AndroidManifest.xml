@@ -95,5 +95,11 @@
                 <data android:scheme="https" android:host="sakhi.com" />
             </intent-filter>
         </activity>
+
+        <!-- The walk's two local alarms: "she has not reached yet" and "are you okay?".
+             Both are decided on the phone, so neither can come from the server. -->
+        <receiver
+            android:name="team.sakhi.android.platform.StayWithMeAlarmReceiver"
+            android:exported="false" />
     </application>
 </manifest>

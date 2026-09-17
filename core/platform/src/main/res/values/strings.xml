@@ -87,4 +87,11 @@
     <string name="platform_push_swm_cancelled_body">Her walk has ended.</string>
     <string name="platform_push_swm_late_title">%1$s has not reached yet</string>
     <string name="platform_push_swm_late_body">She is past her time. Tap to see where she is.</string>
+
+    <!-- The two things a walk says when nobody is looking at the app. Same words as iOS's
+         local notifications. -->
+    <string name="platform_swm_not_reached_title">She has not reached yet</string>
+    <string name="platform_swm_not_reached_body">She is past the time she gave you. Open Sakhi.</string>
+    <string name="platform_swm_check_in_title">Are you okay?</string>
+    <string name="platform_swm_check_in_body">Tap to tell Sakhi you are fine.</string>
 </resources>

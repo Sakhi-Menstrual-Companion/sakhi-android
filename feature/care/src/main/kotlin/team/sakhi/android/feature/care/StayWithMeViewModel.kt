@@ -19,6 +19,7 @@ import kotlinx.datetime.Instant
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.platform.StayWithMeLocationService
+import team.sakhi.android.platform.StayWithMeLocalAlarms
 import team.sakhi.emergency.EmergencySafePlace
 import team.sakhi.emergency.EmergencySafePlaceKind
 import team.sakhi.emergency.EmergencySafePlacesProvider
@@ -29,6 +30,7 @@ import team.sakhi.platform.BiometricResult
 import team.sakhi.staywithme.CarePartnerCard
 import team.sakhi.staywithme.StayWithMeAlarm
 import team.sakhi.staywithme.StayWithMeAlarmPreference
+import team.sakhi.staywithme.StayWithMeCheckInPreference
 import team.sakhi.staywithme.StayWithMeDestination
 import team.sakhi.staywithme.StayWithMeLocation
 import team.sakhi.staywithme.StayWithMeRealtimeCoordinator
@@ -87,6 +89,7 @@ class StayWithMeViewModel(
     private val placesProvider: EmergencySafePlacesProvider,
     private val hapticManager: AndroidHapticManager,
     private val alarmPreference: StayWithMeAlarmPreference,
+    private val checkInPreference: StayWithMeCheckInPreference,
     private val kvStore: PlatformKeyValueStore,
     private val biometrics: BiometricInterface,
 ) : ViewModel() {
@@ -178,18 +181,46 @@ class StayWithMeViewModel(
         val id = store.watching.value?.id ?: return
         kvStore.set(ACKNOWLEDGED_ALARM_KEY, id)
         acknowledgedAlarmId.value = id
+        StayWithMeLocalAlarms.cancelNotReached(appContext)
         hapticManager.impact(HapticImpact.HEAVY)
     }
 
     init {
-        // "Are you okay?", every ten minutes while she is walking, the same interval iOS
-        // schedules its check-in notifications on. Only while her own walk is live, and
-        // never while one is already waiting for an answer.
+        // "Are you okay?", on her own interval, while the app is open. The same question is
+        // scheduled as a notification below, for when it is not.
         viewModelScope.launch {
             while (isActive) {
-                delay(CHECK_IN_EVERY_MS)
+                delay(checkInPreference.minutes().coerceAtLeast(1) * 60_000L)
                 if (store.mine.value?.status?.isLive == true && !checkIn.value.requested) {
                     requestCheckIn()
+                }
+            }
+        }
+
+        // The two things a walk has to say when nobody is looking at the app. Both are
+        // decided here rather than by the server, because his alarm delay and her check-in
+        // interval never leave their own phones.
+        viewModelScope.launch {
+            store.watching.collect { watched ->
+                if (watched != null && watched.status.isLive) {
+                    StayWithMeLocalAlarms.scheduleNotReached(
+                        context = appContext,
+                        sessionId = watched.id,
+                        atEpochMillis = StayWithMeAlarm
+                            .alarmAt(watched, alarmPreference.minutes())
+                            .toEpochMilliseconds(),
+                    )
+                } else {
+                    StayWithMeLocalAlarms.cancelNotReached(appContext)
+                }
+            }
+        }
+        viewModelScope.launch {
+            store.mine.collect { walk ->
+                if (walk != null && walk.status.isLive) {
+                    StayWithMeLocalAlarms.scheduleCheckIn(appContext, checkInPreference.minutes())
+                } else {
+                    StayWithMeLocalAlarms.cancelCheckIn(appContext)
                 }
             }
         }
@@ -427,9 +458,6 @@ class StayWithMeViewModel(
         private const val REFRESH_MIN_SPIN_MS = 450L
         /** The walk whose alarm he has already slid away, on this phone. */
         const val ACKNOWLEDGED_ALARM_KEY = "stayWithMe.notReached.acknowledged"
-
-        /** iOS's `StayWithMePlanStore.checkInMinutes` default: ten minutes. */
-        const val CHECK_IN_EVERY_MS = 10 * 60 * 1000L
 
         const val POLL_MS = 10_000L
 

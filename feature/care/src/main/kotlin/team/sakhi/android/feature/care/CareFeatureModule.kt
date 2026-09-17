@@ -21,6 +21,7 @@ val careFeatureModule = module {
             placesProvider = get(),
             hapticManager = get(),
             alarmPreference = get(),
+            checkInPreference = get(),
             kvStore = get(),
             biometrics = get(),
         )
