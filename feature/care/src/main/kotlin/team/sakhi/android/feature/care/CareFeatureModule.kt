@@ -22,6 +22,7 @@ val careFeatureModule = module {
             hapticManager = get(),
             alarmPreference = get(),
             kvStore = get(),
+            biometrics = get(),
         )
     }
     viewModel {

@@ -397,6 +397,11 @@ internal fun StayWithMeOwnerLive(
     onExtend: () -> Unit,
     onStop: () -> Unit,
     onClose: () -> Unit,
+    /** "Are you okay?" is waiting for her answer. */
+    checkInRequested: Boolean = false,
+    checkInChecking: Boolean = false,
+    checkInFailed: Boolean = false,
+    onCheckInOkay: () -> Unit = {},
     onRefresh: () -> Unit = {},
     route: WalkRoute? = null,
     /** A refresh is in flight: the button shows a spinner. */
@@ -447,10 +452,26 @@ internal fun StayWithMeOwnerLive(
 
         var expanded by remember(session.id) { mutableStateOf(false) }
         val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val restingHeight = if (checkInRequested) 216.dp else 318.dp
         val panelHeight by animateDpAsState(
-            targetValue = if (expanded) maxHeight - 64.dp else 318.dp + bottomInset,
+            targetValue = if (expanded) maxHeight - 64.dp else restingHeight + bottomInset,
             label = "ownerPanelHeight",
         )
+
+        // Above the panel, over the map: one thing asking at a time (Karan, 2026-09-16).
+        if (checkInRequested) {
+            RideCheckInBox(
+                personName = personName,
+                checking = checkInChecking,
+                failed = checkInFailed,
+                onOkay = onCheckInOkay,
+                onGetHelp = { dial(context, "112") },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = restingHeight + bottomInset + 10.dp),
+            )
+        }
         Surface(
             color = RideStyle.ground,
             shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
@@ -558,12 +579,14 @@ internal fun StayWithMeOwnerLive(
 
                 // iOS's two buttons, side by side: a 112 wide white "+15 min" and "I'm home"
                 // taking the rest, both 58 tall.
-                RideFooterButtons(
-                    onExtend = onExtend,
-                    onArrive = onArrive,
-                    enabled = !isBusy,
-                    busy = isBusy,
-                )
+                if (!checkInRequested) {
+                    RideFooterButtons(
+                        onExtend = onExtend,
+                        onArrive = onArrive,
+                        enabled = !isBusy,
+                        busy = isBusy,
+                    )
+                }
             }
         }
     }

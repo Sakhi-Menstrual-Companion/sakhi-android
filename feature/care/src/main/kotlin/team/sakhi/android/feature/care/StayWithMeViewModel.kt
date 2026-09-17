@@ -24,6 +24,8 @@ import team.sakhi.emergency.EmergencySafePlaceKind
 import team.sakhi.emergency.EmergencySafePlacesProvider
 import team.sakhi.session.SessionManager
 import team.sakhi.platform.PlatformKeyValueStore
+import team.sakhi.platform.BiometricInterface
+import team.sakhi.platform.BiometricResult
 import team.sakhi.staywithme.CarePartnerCard
 import team.sakhi.staywithme.StayWithMeAlarm
 import team.sakhi.staywithme.StayWithMeAlarmPreference
@@ -56,6 +58,15 @@ data class StayWithMeUiState(
     /** True while the walk is arriving on a socket rather than being asked for. */
     val isLiveSocket: Boolean = false,
     /**
+     * True while "Are you okay?" is waiting for her answer. The panel drops to make room
+     * and its buttons hide, so only one thing is asking at a time.
+     */
+    val checkInRequested: Boolean = false,
+    /** Her face is being checked right now. */
+    val checkInChecking: Boolean = false,
+    /** It was not her, or she cancelled. The box says so and stays. */
+    val checkInFailed: Boolean = false,
+    /**
      * True when this phone should be showing "she has not reached yet", with the alarm.
      *
      * The rule is `StayWithMeAlarm`, shared with iOS, so the same walk raises the alarm at
@@ -77,6 +88,7 @@ class StayWithMeViewModel(
     private val hapticManager: AndroidHapticManager,
     private val alarmPreference: StayWithMeAlarmPreference,
     private val kvStore: PlatformKeyValueStore,
+    private val biometrics: BiometricInterface,
 ) : ViewModel() {
 
     /**
@@ -84,6 +96,14 @@ class StayWithMeViewModel(
      * that comes back the moment the screen redraws is worse than one that never fired.
      */
     private val acknowledgedAlarmId = MutableStateFlow(kvStore.get(ACKNOWLEDGED_ALARM_KEY))
+
+    private val checkIn = MutableStateFlow(CheckInState())
+
+    private data class CheckInState(
+        val requested: Boolean = false,
+        val checking: Boolean = false,
+        val failed: Boolean = false,
+    )
 
     private val now = MutableStateFlow(store.now())
     private val places = MutableStateFlow<List<EmergencySafePlace>>(emptyList())
@@ -111,8 +131,11 @@ class StayWithMeViewModel(
         }
 
     val uiState: StateFlow<StayWithMeUiState> =
-        combine(withTrails, acknowledgedAlarmId) { state, acknowledged ->
+        combine(withTrails, acknowledgedAlarmId, checkIn) { state, acknowledged, ask ->
             state.copy(
+                checkInRequested = ask.requested && state.mine != null,
+                checkInChecking = ask.checking,
+                checkInFailed = ask.failed,
                 alarmRaised = StayWithMeAlarm.isRaised(
                     session = state.watching,
                     now = state.now,
@@ -121,6 +144,34 @@ class StayWithMeViewModel(
                 ),
             )
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), StayWithMeUiState(now = store.now()))
+
+    /** Time to ask her again. Comes from the check-in push, or the timer below. */
+    fun requestCheckIn() {
+        if (store.mine.value == null) return
+        checkIn.value = CheckInState(requested = true)
+        hapticManager.impact(HapticImpact.HEAVY)
+    }
+
+    /**
+     * She said she is okay. Her face is asked for first, because a box anyone holding her
+     * phone could dismiss would make the question worth nothing.
+     */
+    fun confirmCheckIn() {
+        viewModelScope.launch {
+            checkIn.value = checkIn.value.copy(checking = true, failed = false)
+            val isHer = runCatching {
+                biometrics.authenticate(appContext.getString(R.string.care_swm_checkin_reason))
+            }.getOrNull()
+            val passed = isHer is BiometricResult.Success
+            if (passed) {
+                checkIn.value = CheckInState()
+                store.markSeen()
+                hapticManager.impact(HapticImpact.MEDIUM)
+            } else {
+                checkIn.value = CheckInState(requested = true, checking = false, failed = true)
+            }
+        }
+    }
 
     /** He slid it away. This walk does not raise the alarm again. */
     fun acknowledgeAlarm() {
@@ -131,6 +182,17 @@ class StayWithMeViewModel(
     }
 
     init {
+        // "Are you okay?", every ten minutes while she is walking, the same interval iOS
+        // schedules its check-in notifications on. Only while her own walk is live, and
+        // never while one is already waiting for an answer.
+        viewModelScope.launch {
+            while (isActive) {
+                delay(CHECK_IN_EVERY_MS)
+                if (store.mine.value?.status?.isLive == true && !checkIn.value.requested) {
+                    requestCheckIn()
+                }
+            }
+        }
         // The countdown's clock. One tick a second, only while someone is subscribed.
         viewModelScope.launch {
             while (isActive) {
@@ -365,6 +427,9 @@ class StayWithMeViewModel(
         private const val REFRESH_MIN_SPIN_MS = 450L
         /** The walk whose alarm he has already slid away, on this phone. */
         const val ACKNOWLEDGED_ALARM_KEY = "stayWithMe.notReached.acknowledged"
+
+        /** iOS's `StayWithMePlanStore.checkInMinutes` default: ten minutes. */
+        const val CHECK_IN_EVERY_MS = 10 * 60 * 1000L
 
         const val POLL_MS = 10_000L
 

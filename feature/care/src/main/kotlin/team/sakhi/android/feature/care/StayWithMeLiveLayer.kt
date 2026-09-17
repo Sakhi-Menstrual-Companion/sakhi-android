@@ -112,6 +112,10 @@ fun StayWithMeLiveLayer(
             route = route,
             refreshing = refreshing,
             recenterKey = recenterTick,
+            checkInRequested = state.checkInRequested,
+            checkInChecking = state.checkInChecking,
+            checkInFailed = state.checkInFailed,
+            onCheckInOkay = viewModel::confirmCheckIn,
         )
         // Past her time by his own delay, and she has not said she is home. This takes the
         // whole screen with the alarm going, and he has to slide it away. The rule for when

@@ -306,6 +306,13 @@
     <string name="care_swm_person_has_been_told">%1$s has been told</string>
     <string name="care_swm_until_person_told">Until %1$s is told</string>
     <string name="care_swm_extend_15">+15 min</string>
+    <!-- "Are you okay?", the box that floats over the panel while she walks. Same words as iOS. -->
+    <string name="care_swm_checkin_title">Are you okay?</string>
+    <string name="care_swm_checkin_body">%1$s is still with you. Confirm to carry on.</string>
+    <string name="care_swm_checkin_failed">That didn\'t work. Try again.</string>
+    <string name="care_swm_checkin_okay">I\'m okay</string>
+    <string name="care_swm_checkin_help">Get help</string>
+    <string name="care_swm_checkin_reason">Confirm that you are okay</string>
     <string name="care_swm_places_loading">Looking for help near her</string>
     <string name="care_swm_places_empty">Nothing found close to her yet</string>
     <string name="care_swm_places_loading_you">Looking for help near you</string>
