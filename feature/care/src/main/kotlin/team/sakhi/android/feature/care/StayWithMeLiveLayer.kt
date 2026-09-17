@@ -36,6 +36,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.sakhiGroupedBackground
+import team.sakhi.android.ui.IntroSeenKey
+import team.sakhi.android.ui.SakhiOnboardingPoint
+import team.sakhi.android.ui.SakhiOnboardingView
+import team.sakhi.android.ui.rememberIntroSeen
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessAlarm
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Map
+import androidx.compose.ui.res.stringResource
 import team.sakhi.care.CareRuntimeState
 
 /**
@@ -51,6 +61,12 @@ import team.sakhi.care.CareRuntimeState
 @Composable
 fun StayWithMeLiveLayer(
     onClose: () -> Unit,
+    /**
+     * Opens the Care screen, where a care partner is invited. Reached only from the intro's
+     * primary button, and only for someone who has nobody on Be Her Sakhi yet, so the screen
+     * can explain the walk without ending in a dead button.
+     */
+    onAddCarePartner: () -> Unit = {},
     careViewModel: CareViewModel = koinViewModel(),
     viewModel: StayWithMeViewModel = koinViewModel(),
 ) {
@@ -76,11 +92,28 @@ fun StayWithMeLiveLayer(
     var sawWalk by remember { mutableStateOf(false) }
     if (mine != null || watching != null) sawWalk = true
 
+    // What a walk is, once, before the first one. Kept on the device under the same key iOS
+    // reads from UserDefaults.
+    val introSeen = rememberIntroSeen(IntroSeenKey.STAY_WITH_ME)
+
+    // Whether the care read has finished, or has had long enough that waiting further would
+    // just be a spinner. It cannot be `careState !is Loading` alone: a local-only account
+    // has no cloud to read from, so the refresh fails and the state never leaves `Loading`.
+    // That left this screen spinning for ever instead of explaining what a walk is.
+    var careReadTimedOut by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(CareReadGraceMs)
+        careReadTimedOut = true
+    }
+    val careSettled = care.careState !is CareRuntimeState.Loading || careReadTimedOut
+
     // The walk ended while this was open: close. Arriving cold from a notification, give the
-    // first read a few seconds before deciding there is nothing to show. Her own side is the
-    // exception: with no walk this IS where she starts one, so it stays.
-    LaunchedEffect(mine == null && watching == null, sawWalk, owner != null) {
-        if (mine == null && watching == null && owner == null) {
+    // first read a few seconds before deciding there is nothing to show. Two exceptions,
+    // both of which are screens rather than nothing: her own side, where with no walk this
+    // IS where she starts one, and someone with nobody on Be Her Sakhi yet, who gets the
+    // intro explaining what a walk is instead of a screen that closes itself.
+    LaunchedEffect(mine == null && watching == null, sawWalk, owner != null, partner != null) {
+        if (mine == null && watching == null && owner == null && partner != null) {
             if (!sawWalk) delay(6_000)
             onClose()
         }
@@ -146,6 +179,14 @@ fun StayWithMeLiveLayer(
         )
         // No walk, and this is her own connection: the screen she starts one from, in the same
         // full screen the walk itself uses. The map is the screen and the form sits over it.
+        //
+        // What a walk is comes first, once. After that the start screen opens straight away.
+        owner != null && !introSeen.seen -> StayWithMeIntro(
+            personName = careDisplayName(owner.partnership, isPartnerRole = false),
+            onPrimary = introSeen::markSeen,
+            onNotNow = onClose,
+            onClose = onClose,
+        )
         owner != null -> StayWithMeStartLayer(
             personName = careDisplayName(owner.partnership, isPartnerRole = false),
             here = here,
@@ -156,6 +197,21 @@ fun StayWithMeLiveLayer(
                 viewModel.start(owner.partnership.id, minutes, note, destination)
             },
         )
+        // Nobody on Be Her Sakhi yet. The same screen still explains what a walk is, and
+        // its one action opens the Care screen, where she can add someone if she wants to.
+        // Nothing here asks twice: adding a person means sharing where she is with them,
+        // and that choice is hers alone.
+        // Held back until the care read has settled, so the intro cannot flash over a
+        // connection that is about to arrive. The spinner below covers that moment.
+        careSettled && partner == null -> StayWithMeIntro(
+            personName = null,
+            onPrimary = {
+                introSeen.markSeen()
+                onAddCarePartner()
+            },
+            onNotNow = onClose,
+            onClose = onClose,
+        )
         else -> Box(
             modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground()),
             contentAlignment = Alignment.Center,
@@ -165,6 +221,68 @@ fun StayWithMeLiveLayer(
             if (!sawWalk) CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
     }
+}
+
+/**
+ * What a walk is, once, before the first one. Drawn with the app's intro template, the same
+ * screen Care and Sakhi AI open on.
+ *
+ * [personName] is null for someone who has nobody on Be Her Sakhi yet. The screen then says
+ * the same things in the third person and its one action opens the Care screen, where she
+ * can add someone if she wants to. It is an explanation with a door, not a request: adding
+ * a person means sharing where she is with them, and that decision is hers alone.
+ */
+@Composable
+private fun StayWithMeIntro(
+    personName: String?,
+    onPrimary: () -> Unit,
+    onNotNow: () -> Unit,
+    onClose: () -> Unit,
+) {
+    SakhiOnboardingView(
+        // iOS `figure.walk.motion`.
+        icon = Icons.Filled.DirectionsWalk,
+        title = stringResource(R.string.stay_with_me_intro_title),
+        message = if (personName != null) {
+            stringResource(R.string.stay_with_me_intro_message, personName)
+        } else {
+            stringResource(R.string.stay_with_me_intro_no_partner_message)
+        },
+        points = listOf(
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.Map,
+                title = stringResource(R.string.stay_with_me_intro_point_1_title),
+                detail = stringResource(R.string.stay_with_me_intro_point_1_detail),
+            ),
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.CheckCircle,
+                title = stringResource(R.string.stay_with_me_intro_point_2_title),
+                detail = if (personName != null) {
+                    stringResource(R.string.stay_with_me_intro_point_2_detail, personName)
+                } else {
+                    stringResource(R.string.stay_with_me_intro_no_partner_point_2_detail)
+                },
+            ),
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.AccessAlarm,
+                title = stringResource(R.string.stay_with_me_intro_point_3_title),
+                detail = if (personName != null) {
+                    stringResource(R.string.stay_with_me_intro_point_3_detail, personName)
+                } else {
+                    stringResource(R.string.stay_with_me_intro_no_partner_point_3_detail)
+                },
+            ),
+        ),
+        primaryLabel = if (personName != null) {
+            stringResource(R.string.stay_with_me_intro_primary)
+        } else {
+            stringResource(R.string.stay_with_me_intro_no_partner_primary)
+        },
+        onPrimaryClick = onPrimary,
+        secondaryLabel = stringResource(R.string.stay_with_me_intro_secondary),
+        onSecondaryClick = onNotNow,
+        onClose = onClose,
+    )
 }
 
 /**
@@ -227,3 +345,11 @@ private fun StayWithMeStartLayer(
         }
     }
 }
+
+/**
+ * How long this screen waits for care state before it stops waiting.
+ *
+ * A signed-in phone answers in well under this. A local-only account never answers at all,
+ * because there is no cloud behind it, and that is the case this number exists for.
+ */
+private const val CareReadGraceMs = 2_500L

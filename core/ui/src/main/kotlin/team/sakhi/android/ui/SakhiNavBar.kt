@@ -1,10 +1,12 @@
 package team.sakhi.android.ui
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,18 +25,32 @@ import androidx.compose.ui.unit.sp
  *
  * iOS composes it from three optional slots and derives everything else:
  * ```
- * HStack(spacing: 0) {
- *     if let onBack  { DSBackButton(action: onBack) }
- *     if let title   { Text(title).font(.lato(17, .bold))
- *                         .frame(maxWidth: .infinity,
- *                                alignment: onBack == nil && onClose == nil ? .leading : .center) }
- *     else           { Spacer() }
- *     if let onClose { DSCloseButton(action: onClose) }
+ * ZStack {
+ *     if let title { Text(title).font(.lato(17, .bold))
+ *                       .frame(maxWidth: .infinity,
+ *                              alignment: onBack == nil && onClose == nil ? .leading : .center) }
+ *     HStack(spacing: DS.Spacing.xs) {
+ *         if let onBack  { DSBackButton(action: onBack) }
+ *         if let onClose { DSCloseButton(action: onClose) }
+ *         Spacer(minLength: 0)
+ *     }
  * }
  * .padding(.horizontal, DS.Spacing.screenHorizontal)  // 24
  * .padding(.top, DS.Spacing.ml)                       // 20
  * .padding(.bottom, DS.Spacing.xs)                    // 8
  * ```
+ *
+ * ── The close button lives on the LEFT ──────────────────────────────────────────────
+ *
+ * On every screen in the app, next to the back button when a screen has both, back first
+ * (Karan, 2026-09-18). It used to sit on the right, which meant the way out moved
+ * depending on which screen she was on. Changed here rather than per screen, so it applies
+ * everywhere at once. `OnboardingShell` used to smuggle its close button into the
+ * [leading] slot to get it on the left; it no longer has to.
+ *
+ * The controls are OVERLAID on the title rather than laid out beside it, so a centred
+ * title stays centred on the screen instead of being pushed off centre by whatever is to
+ * its left. Same reason iOS uses a ZStack here.
  *
  * The alignment rule is the subtle part and is reproduced exactly: a title **centres**
  * whenever there is a back or close button to balance against, and **left-aligns** when
@@ -48,11 +64,11 @@ import androidx.compose.ui.unit.sp
  * on the in-header close button".
  *
  * @param onBack leading back chevron. Null hides it.
- * @param onClose trailing close cross. Null hides it.
+ * @param onClose the close cross, in the LEADING slot beside back. Null hides it.
  * @param title optional inline title; centred when either button is present.
  * @param onGradient use the light-on-dark treatment for both buttons, for nav bars drawn
  *   over a saturated phase background rather than a neutral surface.
- * @param trailing extra trailing content placed before [onClose], for the
+ * @param trailing extra trailing content at the far end of the bar, for the
  *   `trailingAction` slot iOS's `ProfileSettingsDetailView` exposes (e.g. a sync button).
  */
 @Composable
@@ -84,22 +100,17 @@ fun SakhiNavBar(
     topPadding: Dp = 20.dp,
     bottomPadding: Dp = 8.dp,
 ) {
-    Row(
+    Box(
         modifier = modifier
             .fillMaxWidth()
             // iOS: screenHorizontal (24) / .ml (20) / .xs (8).
             .padding(horizontal = 24.dp)
             .padding(top = topPadding, bottom = bottomPadding),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(0.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        if (onBack != null) {
-            BackButton(onClick = onBack, onGradient = onGradient)
-        }
-
-        if (leading != null) {
-            leading()
-        } else if (title != null) {
+        // Drawn first, under the controls, so it keeps the centre of the screen. A `leading`
+        // slot replaces the title entirely, and it is laid out in the row below instead.
+        if (leading == null && title != null) {
             Text(
                 text = title,
                 // iOS: .lato(17, .bold).
@@ -109,16 +120,44 @@ fun SakhiNavBar(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = if (onBack == null && onClose == null) TextAlign.Start else TextAlign.Center,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
             )
-        } else {
-            androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
         }
 
-        trailing()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            // Zero, deliberately. The only gap iOS has here is between back and close, and
+            // that one is spelled out below. A row-wide `spacedBy` would also open a gap in
+            // front of the `leading` and `trailing` slots, which no screen asked for.
+            horizontalArrangement = Arrangement.spacedBy(0.dp),
+        ) {
+            if (onBack != null) {
+                BackButton(onClick = onBack, onGradient = onGradient)
+            }
 
-        if (onClose != null) {
-            CloseButton(onClick = onClose, onGradient = onGradient)
+            // iOS: DS.Spacing.xs, only when a screen carries both controls.
+            if (onBack != null && onClose != null) {
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(8.dp))
+            }
+
+            if (onClose != null) {
+                CloseButton(onClick = onClose, onGradient = onGradient)
+            }
+
+            if (leading != null) {
+                // A gap between the controls and a custom leading block, which now sits
+                // beside them rather than across the bar from them. Without it the logging
+                // sheet's date started flush against the close button.
+                if (onBack != null || onClose != null) {
+                    androidx.compose.foundation.layout.Spacer(modifier = Modifier.width(12.dp))
+                }
+                leading()
+            } else {
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.weight(1f))
+            }
+
+            trailing()
         }
     }
 }

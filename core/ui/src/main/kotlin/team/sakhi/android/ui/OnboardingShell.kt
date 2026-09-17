@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
 
 /**
@@ -29,12 +30,17 @@ import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
  * @param showChrome false for a step that owns its own header, or a full-screen loading
  *   state with no way back -- the top gap and nav bar are both suppressed together.
  * @param onBack back chevron in the leading slot. Null on the first step.
- * @param onClose close cross, which shares that same leading slot with back and shows
- *   only when there is nothing to go back to. iOS puts close top-LEFT for this reason.
+ * @param onClose close cross, beside back in the same leading group. Both are on the LEFT,
+ *   back first, on every screen in the app.
  * @param paintsPageBackground true for a screen presented over something else, which has
  *   to paint its own opaque ground. False -- the default -- for the flow inside
  *   `RootNavHost`, where the theme root already paints exactly this brush behind it, and
  *   for the Care invite flow, which sits on `SheetSurface`'s own white card.
+ * @param pageBrush a ground of this step's own, painted edge to edge behind the whole
+ *   shell, chrome included. The Care intro is drawn with `SakhiOnboardingView`, whose
+ *   ground is the soft pink gradient: painting it inside the step instead would start the
+ *   gradient below the close button and leave a seam across the top of the screen. It
+ *   overrides [paintsPageBackground] when both are given.
  */
 @Composable
 fun OnboardingShell(
@@ -43,15 +49,16 @@ fun OnboardingShell(
     onBack: (() -> Unit)? = null,
     onClose: (() -> Unit)? = null,
     paintsPageBackground: Boolean = false,
+    pageBrush: Brush? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     // The brush is read before the insets padding so the gradient it draws in dark mode
     // spans the whole window, exactly as the theme root's does. Padding first would
     // restart it inside a shorter box and the two would not line up.
-    val background = if (paintsPageBackground) {
-        Modifier.background(sakhiPageBackgroundBrush())
-    } else {
-        Modifier
+    val background = when {
+        pageBrush != null -> Modifier.background(pageBrush)
+        paintsPageBackground -> Modifier.background(sakhiPageBackgroundBrush())
+        else -> Modifier
     }
 
     // `consumeWindowInsets` after the padding matters: Compose does not treat insets as
@@ -71,17 +78,15 @@ fun OnboardingShell(
             // button and the title. Karan's call after seeing both on a real device.
             Spacer(modifier = Modifier.height(OnboardingHeaderTopGap))
 
+            // Both controls go to the bar's own slots now. This used to hand the close
+            // button to the `leading` slot to get it on the left, and only when there was
+            // no back button to share the row with; `SakhiNavBar` puts close on the left on
+            // every screen in the app, so the workaround is gone and a step that can go
+            // back now keeps its way out as well.
             SakhiNavBar(
                 modifier = Modifier.heightIn(min = OnboardingNavBarMinHeight),
                 onBack = onBack,
-                leading = if (onBack == null && onClose != null) {
-                    {
-                        CloseButton(onClick = onClose)
-                        Spacer(modifier = Modifier.weight(1f))
-                    }
-                } else {
-                    null
-                },
+                onClose = onClose,
             )
         }
 

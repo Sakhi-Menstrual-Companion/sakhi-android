@@ -343,4 +343,25 @@
     <string name="care_she_shares_section_see">What you can see</string>
     <string name="care_she_shares_on">Shared</string>
     <string name="care_she_shares_off">Not shared</string>
+    <!-- Shown once, before the first walk. Same words as iOS's `stayWithMeIntro`. -->
+    <string name="stay_with_me_intro_title">Someone walks it with you</string>
+    <string name="stay_with_me_intro_message">Say where you are going and by when. Until you are there, %1$s can see you moving.</string>
+    <string name="stay_with_me_intro_point_1_title">Only for this walk</string>
+    <string name="stay_with_me_intro_point_1_detail">Your location is shared while the walk is on, and stops the moment it ends.</string>
+    <string name="stay_with_me_intro_point_2_title">Home closes it</string>
+    <string name="stay_with_me_intro_point_2_detail">Reaching your place ends the walk and tells %1$s you are there.</string>
+    <string name="stay_with_me_intro_point_3_title">If you are not there in time</string>
+    <string name="stay_with_me_intro_point_3_detail">%1$s\'s phone rings, so someone knows before you have to ask.</string>
+    <string name="stay_with_me_intro_primary">Set up a walk</string>
+    <string name="stay_with_me_intro_secondary">Not now</string>
+
+    <!--
+      The same screen for someone who has nobody on Be Her Sakhi yet. It explains what a
+      walk is and what the other person would see, and the choice stays entirely hers:
+      adding someone means sharing where she is with them, so nothing here asks twice.
+    -->
+    <string name="stay_with_me_intro_no_partner_message">Say where you are going and by when. Until you are there, the person you choose can see you moving.</string>
+    <string name="stay_with_me_intro_no_partner_point_2_detail">Reaching your place ends the walk and lets them know you are there.</string>
+    <string name="stay_with_me_intro_no_partner_point_3_detail">Their phone rings, so someone knows before you have to ask.</string>
+    <string name="stay_with_me_intro_no_partner_primary">Add a care partner</string>
 </resources>

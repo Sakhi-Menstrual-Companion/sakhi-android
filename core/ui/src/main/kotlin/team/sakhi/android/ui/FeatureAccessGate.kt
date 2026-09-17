@@ -9,6 +9,11 @@ import kotlinx.coroutines.launch
 import team.sakhi.config.RemoteConfigStore
 import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.EditCalendar
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -121,6 +126,50 @@ fun FeatureAccessBlocked(
     val scope = rememberCoroutineScope()
     val copy = blockedCopyFor(reason)
 
+    // The no-internet case is rebuilt on `SakhiOnboardingView`, the app's one intro
+    // template. It is the explainer she is most likely to meet, and the only one of the
+    // four whose three points are worth spelling out: what is safe, what still works, and
+    // what happens when she comes back. The other reasons keep the illustrated layout
+    // below until they are given the same treatment.
+    if (reason == BlockReason.OFFLINE_NEEDS_INTERNET) {
+        SakhiOnboardingView(
+            icon = Icons.Filled.CloudOff,
+            title = stringResource(R.string.feature_gate_offline_title),
+            message = stringResource(R.string.feature_gate_offline_short_message),
+            points = listOf(
+                SakhiOnboardingPoint(
+                    icon = Icons.Filled.Lock,
+                    title = stringResource(R.string.feature_gate_offline_point_1_title),
+                    detail = stringResource(R.string.feature_gate_offline_point_1_detail),
+                ),
+                SakhiOnboardingPoint(
+                    icon = Icons.Filled.EditCalendar,
+                    title = stringResource(R.string.feature_gate_offline_point_2_title),
+                    detail = stringResource(R.string.feature_gate_offline_point_2_detail),
+                ),
+                SakhiOnboardingPoint(
+                    icon = Icons.Filled.CloudSync,
+                    title = stringResource(R.string.feature_gate_offline_point_3_title),
+                    detail = stringResource(R.string.feature_gate_offline_point_3_detail),
+                ),
+            ),
+            primaryLabel = stringResource(R.string.feature_gate_resume_online),
+            onPrimaryClick = {
+                // Mirrors iOS `resumeOnline()`: release the held sync queue FIRST, then
+                // clear the flag. Clearing the flag alone would re-open the feature while
+                // sync stayed paused forever -- writes would queue up silently and never
+                // leave the device.
+                syncPauseState.resume()
+                accessState.setOnlineAccountPaused(false)
+            },
+            secondaryLabel = stringResource(R.string.feature_gate_go_back),
+            onSecondaryClick = onBack,
+            onClose = onBack,
+            modifier = modifier,
+        )
+        return
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -134,7 +183,8 @@ fun FeatureAccessBlocked(
             .padding(horizontal = SakhiSpacing.space6),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        // Leading, not trailing. The way out sits on the LEFT on every screen in the app.
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
             BackButton(onClick = onBack)
         }
 

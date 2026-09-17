@@ -50,6 +50,7 @@ import team.sakhi.android.ui.SakhiNavDirection
 import team.sakhi.android.ui.SakhiScreenTransition
 import team.sakhi.onboarding.OnboardingFlowCompletion
 import team.sakhi.onboarding.OnboardingFlowStep
+import team.sakhi.android.designsystem.sakhiSoftPinkPageBrush
 import team.sakhi.android.ui.OnboardingShell
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
@@ -223,10 +224,20 @@ fun OnboardingFlowHost(
     // Column declared here. iOS: `else if step.showsCloseButton || isModal { DSCloseButton
     // { ... } }` -- the close shares the LEADING slot with back, which is why the Care
     // intro's X is top-left, not top-right.
+    // The Care intro is drawn with `SakhiOnboardingView`, whose ground is the soft pink
+    // gradient. The shell paints it, not the step, so it runs edge to edge behind the
+    // close button rather than starting below it and leaving a seam across the top.
+    val stepPageBrush = if (navState.currentStep == OnboardingFlowStep.PartnerInvitePrompt) {
+        sakhiSoftPinkPageBrush()
+    } else {
+        null
+    }
+
     OnboardingShell(
         showChrome = !isFullScreenLoadingStep && !stepOwnsChrome,
         onBack = if (navState.canGoBack) handleBack else null,
         onClose = onDismiss,
+        pageBrush = stepPageBrush,
     ) {
 
 

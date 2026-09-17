@@ -1,36 +1,30 @@
 package team.sakhi.android.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import team.sakhi.android.designsystem.SakhiSpacing
-import team.sakhi.android.designsystem.sakhiSecondaryLabel
-import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 /**
- * Non-dismissable gate -- port of iOS `ForceUpdateView`. Shown in place of the
- * app's normal content (never as a cancellable dialog/sheet) whenever
- * `UpdateGateController.state.forceUpdate` is true: the installed version is
- * below the remote `app_update_policies.minimum_supported_version` row.
+ * Non-dismissable gate -- port of iOS `ForceUpdateView`. Shown in place of the app's normal
+ * content (never as a cancellable dialog or sheet) whenever
+ * `UpdateGateController.state.forceUpdate` is true: the installed version is below the
+ * remote `app_update_policies.minimum_supported_version` row.
+ *
+ * Rebuilt on [SakhiOnboardingView], the app's one intro template, so a screen she has never
+ * seen before looks like the rest of the app rather than like an error.
+ *
+ * The [title] and [message] are still the remote copy, unchanged, and the points are the
+ * three things she actually wants to know when an app stops working: her data is safe, this
+ * is quick, and there is a person if it goes wrong.
+ *
+ * NO close button, deliberately. There is nothing behind this screen to go back to, and a
+ * cross that does nothing is worse than no cross. Support moved from a bare icon in the top
+ * corner to the secondary action, where every other way out in the app lives.
  */
 @Composable
 fun ForceUpdateScreen(
@@ -40,54 +34,31 @@ fun ForceUpdateScreen(
     onSupportClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
-    val supportDescription = stringResource(R.string.force_update_contact_support)
-    Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            IconButton(
-                onClick = onSupportClick,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(SakhiSpacing.space4)
-                    .semantics { contentDescription = supportDescription },
-            ) {
-                Icon(imageVector = Icons.Filled.Headphones, contentDescription = null)
-            }
-        Column(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(SakhiSpacing.space6),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.SystemUpdate,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(bottom = SakhiSpacing.space4),
-            )
-            Text(
-                text = title,
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                textAlign = TextAlign.Center,
-                color = sakhiSecondaryLabel(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = SakhiSpacing.space2, bottom = SakhiSpacing.space6),
-            )
-        }
-            SakhiFooter(
-                primaryLabel = stringResource(R.string.force_update_update_now),
-                onPrimaryClick = onUpdateClick,
-                showSecondarySlot = false,
-            )
-        }
-        }
-    }
+    SakhiOnboardingView(
+        icon = Icons.Filled.SystemUpdate,
+        title = title,
+        message = message,
+        points = listOf(
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.Lock,
+                title = stringResource(R.string.force_update_point_1_title),
+                detail = stringResource(R.string.force_update_point_1_detail),
+            ),
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.Schedule,
+                title = stringResource(R.string.force_update_point_2_title),
+                detail = stringResource(R.string.force_update_point_2_detail),
+            ),
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.Headphones,
+                title = stringResource(R.string.force_update_point_3_title),
+                detail = stringResource(R.string.force_update_point_3_detail),
+            ),
+        ),
+        primaryLabel = stringResource(R.string.force_update_update_now),
+        onPrimaryClick = onUpdateClick,
+        secondaryLabel = stringResource(R.string.force_update_contact_support_action),
+        onSecondaryClick = onSupportClick,
+        modifier = modifier,
+    )
 }

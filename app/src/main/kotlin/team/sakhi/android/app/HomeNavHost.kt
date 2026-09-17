@@ -343,7 +343,13 @@ fun HomeNavHost() {
     // screen, not a pane inside a sheet over Home. Its own layout carries the panel.
     if (activeOverlaySheet == HomeOverlaySheet.StayWithMe) {
         Box(modifier = Modifier.fillMaxSize()) {
-            StayWithMeLiveLayer(onClose = ::dismissOverlaySheet)
+            StayWithMeLiveLayer(
+                onClose = ::dismissOverlaySheet,
+                // The walk intro's one action, for someone who has nobody on Be Her Sakhi
+                // yet: the same Care screen Home's top-right button opens, where a care
+                // partner is invited.
+                onAddCarePartner = openCare,
+            )
         }
     }
 

@@ -54,6 +54,9 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ChatBubble
+import androidx.compose.material.icons.filled.MedicalServices
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
@@ -144,7 +147,12 @@ import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.android.platform.HapticImpact
 import team.sakhi.android.ui.CloseButton
 import team.sakhi.android.ui.KeyboardSafeScaffold
+import team.sakhi.android.designsystem.sakhiSoftPinkPageBrush
+import team.sakhi.android.ui.IntroSeenKey
 import team.sakhi.android.ui.SakhiListDivider
+import team.sakhi.android.ui.SakhiOnboardingPoint
+import team.sakhi.android.ui.SakhiOnboardingView
+import team.sakhi.android.ui.rememberIntroSeen
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.design.SakhiColors
 import team.sakhi.design.SakhiUIColors
@@ -263,6 +271,26 @@ fun ChatScreen(
     //
     // If nearby places are ever needed again, the permission must be asked for where the
     // user chose that feature, not on entry to chat.
+
+    // What Sakhi is, once, before the first message. The same template Care and Stay With
+    // Me open on. Gated on a flag kept on this device, so it shows once and then never
+    // again -- iOS reads the same key from UserDefaults.
+    val introSeen = rememberIntroSeen(IntroSeenKey.SAKHI_AI)
+    if (!introSeen.seen) {
+        // The sheet's own card carries the soft pink ground, so the gradient reaches the
+        // rounded top corners instead of starting inside them.
+        SheetSurface(backgroundBrush = sakhiSoftPinkPageBrush()) {
+            SakhiAiIntro(
+                onStart = {
+                    hapticManager.impact(HapticImpact.MEDIUM)
+                    introSeen.markSeen()
+                },
+                onNotNow = onClose,
+                onClose = onClose,
+            )
+        }
+        return
+    }
 
     // The sheet's drag handle is the close affordance, as on iOS -- see
     // `HomeNavHost`'s `showSystemDragHandle`.
@@ -444,6 +472,49 @@ fun ChatScreen(
     expandedPlaces?.let { places ->
         PlacesDetailScreen(places = places, onBack = { expandedPlaces = null })
     }
+}
+
+/**
+ * The Sakhi AI intro, on the app's shared onboarding template.
+ *
+ * "Not a doctor" is a point on this screen rather than a disclaimer under it, deliberately:
+ * the promise and the limit belong in the same list, where she is actually reading.
+ */
+@Composable
+private fun SakhiAiIntro(
+    onStart: () -> Unit,
+    onNotNow: () -> Unit,
+    onClose: () -> Unit,
+) {
+    SakhiOnboardingView(
+        // iOS `sparkles`.
+        icon = Icons.Filled.AutoAwesome,
+        title = stringResource(R.string.chat_intro_title),
+        message = stringResource(R.string.chat_intro_message),
+        points = listOf(
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.CalendarMonth,
+                title = stringResource(R.string.chat_intro_point_1_title),
+                detail = stringResource(R.string.chat_intro_point_1_detail),
+            ),
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.ChatBubble,
+                title = stringResource(R.string.chat_intro_point_2_title),
+                detail = stringResource(R.string.chat_intro_point_2_detail),
+            ),
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.MedicalServices,
+                title = stringResource(R.string.chat_intro_point_3_title),
+                detail = stringResource(R.string.chat_intro_point_3_detail),
+            ),
+        ),
+        primaryLabel = stringResource(R.string.chat_intro_primary),
+        onPrimaryClick = onStart,
+        secondaryLabel = stringResource(R.string.chat_intro_secondary),
+        onSecondaryClick = onNotNow,
+        onClose = onClose,
+        drawsBackground = false,
+    )
 }
 
 private val nearbyPlacesDistanceStopsKm = listOf(0.5, 1.0, 2.0, 5.0)

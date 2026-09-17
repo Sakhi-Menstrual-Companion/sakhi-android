@@ -136,4 +136,15 @@
     <string name="chat_welcome_partner_follow_up">Tell me how you would like to support her today.</string>
     <string name="chat_context_subject_default">her</string>
     <string name="chat_context_user_default">you</string>
+    <!-- Shown once, before the first chat. Same words as iOS's `sakhiAIIntro`. -->
+    <string name="chat_intro_title">A friend who knows your cycle</string>
+    <string name="chat_intro_message">Ask anything about your body, your cycle or how you are feeling, in your own words.</string>
+    <string name="chat_intro_point_1_title">Answers that fit your month</string>
+    <string name="chat_intro_point_1_detail">She reads the days you logged, so the answer is about you, not about everyone.</string>
+    <string name="chat_intro_point_2_title">Hindi or English, either way</string>
+    <string name="chat_intro_point_2_detail">Write however you speak. There is no wrong way to ask.</string>
+    <string name="chat_intro_point_3_title">Not a doctor</string>
+    <string name="chat_intro_point_3_detail">She can help you understand something and tell you when to go and get it checked.</string>
+    <string name="chat_intro_primary">Start talking</string>
+    <string name="chat_intro_secondary">Not now</string>
 </resources>

@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Share
@@ -101,6 +102,8 @@ import team.sakhi.android.ui.OnboardingBulletSpacing
 import team.sakhi.android.ui.OnboardingHeaderContentGap
 import team.sakhi.android.ui.OnboardingIntroScaffold
 import team.sakhi.android.ui.OnboardingStepTitle
+import team.sakhi.android.ui.SakhiOnboardingPoint
+import team.sakhi.android.ui.SakhiOnboardingView
 import team.sakhi.android.ui.OnboardingTitleTopPadding
 import team.sakhi.android.ui.PrimaryButton
 import team.sakhi.android.ui.SakhiAlert
@@ -390,14 +393,25 @@ private fun ModeSelectionScreen(
 }
 
 
-// Transcribed from iOS `PartnerInvitePromptContent.Layout`.
-private val PartnerInvitePromptImageHeight = 335.dp
-private val PartnerInvitePromptCarouselHeight = 460.dp
-private val PartnerInvitePromptIndicatorTop = 307.dp
-
 /** iOS `IntroCarouselStep.Layout.imageVisualHeight` (300) -- was a fixed 220dp square. */
 private val IntroCarouselImageHeight = 300.dp
 
+/**
+ * The Care intro, drawn with the app's onboarding template. Same words as before, from the
+ * same string resources, in the shape every other intro in the app now uses.
+ *
+ * Continue still calls `onContinue`, which runs the step's own handler and carries on into
+ * the invite flow exactly as it did when this screen was a two-page carousel. Nothing about
+ * what she is asked, or when, changed here.
+ *
+ * NO close button of its own, and no secondary action. `OnboardingShell` above it already
+ * draws back and close, and this is a screen about a person she may or may not want to add:
+ * it explains, and then it gets out of the way. Adding someone means sharing her health
+ * data with them, and that decision is entirely hers.
+ *
+ * The soft pink ground is painted by the shell, not here, so it runs edge to edge behind
+ * the close button instead of starting below it. See `OnboardingShell.pageBrush`.
+ */
 @Composable
 private fun PartnerInvitePromptScreen(
     canGoBack: Boolean,
@@ -406,110 +420,36 @@ private fun PartnerInvitePromptScreen(
     onStartCareInviteUpgrade: () -> Unit,
 ) {
     val hapticManager = koinInject<AndroidHapticManager>()
-    val title = stringResource(R.string.onboarding_partner_invite_prompt_title)
-    val subtitle = stringResource(R.string.onboarding_partner_invite_prompt_subtitle)
-    val continueLabel = stringResource(R.string.onboarding_continue)
 
-    // iOS presents this step as a two-page carousel (`PartnerInvitePromptContent`):
-    // slide 0 is the CarePartner illustration, slide 1 is the three feature bullets.
-    // Android previously flattened both into one card with a generic Groups glyph and
-    // dropped every bullet subtitle, so the screen said noticeably less than iOS's and
-    // left a large dead gap where the subtitles belong.
-    val pagerState = rememberPagerState(pageCount = { 2 })
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(SakhiSpacing.space6),
-        ) {
-            OnboardingStepTitle(text = title)
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = sakhiSecondaryLabel(),
-                modifier = Modifier.padding(top = SakhiSpacing.space2),
-            )
-
-            // iOS pins the carousel to 460pt and overlays the page indicator at a fixed
-            // offset (imageTopPadding -18 + imageHeight 335 - 10 = 307) so the dots hold
-            // their position across both slides instead of tracking each page's content.
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(PartnerInvitePromptCarouselHeight),
-            ) {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.Top,
-                ) { page ->
-                    if (page == 0) {
-                        Box(
-                            modifier = Modifier.fillMaxWidth(),
-                            contentAlignment = Alignment.TopCenter,
-                        ) {
-                            Image(
-                                painter = painterResource(team.sakhi.android.ui.R.drawable.care_partner_onboarding),
-                                contentDescription = null,
-                                modifier = Modifier.height(PartnerInvitePromptImageHeight),
-                            )
-                        }
-                    } else {
-                        // iOS `pointsSlide`: VStack spacing DS.Spacing.l (24), top pad .m (16).
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = SakhiSpacing.space4),
-                            verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space6),
-                        ) {
-                            FeatureBulletRow(
-                                icon = Icons.Filled.Favorite,
-                                title = stringResource(R.string.onboarding_partner_invite_prompt_feature_1),
-                                subtitle = stringResource(R.string.onboarding_partner_invite_prompt_feature_1_subtitle),
-                            )
-                            FeatureBulletRow(
-                                icon = Icons.Filled.NotificationsActive,
-                                title = stringResource(R.string.onboarding_partner_invite_prompt_feature_2),
-                                subtitle = stringResource(R.string.onboarding_partner_invite_prompt_feature_2_subtitle),
-                            )
-                            FeatureBulletRow(
-                                icon = Icons.Filled.Groups,
-                                title = stringResource(R.string.onboarding_partner_invite_prompt_feature_3),
-                                subtitle = stringResource(R.string.onboarding_partner_invite_prompt_feature_3_subtitle),
-                            )
-                        }
-                    }
-                }
-
-                OnboardingDots(
-                    currentIndex = pagerState.currentPage,
-                    totalCount = 2,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = PartnerInvitePromptIndicatorTop),
-                )
-            }
-        }
-
-        // NO secondary button. iOS's `PartnerInvitePromptStep` declares
-        // `var secondaryLabel: String? { nil }` — this screen offers exactly one action.
-        //
-        // Android had added "Continue as Care Partner" here as the only trigger for
-        // `PartnerInviteUpgradeRequired`. That path is not lost: a care partner arrives by
-        // invite link, which `RootNavHost` turns into a forced `joinFamily` onboarding flow
-        // carrying the code — the same way iOS reaches its `carePartnerInvite` FlowEntry.
-        // Putting it on this screen asked every new user to self-identify as a partner on a
-        // screen that is about inviting one.
-        SakhiFooter(
-            primaryLabel = continueLabel,
-            onPrimaryClick = {
-                hapticManager.impact(HapticImpact.MEDIUM)
-                onContinue()
-            },
-        )
-    }
+    SakhiOnboardingView(
+        // iOS `person.2.fill`.
+        icon = Icons.Filled.People,
+        title = stringResource(R.string.onboarding_partner_invite_prompt_title),
+        message = stringResource(R.string.onboarding_partner_invite_prompt_subtitle),
+        points = listOf(
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.Favorite,
+                title = stringResource(R.string.onboarding_partner_invite_prompt_feature_1),
+                detail = stringResource(R.string.onboarding_partner_invite_prompt_feature_1_subtitle),
+            ),
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.NotificationsActive,
+                title = stringResource(R.string.onboarding_partner_invite_prompt_feature_2),
+                detail = stringResource(R.string.onboarding_partner_invite_prompt_feature_2_subtitle),
+            ),
+            SakhiOnboardingPoint(
+                icon = Icons.Filled.Groups,
+                title = stringResource(R.string.onboarding_partner_invite_prompt_feature_3),
+                detail = stringResource(R.string.onboarding_partner_invite_prompt_feature_3_subtitle),
+            ),
+        ),
+        primaryLabel = stringResource(R.string.onboarding_continue),
+        onPrimaryClick = {
+            hapticManager.impact(HapticImpact.MEDIUM)
+            onContinue()
+        },
+        drawsBackground = false,
+    )
 }
 
 @Composable
@@ -1596,17 +1536,15 @@ private fun OfflineWarningScreen(
                 modifier = Modifier.padding(top = SakhiSpacing.space2),
             )
 
-            // Same carousel height as `PartnerInvitePromptScreen` -- iOS reuses that
-            // exact hero size for both -- but the top offset and dots position are
-            // deliberately Offline-specific (`OfflineCarouselTopGap`/
-            // `OfflineIndicatorTop`, not the shared `PartnerInvitePrompt*` constants):
-            // Karan asked for both content and the page dots pushed down further on
-            // this screen specifically, without moving PartnerInvitePromptScreen's.
+            // The hero size iOS gives `PartnerInvitePromptContent`, kept for this screen
+            // after the Care intro moved to the shared onboarding template. The top offset
+            // and dots position are deliberately larger: Karan asked for both content and
+            // the page dots pushed down further on this screen specifically.
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = OfflineCarouselTopGap)
-                    .height(PartnerInvitePromptCarouselHeight),
+                    .height(OfflineCarouselHeight),
             ) {
                 HorizontalPager(
                     state = pagerState,
@@ -1661,7 +1599,15 @@ private fun OfflineWarningScreen(
 
 /** Karan: offline carousel content and page dots pushed down further than the default. */
 private val OfflineCarouselTopGap = SakhiSpacing.space4
-private val OfflineIndicatorTop = PartnerInvitePromptIndicatorTop + SakhiSpacing.space4
+
+/**
+ * Transcribed from iOS `PartnerInvitePromptContent.Layout`, which is where this screen's
+ * hero size came from. They used to be read off the Care intro's own constants; that screen
+ * is now drawn with `SakhiOnboardingView` and has no carousel, so these live here, with the
+ * one screen still using them.
+ */
+private val OfflineCarouselHeight = 460.dp
+private val OfflineIndicatorTop = 307.dp + SakhiSpacing.space4
 
 /**
  * iOS `offlineLossesSlide`'s row: `HStack(alignment: .top, spacing: .m)` (16), a 52x52

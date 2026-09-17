@@ -113,4 +113,28 @@
          card, so the two cannot drift into two slightly different invitations. -->
     <string name="sakhi_connect_footer_body">Have something to share or ask? We\'re always listening. Tap below to connect or discover more about Sakhi.</string>
     <string name="sakhi_connect_footer_cta">Connect with Us</string>
+    <!--
+      The three points on the update screen, drawn with the app's intro template. The
+      remote `title` and `message` still come from `app_update_policies`; these say what
+      the update is for, which the remote copy never had room to.
+    -->
+    <string name="force_update_point_1_title">Your days are safe</string>
+    <string name="force_update_point_1_detail">Everything you have logged stays on your phone, and comes back as soon as the new version opens.</string>
+    <string name="force_update_point_2_title">A few minutes at most</string>
+    <string name="force_update_point_2_detail">Update Now opens the Play Store on Sakhi\'s page, and you come straight back here.</string>
+    <string name="force_update_point_3_title">If it will not update</string>
+    <string name="force_update_point_3_detail">Contact support is at the bottom of this screen, and we would be glad to help.</string>
+    <string name="force_update_contact_support_action">Contact support</string>
+    <!--
+      The offline explainer, rebuilt on the app's intro template. The title is unchanged;
+      the long single paragraph it used to carry is now the message plus three points, so
+      each thing she wants to know has its own line.
+    -->
+    <string name="feature_gate_offline_short_message">This part needs the internet. Come back online whenever you are ready.</string>
+    <string name="feature_gate_offline_point_1_title">Nothing is lost</string>
+    <string name="feature_gate_offline_point_1_detail">Everything you have written down is safe on your phone, exactly as you left it.</string>
+    <string name="feature_gate_offline_point_2_title">You can still log today</string>
+    <string name="feature_gate_offline_point_2_detail">The calendar and your notes keep working without a connection.</string>
+    <string name="feature_gate_offline_point_3_title">Back on, whenever you want</string>
+    <string name="feature_gate_offline_point_3_detail">Sakhi picks up where it stopped and sends what has been waiting.</string>
 </resources>
