@@ -108,4 +108,9 @@
     <string name="feature_gate_unknown_message">We couldn\'t open this just now. Everything you have logged is safe. Please try again in a little while.</string>
     <string name="feature_gate_go_back">Go back</string>
     <string name="close">Close</string>
+
+    <!-- The invitation Sakhi closes a screen with. Shared by Profile and the walk's start
+         card, so the two cannot drift into two slightly different invitations. -->
+    <string name="sakhi_connect_footer_body">Have something to share or ask? We\'re always listening. Tap below to connect or discover more about Sakhi.</string>
+    <string name="sakhi_connect_footer_cta">Connect with Us</string>
 </resources>

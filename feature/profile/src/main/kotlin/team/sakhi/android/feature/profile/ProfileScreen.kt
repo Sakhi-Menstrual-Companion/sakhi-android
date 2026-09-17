@@ -69,6 +69,7 @@ import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
+import team.sakhi.android.ui.SakhiConnectFooter
 import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiConfirm
 import team.sakhi.android.designsystem.sakhiDeepRose
@@ -291,7 +292,7 @@ fun ProfileScreen(
             }
 
             item(key = "footer", contentType = "footer") {
-                ProfileFooter(onConnectClick = { uriHandler.openUri("https://sakhi.rachna.co") })
+                SakhiConnectFooter()
             }
         }
         }
@@ -693,33 +694,4 @@ private fun avatarInitials(uiState: ProfileUiState): String? {
         .mapNotNull { it.firstOrNull()?.uppercaseChar() }
         .joinToString("")
     return initials.ifBlank { null }
-}
-
-@Composable
-private fun ProfileFooter(onConnectClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = SakhiSpacing.space6, bottom = SakhiSpacing.space10),
-        verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = stringResource(R.string.profile_footer_body),
-            style = MaterialTheme.typography.bodySmall,
-            color = sakhiSecondaryLabel(),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        TextButton(
-            onClick = onConnectClick,
-            contentPadding = PaddingValues(0.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.profile_footer_cta),
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-    }
 }

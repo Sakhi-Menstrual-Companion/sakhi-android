@@ -142,6 +142,7 @@ import team.sakhi.android.ui.SakhiAlertKind
 import team.sakhi.android.ui.SakhiAlertSheet
 import team.sakhi.android.ui.SakhiFooter
 import team.sakhi.android.ui.SakhiListDivider
+import team.sakhi.android.ui.SakhiConnectFooter
 import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.android.ui.SakhiTextField
 import team.sakhi.emergency.EmergencySafePlace
@@ -318,7 +319,24 @@ internal fun StayWithMeStartSection(
 
         Spacer(Modifier.height(18.dp))
 
-        // 3. Who is being asked.
+        // 3. The three numbers, in their own section and in the same component the connected
+        // screen and the alarm screen use, so an emergency looks the same everywhere in this
+        // feature (Karan, 2026-09-18). It is also the only real colour on this card: a blue
+        // shield and a red cross next to the pink helpline, against rows that are otherwise
+        // all pink discs.
+        Text(
+            text = stringResource(R.string.care_swm_call_for_help),
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+            color = sakhiLabel(),
+            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
+        )
+        EmergencyCallButtons(onCall = { number -> dial(context, number) })
+
+        Spacer(Modifier.height(18.dp))
+
+        // 4. Who is being asked. Her Sakhi and nobody else: the helplines above are not
+        // contacts, and there has never been a way to add a number here.
         Text(
             text = stringResource(R.string.care_swm_emergency_contacts),
             fontSize = 17.sp,
@@ -361,7 +379,7 @@ internal fun StayWithMeStartSection(
 
         Spacer(Modifier.height(18.dp))
 
-        // 4. The button, with the consent line under it.
+        // 5. The button, with the consent line under it.
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -417,7 +435,11 @@ internal fun StayWithMeStartSection(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        Spacer(Modifier.height(16.dp))
+
+        // The footer her profile ends with, under the button that sets her off, because that
+        // shape already reads as the end of a screen (Karan, 2026-09-18). A smaller gap than
+        // Profile's: this card sits in a panel, not a full page.
+        SakhiConnectFooter(topPadding = SakhiSpacing.space2, bottomPadding = SakhiSpacing.space4)
     }
 }
 
