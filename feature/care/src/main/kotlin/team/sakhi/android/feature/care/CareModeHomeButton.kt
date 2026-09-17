@@ -158,9 +158,17 @@ fun CareModeHomeButton(
     //
     // During a walk it is two rings in one: a faint full circle, and over it a solid slice
     // that fills clockwise from the top as her time goes, so a glance at Home says how far
-    // into the walk she is. Green while she is on time, because they are together and all is
-    // well; red, and full, once she is late.
-    val ringColor = if (late) AppleSystemColors.red else AppleSystemColors.green
+    // into the walk she is.
+    //
+    // The colours are iOS's `HomeNearbyButton.rideRing`, not a set of Android's own: Sakhi's
+    // pink while she is walking, orange once she is past her time, red once her person has
+    // been told. Green was never one of Sakhi's colours, and it said "fine" in a palette
+    // where pink already does.
+    val ringColor = when (phase) {
+        StayWithMePhase.GRACE -> RideStyle.late
+        StayWithMePhase.LATE -> RideStyle.alert
+        else -> MaterialTheme.colorScheme.primary
+    }
 
     Box(
         modifier = modifier
@@ -177,11 +185,11 @@ fun CareModeHomeButton(
             .drawWithContent {
                 drawContent()
                 if (walk != null) {
-                    val stroke = 3.dp.toPx()
+                    val stroke = 4.dp.toPx()
                     val arcTopLeft = Offset(stroke / 2, stroke / 2)
                     val arcSize = Size(size.width - stroke, size.height - stroke)
                     drawArc(
-                        color = ringColor.copy(alpha = 0.25f),
+                        color = ringColor.copy(alpha = 0.22f),
                         startAngle = 0f,
                         sweepAngle = 360f,
                         useCenter = false,
@@ -192,7 +200,9 @@ fun CareModeHomeButton(
                     drawArc(
                         color = ringColor,
                         startAngle = -90f,
-                        sweepAngle = if (late) 360f else 360f * progress,
+                        // Never nothing: iOS keeps a two percent tick showing so a walk that
+                        // has just started still reads as a walk.
+                        sweepAngle = 360f * progress.coerceAtLeast(0.02f),
                         useCenter = false,
                         topLeft = arcTopLeft,
                         size = arcSize,
