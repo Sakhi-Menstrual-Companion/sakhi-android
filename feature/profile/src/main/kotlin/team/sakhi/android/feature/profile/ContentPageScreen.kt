@@ -475,7 +475,7 @@ private fun ContentCard(
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
         ) {
             val itemTitle = item.titleResId?.let { stringResource(it) } ?: item.title
-            val itemBody = item.bodyResId?.let { stringResource(it) } ?: item.body
+            val itemBody = SakhiContact.resolve(item.bodyResId?.let { stringResource(it) } ?: item.body)
             iconSfSymbol?.let { symbol ->
                 Surface(
                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
@@ -585,7 +585,7 @@ private fun TextContentCard(item: ContentItem) {
             verticalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
         ) {
             val itemTitle = item.titleResId?.let { stringResource(it) } ?: item.title
-            val itemBody = item.bodyResId?.let { stringResource(it) } ?: item.body
+            val itemBody = SakhiContact.resolve(item.bodyResId?.let { stringResource(it) } ?: item.body)
             if (item.titleResId != null || itemTitle.isNotBlank()) {
                 Text(
                     text = itemTitle,

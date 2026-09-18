@@ -60,7 +60,6 @@ import team.sakhi.design.SakhiUIColors
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
-private const val FEEDBACK_EMAIL = "hello@getswipe.in"
 private const val MAX_CHARS = 500
 
 /** iOS gates submission on a real message rather than a stray character or two. */
@@ -145,7 +144,7 @@ fun FeedbackScreen(onBack: () -> Unit) {
                             R.string.profile_feedback_subject,
                             context.getString(selectedType.labelRes),
                         )
-                        val mailtoUri = Uri.parse("mailto:$FEEDBACK_EMAIL")
+                        val mailtoUri = Uri.parse("mailto:$SakhiContact.EMAIL")
                             .buildUpon()
                             .appendQueryParameter("subject", subject)
                             .appendQueryParameter("body", trimmedFeedback)

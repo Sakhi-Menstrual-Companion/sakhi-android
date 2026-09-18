@@ -64,7 +64,6 @@ import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 private const val WEBSITE_URL = "https://sakhi.rachna.co"
 private const val INSTAGRAM_URL = "https://instagram.com/sakhi.app"
-private const val FEEDBACK_EMAIL = "hello@getswipe.in"
 
 /** Ports iOS `AboutView.swift`: story/team/licenses navigation, connect links, share, app info. */
 @Composable
@@ -77,7 +76,7 @@ fun AboutScreen(
     val hapticManager = koinInject<AndroidHapticManager>()
     val uiState by contentViewModel.uiState.collectAsState()
     val instagramUrl = uiState.siteSettings?.socialLinks?.instagram?.takeIf { !it.isNullOrBlank() } ?: INSTAGRAM_URL
-    val feedbackEmail = uiState.siteSettings?.contactEmail?.takeIf { !it.isNullOrBlank() } ?: FEEDBACK_EMAIL
+    val feedbackEmail = uiState.siteSettings?.contactEmail?.takeIf { !it.isNullOrBlank() } ?: SakhiContact.EMAIL
     val playStoreWebUrl = remember(context) { playStoreWebUrl(context) }
     val shareBody = stringResource(R.string.profile_about_share_body, playStoreWebUrl)
     val shareChooserTitle = stringResource(R.string.profile_about_share_action)
