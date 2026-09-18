@@ -198,9 +198,21 @@ object CycleInsightAdapter {
             // only**, so every other month came back with nothing to colour -- page back
             // a month and the fertile window simply was not there. `CycleGeometry` answers
             // for any date by projecting a whole cycle at a time, as iOS's calendar does.
-            val hasClosedCycle = forecast.completeCycleCount > 0
-            val isFertile = hasClosedCycle && (markGeometry?.isFertile(epoch) ?: (epoch in state.fertileWindowEpochDays))
-            val isOvulation = hasClosedCycle && (markGeometry?.isOvulation(epoch) ?: (state.ovulationEpochDay == epoch))
+            // No closed-cycle gate. It used to be `forecast.completeCycleCount > 0`, on the
+            // reasoning that a fertile window with no closed cycle behind it rests on a
+            // default rather than on her. That reasoning was wrong: `resolveLengths` above
+            // prefers the cycle length SHE gave at onboarding over any engine average, so
+            // from her very first period the geometry is built from her own number.
+            //
+            // The cost of the gate was that ovulation appeared nowhere, in any month, until
+            // her second period closed a cycle (Karan, 2026-09-18). No major tracker does
+            // that: Apple Health predicts from the first period using the length entered at
+            // setup, Flo shows the window on weak data and widens it instead of hiding it,
+            // and Clue's "three cycles" is about accuracy improving, not about showing
+            // nothing. Research: 01-HQ 02-Research/09-Latest-Research/
+            // 2026-09-18-Showing-Ovulation-Before-The-First-Closed-Cycle.md
+            val isFertile = markGeometry?.isFertile(epoch) ?: (epoch in state.fertileWindowEpochDays)
+            val isOvulation = markGeometry?.isOvulation(epoch) ?: (state.ovulationEpochDay == epoch)
             val isPms = epoch in state.pmsWindowEpochDays
             if (isPeriod || isPredicted || isFertile || isOvulation || isPms) {
                 marks[day] = CalendarMarker.DayMark(
