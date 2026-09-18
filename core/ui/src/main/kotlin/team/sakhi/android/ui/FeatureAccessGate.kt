@@ -23,9 +23,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -197,98 +195,103 @@ fun FeatureAccessBlocked(
     // of sitting in the modal sheet). Emergency stays full screen on purpose (see
     // `HomeNavHost`'s comment there), so only the sheet path goes through `SheetSurface`.
     val explainer = @Composable {
+        // iOS's `SakhiIllustratedActionView`, not a centred stack: the close X, then the
+        // image, then the copy at the top, and the button pinned to the bottom in the shared
+        // `SakhiFooter` with a flexible gap between (Karan, 2026-09-19: "sahi layout and
+        // sakhi footer... bilkul bhi space nahi hai content aur CTA ke beech"). A button
+        // hugging the message was the visible difference from iOS.
         Column(
-            // Sheet mode already got `modifier` applied one level up, on `SheetSurface`
-            // itself; using it again here as well as there would double it.
             modifier = (if (presentedAsSheet) Modifier else modifier)
                 .fillMaxSize()
-                .let { if (presentedAsSheet) it else it.background(sakhiPageBackgroundBrush()) }
-                .windowInsetsPadding(WindowInsets.safeDrawing)
-                .padding(horizontal = SakhiSpacing.space6),
+                .let { if (presentedAsSheet) it else it.background(sakhiPageBackgroundBrush()).statusBarsPadding() },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-        // Leading, not trailing. The way out sits on the LEFT on every screen in the app.
-        // Always the X: Karan, 2026-09-19, this screen is never something you step back
-        // through, it is something you dismiss, in a sheet or full screen alike.
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-            CloseButton(onClick = onBack)
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // The image leads, drawn taller than the box that shows it so it reads large
-        // without pushing the copy down. Metrics are `IntroCarouselStep.Layout` on iOS --
-        // a 235 container over a 300 visual -- which `SakhiIllustratedActionView` now uses
-        // too, so this screen and the onboarding carousel sit at the same heights on both
-        // platforms rather than at approximately the same heights.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(235.dp)
-                .clipToBounds(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Image(
-                painter = painterResource(copy.image),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
+            // Leading, not trailing. The way out sits on the LEFT on every screen in the app.
+            // Always the X, never a back chevron (Karan, 2026-09-19): this screen is something
+            // you dismiss, in a sheet or full screen alike, and iOS draws `DSCloseButton` here.
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(300.dp),
+                    .padding(horizontal = SakhiSpacing.space6)
+                    .padding(top = SakhiSpacing.space5),
+                horizontalArrangement = Arrangement.Start,
+            ) {
+                CloseButton(onClick = onBack)
+            }
+
+            // iOS `Layout.imageTopInset`.
+            Spacer(modifier = Modifier.height(SakhiSpacing.space6))
+
+            // The image leads, drawn taller than the box that shows it so it reads large
+            // without pushing the copy down. Metrics are `IntroCarouselStep.Layout` on iOS --
+            // a 235 container over a 300 visual -- which `SakhiIllustratedActionView` now uses
+            // too, so this screen and the onboarding carousel sit at the same heights on both
+            // platforms rather than at approximately the same heights.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = SakhiSpacing.space6)
+                    .height(235.dp)
+                    .clipToBounds(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter = painterResource(copy.image),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp),
+                )
+            }
+
+            Text(
+                text = stringResource(copy.title),
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center,
+                // iOS `Layout.titleTopGap`.
+                modifier = Modifier
+                    .padding(top = 52.dp)
+                    .padding(horizontal = SakhiSpacing.space8),
             )
-        }
+            Text(
+                text = stringResource(copy.message),
+                style = MaterialTheme.typography.bodyMedium,
+                color = sakhiSecondaryLabel(),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(top = SakhiSpacing.space2)
+                    .padding(horizontal = SakhiSpacing.space8),
+            )
 
-        Text(
-            text = stringResource(copy.title),
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-            // iOS `Layout.titleTopGap`.
-            modifier = Modifier.padding(top = 52.dp),
-        )
-        Text(
-            text = stringResource(copy.message),
-            style = MaterialTheme.typography.bodyMedium,
-            color = sakhiSecondaryLabel(),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space2),
-        )
+            // The flexible gap that keeps the copy at the top and the button at the bottom.
+            Spacer(modifier = Modifier.weight(1f))
 
-        // A real gap, not just the button's own top padding -- Karan, 2026-09-19, on a
-        // real device: "bilkul bhi space nahi hai content aur CTA ke beech". iOS groups
-        // this whole block with DS.Spacing.l between each part, which is what
-        // this and the button's own remaining top padding together now match.
-        Spacer(modifier = Modifier.height(SakhiSpacing.space6))
-
-        PrimaryButton(
-            text = stringResource(copy.primaryLabel),
-            onClick = {
-                if (reason == BlockReason.OFFLINE_NEEDS_INTERNET) {
-                    // Mirrors iOS `resumeOnline()`: release the held sync queue FIRST,
-                    // then clear the flag. Clearing the flag alone (which is all this
-                    // did before the pause flag existed) would have re-opened the
-                    // feature while sync stayed paused forever — writes would queue up
-                    // silently and never leave the device.
-                    syncPauseState.resume()
-                    accessState.setOnlineAccountPaused(false)
-                } else if (reason == BlockReason.REMOTELY_DISABLED && featureKey != null) {
-                    // Registers her interest, then leaves. The push is sent by the
-                    // `notify-feature-available` Edge Function when the flag is switched
-                    // back on. A failure is deliberately silent: she is already on a
-                    // screen saying something is unavailable.
-                    scope.launch {
-                        remoteConfigStore.requestNotification(featureKey)
+            SakhiFooter(
+                primaryLabel = stringResource(copy.primaryLabel),
+                onPrimaryClick = {
+                    if (reason == BlockReason.OFFLINE_NEEDS_INTERNET) {
+                        // Mirrors iOS `resumeOnline()`: release the held sync queue FIRST,
+                        // then clear the flag. Clearing the flag alone (which is all this
+                        // did before the pause flag existed) would have re-opened the
+                        // feature while sync stayed paused forever -- writes would queue up
+                        // silently and never leave the device.
+                        syncPauseState.resume()
+                        accessState.setOnlineAccountPaused(false)
+                    } else if (reason == BlockReason.REMOTELY_DISABLED && featureKey != null) {
+                        // Registers her interest, then leaves. The push is sent by the
+                        // `notify-feature-available` Edge Function when the flag is switched
+                        // back on. A failure is deliberately silent: she is already on a
+                        // screen saying something is unavailable.
+                        scope.launch {
+                            remoteConfigStore.requestNotification(featureKey)
+                            onBack()
+                        }
+                    } else {
                         onBack()
                     }
-                } else {
-                    onBack()
-                }
-            },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = SakhiSpacing.space5),
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
+                },
+            )
         }
     }
     if (presentedAsSheet) {
