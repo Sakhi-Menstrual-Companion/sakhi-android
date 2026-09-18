@@ -11,7 +11,7 @@ dependencies {
     // The shared cycle detector, the same module iOS links as
     // PredictionSDK.xcframework. `api` so the engine's models stay visible to any
     // module that consumes a coordinator result, matching how SakhiCore is exposed.
-    api("com.getswipe.sakhi:PredictionSDK:1.0.0")
+    api("team.sakhi:PredictionSDK:1.0.0")
 
     implementation(libs.kermit)
     implementation(libs.androidx.core.ktx)
