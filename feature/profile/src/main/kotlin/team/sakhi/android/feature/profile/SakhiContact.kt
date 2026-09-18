@@ -8,6 +8,10 @@ package team.sakhi.android.feature.profile
  * a different one from the published privacy policy, and which Karan settled on 2026-09-18:
  * "hello@getswipe.in bilkul hat jayega, sakhi se swipe ka koi relevant nahi hai."
  *
+ * It then briefly became contact@sakhiapp.in, which matched the website and still could not
+ * receive mail: sakhiapp.in is a parked domain with no MX record. teamsakhi.com is the one
+ * with a mail server, and Karan chose contact@teamsakhi.com the same day.
+ *
  * The long legal bodies in `strings.xml` carry [TOKEN] rather than the address, because an
  * address cannot be referenced from inside another string resource. `ContentPageScreen`
  * swaps it in when it renders. A plain token and not `%1$s`: one FAQ body contains a literal
@@ -17,7 +21,7 @@ package team.sakhi.android.feature.profile
  */
 internal object SakhiContact {
 
-    const val EMAIL = "contact@sakhiapp.in"
+    const val EMAIL = "contact@teamsakhi.com"
 
     /** What the legal bodies in `strings.xml` carry in place of the address. */
     const val TOKEN = "{email}"
