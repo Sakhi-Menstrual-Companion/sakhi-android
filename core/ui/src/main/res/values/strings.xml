@@ -102,8 +102,8 @@
     <string name="feature_gate_no_permission_title">Not shared with you yet</string>
     <string name="feature_gate_no_permission_message">She hasn\'t shared this part of Sakhi with you, and that is completely her choice. Whatever she decides is okay, and she can change it any time.</string>
     <string name="feature_gate_notify_me">Tell me when it\'s back</string>
-    <string name="feature_gate_paused_title">We\'ve paused this for now</string>
-    <string name="feature_gate_paused_message">Nothing is wrong on your side. We have turned this off for a little while so we can fix it properly. Everything you have logged is safe, and it will come back.</string>
+    <string name="feature_gate_paused_title">It\'s not you</string>
+    <string name="feature_gate_paused_message">We\'ve paused this for a little while to fix it. Everything you have logged is safe.</string>
     <string name="feature_gate_unknown_title">Not available right now</string>
     <string name="feature_gate_unknown_message">We couldn\'t open this just now. Everything you have logged is safe. Please try again in a little while.</string>
     <string name="feature_gate_go_back">Go back</string>
