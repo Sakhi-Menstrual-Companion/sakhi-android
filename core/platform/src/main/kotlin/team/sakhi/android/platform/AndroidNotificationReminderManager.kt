@@ -199,23 +199,26 @@ class AndroidNotificationReminderManager(
             kvStore: PlatformKeyValueStore,
             isViewingOwnData: Boolean,
         ): NotificationPreferences {
+            // Scoped on the mode, the same way the Notifications screen writes them. These
+            // two branches used to read one shared value, so a care partner's choice about
+            // her alerts and her own choice about her own were the same stored bool.
             return if (isViewingOwnData) {
                 NotificationPreferences(
                     periodReminder = kvStore.getBool(
-                        UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER,
+                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER, isViewingOwnData),
                         UserPreferenceDefaults.NOTIFICATION_PERIOD_REMINDER,
                     ),
                     fertileWindow = kvStore.getBool(
-                        UserPreferenceKeys.NOTIFICATION_FERTILE_WINDOW,
+                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_FERTILE_WINDOW, isViewingOwnData),
                         UserPreferenceDefaults.NOTIFICATION_FERTILE_WINDOW,
                     ),
                     ovulationDay = kvStore.getBool(
-                        UserPreferenceKeys.NOTIFICATION_OVULATION_DAY,
+                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_OVULATION_DAY, isViewingOwnData),
                         UserPreferenceDefaults.NOTIFICATION_OVULATION_DAY,
                     ),
                     pmsWindow = false,
                     loggingReminder = kvStore.getBool(
-                        UserPreferenceKeys.NOTIFICATION_LOGGING_REMINDER,
+                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_LOGGING_REMINDER, isViewingOwnData),
                         UserPreferenceDefaults.NOTIFICATION_LOGGING_REMINDER,
                     ),
                     // iOS's live `NotificationManager.scheduleCycleReminders` overrides
@@ -225,7 +228,7 @@ class AndroidNotificationReminderManager(
             } else {
                 NotificationPreferences(
                     periodReminder = kvStore.getBool(
-                        UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER,
+                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER, isViewingOwnData),
                         UserPreferenceDefaults.NOTIFICATION_PERIOD_REMINDER,
                     ),
                     fertileWindow = false,

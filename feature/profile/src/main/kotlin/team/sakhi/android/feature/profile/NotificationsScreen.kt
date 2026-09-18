@@ -121,6 +121,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                 ToggleSection(
                     labelRes = R.string.profile_notifications_section_her_health_alerts,
                     kvStore = kvStore,
+                    isViewingOwnData = !isPartnerRole,
                     onToggleChanged = ::handleToggleChanged,
                     footerRes = R.string.profile_notifications_note_her_health_alerts,
                     rows = listOf(
@@ -143,6 +144,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                 ToggleSection(
                     labelRes = R.string.profile_notifications_section_care_alerts,
                     kvStore = kvStore,
+                    isViewingOwnData = !isPartnerRole,
                     onToggleChanged = ::handleToggleChanged,
                     footerRes = R.string.profile_notifications_note_care_alerts,
                     rows = listOf(
@@ -158,6 +160,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                 ToggleSection(
                     labelRes = R.string.profile_notifications_section_reminders,
                     kvStore = kvStore,
+                    isViewingOwnData = !isPartnerRole,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
                         ToggleOption(
@@ -173,6 +176,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                 ToggleSection(
                     labelRes = R.string.profile_notifications_section_period_alerts,
                     kvStore = kvStore,
+                    isViewingOwnData = !isPartnerRole,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
                         ToggleOption(
@@ -201,6 +205,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                 ToggleSection(
                     labelRes = R.string.profile_notifications_section_cycle_fertility,
                     kvStore = kvStore,
+                    isViewingOwnData = !isPartnerRole,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
                         ToggleOption(
@@ -222,6 +227,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                 ToggleSection(
                     labelRes = R.string.profile_notifications_section_be_her_sakhi,
                     kvStore = kvStore,
+                    isViewingOwnData = !isPartnerRole,
                     onToggleChanged = ::handleToggleChanged,
                     footerRes = R.string.profile_notifications_note_be_her_sakhi,
                     rows = listOf(
@@ -237,6 +243,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                 ToggleSection(
                     labelRes = R.string.profile_notifications_section_reminders,
                     kvStore = kvStore,
+                    isViewingOwnData = !isPartnerRole,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
                         ToggleOption(
@@ -282,6 +289,16 @@ private val NotificationSettingsTrailingIconSize = 13.dp
 private fun ToggleSection(
     @StringRes labelRes: Int,
     kvStore: PlatformKeyValueStore,
+    /**
+     * Which mode these toggles belong to.
+     *
+     * Both branches of this screen list the same keys: "Her period is coming" for a care
+     * partner and "Your period is coming" for her own reads and writes
+     * `notif_period_reminder` either way. Turning one off turned the other off. The read
+     * side already knew about the mode (`resolvePreferences` takes `isViewingOwnData`);
+     * only the storage was blind to it.
+     */
+    isViewingOwnData: Boolean,
     onToggleChanged: (String, Boolean) -> Unit,
     rows: List<ToggleOption>,
     @StringRes footerRes: Int? = null,
@@ -301,7 +318,7 @@ private fun ToggleSection(
                         subtitle = stringResource(row.subtitleRes),
                         icon = row.icon,
                         kvStore = kvStore,
-                        key = row.key,
+                        key = UserPreferenceKeys.notificationKey(row.key, isViewingOwnData),
                         default = row.default,
                         onToggleChanged = onToggleChanged,
                     )
