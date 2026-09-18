@@ -25,6 +25,7 @@ import team.sakhi.access.FeatureAccessState
 import team.sakhi.android.platform.AndroidHapticManager
 import team.sakhi.appstate.AppStateInputBridge
 import team.sakhi.auth.AuthRepository
+import team.sakhi.care.CareRealtimeCoordinator
 import team.sakhi.models.CycleData
 import team.sakhi.models.CycleHealthStatus
 import team.sakhi.models.UserProfile
@@ -34,6 +35,7 @@ import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.session.SessionPermissions
 import team.sakhi.state.SessionState
+import team.sakhi.sync.SyncPauseState
 
 /**
  * State-machine test for `ProfileViewModel`. `SessionManager`/`UserProfileRepository`/
@@ -84,6 +86,15 @@ class ProfileViewModelTest {
             every { getString(R.string.profile_load_failed) } returns "Failed to load profile"
             every { getString(R.string.profile_sign_out_failed) } returns "Couldn't sign out. Please try again."
         },
+        // Real state, not a mock: it is a bare StateFlow holder, and `init` subscribes to it
+        // immediately, so a relaxed mock would answer `isPaused` with a mocked Flow these
+        // tests never emit on.
+        syncPauseState: SyncPauseState = SyncPauseState(),
+        // Relaxed: these tests assert profile/session state, never the care-realtime
+        // reconnect `resumeOnline()` triggers. Added when the constructor grew these two
+        // parameters and this factory was not updated, which failed the whole module's
+        // compile rather than one test.
+        careRealtimeCoordinator: CareRealtimeCoordinator = mockk(relaxed = true),
     ) = ProfileViewModel(
         sessionManager,
         userProfileRepository,
@@ -93,6 +104,8 @@ class ProfileViewModelTest {
         featureAccessState,
         hapticManager,
         appContext,
+        syncPauseState,
+        careRealtimeCoordinator,
     )
 
     @Test

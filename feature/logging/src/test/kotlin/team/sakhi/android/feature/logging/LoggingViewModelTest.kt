@@ -36,6 +36,7 @@ import team.sakhi.models.FlowIntensity
 import team.sakhi.models.LogSource
 import team.sakhi.models.PeriodLog
 import team.sakhi.models.UserCareRole
+import team.sakhi.notifications.NotificationRepository
 import team.sakhi.repositories.PeriodLogRepository
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
@@ -160,6 +161,10 @@ class LoggingViewModelTest {
         cycleDataRepository: CycleDataRepository = mockk<CycleDataRepository>().also {
             coEvery { it.getAll(any()) } returns Result.success(emptyList())
         },
+        // Relaxed: these tests assert save/permission behaviour, never the care-partner
+        // wake-up push. Added when the constructor grew this parameter and this factory
+        // was not updated, which failed the whole module's compile rather than one test.
+        notificationRepository: NotificationRepository = mockk(relaxed = true),
     ) = LoggingViewModel(
         appContext,
         sessionManager,
@@ -170,6 +175,7 @@ class LoggingViewModelTest {
         cycleDataRepository,
         // Relaxed: the tests assert on saved state, not on the Home-refresh signal.
         mockk(relaxed = true),
+        notificationRepository,
     )
 
     @Test
