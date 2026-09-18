@@ -145,12 +145,17 @@ class AndroidNotificationReminderManager(
         kvStore.set(CONTEXT_TARGET_USER_ID, session.targetUserId)
         kvStore.set(CONTEXT_IS_VIEWING_OWN_DATA, session.isViewingOwnData.toString())
         kvStore.set(CONTEXT_USER_NAME, session.userName)
+        // The signed-in account, not the data being viewed -- these are that account's own
+        // reminder choices, so a worker running after she has signed out and someone else
+        // has signed in must not read the toggles she left behind.
+        kvStore.set(CONTEXT_USER_ID, session.userId)
     }
 
     private fun clearSchedulingContext() {
         kvStore.remove(CONTEXT_TARGET_USER_ID)
         kvStore.remove(CONTEXT_IS_VIEWING_OWN_DATA)
         kvStore.remove(CONTEXT_USER_NAME)
+        kvStore.remove(CONTEXT_USER_ID)
     }
 
     private fun enqueuePeriodicRefresh() {
@@ -189,6 +194,7 @@ class AndroidNotificationReminderManager(
         private const val CONTEXT_TARGET_USER_ID = "sakhi.notification.context.target_user_id"
         private const val CONTEXT_IS_VIEWING_OWN_DATA = "sakhi.notification.context.is_viewing_own_data"
         private const val CONTEXT_USER_NAME = "sakhi.notification.context.user_name"
+        private const val CONTEXT_USER_ID = "sakhi.notification.context.user_id"
 
         /** Shared with `SakhiFirebaseMessagingService.onNewToken`, which writes this key. */
         internal const val PENDING_FCM_TOKEN = "sakhi.notification.pending_fcm_token"
@@ -198,6 +204,7 @@ class AndroidNotificationReminderManager(
         internal fun resolvePreferences(
             kvStore: PlatformKeyValueStore,
             isViewingOwnData: Boolean,
+            userId: String? = null,
         ): NotificationPreferences {
             // Scoped on the mode, the same way the Notifications screen writes them. These
             // two branches used to read one shared value, so a care partner's choice about
@@ -205,20 +212,20 @@ class AndroidNotificationReminderManager(
             return if (isViewingOwnData) {
                 NotificationPreferences(
                     periodReminder = kvStore.getBool(
-                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER, isViewingOwnData),
+                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER, isViewingOwnData, userId),
                         UserPreferenceDefaults.NOTIFICATION_PERIOD_REMINDER,
                     ),
                     fertileWindow = kvStore.getBool(
-                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_FERTILE_WINDOW, isViewingOwnData),
+                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_FERTILE_WINDOW, isViewingOwnData, userId),
                         UserPreferenceDefaults.NOTIFICATION_FERTILE_WINDOW,
                     ),
                     ovulationDay = kvStore.getBool(
-                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_OVULATION_DAY, isViewingOwnData),
+                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_OVULATION_DAY, isViewingOwnData, userId),
                         UserPreferenceDefaults.NOTIFICATION_OVULATION_DAY,
                     ),
                     pmsWindow = false,
                     loggingReminder = kvStore.getBool(
-                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_LOGGING_REMINDER, isViewingOwnData),
+                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_LOGGING_REMINDER, isViewingOwnData, userId),
                         UserPreferenceDefaults.NOTIFICATION_LOGGING_REMINDER,
                     ),
                     // iOS's live `NotificationManager.scheduleCycleReminders` overrides
@@ -228,7 +235,7 @@ class AndroidNotificationReminderManager(
             } else {
                 NotificationPreferences(
                     periodReminder = kvStore.getBool(
-                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER, isViewingOwnData),
+                        UserPreferenceKeys.notificationKey(UserPreferenceKeys.NOTIFICATION_PERIOD_REMINDER, isViewingOwnData, userId),
                         UserPreferenceDefaults.NOTIFICATION_PERIOD_REMINDER,
                     ),
                     fertileWindow = false,
@@ -248,6 +255,7 @@ class AndroidNotificationReminderManager(
                 targetUserId = targetUserId,
                 isViewingOwnData = kvStore.get(CONTEXT_IS_VIEWING_OWN_DATA)?.toBooleanStrictOrNull() ?: true,
                 userName = kvStore.get(CONTEXT_USER_NAME).orEmpty(),
+                userId = kvStore.get(CONTEXT_USER_ID),
             )
         }
 
@@ -318,6 +326,7 @@ class AndroidNotificationReminderManager(
             val targetUserId: String,
             val isViewingOwnData: Boolean,
             val userName: String,
+            val userId: String? = null,
         )
     }
 
@@ -337,7 +346,7 @@ class AndroidNotificationReminderManager(
 
             val context = schedulingContext(kvStore) ?: return Result.success()
             val cycle = cycleDataRepository.getLatest(context.targetUserId).getOrNull() ?: return Result.success()
-            val preferences = resolvePreferences(kvStore, context.isViewingOwnData)
+            val preferences = resolvePreferences(kvStore, context.isViewingOwnData, context.userId)
             val scheduled = NotificationScheduleBuilder.build(
                 cycle = cycle,
                 userName = context.userName,

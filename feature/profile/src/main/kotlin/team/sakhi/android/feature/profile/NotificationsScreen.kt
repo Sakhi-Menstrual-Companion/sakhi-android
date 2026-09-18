@@ -122,6 +122,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                     labelRes = R.string.profile_notifications_section_her_health_alerts,
                     kvStore = kvStore,
                     isViewingOwnData = !isPartnerRole,
+                    userId = currentSession?.userId,
                     onToggleChanged = ::handleToggleChanged,
                     footerRes = R.string.profile_notifications_note_her_health_alerts,
                     rows = listOf(
@@ -145,6 +146,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                     labelRes = R.string.profile_notifications_section_care_alerts,
                     kvStore = kvStore,
                     isViewingOwnData = !isPartnerRole,
+                    userId = currentSession?.userId,
                     onToggleChanged = ::handleToggleChanged,
                     footerRes = R.string.profile_notifications_note_care_alerts,
                     rows = listOf(
@@ -161,6 +163,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                     labelRes = R.string.profile_notifications_section_reminders,
                     kvStore = kvStore,
                     isViewingOwnData = !isPartnerRole,
+                    userId = currentSession?.userId,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
                         ToggleOption(
@@ -177,6 +180,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                     labelRes = R.string.profile_notifications_section_period_alerts,
                     kvStore = kvStore,
                     isViewingOwnData = !isPartnerRole,
+                    userId = currentSession?.userId,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
                         ToggleOption(
@@ -206,6 +210,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                     labelRes = R.string.profile_notifications_section_cycle_fertility,
                     kvStore = kvStore,
                     isViewingOwnData = !isPartnerRole,
+                    userId = currentSession?.userId,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
                         ToggleOption(
@@ -228,6 +233,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                     labelRes = R.string.profile_notifications_section_be_her_sakhi,
                     kvStore = kvStore,
                     isViewingOwnData = !isPartnerRole,
+                    userId = currentSession?.userId,
                     onToggleChanged = ::handleToggleChanged,
                     footerRes = R.string.profile_notifications_note_be_her_sakhi,
                     rows = listOf(
@@ -244,6 +250,7 @@ fun NotificationsScreen(onBack: () -> Unit) {
                     labelRes = R.string.profile_notifications_section_reminders,
                     kvStore = kvStore,
                     isViewingOwnData = !isPartnerRole,
+                    userId = currentSession?.userId,
                     onToggleChanged = ::handleToggleChanged,
                     rows = listOf(
                         ToggleOption(
@@ -299,6 +306,14 @@ private fun ToggleSection(
      * only the storage was blind to it.
      */
     isViewingOwnData: Boolean,
+    /**
+     * The account signed in on this device right now, not the data being viewed.
+     *
+     * A bare key here is one file on a shared phone: her toggle followed whichever account
+     * signed in next, and a partner's could reset hers. Karan, 2026-09-18: each account
+     * keeps its own.
+     */
+    userId: String?,
     onToggleChanged: (String, Boolean) -> Unit,
     rows: List<ToggleOption>,
     @StringRes footerRes: Int? = null,
@@ -318,7 +333,7 @@ private fun ToggleSection(
                         subtitle = stringResource(row.subtitleRes),
                         icon = row.icon,
                         kvStore = kvStore,
-                        key = UserPreferenceKeys.notificationKey(row.key, isViewingOwnData),
+                        key = UserPreferenceKeys.notificationKey(row.key, isViewingOwnData, userId),
                         default = row.default,
                         onToggleChanged = onToggleChanged,
                     )
