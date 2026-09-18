@@ -435,6 +435,7 @@ fun HomeNavHost() {
                     HomeOverlaySheet.Chat -> FeatureAccessGate(
                         feature = AppFeature.SAKHI_AI_CHAT,
                         onBack = ::dismissOverlaySheet,
+                        presentedAsSheet = true,
                     ) {
                         ChatScreen(
                             onClose = ::dismissOverlaySheet,
@@ -454,6 +455,7 @@ fun HomeNavHost() {
                     is HomeOverlaySheet.Care -> FeatureAccessGate(
                         feature = AppFeature.BE_HER_SAKHI,
                         onBack = ::dismissOverlaySheet,
+                        presentedAsSheet = true,
                     ) {
                         CareScreen(
                             prefillInviteCode = targetSheet.prefillInviteCode,

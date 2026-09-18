@@ -68,6 +68,14 @@ fun FeatureAccessGate(
     feature: AppFeature,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * True when this gate's content is one pane inside [team.sakhi.android.ui.SakhiModalSheet]
+     * (Chat, Care), so the blocked explainer must present as that same sheet -- rounded top,
+     * drag handle, sized to the sheet, not to the screen. False (the default) is Emergency's
+     * case, deliberately full screen like iOS's `.fullScreenCover`, and any other caller that
+     * is not inside a modal sheet.
+     */
+    presentedAsSheet: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val resolver = koinInject<FeatureAccessResolver>()
@@ -102,6 +110,7 @@ fun FeatureAccessGate(
             reason = decision.reason,
             onBack = onBack,
             modifier = modifier,
+            presentedAsSheet = presentedAsSheet,
             // `AppFeature.name` is the same string the server keys on.
             featureKey = feature.name,
         )
@@ -117,6 +126,8 @@ fun FeatureAccessBlocked(
     reason: BlockReason?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** See [FeatureAccessGate]'s parameter of the same name. */
+    presentedAsSheet: Boolean = false,
     /** The `remote_config` key, for the paused state's notify button. */
     featureKey: String? = null,
 ) {
@@ -132,60 +143,75 @@ fun FeatureAccessBlocked(
     // what happens when she comes back. The other reasons keep the illustrated layout
     // below until they are given the same treatment.
     if (reason == BlockReason.OFFLINE_NEEDS_INTERNET) {
-        SakhiOnboardingView(
-            icon = Icons.Filled.CloudOff,
-            title = stringResource(R.string.feature_gate_offline_title),
-            message = stringResource(R.string.feature_gate_offline_short_message),
-            points = listOf(
-                SakhiOnboardingPoint(
-                    icon = Icons.Filled.Lock,
-                    title = stringResource(R.string.feature_gate_offline_point_1_title),
-                    detail = stringResource(R.string.feature_gate_offline_point_1_detail),
+        val onlineOnboarding = @Composable {
+            SakhiOnboardingView(
+                icon = Icons.Filled.CloudOff,
+                title = stringResource(R.string.feature_gate_offline_title),
+                message = stringResource(R.string.feature_gate_offline_short_message),
+                points = listOf(
+                    SakhiOnboardingPoint(
+                        icon = Icons.Filled.Lock,
+                        title = stringResource(R.string.feature_gate_offline_point_1_title),
+                        detail = stringResource(R.string.feature_gate_offline_point_1_detail),
+                    ),
+                    SakhiOnboardingPoint(
+                        icon = Icons.Filled.EditCalendar,
+                        title = stringResource(R.string.feature_gate_offline_point_2_title),
+                        detail = stringResource(R.string.feature_gate_offline_point_2_detail),
+                    ),
+                    SakhiOnboardingPoint(
+                        icon = Icons.Filled.CloudSync,
+                        title = stringResource(R.string.feature_gate_offline_point_3_title),
+                        detail = stringResource(R.string.feature_gate_offline_point_3_detail),
+                    ),
                 ),
-                SakhiOnboardingPoint(
-                    icon = Icons.Filled.EditCalendar,
-                    title = stringResource(R.string.feature_gate_offline_point_2_title),
-                    detail = stringResource(R.string.feature_gate_offline_point_2_detail),
-                ),
-                SakhiOnboardingPoint(
-                    icon = Icons.Filled.CloudSync,
-                    title = stringResource(R.string.feature_gate_offline_point_3_title),
-                    detail = stringResource(R.string.feature_gate_offline_point_3_detail),
-                ),
-            ),
-            primaryLabel = stringResource(R.string.feature_gate_resume_online),
-            onPrimaryClick = {
-                // Mirrors iOS `resumeOnline()`: release the held sync queue FIRST, then
-                // clear the flag. Clearing the flag alone would re-open the feature while
-                // sync stayed paused forever -- writes would queue up silently and never
-                // leave the device.
-                syncPauseState.resume()
-                accessState.setOnlineAccountPaused(false)
-            },
-            secondaryLabel = stringResource(R.string.feature_gate_go_back),
-            onSecondaryClick = onBack,
-            onClose = onBack,
-            modifier = modifier,
-        )
+                primaryLabel = stringResource(R.string.feature_gate_resume_online),
+                onPrimaryClick = {
+                    // Mirrors iOS `resumeOnline()`: release the held sync queue FIRST, then
+                    // clear the flag. Clearing the flag alone would re-open the feature while
+                    // sync stayed paused forever -- writes would queue up silently and never
+                    // leave the device.
+                    syncPauseState.resume()
+                    accessState.setOnlineAccountPaused(false)
+                },
+                secondaryLabel = stringResource(R.string.feature_gate_go_back),
+                onSecondaryClick = onBack,
+                onClose = onBack,
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+        if (presentedAsSheet) {
+            SheetSurface(showDragHandle = true, modifier = modifier) { onlineOnboarding() }
+        } else {
+            Box(modifier = modifier.fillMaxSize()) { onlineOnboarding() }
+        }
         return
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            // Opaque, matching iOS's `.profileStaticPageBackground()`. Without it the
-            // explainer drew straight over whatever screen it replaced, so Home's
-            // hero and cards showed through the copy and it was unreadable. It has to be
-            // the page BRUSH, not the flat background role: in dark that role is pure
-            // black, while iOS's modifier paints the follicular phase gradient.
-            .background(sakhiPageBackgroundBrush())
-            .windowInsetsPadding(WindowInsets.safeDrawing)
-            .padding(horizontal = SakhiSpacing.space6),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+    // `SheetSurface` already fills its container, clips the rounded top and paints the
+    // page background -- all three of which this Column used to do a second time with
+    // `.fillMaxSize()` / `.background()` / `.windowInsetsPadding(safeDrawing)` of its own.
+    // That second, unclipped, edge-to-edge paint is exactly what made this screen read as
+    // a full page instead of the sheet Chat and Care present it inside (Karan, 2026-09-19,
+    // spotted it as the "We've paused this for now" screen filling the whole phone instead
+    // of sitting in the modal sheet). Emergency stays full screen on purpose (see
+    // `HomeNavHost`'s comment there), so only the sheet path goes through `SheetSurface`.
+    val explainer = @Composable {
+        Column(
+            // Sheet mode already got `modifier` applied one level up, on `SheetSurface`
+            // itself; using it again here as well as there would double it.
+            modifier = (if (presentedAsSheet) Modifier else modifier)
+                .fillMaxSize()
+                .let { if (presentedAsSheet) it else it.background(sakhiPageBackgroundBrush()) }
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+                .padding(horizontal = SakhiSpacing.space6),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
         // Leading, not trailing. The way out sits on the LEFT on every screen in the app.
+        // Always the X: Karan, 2026-09-19, this screen is never something you step back
+        // through, it is something you dismiss, in a sheet or full screen alike.
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start) {
-            BackButton(onClick = onBack)
+            CloseButton(onClick = onBack)
         }
 
         Spacer(modifier = Modifier.weight(1f))
@@ -227,6 +253,12 @@ fun FeatureAccessBlocked(
             modifier = Modifier.padding(top = SakhiSpacing.space2),
         )
 
+        // A real gap, not just the button's own top padding -- Karan, 2026-09-19, on a
+        // real device: "bilkul bhi space nahi hai content aur CTA ke beech". iOS groups
+        // this whole block with DS.Spacing.l between each part, which is what
+        // this and the button's own remaining top padding together now match.
+        Spacer(modifier = Modifier.height(SakhiSpacing.space6))
+
         PrimaryButton(
             text = stringResource(copy.primaryLabel),
             onClick = {
@@ -257,6 +289,12 @@ fun FeatureAccessBlocked(
         )
 
         Spacer(modifier = Modifier.weight(1f))
+        }
+    }
+    if (presentedAsSheet) {
+        SheetSurface(showDragHandle = true, modifier = modifier) { explainer() }
+    } else {
+        explainer()
     }
 }
 
