@@ -34,11 +34,16 @@ class SakhiMotionTest {
     }
 
     @Test
-    fun `iOS calendar sheet spring keeps its stiffness and lands just under critical damping`() {
+    fun `Android's sheet spring is stiffer than iOS but lands at the same near-critical damping`() {
+        // Stale since 6d9ad0a (2026-09-13), which moved this spring from iOS's own
+        // 340/34 to a stiffer 520/42 so a sheet arrives about a fifth sooner on Android
+        // ("Karan found every sheet slow to arrive"). This test still asserted 340/0.9220,
+        // the value the code stopped producing that same commit, so it should have failed
+        // ever since and did not get run.
         val spec = SakhiMotion.sheet<Float>()
-        assertEquals(340f, spec.stiffness)
-        // 34 / (2 · √340) = 0.9220
-        assertEquals(0.9220f, spec.dampingRatio, absoluteTolerance = 0.0005f)
+        assertEquals(520f, spec.stiffness)
+        // 42 / (2 · √520) = 0.9209
+        assertEquals(0.9209f, spec.dampingRatio, absoluteTolerance = 0.0005f)
     }
 
     @Test
