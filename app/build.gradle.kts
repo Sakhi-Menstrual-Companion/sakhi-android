@@ -90,8 +90,10 @@ android {
         // something different: 2.0.1 to 2.0.2 for a fix, to 2.1.0 for a feature. The two
         // numbers are independent and are not meant to match each other.
         versionCode = 5
-        // NOTE: iOS `MARKETING_VERSION` is still 1.0, so the two platforms no longer carry
-        // the same number. Bring iOS into step if they are meant to match.
+        // The two platforms do not carry the same number and are not meant to. iOS
+        // `MARKETING_VERSION` is 2.0.1 (checked in project.pbxproj, 2026-09-18); this note
+        // said 1.0 and was stale. Each store versions on its own, so leave them alone unless
+        // a release deliberately aligns them.
         versionName = "2.0.2"
         // Temporary fallback keeps clean checkouts buildable, but the new
         // Nearby Places map surfaces still need a Maps-authorized runtime key.
