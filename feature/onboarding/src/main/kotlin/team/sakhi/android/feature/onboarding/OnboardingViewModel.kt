@@ -42,6 +42,7 @@ import team.sakhi.validation.ValidationRules
 import java.time.LocalDate
 import java.time.YearMonth
 import team.sakhi.repositories.CareInviteException
+import team.sakhi.android.common.oneSakhiRefusalMessage
 import team.sakhi.android.common.toSafeUserMessage
 
 private const val ONBOARDING_CONTINUE_TRANSITION_GUARD_NANOS = 420_000_000L
@@ -317,9 +318,11 @@ class OnboardingViewModel(
                 // off the edge function's status code, so expired / already-used / wrong
                 // phone are finally distinguishable instead of collapsing into one
                 // "something went wrong".
+                val oneSakhiRefusal = throwable.oneSakhiRefusalMessage(appContext)
                 val message = when {
                     throwable.isOfflineFailure() ->
                         appContext.getString(R.string.onboarding_error_offline)
+                    oneSakhiRefusal != null -> oneSakhiRefusal
                     else -> when ((throwable as? CareInviteException)?.reason) {
                         CareInviteException.Reason.EXPIRED ->
                             appContext.getString(R.string.onboarding_error_code_expired)
@@ -335,7 +338,9 @@ class OnboardingViewModel(
                 }
                 // A wrong or spent code will not start working on retry; iOS drops the
                 // retry affordance for exactly this case (`canRetry = false` on notFound).
-                val retryable = (throwable as? CareInviteException)?.reason != CareInviteException.Reason.NOT_FOUND
+                val retryable = (throwable as? CareInviteException)?.reason.let {
+                    it != CareInviteException.Reason.NOT_FOUND && oneSakhiRefusal == null
+                }
                 _acceptUiState.value = _acceptUiState.value.copy(
                     isAccepting = false,
                     error = message,

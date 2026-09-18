@@ -787,6 +787,7 @@ class ChatViewModel(
                 text = text,
             )
         }.onFailure { throwable ->
+            logSendFailure(throwable, willRetry = throwable.isRetryableChatFailure())
             if (activeSessionKey(sessionManager.current) != requestedSessionKey) return@onFailure
             if (throwable.isRetryableChatFailure()) {
                 enqueuePendingRetry(
@@ -815,6 +816,18 @@ class ChatViewModel(
                 )
             }
         }
+    }
+
+    // The girl only ever sees "not sent". Without this line nothing says whether the server
+    // was reached, which is how a phone clock six hours behind hid as a silent chat failure.
+    // Class and first line only: Ktor messages can carry the request URL and headers.
+    private fun logSendFailure(throwable: Throwable, willRetry: Boolean) {
+        android.util.Log.w(
+            "SakhiChat",
+            "send failed (${if (willRetry) "will retry" else "marked not sent"}): " +
+                "${throwable::class.simpleName}: " +
+                throwable.message.orEmpty().substringBefore('\n').take(160),
+        )
     }
 
     private fun localWelcomeMessages(session: SessionContext): List<ConversationMessage> {

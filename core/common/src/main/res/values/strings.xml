@@ -2,4 +2,6 @@
     <!-- Shown instead of a raw backend/network exception message. See
          SafeErrorMessage.kt for why exception text must never reach the UI. -->
     <string name="common_error_offline">You\'re offline. Please check your connection and try again.</string>
+    <string name="common_error_partner_already_connected">You\'re already someone\'s Sakhi. That connection needs to end before you can accept a new invite.</string>
+    <string name="common_error_primary_already_connected">She already has a Sakhi, so this invite can\'t be accepted. Her current connection needs to end first.</string>
 </resources>

@@ -19,6 +19,7 @@ import team.sakhi.models.PartnerInvitation
 import team.sakhi.models.RelationType
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
+import team.sakhi.android.common.oneSakhiRefusalMessage
 import team.sakhi.android.common.toSafeUserMessage
 
 data class CareUiState(
@@ -256,7 +257,8 @@ class CareViewModel(
                 _uiState.update {
                     it.copy(
                         isAcceptingInvite = false,
-                        error = throwable.toSafeUserMessage(appContext, R.string.care_error_accept_invite),
+                        error = throwable.oneSakhiRefusalMessage(appContext)
+                            ?: throwable.toSafeUserMessage(appContext, R.string.care_error_accept_invite),
                     )
                 }
             }

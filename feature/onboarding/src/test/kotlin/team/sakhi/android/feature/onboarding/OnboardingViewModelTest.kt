@@ -104,6 +104,10 @@ class OnboardingViewModelTest {
         every { getString(R.string.onboarding_error_offline) } returns "No internet connection. Please check and try again."
         every { getString(R.string.onboarding_error_code_expired) } returns "This code has expired. Ask your partner to create a new invite."
         every { getString(R.string.onboarding_error_code_wrong_phone) } returns "This invitation was sent to a different phone number."
+        every { getString(team.sakhi.android.common.R.string.common_error_partner_already_connected) } returns
+            "You're already someone's Sakhi. That connection needs to end before you can accept a new invite."
+        every { getString(team.sakhi.android.common.R.string.common_error_primary_already_connected) } returns
+            "She already has a Sakhi, so this invite can't be accepted. Her current connection needs to end first."
         every { getString(R.string.onboarding_error_sign_in_before_invite) } returns "Please sign in before creating a care invite."
         every { getString(R.string.onboarding_fallback_user) } returns "User"
         every { getString(R.string.onboarding_error_create_invite) } returns "Couldn't create invite right now."
@@ -790,6 +794,50 @@ class OnboardingViewModelTest {
         // longer "…Please double-check with your partner." sentence.
         assertEquals("This code doesn't exist.", state.error)
         // Retrying the same wrong/spent code cannot succeed, so the affordance is dropped.
+        assertFalse(state.canRetry)
+    }
+
+    @Test
+    fun `acceptBeHerSakhiInvite already someone's Sakhi says so and blocks retry`() = runTest {
+        val flowStore = OnboardingFlowStore("newUser")
+        flowStore.send(OnboardingFlowIntent.BeHerSakhiCodeEntered(code = "ABC123"))
+        val careStore = mockCareStore()
+        coEvery { careStore.acceptInvitation("ABC123", "user-1") } throws
+            CareInviteException(CareInviteException.Reason.PARTNER_ALREADY_CONNECTED, 409)
+        val viewModel = newViewModel(flowStore = flowStore, careStore = careStore)
+        advanceUntilIdle()
+
+        viewModel.acceptBeHerSakhiInvite()
+        advanceUntilIdle()
+        awaitCondition { !viewModel.acceptUiState.value.isAccepting }
+
+        val state = viewModel.acceptUiState.value
+        assertEquals(
+            "You're already someone's Sakhi. That connection needs to end before you can accept a new invite.",
+            state.error,
+        )
+        assertFalse(state.canRetry)
+    }
+
+    @Test
+    fun `acceptBeHerSakhiInvite from a woman who already has a Sakhi says so and blocks retry`() = runTest {
+        val flowStore = OnboardingFlowStore("newUser")
+        flowStore.send(OnboardingFlowIntent.BeHerSakhiCodeEntered(code = "ABC123"))
+        val careStore = mockCareStore()
+        coEvery { careStore.acceptInvitation("ABC123", "user-1") } throws
+            CareInviteException(CareInviteException.Reason.PRIMARY_ALREADY_CONNECTED, 409)
+        val viewModel = newViewModel(flowStore = flowStore, careStore = careStore)
+        advanceUntilIdle()
+
+        viewModel.acceptBeHerSakhiInvite()
+        advanceUntilIdle()
+        awaitCondition { !viewModel.acceptUiState.value.isAccepting }
+
+        val state = viewModel.acceptUiState.value
+        assertEquals(
+            "She already has a Sakhi, so this invite can't be accepted. Her current connection needs to end first.",
+            state.error,
+        )
         assertFalse(state.canRetry)
     }
 

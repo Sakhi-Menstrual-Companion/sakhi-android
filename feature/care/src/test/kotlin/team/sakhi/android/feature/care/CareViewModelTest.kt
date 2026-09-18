@@ -29,6 +29,7 @@ import team.sakhi.models.CarePartnership
 import team.sakhi.models.ParentChildPermissions
 import team.sakhi.models.PartnerInvitation
 import team.sakhi.models.UserCareRole
+import team.sakhi.repositories.CareInviteException
 import team.sakhi.session.SessionContext
 import team.sakhi.session.SessionManager
 import team.sakhi.session.SessionPermissions
@@ -124,6 +125,10 @@ class CareViewModelTest {
             every { getString(R.string.care_error_enter_invite_code) } returns "Please enter the full 6-character code."
             every { getString(R.string.care_info_invite_accepted) } returns "The invite was accepted."
             every { getString(R.string.care_error_accept_invite) } returns "Unable to accept this invite right now."
+            every { getString(team.sakhi.android.common.R.string.common_error_partner_already_connected) } returns
+                "You're already someone's Sakhi. That connection needs to end before you can accept a new invite."
+            every { getString(team.sakhi.android.common.R.string.common_error_primary_already_connected) } returns
+                "She already has a Sakhi, so this invite can't be accepted. Her current connection needs to end first."
             every { getString(R.string.care_info_invite_closed) } returns "That invite has been closed. Nothing was shared."
             every { getString(R.string.care_error_cancel_invite) } returns "Unable to cancel this invite right now."
             every { getString(R.string.care_error_complete_action) } returns "Unable to complete this right now."
@@ -421,6 +426,44 @@ class CareViewModelTest {
         val state = viewModel.uiState.value
         assertEquals("", state.acceptInviteCode)
         assertEquals("The invite was accepted.", state.infoMessage)
+    }
+
+    @Test
+    fun `accepting while already someone's Sakhi says so instead of the generic failure`() = runTest {
+        val careStore = mockCareStore {
+            coEvery { acceptInvitation("ABC123", "user-1") } throws
+                CareInviteException(CareInviteException.Reason.PARTNER_ALREADY_CONNECTED, 409)
+        }
+        val viewModel = newViewModel(mockSessionManager(sessionContext()), careStore = careStore)
+        advanceUntilIdle()
+        viewModel.onAcceptInviteCodeChanged("abc123")
+
+        viewModel.acceptInvitation()
+        advanceUntilIdle()
+
+        assertEquals(
+            "You're already someone's Sakhi. That connection needs to end before you can accept a new invite.",
+            viewModel.uiState.value.error,
+        )
+    }
+
+    @Test
+    fun `accepting an invite from a woman who already has a Sakhi says so instead of the generic failure`() = runTest {
+        val careStore = mockCareStore {
+            coEvery { acceptInvitation("ABC123", "user-1") } throws
+                CareInviteException(CareInviteException.Reason.PRIMARY_ALREADY_CONNECTED, 409)
+        }
+        val viewModel = newViewModel(mockSessionManager(sessionContext()), careStore = careStore)
+        advanceUntilIdle()
+        viewModel.onAcceptInviteCodeChanged("abc123")
+
+        viewModel.acceptInvitation()
+        advanceUntilIdle()
+
+        assertEquals(
+            "She already has a Sakhi, so this invite can't be accepted. Her current connection needs to end first.",
+            viewModel.uiState.value.error,
+        )
     }
 
     @Test
