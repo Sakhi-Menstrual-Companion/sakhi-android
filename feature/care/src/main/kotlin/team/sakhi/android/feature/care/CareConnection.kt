@@ -23,13 +23,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.EditCalendar
 import androidx.compose.material.icons.filled.Favorite
@@ -50,6 +53,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -69,16 +75,20 @@ import team.sakhi.android.designsystem.sakhiGroupedBackground
 import team.sakhi.android.designsystem.sakhiLightPink
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiSystemBackground
+import team.sakhi.android.designsystem.sakhiTertiaryLabel
+import team.sakhi.android.ui.SakhiFooter
+import team.sakhi.android.ui.SakhiNavBar
 import team.sakhi.staywithme.StayWithMeWalkRecord
 
 /**
- * The picture at the top of a connection: the two of them, under a shelter.
+ * The two of them, at the top of their page. Port of iOS's `CareConnectionArt`.
  *
- * Two faces side by side with a soft arc over them, and three small lights above it. It
- * says someone is with you, and nothing about who they are to you. An earlier design had
- * two houses joined by a string of lights with a heart lantern, which reads as a couple
- * living apart; this is Care Mode, and for most women the person she trusts is her mother,
- * her sister or a friend.
+ * It used to be a scene: a wide arc over the faces with three small lights above it, meant
+ * to read as a shelter, and then a soft halo behind them. Both were decoration nobody could
+ * name (Karan, 2026-09-14). What is left is the part that means something: the two faces,
+ * on the page, with the Sakhi mark where they meet on a white disc, like a small seal on the
+ * pair rather than a third face. Who they are to each other is deliberately not drawn: for
+ * most women the person she trusts is her mother, her sister or a friend.
  */
 @Composable
 internal fun CareConnectionArt(
@@ -88,35 +98,36 @@ internal fun CareConnectionArt(
     otherAvatarIndex: Int,
     modifier: Modifier = Modifier,
 ) {
-    val pink = MaterialTheme.colorScheme.primary
-    Box(modifier = modifier.fillMaxWidth().height(190.dp)) {
-        // The shelter: a wide, shallow arc over both of them, with three lights above it.
-        Canvas(modifier = Modifier.fillMaxWidth().height(190.dp)) {
-            val w = size.width
-            val h = size.height
-            val arc = androidx.compose.ui.graphics.Path().apply {
-                moveTo(w * 0.20f, h * 0.52f)
-                quadraticBezierTo(w * 0.5f, h * 0.12f, w * 0.80f, h * 0.52f)
+    Box(
+        modifier = modifier.fillMaxWidth().height(100.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy((-16).dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CareFace(avatarIndex = selfAvatarIndex, size = 76)
+                CareFace(avatarIndex = otherAvatarIndex, size = 76)
             }
-            drawPath(arc, color = pink.copy(alpha = 0.28f), style = Stroke(width = 4f, cap = StrokeCap.Round))
-            listOf(0.34f, 0.5f, 0.66f).forEachIndexed { index, t ->
-                val y = if (index == 1) h * 0.14f else h * 0.22f
-                drawCircle(color = pink.copy(alpha = 0.5f), radius = h * 0.016f, center = Offset(w * t, y))
-            }
-        }
-
-        Row(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = SakhiSpacing.space4),
-            horizontalArrangement = Arrangement.spacedBy((-14).dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            CareFace(avatarIndex = selfAvatarIndex, size = 72)
-            CareFace(avatarIndex = otherAvatarIndex, size = 72)
+            // iOS: a 24pt mark, 2pt white collar, sitting 5pt below where the faces meet.
+            Image(
+                painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_app_logo),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .offset(y = 5.dp)
+                    .background(sakhiSystemBackground(), CircleShape)
+                    .padding(2.dp)
+                    .size(24.dp)
+                    .clip(CircleShape),
+            )
         }
     }
 }
 
-/** One face in the picture: the stand-in artwork, on a soft disc, with a white collar. */
+/** One face in the picture: the stand-in artwork on a soft disc, with a white collar. */
 @Composable
 private fun CareFace(avatarIndex: Int, size: Int) {
     Box(
@@ -131,9 +142,9 @@ private fun CareFace(avatarIndex: Int, size: Int) {
         Image(
             painter = painterResource(CareAvatars.drawable(avatarIndex)),
             contentDescription = null,
-            // 80% of the artwork's own fill, so the face sits inside its circle rather than
-            // pressing on the edge (Karan, 2026-09-13).
-            modifier = Modifier.fillMaxSize().scale(CareAvatars.scale(avatarIndex) * 0.8f),
+            // 64% of the artwork's own fill: 80% on 2026-09-13, then another fifth off on
+            // 2026-09-14. The circle keeps its size; only the face inside it gets smaller.
+            modifier = Modifier.fillMaxSize().scale(CareAvatars.scale(avatarIndex) * 0.64f),
         )
     }
 }
@@ -251,18 +262,20 @@ internal fun CareMoments(
                     imageVector = Icons.Filled.Favorite,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier.size(22.dp),
                 )
             }
+            // iOS: 16 bold label over a 13 secondary line, 16 and 4 below the disc.
             Text(
                 text = androidx.compose.ui.res.stringResource(R.string.care_moments_empty_title),
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
                 color = sakhiLabel(),
                 modifier = Modifier.padding(top = SakhiSpacing.space4),
             )
             Text(
                 text = emptyText,
-                style = MaterialTheme.typography.bodySmall,
+                fontSize = 13.sp,
                 color = sakhiSecondaryLabel(),
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.padding(top = SakhiSpacing.space1),
@@ -271,6 +284,9 @@ internal fun CareMoments(
         return
     }
     val shown = limit?.let { moments.take(it) } ?: moments
+    // The card (a limit) closes itself: 4 under the list when "Show all" follows, 12 when it
+    // does not. The full page (no limit) is the list alone.
+    val hasMore = limit != null && moments.size > limit
     Column(modifier = Modifier.fillMaxWidth()) {
         shown.forEachIndexed { index, moment ->
             TimelineRow(
@@ -280,27 +296,34 @@ internal fun CareMoments(
                 isLast = index == shown.lastIndex,
             )
         }
-        if (onShowAll != null && limit != null && moments.size > limit) {
-            SakhiListDivider(modifier = Modifier.padding(top = SakhiSpacing.space2))
+        if (limit != null) {
+            Spacer(Modifier.height(if (hasMore) 4.dp else 12.dp))
+        }
+        if (onShowAll != null && hasMore) {
+            SakhiListDivider()
+            val showAllLabel = androidx.compose.ui.res.stringResource(R.string.care_moments_show_all)
+            val showAllA11y = androidx.compose.ui.res.stringResource(R.string.care_moments_show_all_a11y, moments.size)
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(onClick = onShowAll)
-                    .padding(vertical = SakhiSpacing.space4),
+                    .semantics { contentDescription = showAllA11y }
+                    .padding(vertical = 14.dp),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = androidx.compose.ui.res.stringResource(R.string.care_moments_show_all),
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    text = showAllLabel,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
                 )
-                Spacer(Modifier.width(2.dp))
+                Spacer(Modifier.width(4.dp))
                 Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    imageVector = Icons.Filled.ChevronRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(18.dp),
+                    modifier = Modifier.size(16.dp),
                 )
             }
         }
@@ -345,21 +368,22 @@ private fun TimelineRow(moment: CareMoment, time: String, isFirst: Boolean, isLa
             Row(verticalAlignment = Alignment.Top) {
                 Text(
                     text = moment.title,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
                     color = sakhiLabel(),
                     modifier = Modifier.weight(1f),
                 )
                 Spacer(Modifier.width(SakhiSpacing.space2))
                 Text(
                     text = time,
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 12.sp,
                     color = sakhiSecondaryLabel(),
                 )
             }
             if (moment.detail.isNotBlank()) {
                 Text(
                     text = moment.detail,
-                    style = MaterialTheme.typography.bodySmall,
+                    fontSize = 13.sp,
                     color = sakhiSecondaryLabel(),
                     modifier = Modifier.padding(top = 2.dp),
                 )
@@ -380,7 +404,7 @@ internal fun CareLinkRow(
         modifier = Modifier
             .fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
+            .padding(horizontal = SakhiSpacing.space5, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
@@ -392,25 +416,28 @@ internal fun CareLinkRow(
                 imageVector = icon,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(17.dp),
+                modifier = Modifier.size(16.dp),
             )
         }
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
                 color = sakhiLabel(),
             )
             subtitle?.let {
-                Text(text = it, style = MaterialTheme.typography.bodySmall, color = sakhiSecondaryLabel())
+                Text(text = it, fontSize = 13.sp, color = sakhiSecondaryLabel())
             }
         }
+        // iOS draws the chevron only when the row opens something; a row that only tells her
+        // something (what she shares with him) has none and is not a button.
         if (onClick != null) {
             Icon(
                 imageVector = Icons.Filled.ChevronRight,
                 contentDescription = null,
-                tint = sakhiSecondaryLabel(),
-                modifier = Modifier.size(20.dp),
+                tint = sakhiTertiaryLabel(),
+                modifier = Modifier.size(18.dp),
             )
         }
     }
@@ -454,7 +481,8 @@ internal fun CareSection(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = SakhiSpacing.space5),
-        shape = RoundedCornerShape(SakhiRadius.xl),
+        // iOS `careCard`: continuous 24.
+        shape = RoundedCornerShape(24.dp),
         color = sakhiSystemBackground(),
     ) {
         Column(modifier = Modifier.fillMaxWidth(), content = content)
@@ -483,14 +511,16 @@ internal fun CareSectionTitle(
         Text(
             text = text,
             // Sentence case, not capitals (Karan, 2026-09-13), so no wide caps tracking.
-            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
             color = sakhiSecondaryLabel(),
             modifier = Modifier.weight(1f),
         )
         if (actionText != null && onAction != null) {
             Text(
                 text = actionText,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.clickable(onClick = onAction),
             )
@@ -520,215 +550,107 @@ internal fun CareSinceChip(text: String, modifier: Modifier = Modifier) {
             imageVector = Icons.Filled.Favorite,
             contentDescription = null,
             tint = sakhiDeepRose(),
-            modifier = Modifier.size(13.dp),
+            modifier = Modifier.size(11.dp),
         )
         Text(
             text = text,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.SemiBold),
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
             color = sakhiDeepRose(),
         )
     }
 }
 
-/** Where the Stay With Me card is: nothing yet, a round trip, an ask out, or a live walk. */
-internal enum class CareStayState { Idle, Working, Waiting, Live }
-
 /**
- * The Stay With Me block: a real map, what is happening, and the one button.
- *
- * The map is live the moment a walk is: her dot, the way she has come, the way ahead. Before
- * that it shows where this phone is, so it is a map of somewhere real rather than a drawing.
- * The whole map is a tap target that opens it full screen, and the small button in its corner
- * says so, since a map in a list does not otherwise look like it opens.
- *
- * [mapModifier] is the caller's, so it can carry the shared-bounds link to the full screen map
- * the card grows into.
+ * A finished action, on its own page: a pink disc with a tick, what happened, and Done.
+ * Port of iOS's `CareActionCompletionView` (plain symbol hero), used for "Request cancelled".
+ * The way out is the X on the left, like every other Sakhi sheet.
  */
 @Composable
-internal fun CareStayCard(
-    state: CareStayState,
+internal fun CareActionCompletion(
     title: String,
-    line: String,
-    idleLabel: String,
-    onButton: () -> Unit,
-    onExpand: () -> Unit,
-    mapModifier: Modifier = Modifier,
-    map: @Composable () -> Unit,
+    message: String,
+    primaryLabel: String,
+    onPrimary: () -> Unit,
+    onClose: () -> Unit,
 ) {
-    CareSection {
-        CareSectionTitle(text = title)
-        Box(
-            modifier = Modifier
-                .padding(horizontal = SakhiSpacing.space4)
-                .then(mapModifier)
-                .fillMaxWidth()
-                .height(184.dp)
-                .clip(RoundedCornerShape(SakhiRadius.lg))
-                .background(sakhiLightPink()),
-        ) {
-            map()
-            // Over the map, so a tap anywhere on it opens it, and the map itself never takes
-            // the drag that should scroll the page.
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable(onClick = onExpand),
-            )
-            if (state == CareStayState.Live) {
-                LiveBadge(modifier = Modifier.align(Alignment.TopStart).padding(10.dp))
-            }
-            Surface(
-                shape = CircleShape,
-                color = sakhiSystemBackground(),
-                shadowElevation = 0.dp,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(10.dp)
-                    .size(34.dp),
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize().clickable(onClick = onExpand),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.OpenInFull,
-                        contentDescription = androidx.compose.ui.res.stringResource(R.string.care_stay_expand),
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-        }
-        androidx.compose.animation.AnimatedContent(
-            targetState = line,
-            label = "careStayLine",
-        ) { text ->
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = sakhiSecondaryLabel(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = SakhiSpacing.space5, end = SakhiSpacing.space5, top = SakhiSpacing.space3),
-            )
-        }
-        CareStayButton(
-            state = state,
-            idleLabel = idleLabel,
-            onClick = if (state == CareStayState.Live) onExpand else onButton,
-            modifier = Modifier.padding(
-                start = SakhiSpacing.space4,
-                end = SakhiSpacing.space4,
-                top = SakhiSpacing.space4,
-                bottom = SakhiSpacing.space5,
+    val pageTop = sakhiLightPink()
+    val pageBottom = androidx.compose.ui.graphics.lerp(sakhiLightPink(), sakhiSystemBackground(), 0.82f)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    0f to pageTop,
+                    0.30f to androidx.compose.ui.graphics.lerp(pageTop, pageBottom, 0.72f),
+                    1f to pageBottom,
+                ),
             ),
+    ) {
+        SakhiNavBar(onClose = onClose)
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(
+                modifier = Modifier.size(72.dp).background(MaterialTheme.colorScheme.primary, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp),
+                )
+            }
+            Text(
+                text = title,
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = sakhiLabel(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.padding(top = SakhiSpacing.space8, start = SakhiSpacing.space6, end = SakhiSpacing.space6),
+            )
+            Text(
+                text = message,
+                fontSize = 15.sp,
+                lineHeight = 21.sp,
+                color = sakhiSecondaryLabel(),
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier
+                    .padding(top = SakhiSpacing.space3)
+                    .padding(horizontal = SakhiSpacing.space8)
+                    .widthIn(max = 280.dp),
+            )
+        }
+        SakhiFooter(
+            primaryLabel = primaryLabel,
+            onPrimaryClick = onPrimary,
+            showSecondarySlot = false,
         )
     }
 }
 
 /**
- * The card's one button, through each thing it can be.
- *
- * Asking: a spinner in the pink, so the press is answered at once. Waiting: the pink goes soft
- * and a small dot breathes beside "Waiting for her to start", because nothing is wrong and
- * nothing more is needed from them. Live: it opens the map.
+ * The footer's button while its action is running: the same pink capsule with a spinner where
+ * the label was, as iOS's `isLoading`. [SakhiFooter] has no loading state of its own.
  */
 @Composable
-internal fun CareStayButton(
-    state: CareStayState,
-    idleLabel: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val pink = MaterialTheme.colorScheme.primary
-    val waiting = state == CareStayState.Waiting
-    val fill by androidx.compose.animation.animateColorAsState(
-        targetValue = if (waiting) pink.copy(alpha = 0.10f) else pink,
-        label = "careStayButtonFill",
-    )
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(52.dp)
-            .clip(RoundedCornerShape(SakhiRadius.full))
-            .background(fill)
-            .clickable(
-                enabled = state == CareStayState.Idle || state == CareStayState.Live,
-                onClick = onClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        androidx.compose.animation.AnimatedContent(
-            targetState = state,
-            label = "careStayButton",
-        ) { shown ->
-            when (shown) {
-                CareStayState.Working -> androidx.compose.material3.CircularProgressIndicator(
-                    color = Color.White,
-                    strokeWidth = 2.5.dp,
-                    modifier = Modifier.size(22.dp),
-                )
-                CareStayState.Waiting -> Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    BreathingDot(color = sakhiDeepRose())
-                    Text(
-                        text = androidx.compose.ui.res.stringResource(R.string.care_stay_waiting_button),
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = sakhiDeepRose(),
-                    )
-                }
-                CareStayState.Live -> Text(
-                    text = androidx.compose.ui.res.stringResource(R.string.care_stay_open_live),
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White,
-                )
-                CareStayState.Idle -> Text(
-                    text = idleLabel,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = Color.White,
-                )
-            }
-        }
-    }
-}
-
-/** A small dot that fades in and out, for "waiting" and for "live". */
-@Composable
-private fun BreathingDot(color: Color, size: Int = 8) {
-    val transition = androidx.compose.animation.core.rememberInfiniteTransition(label = "breathingDot")
-    val alpha by transition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
-            androidx.compose.animation.core.tween(900),
-            androidx.compose.animation.core.RepeatMode.Reverse,
-        ),
-        label = "breathingDotAlpha",
-    )
+internal fun CareLoadingButton() {
     Box(
         modifier = Modifier
-            .size(size.dp)
-            .background(color.copy(alpha = alpha), CircleShape),
-    )
-}
-
-/** "LIVE", with a breathing dot, on the map while a walk is on. */
-@Composable
-private fun LiveBadge(modifier: Modifier = Modifier) {
-    Row(
-        modifier = modifier
-            .background(sakhiSystemBackground(), RoundedCornerShape(SakhiRadius.full))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+            .fillMaxWidth()
+            .height(52.dp)
+            .padding(horizontal = SakhiSpacing.space1)
+            .clip(RoundedCornerShape(SakhiRadius.full))
+            .background(MaterialTheme.colorScheme.primary),
+        contentAlignment = Alignment.Center,
     ) {
-        BreathingDot(color = MaterialTheme.colorScheme.primary, size = 7)
-        Text(
-            text = androidx.compose.ui.res.stringResource(R.string.care_stay_live_badge),
-            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.8.sp),
-            color = MaterialTheme.colorScheme.primary,
+        androidx.compose.material3.CircularProgressIndicator(
+            color = Color.White,
+            strokeWidth = 2.5.dp,
+            modifier = Modifier.size(22.dp),
         )
     }
 }

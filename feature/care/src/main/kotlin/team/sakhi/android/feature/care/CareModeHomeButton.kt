@@ -240,6 +240,9 @@ fun CareModeHomeButton(
                 longitude = here!!.second,
                 modifier = Modifier.matchParentSize(),
             )
+            // A lite-mode map hands every tap to the Google Maps app, so the button's own
+            // click never fires. This sits over it and takes the tap first.
+            Box(Modifier.matchParentSize().clickable(onClick = onOpen))
         }
         when {
             pair != null -> HomeButtonFace(avatarIndex = pair.first)

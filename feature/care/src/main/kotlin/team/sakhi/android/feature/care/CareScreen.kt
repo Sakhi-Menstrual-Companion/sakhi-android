@@ -2,18 +2,10 @@ package team.sakhi.android.feature.care
 
 import team.sakhi.android.ui.SakhiNavDirection
 import team.sakhi.android.ui.SakhiScreenTransition
-import androidx.compose.material.icons.automirrored.filled.DirectionsWalk
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.runtime.saveable.rememberSaveable
 import android.content.ClipData
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -80,7 +72,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -117,6 +108,7 @@ import team.sakhi.date.DateConverter
 import team.sakhi.models.CarePartnership
 import team.sakhi.models.ParentChildPermissions
 import team.sakhi.models.PartnerInvitation
+import team.sakhi.models.RelationType
 import team.sakhi.android.designsystem.sakhiLabel
 import team.sakhi.android.designsystem.sakhiLightPink
 import androidx.compose.ui.graphics.Brush
@@ -141,16 +133,17 @@ fun CareScreen(
     viewModel: CareViewModel = koinViewModel(),
     onClose: () -> Unit = {},
     /**
-     * A walk is live on either side. The host swaps this sheet for the full-screen walk
-     * ([StayWithMeLiveLayer]), the way Emergency Assistance is full screen rather than a
-     * pane inside a sheet.
+     * Not used by this page any more: the Stay With Me card left the Care page, as on iOS
+     * (2026-09-14), and the ride opens from the calendar bar's nearby-map button. Kept so the
+     * host's call does not change; iOS's "an ask from her person opens the ride from this
+     * page" has no Android counterpart yet.
      */
+    @Suppress("UNUSED_PARAMETER")
     onOpenLiveWalk: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val hapticManager = koinInject<AndroidHapticManager>()
     val stayWithMeViewModel: StayWithMeViewModel = koinViewModel()
-    val stayWithMe by stayWithMeViewModel.uiState.collectAsStateWithLifecycle()
     // Only while this sheet is on screen: it re-reads the walk, tells her screen that her
     // person is looking, and notices a walk that has gone past its time.
     DisposableEffect(Unit) {
@@ -184,27 +177,9 @@ fun CareScreen(
     val ownerConnected = uiState.careState as? CareRuntimeState.OwnerConnected
     val partnerConnected = uiState.careState as? CareRuntimeState.PartnerConnected
     val connectedPartnership = ownerConnected?.partnership ?: partnerConnected?.partnership
-    // Her person hears back after they ask, only when it did not go. When it did, the button
-    // turns into "Waiting for her to start".
-    val askResult by stayWithMeViewModel.askResult.collectAsStateWithLifecycle()
-    val askedAt by stayWithMeViewModel.askedAt.collectAsStateWithLifecycle()
-    val route by stayWithMeViewModel.route.collectAsStateWithLifecycle()
-    val refreshing by stayWithMeViewModel.refreshing.collectAsStateWithLifecycle()
-    val recenterTick by stayWithMeViewModel.recenterTick.collectAsStateWithLifecycle()
-    // Where this phone is, for the card's map before any walk. Read once, from the last fix
-    // the system already has, so opening the screen never switches the GPS on.
-    var here by remember { mutableStateOf<team.sakhi.staywithme.StayWithMeLocation?>(null) }
-    LaunchedEffect(Unit) {
-        here = team.sakhi.android.platform.StayWithMeLocationService.lastKnownLatLng(careContext)?.let { (lat, lng) ->
-            team.sakhi.staywithme.StayWithMeLocation(lat, lng, null, null, null, kotlinx.datetime.Clock.System.now())
-        }
-    }
-    LaunchedEffect(askResult) {
-        askResult?.let {
-            android.widget.Toast.makeText(careContext, it, android.widget.Toast.LENGTH_SHORT).show()
-            stayWithMeViewModel.clearAskResult()
-        }
-    }
+    // No Stay With Me card on this page, as on iOS (Karan, 2026-09-14): the ride opens from
+    // the nearby-map button in the calendar bar, so the Care page is the two faces, what they
+    // did for each other, and the connection.
 
     LaunchedEffect(connectedPartnership?.id) {
         connectedPartnership?.id?.let(stayWithMeViewModel::loadHistory)
@@ -297,240 +272,218 @@ fun CareScreen(
         careScreen = CareSubScreen.Root
     }
     val subScreen = if (showInviteFlowRoute) CareSubScreen.InviteFlow else careScreen
-    SheetSurface {
-        SakhiScreenTransition(
-            targetState = subScreen,
-            directionFor = { _, target ->
-                when (target) {
-                    CareSubScreen.Root -> SakhiNavDirection.Backward
-                    CareSubScreen.InviteFlow -> SakhiNavDirection.None
-                    else -> SakhiNavDirection.Forward
-                }
-            },
-            label = "care_sheet_transition",
-            // Care's pages are children of the Care screen, so it stays behind them.
-            parentStaysBehind = true,
-        ) { target ->
-            // Each branch reads its partnership again rather than trusting the check above:
-            // a screen sliding out can still be drawn after the connection it showed is gone.
-            when (target) {
-                CareSubScreen.InviteFlow -> OnboardingFlowHost(
-                    flowId = "carePartnerInvite",
-                    // Modal flow: iOS shows a close button on the root step. Closes the whole
-                    // care sheet, matching `requestDismiss(route:)`.
-                    onDismiss = onClose,
-                    onFlowCompleted = {
-                        showOwnerInviteFlow = false
-                        autoLaunchInviteFlow = false
-                        if (uiState.careState !is CareRuntimeState.OwnerConnected) {
-                            onClose()
-                        }
-                    },
+
+    // What the other person is called on these pages, as iOS's `displayLabel`: their name on
+    // their profile, then the one on the connection, then a plain stand-in.
+    val shownLabel = shownPartnership?.let { careDetailLabel(it, partnerCard?.name, shownIsPartner) }.orEmpty()
+
+    // Cancelling a pending invite, as iOS's hub does it: a loading screen while it goes, then
+    // "Request cancelled" with Done, rather than dropping her straight into a new invite flow.
+    var cancelRequested by remember { mutableStateOf(false) }
+    var requestCancelled by remember { mutableStateOf(false) }
+    LaunchedEffect(uiState.isCancellingInvite) {
+        if (cancelRequested && !uiState.isCancellingInvite) {
+            cancelRequested = false
+            if (uiState.error == null) {
+                requestCancelled = true
+            } else {
+                ToastManager.show(
+                    title = careContext.getString(R.string.care_cancel_request_failed_title),
+                    message = careContext.getString(R.string.care_cancel_request_failed_message),
+                    type = ToastType.ERROR,
+                    durationMs = 2000L,
                 )
+            }
+        }
+    }
+    // The permissions page was left as it was: a failed save says so (iOS's alert), and a
+    // saving one is covered by the loading screen.
+    var permissionsFailed by remember { mutableStateOf(false) }
 
-                CareSubScreen.SheShares -> shownPartnership?.let { partnership ->
-                    SheSharesContent(
-                        partnership = partnership,
-                        onBack = { careScreen = CareSubScreen.Root },
-                    )
-                }
+    SheetSurface {
+        when {
+            requestCancelled -> CareActionCompletion(
+                title = stringResource(R.string.care_request_cancelled_title),
+                message = stringResource(R.string.care_info_invite_closed),
+                primaryLabel = stringResource(R.string.care_done),
+                onPrimary = onClose,
+                onClose = onClose,
+            )
 
-                CareSubScreen.Leave -> shownPartnership?.let { partnership ->
-                    LeaveConnectionContent(
-                        isPartnerRole = shownIsPartner,
-                        name = careDisplayName(partnership, isPartnerRole = shownIsPartner),
-                        isRemoving = uiState.isRemovingPartnership,
-                        onBack = { careScreen = CareSubScreen.Root },
-                        onConfirm = {
-                            hapticManager.impact(HapticImpact.MEDIUM)
-                            viewModel.removePartnership(partnership.id)
-                        },
-                    )
-                }
+            uiState.isCancellingInvite -> CareProgressLoading(
+                listOf(
+                    stringResource(R.string.care_loading_cancelling_1),
+                    stringResource(R.string.care_loading_cancelling_2),
+                    stringResource(R.string.care_loading_cancelling_3),
+                ),
+            )
 
-                CareSubScreen.History -> shownPartnership?.let { partnership ->
-                    PartnerHistoryContent(
-                        partnership = partnership,
-                        isPartnerRole = shownIsPartner,
-                        walks = walkHistory,
-                        actions = careActions,
-                        onBack = { careScreen = CareSubScreen.Root },
-                    )
-                }
+            // Leaving or removing: iOS swaps the whole page for this while the server does it.
+            uiState.isRemovingPartnership -> CareProgressLoading(
+                listOf(
+                    stringResource(R.string.care_loading_removing_1),
+                    stringResource(R.string.care_loading_removing_2),
+                    stringResource(R.string.care_loading_removing_3),
+                ),
+            )
 
-                CareSubScreen.Permissions -> shownPartnership?.let { partnership ->
-                    PartnerPermissionsEditContent(
-                        partnership = partnership,
-                        isSaving = uiState.isSavingPermissions,
-                        onBack = { careScreen = CareSubScreen.Root },
-                        onSave = { permissions ->
-                            viewModel.updatePermissions(partnership.id, permissions) { saved ->
-                                if (saved) careScreen = CareSubScreen.Root
+            else -> SakhiScreenTransition(
+                targetState = subScreen,
+                directionFor = { _, target ->
+                    when (target) {
+                        CareSubScreen.Root -> SakhiNavDirection.Backward
+                        CareSubScreen.InviteFlow -> SakhiNavDirection.None
+                        else -> SakhiNavDirection.Forward
+                    }
+                },
+                label = "care_sheet_transition",
+                // Care's pages are children of the Care screen, so it stays behind them.
+                parentStaysBehind = true,
+            ) { target ->
+                // Each branch reads its partnership again rather than trusting the check above:
+                // a screen sliding out can still be drawn after the connection it showed is gone.
+                when (target) {
+                    CareSubScreen.InviteFlow -> OnboardingFlowHost(
+                        flowId = "carePartnerInvite",
+                        // Modal flow: iOS shows a close button on the root step. Closes the whole
+                        // care sheet, matching `requestDismiss(route:)`.
+                        onDismiss = onClose,
+                        onFlowCompleted = {
+                            showOwnerInviteFlow = false
+                            autoLaunchInviteFlow = false
+                            if (uiState.careState !is CareRuntimeState.OwnerConnected) {
+                                onClose()
                             }
                         },
                     )
-                }
 
-                CareSubScreen.Root -> {
-                    when (val state = uiState.careState) {
-                        CareRuntimeState.Loading -> LoadingContent()
-
-                        CareRuntimeState.Disconnected -> InviteCreationContent(
-                            uiState = uiState,
-                            onInviteeNameChanged = viewModel::onInviteeNameChanged,
-                            onPartnerRelationChanged = viewModel::onPartnerRelationChanged,
-                            onCreateInvitation = viewModel::createInvitation,
-                            onAcceptInviteCodeChanged = viewModel::onAcceptInviteCodeChanged,
-                            onAcceptInvitation = {
+                    CareSubScreen.Leave -> shownPartnership?.let { partnership ->
+                        LeaveConnectionContent(
+                            isPartnerRole = shownIsPartner,
+                            name = shownLabel,
+                            isRemoving = uiState.isRemovingPartnership,
+                            onBack = { careScreen = CareSubScreen.Root },
+                            onConfirm = {
                                 hapticManager.impact(HapticImpact.MEDIUM)
-                                viewModel.acceptInvitation()
+                                viewModel.removePartnership(partnership.id)
                             },
                         )
+                    }
 
-                        is CareRuntimeState.PendingInvitation -> PendingInviteContent(
-                            invitation = state.invitation,
-                            isCancelling = uiState.isCancellingInvite,
-                            onCancel = viewModel::cancelInvitation,
-                            onClose = onClose,
+                    CareSubScreen.History -> shownPartnership?.let { partnership ->
+                        PartnerHistoryContent(
+                            partnership = partnership,
+                            isPartnerRole = shownIsPartner,
+                            name = shownLabel,
+                            walks = walkHistory,
+                            actions = careActions,
+                            onBack = { careScreen = CareSubScreen.Root },
                         )
+                    }
 
-                        is CareRuntimeState.OwnerConnected -> {
-                            val walk = stayWithMe.mine
-                            val personName = careDisplayName(state.partnership, isPartnerRole = false)
-                            val moments = remember(walkHistory, loggedDays, personName, careActions) {
-                                careMoments(
-                                    careContext,
-                                    walkHistory,
-                                    loggedDays,
-                                    isPartnerRole = false,
-                                    otherName = personName,
-                                    actions = careActions,
+                    CareSubScreen.Permissions -> shownPartnership?.let { partnership ->
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            PartnerPermissionsEditContent(
+                                partnership = partnership,
+                                isSaving = uiState.isSavingPermissions,
+                                onBack = { careScreen = CareSubScreen.Root },
+                                onSave = { permissions ->
+                                    viewModel.updatePermissions(partnership.id, permissions) { saved ->
+                                        if (saved) careScreen = CareSubScreen.Root else permissionsFailed = true
+                                    }
+                                },
+                            )
+                            // iOS covers the page with the loading screen while it saves.
+                            if (uiState.isSavingPermissions) {
+                                CareProgressLoading(
+                                    listOf(
+                                        stringResource(R.string.care_loading_permissions_1, shownLabel),
+                                        stringResource(R.string.care_loading_permissions_2),
+                                        stringResource(R.string.care_loading_permissions_3),
+                                    ),
                                 )
                             }
-                            ConnectedCare(
-                                partnership = state.partnership,
-                                isPartnerRole = false,
-                                isRemoving = uiState.isRemovingPartnership,
-                                moments = moments,
-                                selfAvatarIndex = selfAvatarIndex,
-                                otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
-                                serverName = partnerCard?.name,
-                                stayState = when {
-                                    walk != null -> CareStayState.Live
-                                    stayWithMe.isBusy -> CareStayState.Working
-                                    else -> CareStayState.Idle
-                                },
-                                stayLine = if (walk != null) {
-                                    stringResource(R.string.care_stay_live_owner, personName)
-                                } else {
-                                    stringResource(R.string.care_section_stay_line_owner, personName)
-                                },
-                                stayIdleLabel = stringResource(R.string.care_swm_ask_button, personName),
-                                onStayButton = {},
-                                openFullWalk = onOpenLiveWalk,
-                                startContent = {
-                                    StayWithMeStartSection(
-                                        personName = personName,
-                                        isBusy = stayWithMe.isBusy,
-                                        error = stayWithMe.error,
-                                        onStart = { minutes, note, destination ->
-                                            stayWithMeViewModel.start(state.partnership.id, minutes, note, destination)
-                                        },
-                                    )
-                                },
-                                mapLocation = walk?.lastLocation ?: here,
-                                mapTrail = if (walk != null) stayWithMe.mineTrail else emptyList(),
-                                mapDestination = walk?.destination,
-                                mapRoute = if (walk != null) route?.points.orEmpty() else emptyList(),
-                                mapInitial = "",
-                                mapAvatarWithoutName = false,
-                                liveWalk = walk?.let { session ->
-                                    { close ->
-                                        StayWithMeOwnerLive(
-                                            session = session,
-                                            personName = personName,
-                                            now = stayWithMe.now,
-                                            isBusy = stayWithMe.isBusy,
-                                            trail = stayWithMe.mineTrail,
-                                            places = stayWithMe.places,
-                                            placesLoading = stayWithMe.placesLoading,
-                                            onArrive = stayWithMeViewModel::arrive,
-                                            onExtend = stayWithMeViewModel::extend,
-                                            onStop = stayWithMeViewModel::stop,
-                                            onClose = close,
-                                            onRefresh = stayWithMeViewModel::refreshMyLocation,
-                                            route = route,
-                                            refreshing = refreshing,
-                                            recenterKey = recenterTick,
-                                        )
-                                    }
-                                },
-                                onHistory = { careScreen = CareSubScreen.History },
-                                onManagePermissions = { careScreen = CareSubScreen.Permissions },
-                                onRemove = { careScreen = CareSubScreen.Leave },
-                                onClose = onClose,
-                            )
                         }
+                    }
 
-                        is CareRuntimeState.PartnerConnected -> {
-                            val walk = stayWithMe.watching
-                            val herName = careDisplayName(state.partnership, isPartnerRole = true)
-                            val moments = remember(walkHistory, loggedDays, herName) {
-                                careMoments(careContext, walkHistory, loggedDays, isPartnerRole = true, otherName = herName)
-                            }
-                            val stayState = when {
-                                walk != null -> CareStayState.Live
-                                stayWithMe.isBusy -> CareStayState.Working
-                                askedAt != null -> CareStayState.Waiting
-                                else -> CareStayState.Idle
-                            }
-                            ConnectedCare(
-                                partnership = state.partnership,
-                                isPartnerRole = true,
-                                isRemoving = uiState.isRemovingPartnership,
-                                moments = moments,
-                                selfAvatarIndex = selfAvatarIndex,
-                                otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
-                                serverName = partnerCard?.name,
-                                stayState = stayState,
-                                stayLine = when (stayState) {
-                                    CareStayState.Live -> stringResource(R.string.care_stay_live_partner)
-                                    CareStayState.Waiting -> stringResource(R.string.care_stay_waiting_line)
-                                    else -> stringResource(R.string.care_section_stay_line_partner)
+                    CareSubScreen.Root -> {
+                        when (val state = uiState.careState) {
+                            CareRuntimeState.Loading -> CareProgressLoading(
+                                listOf(
+                                    stringResource(R.string.care_loading_syncing_1),
+                                    stringResource(R.string.care_loading_syncing_2),
+                                    stringResource(R.string.care_loading_syncing_3),
+                                ),
+                            )
+
+                            CareRuntimeState.Disconnected -> InviteCreationContent(
+                                uiState = uiState,
+                                onInviteeNameChanged = viewModel::onInviteeNameChanged,
+                                onPartnerRelationChanged = viewModel::onPartnerRelationChanged,
+                                onCreateInvitation = viewModel::createInvitation,
+                                onAcceptInviteCodeChanged = viewModel::onAcceptInviteCodeChanged,
+                                onAcceptInvitation = {
+                                    hapticManager.impact(HapticImpact.MEDIUM)
+                                    viewModel.acceptInvitation()
                                 },
-                                stayIdleLabel = stringResource(R.string.care_ask_to_stay_with_her),
-                                onStayButton = { stayWithMeViewModel.askToStay(state.partnership.id) },
-                                // Before she starts, this phone's own position: her person sees a real
-                                // map, never where she is until she chooses to share it.
-                                mapLocation = walk?.lastLocation ?: here,
-                                mapTrail = if (walk != null) stayWithMe.watchingTrail else emptyList(),
-                                mapDestination = walk?.destination,
-                                mapRoute = if (walk != null) route?.points.orEmpty() else emptyList(),
-                                mapInitial = "",
-                                mapAvatarWithoutName = walk != null,
-                                liveWalk = walk?.let { session ->
-                                    { close ->
-                                        StayWithMeWatcherLive(
-                                            session = session,
-                                            herName = herName,
-                                            now = stayWithMe.now,
-                                            places = stayWithMe.places,
-                                            placesLoading = stayWithMe.placesLoading,
-                                            trail = stayWithMe.watchingTrail,
-                                            onClose = close,
-                                            onRefresh = stayWithMeViewModel::refreshWalk,
-                                            route = route,
-                                            refreshing = refreshing,
-                                            recenterKey = recenterTick,
-                                        )
-                                    }
+                            )
+
+                            is CareRuntimeState.PendingInvitation -> PendingInviteContent(
+                                invitation = state.invitation,
+                                isCancelling = uiState.isCancellingInvite,
+                                onCancel = {
+                                    cancelRequested = true
+                                    viewModel.cancelInvitation()
                                 },
-                                onHistory = { careScreen = CareSubScreen.History },
-                                // His side reads what she shares; only she can change it.
-                                onManagePermissions = { careScreen = CareSubScreen.SheShares },
-                                onRemove = { careScreen = CareSubScreen.Leave },
                                 onClose = onClose,
                             )
+
+                            is CareRuntimeState.OwnerConnected -> {
+                                val personName = careDetailLabel(state.partnership, partnerCard?.name, isPartnerRole = false)
+                                val moments = remember(walkHistory, loggedDays, personName, careActions) {
+                                    careMoments(
+                                        careContext,
+                                        walkHistory,
+                                        loggedDays,
+                                        isPartnerRole = false,
+                                        otherName = personName,
+                                        actions = careActions,
+                                    )
+                                }
+                                PartnerDetailContent(
+                                    partnership = state.partnership,
+                                    isPartnerRole = false,
+                                    moments = moments,
+                                    selfAvatarIndex = selfAvatarIndex,
+                                    otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
+                                    serverName = partnerCard?.name,
+                                    onHistory = { careScreen = CareSubScreen.History },
+                                    onManagePermissions = { careScreen = CareSubScreen.Permissions },
+                                    onRemove = { careScreen = CareSubScreen.Leave },
+                                    onClose = onClose,
+                                )
+                            }
+
+                            is CareRuntimeState.PartnerConnected -> {
+                                val herName = careDetailLabel(state.partnership, partnerCard?.name, isPartnerRole = true)
+                                val moments = remember(walkHistory, loggedDays, herName) {
+                                    careMoments(careContext, walkHistory, loggedDays, isPartnerRole = true, otherName = herName)
+                                }
+                                PartnerDetailContent(
+                                    partnership = state.partnership,
+                                    isPartnerRole = true,
+                                    moments = moments,
+                                    selfAvatarIndex = selfAvatarIndex,
+                                    otherAvatarIndex = partnerCard?.avatarIndex ?: 0,
+                                    serverName = partnerCard?.name,
+                                    onHistory = { careScreen = CareSubScreen.History },
+                                    // What she shares with him is a line he reads, not a page:
+                                    // only she can change it, and iOS gives the row no action.
+                                    onManagePermissions = null,
+                                    onRemove = { careScreen = CareSubScreen.Leave },
+                                    onClose = onClose,
+                                )
+                            }
                         }
                     }
                 }
@@ -538,17 +491,15 @@ fun CareScreen(
         }
     }
 
-    // Her side: duration, where to, and the ask, raised by the footer button rather than
-    // sitting in the page. The page is about the two of them; this is the doing.
-}
-
-@Composable
-private fun LoadingContent() {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center,
-    ) {
-        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+    if (permissionsFailed) {
+        SakhiAlertSheet(
+            kind = SakhiAlertKind.Warning,
+            title = stringResource(R.string.care_permissions_failed_title),
+            message = stringResource(R.string.care_error_permission_change_not_saved),
+            primaryLabel = stringResource(R.string.care_ok),
+            onPrimaryClick = { permissionsFailed = false },
+            onDismissRequest = { permissionsFailed = false },
+        )
     }
 }
 
@@ -566,213 +517,56 @@ internal fun careDisplayName(partnership: CarePartnership, isPartnerRole: Boolea
 }
 
 /** The pages the Care sheet can show, for the push and slide between them. */
-private enum class CareSubScreen { Root, InviteFlow, SheShares, Leave, History, Permissions }
+private enum class CareSubScreen { Root, InviteFlow, Leave, History, Permissions }
 
 // ── Connected: PartnerDetailView parity ────────────────────────────────────
 
-/** The link between the card's map and the full screen map it opens into. */
-private const val CARE_STAY_MAP_KEY = "care-stay-map"
-
 /**
- * The connected screen, and the Stay With Me map growing out of it.
- *
- * Tapping the card's map, or its corner button, opens the map full screen with the card's own
- * bounds animating out to the screen's, and closing it shrinks it back into the card. Both are
- * in one [SharedTransitionLayout] for that reason: the map is the same thing in both places,
- * and it should look like it.
- *
- * A live walk is shown right here, in the card, as it happens. Nothing jumps away from the
- * page when her walk starts; the card turns live and the button opens it.
+ * The name to show for the other person: a real one, or nothing. Generic labels ("partner",
+ * "sakhi", "unknown") are not names and are never shown as one. Same test as iOS's
+ * `resolvedName`.
  */
-@OptIn(ExperimentalSharedTransitionApi::class)
-@Composable
-private fun ConnectedCare(
-    partnership: CarePartnership,
-    isPartnerRole: Boolean,
-    isRemoving: Boolean,
-    moments: List<CareMoment>,
-    selfAvatarIndex: Int,
-    otherAvatarIndex: Int,
-    serverName: String?,
-    stayState: CareStayState,
-    stayLine: String,
-    stayIdleLabel: String,
-    onStayButton: () -> Unit,
-    mapLocation: team.sakhi.staywithme.StayWithMeLocation?,
-    mapTrail: List<team.sakhi.staywithme.StayWithMeLocation>,
-    mapDestination: team.sakhi.staywithme.StayWithMeDestination?,
-    mapRoute: List<Pair<Double, Double>>,
-    mapInitial: String,
-    mapAvatarWithoutName: Boolean,
-    /** The full screen walk, when there is one. Given the way to close back into the card. */
-    liveWalk: (@Composable (onClose: () -> Unit) -> Unit)?,
-    /** Her side's start form, shown in the panel over the map. Null on his side. */
-    startContent: (@Composable () -> Unit)? = null,
-    /** Opens the walk as a full-screen layer, outside this sheet. */
-    openFullWalk: (() -> Unit)? = null,
-    onHistory: () -> Unit,
-    onManagePermissions: (() -> Unit)?,
-    onRemove: () -> Unit,
-    onClose: () -> Unit,
-) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    BackHandler(enabled = expanded) { expanded = false }
-    val listState = rememberLazyListState()
-    val accent = MaterialTheme.colorScheme.primary
-
-    SharedTransitionLayout {
-        AnimatedContent(
-            targetState = expanded,
-            transitionSpec = { fadeIn(tween(260)) togetherWith fadeOut(tween(200)) },
-            label = "careStayExpand",
-        ) { isExpanded ->
-            val sharedMap = Modifier.sharedBounds(
-                sharedContentState = rememberSharedContentState(key = CARE_STAY_MAP_KEY),
-                animatedVisibilityScope = this@AnimatedContent,
-                clipInOverlayDuringTransition = OverlayClip(RoundedCornerShape(SakhiRadius.lg)),
-            )
-            if (!isExpanded) {
-                PartnerDetailContent(
-                    partnership = partnership,
-                    isPartnerRole = isPartnerRole,
-                    isRemoving = isRemoving,
-                    moments = moments,
-                    selfAvatarIndex = selfAvatarIndex,
-                    otherAvatarIndex = otherAvatarIndex,
-                    serverName = serverName,
-                    listState = listState,
-                    stayCard = {
-                        CareStayCard(
-                            state = stayState,
-                            title = if (isPartnerRole) {
-                                stringResource(R.string.care_section_stay_with_her)
-                            } else {
-                                stringResource(R.string.care_section_stay_with_me)
-                            },
-                            line = stayLine,
-                            idleLabel = stayIdleLabel,
-                            // Both the button and the map open the walk full screen: a map
-                            // inside this sheet is not full screen (Karan, 2026-09-13).
-                            onButton = if (openFullWalk != null && stayState != CareStayState.Waiting) {
-                                openFullWalk
-                            } else {
-                                onStayButton
-                            },
-                            onExpand = openFullWalk ?: { expanded = true },
-                            mapModifier = sharedMap,
-                        ) {
-                            WalkMap(
-                                location = mapLocation,
-                                accent = accent,
-                                initial = mapInitial,
-                                modifier = Modifier.fillMaxSize(),
-                                trail = mapTrail,
-                                avatarWithoutName = mapAvatarWithoutName,
-                                destination = mapDestination,
-                                routeLine = mapRoute,
-                                topPadding = 0.dp,
-                                interactive = false,
-                            )
-                        }
-                    },
-                    onHistory = onHistory,
-                    onManagePermissions = onManagePermissions,
-                    onRemove = onRemove,
-                    onClose = onClose,
-                )
-            } else {
-                Box(modifier = Modifier.fillMaxSize().then(sharedMap)) {
-                    if (liveWalk != null) {
-                        liveWalk { expanded = false }
-                    } else {
-                        CareStayExpandedIdle(
-                            state = stayState,
-                            line = stayLine,
-                            idleLabel = stayIdleLabel,
-                            onButton = onStayButton,
-                            onClose = { expanded = false },
-                            startContent = startContent.takeIf { stayState != CareStayState.Live },
-                        ) {
-                            WalkMap(
-                                location = mapLocation,
-                                accent = accent,
-                                initial = mapInitial,
-                                modifier = Modifier.fillMaxSize(),
-                                bottomPadding = 180.dp,
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
+private fun careRealName(name: String?): String? {
+    val n = name.orEmpty()
+    val l = n.lowercase()
+    return n.takeIf { it.isNotEmpty() && !l.contains("partner") && !l.contains("sakhi") && l != "unknown" }
 }
 
 /**
- * The map full screen before any walk: the map, the way out, and the same button as the card,
- * so opening it never strands her without the thing she opened it for.
+ * What the other person is called on the connection pages, as iOS's `displayLabel`: their
+ * name on their profile, then the one on the connection, then a plain stand-in for the seat
+ * the reader is in. ([careDisplayName] is the walk screens' own, with its own fallbacks.)
  */
 @Composable
-private fun CareStayExpandedIdle(
-    state: CareStayState,
-    line: String,
-    idleLabel: String,
-    onButton: () -> Unit,
-    onClose: () -> Unit,
-    /**
-     * Her side's whole form: how long, where to, and the ask. Given here so the map is the
-     * screen and everything there is to do sits in the panel over it, the way a live walk and
-     * Emergency Assistance are built (Karan, 2026-09-13). Null on his side, which has one
-     * button and nothing to fill in.
-     */
-    startContent: (@Composable () -> Unit)? = null,
-    map: @Composable () -> Unit,
-) {
-    Box(modifier = Modifier.fillMaxSize().background(sakhiSystemBackground())) {
-        map()
-        LiveWalkTopBar(onClose = onClose, modifier = Modifier.align(Alignment.TopCenter))
-        Surface(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-            shape = RoundedCornerShape(topStart = SakhiRadius.xl, topEnd = SakhiRadius.xl),
-            color = sakhiSystemBackground(),
-            shadowElevation = 0.dp,
-        ) {
-            Column(modifier = Modifier.navigationBarsPadding().padding(top = SakhiSpacing.space3)) {
-                if (startContent != null) {
-                    startContent()
-                } else {
-                    Text(
-                        text = line,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = sakhiSecondaryLabel(),
-                        modifier = Modifier.padding(horizontal = SakhiSpacing.space5),
-                    )
-                    CareStayButton(
-                        state = state,
-                        idleLabel = idleLabel,
-                        onClick = onButton,
-                        modifier = Modifier.padding(
-                            start = SakhiSpacing.space4,
-                            end = SakhiSpacing.space4,
-                            top = SakhiSpacing.space4,
-                            bottom = SakhiSpacing.space5,
-                        ),
-                    )
-                }
-            }
-        }
-    }
+internal fun careDetailLabel(partnership: CarePartnership, serverName: String?, isPartnerRole: Boolean): String =
+    careRealName(serverName)
+        ?: careRealName(partnership.partnerName)
+        ?: stringResource(
+            if (isPartnerRole) R.string.care_fallback_someone_you_care_for else R.string.care_fallback_your_sakhi,
+        )
+
+/**
+ * The loading screen every Care stage shares, as iOS's `CareProgressLoadingView`: the Sakhi
+ * mark, and a line under it that moves on while it waits.
+ */
+@Composable
+internal fun CareProgressLoading(messages: List<String>) {
+    team.sakhi.android.ui.SakhiLoadingView(
+        context = team.sakhi.android.ui.SakhiLoadingContext.Messages(messages),
+    )
 }
 
+/**
+ * The connected Care screen, for both sides of a connection. Port of iOS's `PartnerDetailView`.
+ *
+ * One soft pink page with the two faces at the top and two white blocks under them: what this
+ * person actually did for her, and the connection. There is no Stay With Me card here (Karan,
+ * 2026-09-14): the ride opens from the nearby-map button in the calendar bar.
+ */
 @Composable
 private fun PartnerDetailContent(
     partnership: CarePartnership,
     isPartnerRole: Boolean,
-    isRemoving: Boolean,
-    /** The Stay With Me block, built by the caller so it can link to the full screen map. */
-    stayCard: @Composable () -> Unit,
-    /** Hoisted so the page comes back where she left it after the map closes. */
-    listState: androidx.compose.foundation.lazy.LazyListState,
     /** The real things that happened between them: walks stayed for, days logged. */
     moments: List<CareMoment> = emptyList(),
     /** Her own face, and the other person's, both from the server's five (migration 063). */
@@ -781,42 +575,34 @@ private fun PartnerDetailContent(
     /** The name on their profile, which the partnership row may not have. */
     serverName: String? = null,
     onHistory: () -> Unit,
+    /** Null on his side: what she shares with him is something he reads, not a page. */
     onManagePermissions: (() -> Unit)?,
     onRemove: () -> Unit,
     onClose: () -> Unit,
 ) {
     val context = LocalContext.current
+    val listState = rememberLazyListState()
 
-    val resolvedName = (serverName ?: partnership.partnerName).takeIf { name ->
-        name.isNotEmpty() &&
-            !name.lowercase().contains("partner") &&
-            !name.lowercase().contains("sakhi") &&
-            name.lowercase() != "unknown"
-    }.orEmpty()
-    // Both of these read from the owner's seat. A care partner opening this screen is
-    // looking at the woman she cares for, so "Your Sakhi" described the reader to
-    // themselves and the subtitle did the same.
-    val fallbackLabel = if (isPartnerRole) {
-        stringResource(R.string.care_fallback_someone_you_care_for)
-    } else {
-        stringResource(R.string.care_fallback_your_sakhi)
-    }
-    val displayLabel = if (resolvedName.isEmpty()) fallbackLabel else resolvedName
-    val headerTitle = if (resolvedName.isEmpty()) {
-        displayLabel
-    } else {
-        stringResource(R.string.care_header_you_and_name, resolvedName)
-    }
-    val partnerInitial = displayLabel.take(1).uppercase()
+    val displayLabel = careDetailLabel(partnership, serverName, isPartnerRole)
+
+    // "You & Her" / "You & Him": the two of them, in the order she reads the faces above. His
+    // side is always "Her", because the person he cares for is the woman whose app this is.
+    // Hers comes from the relation she picked when she invited them: the app never asks
+    // anyone's gender, so mother and father are the only two it can be sure of, and a parent
+    // it cannot read is "Them".
+    val pronoun = stringResource(
+        if (isPartnerRole) {
+            R.string.care_pronoun_her
+        } else when (partnership.relationType) {
+            RelationType.MOTHER -> R.string.care_pronoun_her
+            RelationType.FATHER -> R.string.care_pronoun_him
+            RelationType.PARTNER -> R.string.care_pronoun_him
+            RelationType.PARENT -> R.string.care_pronoun_them
+        },
+    )
 
     val createdAtDate = partnershipStartDate(partnership)
     val dateString = formatConnectedSince(createdAtDate, context)
-    val daysOfCare = DateConverter.daysBetween(createdAtDate, DateConverter.today()).coerceAtLeast(0)
-    val daysValue = when (daysOfCare) {
-        0 -> stringResource(R.string.care_today)
-        1 -> stringResource(R.string.care_one_day)
-        else -> pluralStringResource(R.plurals.care_days_plural, daysOfCare, daysOfCare)
-    }
 
     // One pink surface for the whole screen, from the soft pink behind the picture at the
     // top down to a paler pink at the bottom. It never reaches white, because the blocks
@@ -852,10 +638,9 @@ private fun PartnerDetailContent(
             flingBehavior = rememberSakhiFlingBehavior(),
         ) {
             item(key = "care-detail-header") {
-                // The page opens with the picture itself, edge to edge, then who this is and
-                // how long it has been. The "since" line is a pill rather than a grey
-                // sentence: it is the one fact under her name and it should read as
-                // something the two of them earned.
+                // The page opens with the picture itself, then who this is and how long it has
+                // been. The "since" line is a pill rather than a grey sentence: it is the one
+                // fact under the heading and it should read as something the two of them earned.
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     modifier = Modifier.fillMaxWidth(),
@@ -865,12 +650,9 @@ private fun PartnerDetailContent(
                         otherAvatarIndex = otherAvatarIndex,
                     )
                     Text(
-                        text = if (isPartnerRole) {
-                            stringResource(R.string.care_header_you_are_with)
-                        } else {
-                            stringResource(R.string.care_header_is_with_you, displayLabel)
-                        },
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        text = stringResource(R.string.care_header_you_and_name, pronoun),
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
                         color = sakhiLabel(),
                         textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = SakhiSpacing.space6),
@@ -879,17 +661,9 @@ private fun PartnerDetailContent(
                         text = stringResource(R.string.care_taking_care_since, dateString),
                         modifier = Modifier.padding(top = SakhiSpacing.space3),
                     )
+                    // 8 under the header, and 16 between the blocks, as iOS lays them out.
                     Spacer(modifier = Modifier.height(SakhiSpacing.space6))
                 }
-            }
-
-            // ── The one thing she came here to do ────────────────────────────────
-            //
-            // First, because everything else on this screen is something to read. A real
-            // map, live the moment a walk is, that opens full screen from where it sits.
-            item(key = "care-stay-with-me") {
-                stayCard()
-                Spacer(modifier = Modifier.height(SakhiSpacing.space4))
             }
 
             // ── What actually happened between them ──────────────────────────────
@@ -912,7 +686,6 @@ private fun PartnerDetailContent(
                         },
                         dayLabel = { momentDayLabel(it, context) },
                     )
-                    Spacer(modifier = Modifier.height(SakhiSpacing.space2))
                 }
                 Spacer(modifier = Modifier.height(SakhiSpacing.space4))
             }
@@ -935,10 +708,11 @@ private fun PartnerDetailContent(
                         } else {
                             stringResource(R.string.care_link_what_can_see_sub)
                         },
-                        // Both sides open it: hers to edit, his to read (Karan, 2026-09-13).
+                        // Hers opens the page where she edits it; his has no action and no
+                        // chevron, as on iOS.
                         onClick = onManagePermissions,
                     )
-                    // No separate History row: "See all" on the moments above opens the same
+                    // No separate History row: "Show all" on the moments above opens the same
                     // page, and a second door to it read as clutter (Karan, 2026-09-13).
                     SakhiListDivider(startInset = SakhiSpacing.space5 + 34.dp + SakhiSpacing.space3)
                     // Ending the connection lives here, at the end of what there is to read,
@@ -959,152 +733,25 @@ private fun PartnerDetailContent(
             }
 
             item(key = "care-detail-tail") {
-                Spacer(modifier = Modifier.height(SakhiSpacing.space12))
+                Spacer(modifier = Modifier.height(SakhiSpacing.space10))
             }
         }
     }
-
-}
-
-@Composable
-private fun AvatarPair(partnerInitial: String) {
-    Box(modifier = Modifier.size(width = 96.dp, height = 66.dp)) {
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(58.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f), CircleShape)
-                .padding(0.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = partnerInitial,
-                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
-            )
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .size(58.dp)
-                .background(MaterialTheme.colorScheme.primary, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Person,
-                contentDescription = null,
-                tint = Color.White,
-            )
-        }
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .size(20.dp)
-                .background(MaterialTheme.colorScheme.surface, CircleShape),
-            contentAlignment = Alignment.Center,
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(14.dp)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Favorite,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(8.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SparkleGlyph() {
-    InfoSymbolIcon(Icons.Filled.AutoAwesome)
-}
-
-
-@Composable
-private fun InfoSymbolIcon(imageVector: androidx.compose.ui.graphics.vector.ImageVector) {
-    Icon(
-        imageVector = imageVector,
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.primary,
-        modifier = Modifier.size(18.dp),
-    )
 }
 
 @Composable
 private fun SectionHeader(text: String, modifier: Modifier = Modifier) {
+    // iOS writes these in capitals ("WHAT THEY CAN DO"), 11 bold, tertiary, 0.5 tracking.
     Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp),
-        color = sakhiSecondaryLabel(),
+        text = text.uppercase(),
+        fontSize = 11.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 0.5.sp,
+        color = sakhiTertiaryLabel(),
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
+            .padding(start = SakhiSpacing.space6, end = SakhiSpacing.space6, bottom = SakhiSpacing.space2),
     )
-}
-
-@Composable
-private fun InfoRow(icon: @Composable () -> Unit, label: String, value: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics(mergeDescendants = true) {}
-            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-    ) {
-        Box(modifier = Modifier.width(28.dp), contentAlignment = Alignment.Center) { icon() }
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = sakhiSecondaryLabel(),
-        )
-    }
-}
-
-@Composable
-private fun ActionRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .semantics(mergeDescendants = true) {}
-            .clickable(onClick = onClick)
-            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.width(28.dp),
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.weight(1f),
-        )
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-            contentDescription = null,
-            // Disclosure chevron. iOS tints `chevron.right` with
-            // `DS.Colors.tertiaryLabel` in 10 of its 13 uses -- it is the
-            // convention, not a one-off.
-            tint = sakhiTertiaryLabel(),
-        )
-    }
 }
 
 private fun formatConnectedSince(
@@ -1114,7 +761,8 @@ private fun formatConnectedSince(
     val javaDate = java.time.LocalDate.of(date.year, date.monthNumber, date.dayOfMonth)
     val formatter = java.time.format.DateTimeFormatter.ofPattern(
         context.getString(R.string.care_connected_since_date_format),
-        java.util.Locale.getDefault(),
+        // Language only: en-IN spells September "Sept", iOS writes "Sep".
+        java.util.Locale(java.util.Locale.getDefault().language),
     )
     return javaDate.format(formatter)
 }
@@ -1194,7 +842,8 @@ private fun PendingInviteContent(
         // the description sat hard left.
         Text(
             text = stringResource(R.string.care_pending_share_with_name, partnerName),
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.onSurface,
             textAlign = TextAlign.Center,
             modifier = Modifier
@@ -1203,7 +852,7 @@ private fun PendingInviteContent(
         )
         Text(
             text = stringResource(R.string.care_pending_waiting_for_name, partnerName),
-            style = MaterialTheme.typography.bodyMedium,
+            fontSize = 15.sp,
             color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
             // iOS: `.lineSpacing(4)` and `.padding(.horizontal, DS.Spacing.xxl)` (32).
@@ -1216,7 +865,8 @@ private fun PendingInviteContent(
 
         Surface(
             shape = RoundedCornerShape(SakhiRadius.full),
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+            // iOS: a `lightPink` capsule, not the brand pink at 12%.
+            color = sakhiLightPink(),
             modifier = Modifier
                 .semantics {
                     contentDescription = context.getString(
@@ -1245,17 +895,16 @@ private fun PendingInviteContent(
                 },
         ) {
             Row(
-                modifier = Modifier.padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
+                modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space3),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
             ) {
                 Text(
                     text = formattedCode,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        letterSpacing = 2.sp,
-                    ),
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 2.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Icon(
@@ -1275,11 +924,8 @@ private fun PendingInviteContent(
                 hapticManager.impact(HapticImpact.MEDIUM)
                 sharePendingInvite(context, shareMessage)
             },
-            secondaryLabel = if (isCancelling) {
-                stringResource(R.string.care_cancelling)
-            } else {
-                stringResource(R.string.care_cancel_request)
-            },
+            // iOS keeps the label and only disables it; the loading screen carries the wait.
+            secondaryLabel = stringResource(R.string.care_cancel_request),
             onSecondaryClick = onCancel,
             secondaryEnabled = !isCancelling,
         )
@@ -1578,6 +1224,7 @@ private fun PartnerPermissionsEditContent(
     var shareWeight by remember { mutableStateOf(initial.canViewWeight) }
     var shareDischarge by remember { mutableStateOf(initial.canViewDischarge) }
     var shareNotes by remember { mutableStateOf(initial.canViewNotes) }
+    val loadingSlot: @Composable () -> Unit = { CareLoadingButton() }
 
     Column(modifier = Modifier.fillMaxSize()) {
         // Had no header at all, so the only way back out of Manage Permissions was Save.
@@ -1617,7 +1264,7 @@ private fun PartnerPermissionsEditContent(
                         checked = canLogPeriods,
                         onCheckedChange = { canLogPeriods = it },
                     )
-                    SakhiListDivider(startInset = SakhiSpacing.space10)
+                    SakhiListDivider(startInset = SakhiSpacing.space4)
                     PermissionToggleRow(
                         title = stringResource(R.string.care_permission_generate_reports),
                         checked = canGenerateReports,
@@ -1653,25 +1300,26 @@ private fun PartnerPermissionsEditContent(
                     )
                     rows.forEachIndexed { index, (title, checked, onChange) ->
                         PermissionToggleRow(title = title, checked = checked, onCheckedChange = onChange)
-                        if (index != rows.lastIndex) SakhiListDivider(startInset = SakhiSpacing.space10)
+                        if (index != rows.lastIndex) SakhiListDivider(startInset = SakhiSpacing.space4)
                     }
                 }
             }
 
             Text(
                 text = stringResource(R.string.care_permission_sexual_activity_private),
-                style = MaterialTheme.typography.bodySmall,
-                color = sakhiSecondaryLabel(),
-                modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
+                fontSize = 12.sp,
+                color = sakhiTertiaryLabel(),
+                modifier = Modifier.padding(start = SakhiSpacing.space6, end = SakhiSpacing.space6, top = SakhiSpacing.space3),
             )
 
-            Spacer(modifier = Modifier.height(SakhiSpacing.space16))
+            Spacer(modifier = Modifier.height(SakhiSpacing.space10))
         }
 
         SakhiListDivider()
         SakhiFooter(
-            primaryLabel = if (isSaving) stringResource(R.string.care_saving) else stringResource(R.string.care_save),
+            primaryLabel = stringResource(R.string.care_save),
             primaryEnabled = !isSaving,
+            primarySlot = if (isSaving) loadingSlot else null,
             onPrimaryClick = {
                 onSave(
                     ParentChildPermissions(
@@ -1703,139 +1351,16 @@ private fun PermissionToggleRow(title: String, checked: Boolean, onCheckedChange
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space2),
+            .padding(horizontal = SakhiSpacing.space4, vertical = SakhiSpacing.space5),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = title,
-            style = MaterialTheme.typography.bodyLarge,
+            fontSize = 15.sp,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f),
         )
         SakhiSwitch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-/**
- * His read-only view of what she shares with him: the same list she edits on her side, each
- * row marked shared or not. Only she can change it, and the page says so, so nothing here
- * reads as something he could ask the app to unlock.
- */
-@Composable
-private fun SheSharesContent(
-    partnership: CarePartnership,
-    onBack: () -> Unit,
-) {
-    val p = partnership.enhancedPermissions ?: ParentChildPermissions()
-    val canDo = listOf(
-        stringResource(R.string.care_permission_log_periods) to p.canLogPeriods,
-        stringResource(R.string.care_permission_generate_reports) to p.canGenerateReports,
-    )
-    val canSee = listOf(
-        stringResource(R.string.care_permission_period_dates) to p.canViewPeriodDates,
-        stringResource(R.string.care_permission_cycle_history) to p.canViewCycleHistory,
-        stringResource(R.string.care_permission_cycle_predictions) to p.canViewPredictions,
-        stringResource(R.string.care_permission_symptoms) to p.canViewSymptoms,
-        stringResource(R.string.care_permission_moods) to p.canViewMoods,
-        stringResource(R.string.care_permission_daily_health_logs) to p.canViewDailyLogs,
-        stringResource(R.string.care_permission_ovulation_tests) to p.canViewOvulationTests,
-        stringResource(R.string.care_permission_medications) to p.canViewMedications,
-        stringResource(R.string.care_permission_body_temperature) to p.canViewTemperature,
-        stringResource(R.string.care_permission_weight_body) to p.canViewWeight,
-        stringResource(R.string.care_permission_discharge) to p.canViewDischarge,
-        stringResource(R.string.care_permission_personal_notes) to p.canViewNotes,
-    )
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        SakhiNavBar(onBack = onBack)
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState(), flingBehavior = rememberSakhiFlingBehavior()),
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space5),
-            ) {
-                Text(
-                    text = stringResource(R.string.care_she_shares_title),
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                )
-                Text(
-                    text = stringResource(R.string.care_she_shares_subtitle),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = sakhiSecondaryLabel(),
-                    modifier = Modifier.padding(top = SakhiSpacing.space2),
-                )
-            }
-
-            SectionHeader(text = stringResource(R.string.care_she_shares_section_do))
-            SharedStateCard(rows = canDo)
-
-            SectionHeader(
-                text = stringResource(R.string.care_she_shares_section_see),
-                modifier = Modifier.padding(top = SakhiSpacing.space6),
-            )
-            SharedStateCard(rows = canSee)
-
-            Text(
-                text = stringResource(R.string.care_permission_sexual_activity_private),
-                style = MaterialTheme.typography.bodySmall,
-                color = sakhiSecondaryLabel(),
-                modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
-            )
-            Spacer(modifier = Modifier.height(SakhiSpacing.space16))
-        }
-    }
-}
-
-@Composable
-private fun SharedStateCard(rows: List<Pair<String, Boolean>>) {
-    Surface(
-        color = sakhiSystemBackground(),
-        shape = RoundedCornerShape(SakhiRadius.xxl),
-        tonalElevation = SakhiSpacing.space1,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space6),
-    ) {
-        Column {
-            rows.forEachIndexed { index, (title, shared) ->
-                val stateLabel = stringResource(
-                    if (shared) R.string.care_she_shares_on else R.string.care_she_shares_off,
-                )
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics(mergeDescendants = true) {}
-                        .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space3),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (shared) MaterialTheme.colorScheme.onSurface else sakhiSecondaryLabel(),
-                        modifier = Modifier.weight(1f),
-                    )
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Icon(
-                            imageVector = if (shared) Icons.Filled.CheckCircle else Icons.Filled.Lock,
-                            contentDescription = null,
-                            tint = if (shared) MaterialTheme.colorScheme.primary else sakhiSecondaryLabel(),
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Text(
-                            text = stateLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (shared) MaterialTheme.colorScheme.primary else sakhiSecondaryLabel(),
-                        )
-                    }
-                }
-                if (index != rows.lastIndex) SakhiListDivider(startInset = SakhiSpacing.space5)
-            }
-        }
     }
 }
 
@@ -1850,6 +1375,8 @@ private fun SharedStateCard(rows: List<Pair<String, Boolean>>) {
 private fun PartnerHistoryContent(
     partnership: CarePartnership,
     isPartnerRole: Boolean,
+    /** The other person's name, as the connection page shows it. */
+    name: String,
     /** The walks this connection has done, from the Stay With Me store. */
     walks: List<team.sakhi.staywithme.StayWithMeWalkRecord>,
     /** Her person's other care actions, from the inbox. Empty on his side. */
@@ -1864,8 +1391,12 @@ private fun PartnerHistoryContent(
     val context = LocalContext.current
     var logs by remember { mutableStateOf<List<team.sakhi.models.PeriodLog>>(emptyList()) }
     var isLoaded by remember { mutableStateOf(false) }
-    val name = careDisplayName(partnership, isPartnerRole)
-    val connectedDate = formatConnectedSince(partnershipStartDate(partnership), context)
+    // iOS: `dateStyle = .medium`, in the phone's own locale.
+    val connectedSince = remember(partnership.id, partnership.createdAt) {
+        val date = partnershipStartDate(partnership)
+        java.time.LocalDate.of(date.year, date.monthNumber, date.dayOfMonth)
+            .format(java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM))
+    }
 
     LaunchedEffect(partnership.userId) {
         periodLogRepository.getAll(partnership.userId).onSuccess { all ->
@@ -1893,54 +1424,89 @@ private fun PartnerHistoryContent(
             ),
     ) {
         SakhiNavBar(onBack = onBack)
+        // A large title under the back button, as every page opened from Care has.
+        Text(
+            text = if (isPartnerRole) {
+                stringResource(R.string.care_section_moments_partner)
+            } else {
+                stringResource(R.string.care_section_moments_owner, name)
+            },
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+            color = sakhiLabel(),
+            modifier = Modifier.padding(
+                start = SakhiSpacing.space6,
+                end = SakhiSpacing.space6,
+                top = SakhiSpacing.space6,
+                bottom = SakhiSpacing.space3,
+            ),
+        )
+        // Nothing on the page until the days are read, as iOS: a spinner for a moment reads as
+        // something being wrong on a page that is only a list.
         if (!isLoaded && walks.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-            return@Column
-        }
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().navigationBarsPadding(),
-            contentPadding = PaddingValues(top = SakhiSpacing.space2, bottom = SakhiSpacing.space10),
-            flingBehavior = rememberSakhiFlingBehavior(),
-        ) {
-            // A large title under the back button, as every page opened from Care has.
-            item(key = "title") {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth())
+        } else if (moments.isEmpty()) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth().navigationBarsPadding(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
+                Icon(
+                    imageVector = Icons.Filled.History,
+                    contentDescription = null,
+                    tint = sakhiTertiaryLabel(),
+                    modifier = Modifier.size(32.dp),
+                )
+                Text(
+                    text = stringResource(R.string.care_history_empty_title),
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = sakhiSecondaryLabel(),
+                    modifier = Modifier.padding(top = SakhiSpacing.space3),
+                )
                 Text(
                     text = if (isPartnerRole) {
-                        stringResource(R.string.care_section_moments_partner)
+                        stringResource(R.string.care_history_empty_partner)
                     } else {
-                        stringResource(R.string.care_section_moments_owner, name)
+                        stringResource(R.string.care_history_empty_owner, name)
                     },
-                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold),
-                    color = sakhiLabel(),
-                    modifier = Modifier.padding(horizontal = SakhiSpacing.space6, vertical = SakhiSpacing.space2),
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = sakhiTertiaryLabel(),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(horizontal = SakhiSpacing.space8)
+                        .padding(top = SakhiSpacing.space3),
                 )
+                Spacer(modifier = Modifier.weight(1f))
+                ConnectionBadge(connectedDate = connectedSince)
+                Spacer(modifier = Modifier.height(SakhiSpacing.space10))
             }
-            // On the page, not in a card: this page is only this list, and a card inside it
-            // just boxes it in (Karan, 2026-09-13).
-            item(key = "timeline") {
-                Column(modifier = Modifier.padding(horizontal = SakhiSpacing.space1)) {
-                    Spacer(modifier = Modifier.height(SakhiSpacing.space2))
-                    CareMoments(
-                        moments = moments,
-                        emptyText = if (isPartnerRole) {
-                            stringResource(R.string.care_moments_empty_partner)
-                        } else {
-                            stringResource(R.string.care_moments_empty_owner, name)
-                        },
-                        dayLabel = { momentDayLabel(it, context) },
-                        limit = null,
-                    )
-                    Spacer(modifier = Modifier.height(SakhiSpacing.space3))
+        } else {
+            LazyColumn(
+                modifier = Modifier.weight(1f).fillMaxWidth().navigationBarsPadding(),
+                contentPadding = PaddingValues(top = SakhiSpacing.space4, bottom = SakhiSpacing.space10),
+                flingBehavior = rememberSakhiFlingBehavior(),
+            ) {
+                // On the page, not in a card: this page is only this list, and a card inside it
+                // just boxes it in (Karan, 2026-09-13).
+                item(key = "timeline") {
+                    Column(modifier = Modifier.padding(horizontal = SakhiSpacing.space1)) {
+                        CareMoments(
+                            moments = moments,
+                            emptyText = "",
+                            dayLabel = { momentDayLabel(it, context) },
+                            limit = null,
+                        )
+                    }
                 }
-            }
-            item(key = "since") {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = SakhiSpacing.space6),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    ConnectionBadge(connectedDate = connectedDate)
+                item(key = "since") {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(top = SakhiSpacing.space6),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        ConnectionBadge(connectedDate = connectedSince)
+                    }
                 }
             }
         }
@@ -1962,17 +1528,18 @@ private fun LeaveConnectionContent(
 ) {
     val pageTop = sakhiLightPink()
     val pageBottom = androidx.compose.ui.graphics.lerp(sakhiLightPink(), sakhiSystemBackground(), 0.82f)
+    val loadingSlot: @Composable () -> Unit = { CareLoadingButton() }
     val points = if (isPartnerRole) {
         listOf(
             Icons.Filled.VisibilityOff to stringResource(R.string.care_leave_point_see_partner),
-            Icons.AutoMirrored.Filled.DirectionsWalk to stringResource(R.string.care_leave_point_walk_partner),
+            Icons.Filled.DirectionsCar to stringResource(R.string.care_leave_point_walk_partner),
             Icons.Filled.History to stringResource(R.string.care_leave_point_history_partner),
             Icons.Filled.PersonAdd to stringResource(R.string.care_leave_point_again_partner),
         )
     } else {
         listOf(
             Icons.Filled.VisibilityOff to stringResource(R.string.care_leave_point_see_owner, name),
-            Icons.AutoMirrored.Filled.DirectionsWalk to stringResource(R.string.care_leave_point_walk_owner, name),
+            Icons.Filled.DirectionsCar to stringResource(R.string.care_leave_point_walk_owner, name),
             Icons.Filled.History to stringResource(R.string.care_leave_point_history_owner, name),
             Icons.Filled.PersonAdd to stringResource(R.string.care_leave_point_again_owner),
         )
@@ -1997,7 +1564,7 @@ private fun LeaveConnectionContent(
         ) {
             Box(
                 modifier = Modifier
-                    .padding(top = SakhiSpacing.space4)
+                    .padding(top = SakhiSpacing.space6)
                     .size(72.dp)
                     .background(sakhiSystemBackground(), CircleShape),
                 contentAlignment = Alignment.Center,
@@ -2006,7 +1573,7 @@ private fun LeaveConnectionContent(
                     imageVector = Icons.Filled.HeartBroken,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(32.dp),
+                    modifier = Modifier.size(28.dp),
                 )
             }
             Text(
@@ -2015,7 +1582,8 @@ private fun LeaveConnectionContent(
                 } else {
                     stringResource(R.string.care_leave_title_owner, name)
                 },
-                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                fontSize = 24.sp,
+                fontWeight = FontWeight.Bold,
                 color = sakhiLabel(),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(start = SakhiSpacing.space6, end = SakhiSpacing.space6, top = SakhiSpacing.space5),
@@ -2026,12 +1594,12 @@ private fun LeaveConnectionContent(
                 } else {
                     stringResource(R.string.care_leave_sub_owner)
                 },
-                style = MaterialTheme.typography.bodyMedium,
+                fontSize = 15.sp,
                 color = sakhiSecondaryLabel(),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(start = SakhiSpacing.space6, end = SakhiSpacing.space6, top = SakhiSpacing.space2),
             )
-            Spacer(modifier = Modifier.height(SakhiSpacing.space6))
+            Spacer(modifier = Modifier.height(28.dp))
             // On the page, not in a card: this screen is only this list.
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = SakhiSpacing.space1)) {
                 points.forEachIndexed { index, (icon, text) ->
@@ -2039,7 +1607,7 @@ private fun LeaveConnectionContent(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = SakhiSpacing.space5, vertical = SakhiSpacing.space4),
+                            .padding(horizontal = SakhiSpacing.space5, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
                     ) {
@@ -2051,12 +1619,12 @@ private fun LeaveConnectionContent(
                                 imageVector = icon,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(17.dp),
+                                modifier = Modifier.size(16.dp),
                             )
                         }
                         Text(
                             text = text,
-                            style = MaterialTheme.typography.bodyMedium,
+                            fontSize = 15.sp,
                             color = sakhiLabel(),
                             modifier = Modifier.weight(1f),
                         )
@@ -2075,6 +1643,7 @@ private fun LeaveConnectionContent(
             },
             onPrimaryClick = onConfirm,
             primaryEnabled = !isRemoving,
+            primarySlot = if (isRemoving) loadingSlot else null,
             secondaryLabel = if (isPartnerRole) {
                 stringResource(R.string.care_leave_keep_partner)
             } else {
@@ -2085,27 +1654,10 @@ private fun LeaveConnectionContent(
     }
 }
 
-/**
- * Rounds only the outer corners of a grouped list, so rows that are separate lazy items still
- * draw as one card. Matches the single `RoundedCornerShape(SakhiRadius.xxl)` the whole group
- * carried when it was one Surface.
- */
-@Composable
-private fun historyRowShape(index: Int, lastIndex: Int): Shape {
-    val radius = SakhiRadius.xxl
-    val square = 0.dp
-    return RoundedCornerShape(
-        topStart = if (index == 0) radius else square,
-        topEnd = if (index == 0) radius else square,
-        bottomStart = if (index == lastIndex) radius else square,
-        bottomEnd = if (index == lastIndex) radius else square,
-    )
-}
-
 @Composable
 private fun ConnectionBadge(connectedDate: String) {
     Row(
-        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space1),
+        horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
@@ -2115,9 +1667,9 @@ private fun ConnectionBadge(connectedDate: String) {
             modifier = Modifier.size(12.dp),
         )
         Text(
-            text = stringResource(R.string.care_connected_badge, connectedDate),
-            style = MaterialTheme.typography.labelSmall,
-            color = sakhiSecondaryLabel(),
+            text = stringResource(R.string.care_taking_care_since, connectedDate),
+            fontSize = 12.sp,
+            color = sakhiTertiaryLabel(),
         )
     }
 }

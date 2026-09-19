@@ -128,7 +128,12 @@ internal object StayWithMeRoutes {
         return points
     }
 
-    private fun metres(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
+    /**
+     * Straight-line metres between two points. Shared with the ride screens, which measure how
+     * far along her line she is and how long the line she walked was, and cannot reach the
+     * shared core's own copy because that one is internal to it.
+     */
+    fun metres(a: Pair<Double, Double>, b: Pair<Double, Double>): Double {
         val r = 6_371_000.0
         val dLat = Math.toRadians(b.first - a.first)
         val dLng = Math.toRadians(b.second - a.second)

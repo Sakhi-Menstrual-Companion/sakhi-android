@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -125,16 +127,21 @@ internal fun StayWithMeNotReachedScreen(
 
     val minutesLate = max(1, ((now - session.expectedArrival).inWholeMinutes).toInt())
 
-    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        val statusTop = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        // Her face on the map, the way iOS draws it, and hers to pan and zoom: the last thing
+        // her phone sent is the one clue on this screen worth looking at closely.
         WalkMap(
             location = session.lastLocation,
             accent = AlarmRed,
             initial = "",
-            avatarWithoutName = true,
+            faceIndex = faceIndex,
             trail = trail,
             destination = session.destination,
             bottomPadding = PanelHeight,
+            topPadding = statusTop + 64.dp,
             modifier = Modifier.fillMaxSize(),
+            showAccuracy = false,
         )
 
         // iOS puts a plain white circle with a cross on the left and a deep-rose 112 pill
@@ -145,56 +152,32 @@ internal fun StayWithMeNotReachedScreen(
             modifier = Modifier.align(Alignment.TopStart),
         )
 
-        // Pull it up for the rest. iOS's panel does the same, and in an emergency the last
-        // thing to ask of someone is a scroll they cannot see the bottom of.
-        var expanded by remember { mutableStateOf(false) }
-        // iOS's 430 is 430 of content: its panel runs under the home indicator and adds the
-        // safe area below. Android's gesture bar would otherwise eat that same 430 from the
-        // inside, which pushed the three numbers' captions below the fold.
-        val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        val panelHeight by animateDpAsState(
-            targetValue = (if (expanded) ExpandedPanelHeight else PanelHeight) + bottomInset,
-            label = "alarmPanelHeight",
-        )
-
-        Surface(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(panelHeight),
-            shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
-            // iOS fills this with `DS.Colors.background`, the app's own pink, not white.
-            color = MaterialTheme.colorScheme.background,
-            // The one shadow Sakhi allows, and only over a map: the panel has to read as
-            // separate from what is under it. Same value as iOS's `WalkBottomPanel`.
-            shadowElevation = 12.dp,
+        // The panel every walk screen uses: at rest her face, the sentence, the three numbers
+        // and the buttons, with the rest of the screen left as map. Pull it up for the rest,
+        // and in an emergency the last thing to ask of someone is a scroll they cannot see the
+        // bottom of.
+        val slide: @Composable () -> Unit = {
+            SlideToConfirm(
+                title = stringResource(R.string.care_swm_alarm_slide),
+                onConfirmed = {
+                    alarm.stop()
+                    onAcknowledged()
+                },
+                modifier = Modifier
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 6.dp, bottom = 8.dp)
+                    .navigationBarsPadding(),
+            )
+        }
+        RideBottomPanel(
+            restingHeight = PanelHeight,
+            fullHeight = maxHeight * 0.9f,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            resetKey = session.id,
+            footer = slide,
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // The grabber, and the whole thing it belongs to, answers a drag either way.
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp, bottom = 2.dp)
-                        .pointerInput(Unit) {
-                            detectVerticalDragGestures { _, dragAmount ->
-                                if (dragAmount < -6f) expanded = true
-                                if (dragAmount > 6f) expanded = false
-                            }
-                        },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 36.dp, height = 5.dp)
-                            .background(sakhiTertiaryLabel().copy(alpha = 0.35f), CircleShape),
-                    )
-                }
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp),
-                ) {
+            item(key = "alarm") {
+                Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                     Spacer(Modifier.height(6.dp))
                     AlarmFace(faceIndex = faceIndex, modifier = Modifier.align(Alignment.CenterHorizontally))
                     Spacer(Modifier.height(14.dp))
@@ -223,18 +206,6 @@ internal fun StayWithMeNotReachedScreen(
                     )
                     Spacer(Modifier.height(24.dp))
                 }
-
-                SlideToConfirm(
-                    title = stringResource(R.string.care_swm_alarm_slide),
-                    onConfirmed = {
-                        alarm.stop()
-                        onAcknowledged()
-                    },
-                    modifier = Modifier
-                        .padding(horizontal = 20.dp)
-                        .padding(top = 6.dp, bottom = 8.dp)
-                        .navigationBarsPadding(),
-                )
             }
         }
     }
@@ -255,6 +226,7 @@ private fun AlarmTopBar(
 ) {
     val closeLabel = stringResource(R.string.care_swm_alarm_back)
     val policeLabel = stringResource(R.string.care_swm_alarm_call_police_a11y)
+    val policeHint = stringResource(R.string.ride_call_police_hint)
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -285,7 +257,7 @@ private fun AlarmTopBar(
                 .background(sakhiDeepRose(), CircleShape)
                 .clickable(onClick = onCallPolice)
                 .padding(horizontal = 16.dp)
-                .semantics { contentDescription = policeLabel },
+                .semantics { contentDescription = "$policeLabel. $policeHint" },
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -389,9 +361,12 @@ private fun AlarmFacts(session: StayWithMeSession, now: Instant) {
             verticalAlignment = Alignment.Top,
         ) {
             val lastSeen = session.lastLocation?.let { fix ->
-                val minutes = ((now - fix.recordedAt).inWholeMinutes).toInt()
+                // iOS's `freshness`: under a minute is "Just now", after that whole minutes
+                // rounded up, and hours once it has been an hour.
+                val ageSeconds = (now - fix.recordedAt).inWholeSeconds
+                val minutes = ((ageSeconds + 59) / 60).toInt()
                 when {
-                    minutes < 1 -> stringResource(R.string.care_swm_alarm_just_now)
+                    ageSeconds < 60 -> stringResource(R.string.care_swm_alarm_just_now)
                     minutes < 60 -> stringResource(R.string.care_swm_alarm_minutes_ago, minutes)
                     else -> stringResource(R.string.care_swm_alarm_hours_ago, minutes / 60)
                 }
@@ -544,8 +519,6 @@ internal fun SlideToConfirm(
 /** iOS uses `UIColor.systemRed` here, and only here. Nothing else on a walk screen is red. */
 private val AlarmRed = Color(0xFFFF3B30)
 private val PanelHeight = 430.dp
-/** Pulled up: everything, including the three numbers to call. */
-private val ExpandedPanelHeight = 680.dp
 /** iOS: a 64 tall track with a five point inset, so the knob is 54. */
 private val TrackHeight = 64.dp
 private val TrackInset = 5.dp

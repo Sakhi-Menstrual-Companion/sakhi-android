@@ -1,6 +1,9 @@
 package team.sakhi.android.feature.care
 
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,12 +28,17 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -61,27 +69,41 @@ internal fun RideCheckInBox(
     onGetHelp: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // Every three seconds (Karan, 2026-09-16): often enough that she knows it wants an
-    // answer, quiet enough that it is not shouting.
+    // One firm tap as it arrives, then a nudge every three seconds until she answers
+    // (Karan, 2026-09-16): often enough that she knows it wants an answer, quiet enough that it
+    // is not shouting. The nudge is a tap and a small shake, and waits while her face is being
+    // checked.
+    val haptics = LocalHapticFeedback.current
+    val stillChecking by rememberUpdatedState(checking)
     var shakes by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
         while (true) {
             delay(3_000)
+            if (stillChecking) continue
+            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
             shakes += 1
         }
     }
-    val shake by animateFloatAsState(targetValue = shakes.toFloat(), label = "checkInShake")
+    // iOS's `RideShake`: each whole number is one shake of three swings, and it rests at every
+    // one, over 0.45 s.
+    val shake by animateFloatAsState(
+        targetValue = shakes.toFloat(),
+        animationSpec = tween(durationMillis = 450, easing = LinearEasing),
+        label = "checkInShake",
+    )
+    val getHelpLabel = stringResource(R.string.ride_get_help_a11y)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .graphicsLayer {
-                // One shake per tick: a small sway that rests where it started.
-                val phase = (shake - shake.toInt()).toDouble()
-                translationX = (sin(phase * Math.PI * 4) * 6).toFloat()
+                // A small side-to-side sway that rests exactly where it started.
+                translationX = (sin(shake.toDouble() * Math.PI * 6) * 7.dp.toPx()).toFloat()
             },
         shape = RoundedCornerShape(24.dp),
         color = RideStyle.floating,
+        border = BorderStroke(0.5.dp, RideStyle.hairline),
         // The same faint shadow the panel under it casts, so the box reads apart from the
         // map it floats on (Karan, 2026-09-16). One of the two shadows Sakhi allows.
         shadowElevation = 12.dp,
@@ -161,7 +183,8 @@ internal fun RideCheckInBox(
                         .height(48.dp)
                         .background(RideStyle.soft, CircleShape)
                         .clickable(onClick = onGetHelp)
-                        .padding(horizontal = 18.dp),
+                        .padding(horizontal = 18.dp)
+                        .semantics { contentDescription = getHelpLabel },
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {

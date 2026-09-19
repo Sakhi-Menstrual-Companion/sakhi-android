@@ -51,6 +51,12 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.AddLink
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.SentimentSatisfied
+import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -118,6 +124,8 @@ import team.sakhi.android.ui.SakhiLoadingContext
 import team.sakhi.android.ui.SakhiLoadingView
 import team.sakhi.android.ui.SakhiSwitch
 import team.sakhi.android.ui.SakhiTextField
+import team.sakhi.android.ui.ToastType
+import team.sakhi.android.ui.ToastManager
 import team.sakhi.android.ui.sakhiScreenTransitionSpec
 import team.sakhi.android.ui.SecondaryButton
 import team.sakhi.auth.AccountState
@@ -220,6 +228,7 @@ fun OnboardingContentStepScreen(
             uiState = acceptUiState,
             onAccept = onAcceptInvite,
             onComplete = onCompleteOnboarding,
+            onBack = onBack,
         )
         OnboardingFlowStep.ModeSelection -> ModeSelectionScreen(
             onModeSelected = onModeSelected,
@@ -254,15 +263,17 @@ fun OnboardingContentStepScreen(
         OnboardingFlowStep.InviteShare -> InviteShareScreen(
             onDismiss = onDismiss,
             uiState = careInviteUiState,
-            onContinueToInviteWaiting = onContinueToInviteWaiting,
-            onCancelInvitation = { onCancelInvitation(true) },
+            // No carrying on to the waiting step from Share, as iOS: the request is cancelled
+            // from here, and the screen that shows it cancelled ends the flow with Done.
+            onCancelInvitation = { onCancelInvitation(false) },
             onDismissError = onDismissInviteError,
+            onDone = onCompleteOnboarding,
         )
         OnboardingFlowStep.InviteWaiting -> InviteWaitingScreen(
             onDismiss = onDismiss,
             uiState = careInviteUiState,
             onContinue = onContinue,
-            onCancelInvitation = { onCancelInvitation(true) },
+            onCancelInvitation = { onCancelInvitation(false) },
             onDismissError = onDismissInviteError,
         )
         OnboardingFlowStep.JoinFamilyIntroCarousel -> IntroCarouselScreen(
@@ -515,7 +526,7 @@ private fun InvitePermissionsScreen(
                 },
             )
             PermissionCard(
-                icon = Icons.Filled.Favorite,
+                icon = Icons.Filled.SentimentSatisfied,
                 title = stringResource(R.string.onboarding_invite_permissions_symptoms_title),
                 description = stringResource(R.string.onboarding_invite_permissions_symptoms_description),
                 isOn = uiState.permissions.isSymptomsEnabled(),
@@ -525,7 +536,7 @@ private fun InvitePermissionsScreen(
                 },
             )
             PermissionCard(
-                icon = Icons.Filled.CheckCircle,
+                icon = Icons.Filled.EditNote,
                 title = stringResource(R.string.onboarding_invite_permissions_daily_logs_title),
                 description = stringResource(R.string.onboarding_invite_permissions_daily_logs_description),
                 isOn = uiState.permissions.isDailyLogsEnabled(),
@@ -535,7 +546,7 @@ private fun InvitePermissionsScreen(
                 },
             )
             PermissionCard(
-                icon = Icons.Filled.Sync,
+                icon = Icons.Filled.BarChart,
                 title = stringResource(R.string.onboarding_invite_permissions_body_stats_title),
                 description = stringResource(R.string.onboarding_invite_permissions_body_stats_description),
                 isOn = uiState.permissions.isBodyStatsEnabled(),
@@ -635,12 +646,118 @@ private fun PermissionCard(
     }
 }
 
+/**
+ * Cancelling an invite, as iOS's share and waiting steps do it: a loading screen while it
+ * goes, then "Request cancelled" with Done; a failure is a toast and she stays where she was.
+ * Shared by both steps so they cannot drift.
+ */
+@Composable
+private fun InviteCancelFlow(
+    uiState: OnboardingCareInviteUiState,
+    onCancelInvitation: () -> Unit,
+    onDismissError: () -> Unit,
+    onDone: () -> Unit,
+    onDismiss: (() -> Unit)?,
+    content: @Composable (requestCancel: () -> Unit) -> Unit,
+) {
+    val context = LocalContext.current
+    var cancelRequested by remember { mutableStateOf(false) }
+    var cancelled by remember { mutableStateOf(false) }
+    val loadingMessages = listOf(
+        stringResource(R.string.onboarding_invite_cancelling_1),
+        stringResource(R.string.onboarding_invite_cancelling_2),
+        stringResource(R.string.onboarding_invite_cancelling_3),
+    )
+
+    LaunchedEffect(uiState.isCancellingInvite) {
+        if (cancelRequested && !uiState.isCancellingInvite) {
+            cancelRequested = false
+            if (uiState.errorMessage == null) {
+                cancelled = true
+            } else {
+                onDismissError()
+                ToastManager.show(
+                    title = context.getString(R.string.onboarding_invite_cancel_failed_title),
+                    message = context.getString(R.string.onboarding_invite_cancel_failed_message),
+                    type = ToastType.ERROR,
+                    durationMs = 2000L,
+                )
+            }
+        }
+    }
+
+    when {
+        cancelled -> InviteRequestCancelled(onDone = onDone, onClose = onDismiss)
+        uiState.isCancellingInvite -> SakhiLoadingView(context = SakhiLoadingContext.Messages(loadingMessages))
+        else -> content {
+            cancelRequested = true
+            onCancelInvitation()
+        }
+    }
+}
+
+/** iOS `CareActionCompletionView` for a closed invite: a tick, what happened, and Done. */
+@Composable
+private fun InviteRequestCancelled(
+    onDone: () -> Unit,
+    onClose: (() -> Unit)?,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        SakhiNavBar(onClose = onClose)
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(
+                modifier = Modifier.size(72.dp).background(MaterialTheme.colorScheme.primary, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Check,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(32.dp),
+                )
+            }
+            Text(
+                text = stringResource(R.string.onboarding_invite_cancelled_title),
+                fontSize = 28.sp,
+                fontWeight = FontWeight.Bold,
+                color = sakhiLabel(),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = SakhiSpacing.space8, start = SakhiSpacing.space6, end = SakhiSpacing.space6),
+            )
+            Text(
+                text = stringResource(R.string.onboarding_info_invite_closed),
+                fontSize = 15.sp,
+                lineHeight = 21.sp,
+                color = sakhiSecondaryLabel(),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(top = SakhiSpacing.space3)
+                    .padding(horizontal = SakhiSpacing.space8),
+            )
+        }
+        SakhiFooter(
+            primaryLabel = stringResource(R.string.onboarding_done),
+            onPrimaryClick = onDone,
+            showSecondarySlot = false,
+        )
+    }
+}
+
+/**
+ * iOS `InviteShareView`. Share opens the system share sheet and nothing else: she stays on
+ * this screen, with her code, until she closes it or cancels the request. (Android used to
+ * carry on to the waiting step from here; iOS never does.)
+ */
 @Composable
 private fun InviteShareScreen(
     uiState: OnboardingCareInviteUiState,
-    onContinueToInviteWaiting: () -> Unit,
     onCancelInvitation: () -> Unit,
     onDismissError: () -> Unit,
+    onDone: () -> Unit,
     onDismiss: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
@@ -651,13 +768,10 @@ private fun InviteShareScreen(
     val shareMessage = context.getString(R.string.onboarding_invite_share_message, uiState.inviteCode)
     val shareTitle = stringResource(R.string.onboarding_invite_share_title, displayName)
     val shareSubtitle = stringResource(R.string.onboarding_invite_share_subtitle, displayName)
-    val errorTitle = stringResource(R.string.onboarding_invite_action_error_title)
     val codeCopiedTitle = stringResource(R.string.onboarding_invite_code_copied_title)
     val codeCopiedMessage = stringResource(R.string.onboarding_invite_code_copied_message, displayName)
     val shareButtonLabel = stringResource(R.string.onboarding_invite_share_button)
     val cancelLabel = stringResource(R.string.onboarding_invite_cancel)
-    val cancellingLabel = stringResource(R.string.onboarding_invite_cancelling)
-    var copyNotice by remember { mutableStateOf<String?>(null) }
     var previousConnected by remember { mutableStateOf(uiState.isConnected) }
 
     LaunchedEffect(uiState.isConnected) {
@@ -667,81 +781,75 @@ private fun InviteShareScreen(
         previousConnected = uiState.isConnected
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-    // iOS `InviteShareView` draws `DSNavBar(onClose:)` itself, and the shell adds nothing
-    // for a fullscreen step. There is deliberately no back button: the invitation has
-    // already been created by the time this screen is reached.
-    SakhiNavBar(onClose = onDismiss)
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .padding(SakhiSpacing.space6),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(modifier = Modifier.weight(1f))
+    InviteCancelFlow(
+        uiState = uiState,
+        onCancelInvitation = onCancelInvitation,
+        onDismissError = onDismissError,
+        onDone = onDone,
+        onDismiss = onDismiss,
+    ) { requestCancel ->
+        Column(modifier = Modifier.fillMaxSize()) {
+            // iOS `InviteShareView` draws `DSNavBar(onClose:)` itself, and the shell adds nothing
+            // for a fullscreen step. There is deliberately no back button: the invitation has
+            // already been created by the time this screen is reached.
+            SakhiNavBar(onClose = onDismiss)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(SakhiSpacing.space6),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
 
-        // iOS `InviteShareView` shows `PartnerAvatarCloud(partnerName:)` here, the same
-        // two-circle avatar the Care sheet's pending state uses. Android drew a share
-        // glyph in a tinted circle instead, which is why this screen did not look like
-        // the iOS one.
-        PartnerAvatarCloud(partnerName = displayName)
+                PartnerAvatarCloud(partnerName = displayName)
 
-        OnboardingStepTitle(
-            text = shareTitle,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space6),
-        )
-        Text(
-            text = shareSubtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = sakhiSecondaryLabel(),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space2),
-        )
+                Text(
+                    text = shareTitle,
+                    fontSize = 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = sakhiLabel(),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 28.dp),
+                )
+                Text(
+                    text = shareSubtitle,
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
+                    color = sakhiSecondaryLabel(),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(horizontal = SakhiSpacing.space8)
+                        .padding(top = SakhiSpacing.space4),
+                )
 
-        uiState.errorMessage?.let { error ->
-            SakhiAlert(
-                title = errorTitle,
-                message = error,
-                tone = SakhiAlertTone.Error,
-                onDismiss = onDismissError,
-                modifier = Modifier.padding(top = SakhiSpacing.space4),
+                InviteCodeChip(
+                    code = uiState.inviteCode,
+                    modifier = Modifier.padding(top = SakhiSpacing.space4),
+                    onCopy = {
+                        hapticManager.success()
+                        copyInviteCode(context = context, code = uiState.inviteCode)
+                        ToastManager.show(
+                            title = codeCopiedTitle,
+                            message = codeCopiedMessage,
+                            type = ToastType.SUCCESS,
+                            durationMs = 2000L,
+                        )
+                    },
+                )
+
+                Spacer(modifier = Modifier.weight(1f))
+            }
+            SakhiFooter(
+                primaryLabel = shareButtonLabel,
+                onPrimaryClick = {
+                    hapticManager.impact(HapticImpact.MEDIUM)
+                    shareInviteMessage(context, shareMessage)
+                },
+                primaryEnabled = uiState.inviteCode.isNotBlank(),
+                secondaryLabel = cancelLabel,
+                onSecondaryClick = requestCancel,
             )
         }
-
-        copyNotice?.let { notice ->
-            SakhiAlert(
-                title = codeCopiedTitle,
-                message = notice,
-                modifier = Modifier.padding(top = SakhiSpacing.space4),
-                onDismiss = { copyNotice = null },
-            )
-        }
-
-        InviteCodeChip(
-            code = uiState.inviteCode,
-            modifier = Modifier.padding(top = SakhiSpacing.space5),
-            onCopy = {
-                hapticManager.success()
-                copyInviteCode(context = context, code = uiState.inviteCode)
-                copyNotice = codeCopiedMessage
-            },
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
-    }
-        SakhiFooter(
-            primaryLabel = shareButtonLabel,
-            onPrimaryClick = {
-                hapticManager.impact(HapticImpact.MEDIUM)
-                shareInviteMessage(context, shareMessage)
-                onContinueToInviteWaiting()
-            },
-            primaryEnabled = uiState.inviteCode.isNotBlank() && !uiState.isCancellingInvite,
-            secondaryLabel = if (uiState.isCancellingInvite) cancellingLabel else cancelLabel,
-            onSecondaryClick = onCancelInvitation,
-            secondaryEnabled = !uiState.isCancellingInvite,
-        )
     }
 }
 
@@ -763,113 +871,92 @@ private fun InviteWaitingScreen(
     val connectedSubtitle = stringResource(R.string.onboarding_invite_connected_subtitle, displayName)
     val waitingTitle = stringResource(R.string.onboarding_invite_waiting_title, displayName)
     val waitingSubtitle = stringResource(R.string.onboarding_invite_waiting_subtitle, displayName)
-    val errorTitle = stringResource(R.string.onboarding_invite_action_error_title)
     val codeCopiedTitle = stringResource(R.string.onboarding_invite_code_copied_title)
     val codeCopiedMessage = stringResource(R.string.onboarding_invite_code_copied_message, displayName)
     val connectedButtonLabel = stringResource(R.string.onboarding_invite_connected_button)
     val shareButtonLabel = stringResource(R.string.onboarding_invite_share_button)
     val cancelLabel = stringResource(R.string.onboarding_invite_cancel)
-    val cancellingLabel = stringResource(R.string.onboarding_invite_cancelling)
-    var copyNotice by remember { mutableStateOf<String?>(null) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-    // iOS `InviteWaitingView` draws `DSNavBar(onClose:)` itself. No back button: the
-    // invitation exists by now.
-    SakhiNavBar(onClose = onDismiss)
-    Column(
-        modifier = Modifier
-            .weight(1f)
-            .padding(SakhiSpacing.space6),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(modifier = Modifier.weight(1f))
+    InviteCancelFlow(
+        uiState = uiState,
+        onCancelInvitation = onCancelInvitation,
+        onDismissError = onDismissError,
+        onDone = onContinue,
+        onDismiss = onDismiss,
+    ) { requestCancel ->
+        Column(modifier = Modifier.fillMaxSize()) {
+            // iOS `InviteWaitingView` draws `DSNavBar(onClose:)` itself. No back button: the
+            // invitation exists by now.
+            SakhiNavBar(onClose = onDismiss)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(SakhiSpacing.space6),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Spacer(modifier = Modifier.weight(1f))
 
-        InviteHero(icon = if (uiState.isConnected) Icons.Filled.CheckCircle else Icons.Filled.Groups)
+                PartnerAvatarCloud(partnerName = displayName)
 
-        val title = if (uiState.isConnected) {
-            connectedTitle
-        } else {
-            waitingTitle
-        }
-        val subtitle = if (uiState.isConnected) {
-            connectedSubtitle
-        } else {
-            waitingSubtitle
-        }
+                // iOS: 30 for the celebration, 26 while she waits.
+                Text(
+                    text = if (uiState.isConnected) connectedTitle else waitingTitle,
+                    fontSize = if (uiState.isConnected) 30.sp else 26.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = sakhiLabel(),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = 28.dp),
+                )
+                Text(
+                    text = if (uiState.isConnected) connectedSubtitle else waitingSubtitle,
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
+                    color = sakhiSecondaryLabel(),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .padding(horizontal = SakhiSpacing.space8)
+                        .padding(top = if (uiState.isConnected) SakhiSpacing.space2 else SakhiSpacing.space4),
+                )
 
-        OnboardingStepTitle(
-            text = title,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space6),
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = sakhiSecondaryLabel(),
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space2),
-        )
+                if (!uiState.isConnected) {
+                    InviteCodeChip(
+                        code = uiState.inviteCode,
+                        modifier = Modifier.padding(top = SakhiSpacing.space4),
+                        onCopy = {
+                            hapticManager.success()
+                            copyInviteCode(context = context, code = uiState.inviteCode)
+                            ToastManager.show(
+                                title = codeCopiedTitle,
+                                message = codeCopiedMessage,
+                                type = ToastType.SUCCESS,
+                                durationMs = 2000L,
+                            )
+                        },
+                    )
+                }
 
-        uiState.errorMessage?.let { error ->
-            SakhiAlert(
-                title = errorTitle,
-                message = error,
-                tone = SakhiAlertTone.Error,
-                onDismiss = onDismissError,
-                modifier = Modifier.padding(top = SakhiSpacing.space4),
-            )
-        }
-
-        if (!uiState.cancelMessage.isNullOrBlank()) {
-            SakhiAlert(
-                message = uiState.cancelMessage,
-                modifier = Modifier.padding(top = SakhiSpacing.space4),
-            )
-        }
-
-        copyNotice?.let { notice ->
-            SakhiAlert(
-                title = codeCopiedTitle,
-                message = notice,
-                modifier = Modifier.padding(top = SakhiSpacing.space4),
-                onDismiss = { copyNotice = null },
-            )
-        }
-
-        if (!uiState.isConnected) {
-            InviteCodeChip(
-                code = uiState.inviteCode,
-                modifier = Modifier.padding(top = SakhiSpacing.space5),
-                onCopy = {
-                    hapticManager.success()
-                    copyInviteCode(context = context, code = uiState.inviteCode)
-                    copyNotice = codeCopiedMessage
-                },
-            )
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-    }
-        if (uiState.isConnected) {
-            SakhiFooter(
-                primaryLabel = connectedButtonLabel,
-                onPrimaryClick = {
-                    hapticManager.impact(HapticImpact.MEDIUM)
-                    onContinue()
-                },
-            )
-        } else {
-            SakhiFooter(
-                primaryLabel = shareButtonLabel,
-                onPrimaryClick = {
-                    hapticManager.impact(HapticImpact.MEDIUM)
-                    shareInviteMessage(context, shareMessage)
-                },
-                primaryEnabled = uiState.inviteCode.isNotBlank() && !uiState.isCancellingInvite,
-                secondaryLabel = if (uiState.isCancellingInvite) cancellingLabel else cancelLabel,
-                onSecondaryClick = onCancelInvitation,
-                secondaryEnabled = !uiState.isCancellingInvite,
-            )
+                Spacer(modifier = Modifier.weight(1f))
+            }
+            if (uiState.isConnected) {
+                SakhiFooter(
+                    primaryLabel = connectedButtonLabel,
+                    onPrimaryClick = {
+                        hapticManager.impact(HapticImpact.MEDIUM)
+                        onContinue()
+                    },
+                )
+            } else {
+                SakhiFooter(
+                    primaryLabel = shareButtonLabel,
+                    onPrimaryClick = {
+                        hapticManager.impact(HapticImpact.MEDIUM)
+                        shareInviteMessage(context, shareMessage)
+                    },
+                    primaryEnabled = uiState.inviteCode.isNotBlank(),
+                    secondaryLabel = cancelLabel,
+                    onSecondaryClick = requestCancel,
+                )
+            }
         }
     }
 }
@@ -899,15 +986,16 @@ private fun InviteCodeChip(
 ) {
     if (code.isBlank()) return
 
+    // iOS: a `lightPink` capsule with no outline, the code in bold monospaced 15 with 2 of
+    // tracking, and a small copy glyph in the brand pink.
     Surface(
         shape = RoundedCornerShape(SakhiRadius.full),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)),
+        color = sakhiLightPink(),
         modifier = modifier.clickable(onClick = onCopy),
     ) {
         Row(
             modifier = Modifier.padding(
-                horizontal = SakhiSpacing.space5,
+                horizontal = SakhiSpacing.space6,
                 vertical = SakhiSpacing.space3,
             ),
             horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space2),
@@ -915,14 +1003,17 @@ private fun InviteCodeChip(
         ) {
             Text(
                 text = formatInviteCode(code),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                letterSpacing = 2.sp,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Icon(
                 imageVector = Icons.Filled.ContentCopy,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(14.dp),
             )
         }
     }
@@ -2261,10 +2352,11 @@ private fun BeHerSakhiScreen(
         )
 
         if (!fieldError.isNullOrBlank()) {
+            // iOS draws the message in the brand pink at 13, not the system error red.
             Text(
                 text = fieldError,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(top = SakhiSpacing.space2),
             )
         }
@@ -2382,13 +2474,23 @@ private fun BeHerAcceptScreen(
     uiState: OnboardingAcceptUiState,
     onAccept: () -> Unit,
     onComplete: () -> Unit,
+    onBack: () -> Unit,
 ) {
     LaunchedEffect(Unit) { onAccept() }
+    val context = LocalContext.current
     val successTitle = stringResource(R.string.onboarding_accept_success_title)
     val successSubtitle = stringResource(R.string.onboarding_accept_success_subtitle)
     val connectionIssueTitle = stringResource(R.string.onboarding_accept_error_connection_title)
     val invalidCodeTitle = stringResource(R.string.onboarding_accept_error_invalid_title)
-    val retryLabel = stringResource(R.string.onboarding_retry)
+    // iOS `common.retry` is "Try Again", not the "Retry" the setup error uses.
+    val retryLabel = stringResource(R.string.onboarding_accept_try_again)
+    val differentCodeLabel = stringResource(R.string.onboarding_accept_use_different_code)
+    val contactSupportLabel = stringResource(R.string.onboarding_accept_contact_support)
+    val loadingMessages = listOf(
+        stringResource(R.string.onboarding_accept_loading_1),
+        stringResource(R.string.onboarding_accept_loading_2),
+        stringResource(R.string.onboarding_accept_loading_3),
+    )
 
     LaunchedEffect(uiState.succeeded) {
         if (uiState.succeeded) {
@@ -2397,66 +2499,103 @@ private fun BeHerAcceptScreen(
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-    Column(
-        modifier = Modifier.weight(1f).padding(SakhiSpacing.space6),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Spacer(modifier = Modifier.weight(1f))
+    when {
+        uiState.succeeded -> Column(
+            modifier = Modifier.fillMaxSize().padding(SakhiSpacing.space6),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(110.dp)
+                    .background(sakhiLightPink(), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Favorite,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(40.dp),
+                )
+            }
+            Text(
+                text = successTitle,
+                fontSize = 26.sp,
+                fontWeight = FontWeight.Bold,
+                color = sakhiLabel(),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(top = SakhiSpacing.space4),
+            )
+            Text(
+                text = successSubtitle,
+                fontSize = 15.sp,
+                lineHeight = 21.sp,
+                color = sakhiSecondaryLabel(),
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .padding(top = SakhiSpacing.space4)
+                    .padding(horizontal = SakhiSpacing.space8),
+            )
+        }
 
-        when {
-            uiState.succeeded -> {
+        uiState.error != null -> Column(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
                 Box(
                     modifier = Modifier
-                        .size(110.dp)
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+                        .size(72.dp)
+                        .background(sakhiLightPink(), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.Favorite,
+                        // iOS `wifi.exclamationmark` when it can be tried again, and
+                        // `link.badge.plus` when the code itself is the problem.
+                        imageVector = if (uiState.canRetry) Icons.Filled.WifiOff else Icons.Filled.AddLink,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier.size(28.dp),
                     )
                 }
                 Text(
-                    text = successTitle,
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = SakhiSpacing.space5),
-                )
-                Text(
-                    text = successSubtitle,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = sakhiSecondaryLabel(),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = SakhiSpacing.space2),
-                )
-            }
-            uiState.error != null -> {
-                Text(
                     text = if (uiState.canRetry) connectionIssueTitle else invalidCodeTitle,
-                    style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = sakhiLabel(),
                     textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(top = SakhiSpacing.space4),
                 )
                 Text(
                     text = uiState.error,
-                    style = MaterialTheme.typography.bodyMedium,
+                    fontSize = 15.sp,
+                    lineHeight = 21.sp,
                     color = sakhiSecondaryLabel(),
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(top = SakhiSpacing.space2),
+                    modifier = Modifier
+                        .padding(top = SakhiSpacing.space4)
+                        .padding(horizontal = SakhiSpacing.space6),
                 )
             }
-            else -> {
-                CircularProgressIndicator()
+            if (uiState.canRetry) {
+                SakhiFooter(primaryLabel = retryLabel, onPrimaryClick = onAccept, showSecondarySlot = false)
+            } else {
+                SakhiFooter(
+                    primaryLabel = differentCodeLabel,
+                    onPrimaryClick = onBack,
+                    secondaryLabel = contactSupportLabel,
+                    onSecondaryClick = {
+                        // iOS opens the mail app to the support address.
+                        val mail = Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("mailto:support@sakhi.app"))
+                        runCatching { context.startActivity(mail) }
+                    },
+                )
             }
         }
 
-        Spacer(modifier = Modifier.weight(1f))
-    }
-        if (uiState.error != null && uiState.canRetry) {
-            SakhiFooter(primaryLabel = retryLabel, onPrimaryClick = onAccept, showSecondarySlot = false)
-        }
+        // iOS `CareProgressLoadingView(stage: .acceptingInvite)`.
+        else -> SakhiLoadingView(context = SakhiLoadingContext.Messages(loadingMessages))
     }
 }
 
@@ -2495,11 +2634,12 @@ private fun PartnerConversionWarningScreen(
         Box(
             modifier = Modifier
                 .size(88.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+                .background(sakhiLightPink(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
+            // iOS `exclamationmark.triangle.fill`.
             Icon(
-                imageVector = Icons.Filled.Shield,
+                imageVector = Icons.Filled.Warning,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(36.dp),
@@ -2508,25 +2648,32 @@ private fun PartnerConversionWarningScreen(
 
         Text(
             text = title,
-            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+            fontSize = 26.sp,
+            fontWeight = FontWeight.Bold,
+            color = sakhiLabel(),
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space5),
+            modifier = Modifier.padding(top = SakhiSpacing.space6),
         )
         Text(
             text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
+            fontSize = 15.sp,
+            lineHeight = 21.sp,
             color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space2),
+            modifier = Modifier
+                .padding(top = SakhiSpacing.space3)
+                .padding(horizontal = SakhiSpacing.space4),
         )
 
         if (uiState.error != null) {
             Text(
                 text = uiState.error,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
+                fontSize = 13.sp,
+                color = MaterialTheme.colorScheme.primary,
                 textAlign = TextAlign.Center,
-                modifier = Modifier.padding(top = SakhiSpacing.space3),
+                modifier = Modifier
+                    .padding(top = SakhiSpacing.space3)
+                    .padding(horizontal = SakhiSpacing.space8),
             )
         }
 

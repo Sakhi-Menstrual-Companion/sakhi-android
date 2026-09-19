@@ -27,6 +27,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.ui.SakhiFooter
+import team.sakhi.android.ui.SakhiNavBar
+import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiLightPink
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
@@ -47,19 +50,21 @@ fun LogPermissionRequestSheet(
     viewModel: LogPermissionViewModel = koinViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val loadingSlot: @Composable () -> Unit = { CareLoadingButton() }
 
+    // iOS `LogPermissionSheet`: the way out (X, left) at the top, then the icon and the two
+    // lines centred in the space between it and the footer.
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = SakhiSpacing.space6),
+        modifier = Modifier.fillMaxSize(),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        SakhiNavBar(onClose = onClose)
         Spacer(modifier = Modifier.weight(1f))
 
         Box(
             modifier = Modifier
                 .size(88.dp)
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
+                .background(sakhiLightPink(), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(
@@ -74,16 +79,21 @@ fun LogPermissionRequestSheet(
             text = stringResource(R.string.care_log_permission_title),
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
+            color = sakhiLabel(),
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(top = SakhiSpacing.space5),
+            modifier = Modifier
+                .padding(horizontal = SakhiSpacing.space8)
+                .padding(top = SakhiSpacing.space6),
         )
         Text(
             text = stringResource(R.string.care_log_permission_subtitle),
             fontSize = 15.sp,
+            lineHeight = 21.sp,
             color = sakhiSecondaryLabel(),
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = SakhiSpacing.space8)
                 .padding(top = SakhiSpacing.space2),
         )
 
@@ -107,6 +117,7 @@ fun LogPermissionRequestSheet(
             secondaryLabel = if (uiState.requestSent) null else stringResource(R.string.care_log_permission_not_now),
             onSecondaryClick = if (uiState.requestSent) null else onClose,
             primaryEnabled = !uiState.requestSent && !uiState.isSending,
+            primarySlot = if (uiState.isSending) loadingSlot else null,
             note = if (uiState.requestSent) stringResource(R.string.care_log_permission_sent_note) else null,
         )
     }

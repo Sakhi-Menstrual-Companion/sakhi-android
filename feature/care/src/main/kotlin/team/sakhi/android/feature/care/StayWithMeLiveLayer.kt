@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.datetime.Clock
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.sakhiGroupedBackground
 import team.sakhi.android.ui.IntroSeenKey
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.ui.res.stringResource
 import team.sakhi.care.CareRuntimeState
+import team.sakhi.staywithme.StayWithMeSession
 
 /**
  * A live Stay With Me walk, full screen, for whichever side of it this phone is on.
@@ -75,6 +77,7 @@ fun StayWithMeLiveLayer(
     val route by viewModel.route.collectAsStateWithLifecycle()
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val recenterTick by viewModel.recenterTick.collectAsStateWithLifecycle()
+    val partnerCard by viewModel.partnerCard.collectAsStateWithLifecycle()
 
     // While this is on screen: re-read the walk, tell her screen her person is looking,
     // and notice a walk that has gone past its time.
@@ -88,9 +91,97 @@ fun StayWithMeLiveLayer(
     val partner = care.careState as? CareRuntimeState.PartnerConnected
     val mine = state.mine.takeIf { owner != null }
     val watching = state.watching.takeIf { partner != null }
+    val context = LocalContext.current
 
     var sawWalk by remember { mutableStateOf(false) }
     if (mine != null || watching != null) sawWalk = true
+
+    // The other person's face, as the server gives it, or the same hash before it has. The
+    // same face the Care screen draws, so the two never disagree about who is who.
+    val hasWalk = mine != null || watching != null
+    val partnershipId = owner?.partnership?.id ?: partner?.partnership?.id
+    LaunchedEffect(partnershipId, hasWalk) {
+        if (hasWalk && partnershipId != null) viewModel.loadPartnerCard(partnershipId)
+    }
+    fun faceFor(userId: String): Int =
+        partnerCard?.takeIf { it.userId.equals(userId, ignoreCase = true) }?.avatarIndex
+            ?: CareAvatars.indexFor(userId)
+
+    val ownerName = owner?.let { careDisplayName(it.partnership, isPartnerRole = false) }
+    val partnerName = partner?.let { careDisplayName(it.partnership, isPartnerRole = true) }
+
+    // "You're home safe". Built on her phone the moment she says she is home, and on her
+    // person's once the app has read back that the walk ended as an arrival and not a
+    // cancellation. It wins over everything else this screen could show, and it is what
+    // closes the screen when they are done with it.
+    var arrival by remember { mutableStateOf<StayWithMeHomeSafe?>(null) }
+    var arrivalBusySeen by remember { mutableStateOf(false) }
+    var stopping by remember { mutableStateOf(false) }
+    var stopBusySeen by remember { mutableStateOf(false) }
+    // The last walk her person was watching, and the line it drew, kept because the store
+    // drops both the moment the walk ends.
+    var lastWatched by remember { mutableStateOf<StayWithMeSession?>(null) }
+    var lastWatchedTrail by remember { mutableStateOf<List<StayWithMeLocation>>(emptyList()) }
+    LaunchedEffect(watching, state.watchingTrail) {
+        if (watching != null) {
+            lastWatched = watching
+            lastWatchedTrail = state.watchingTrail
+        }
+    }
+    // Her person's phone is only told that the walk ended, never how: "she is home" and "she
+    // stopped sharing" arrive as the same nothing. This is the moment it asks the history.
+    val awaitingEnd = partner != null && watching == null && lastWatched != null
+    LaunchedEffect(awaitingEnd) {
+        val previous = lastWatched
+        if (!awaitingEnd || previous == null) return@LaunchedEffect
+        viewModel.loadHistory(previous.partnershipId)
+        // The history arrives on its own flow, so the row may land a moment after the load.
+        var record = viewModel.history.value.firstOrNull { it.id == previous.id }
+        var tries = 0
+        while (record == null && tries < 8) {
+            delay(250)
+            record = viewModel.history.value.firstOrNull { it.id == previous.id }
+            tries += 1
+        }
+        // Not an arrival, or an old walk the history happened to hand back: say nothing.
+        if (record != null && record.arrived && (Clock.System.now() - record.endedAt).inWholeMinutes < 15) {
+            arrival = StayWithMeHomeSafe(
+                id = record.id,
+                isHer = false,
+                personName = partnerName.orEmpty(),
+                selfFace = CareAvatars.selfIndex(context, previous.watcherUserId),
+                otherFace = faceFor(previous.ownerUserId),
+                startedAt = record.startedAt,
+                endedAt = record.endedAt,
+                metres = trailMetres(lastWatchedTrail),
+            )
+        }
+        lastWatched = null
+    }
+    // She said she is home and it did not go through: she is still out there, so there is
+    // nothing to celebrate.
+    LaunchedEffect(arrival, state.isBusy, mine == null) {
+        val moment = arrival ?: return@LaunchedEffect
+        if (!moment.isHer) return@LaunchedEffect
+        if (state.isBusy) {
+            arrivalBusySeen = true
+        } else if (arrivalBusySeen && mine != null) {
+            arrival = null
+            arrivalBusySeen = false
+        }
+    }
+    // Stopping a walk closes this screen once it has really stopped, the way iOS does.
+    LaunchedEffect(stopping, state.isBusy, mine == null) {
+        if (!stopping) return@LaunchedEffect
+        if (state.isBusy) stopBusySeen = true
+        if (mine == null) {
+            onClose()
+        } else if (!state.isBusy && stopBusySeen) {
+            stopping = false
+            stopBusySeen = false
+        }
+    }
+    val celebration = arrival?.takeIf { !it.isHer || mine == null }
 
     // What a walk is, once, before the first one. Kept on the device under the same key iOS
     // reads from UserDefaults.
@@ -111,16 +202,17 @@ fun StayWithMeLiveLayer(
     // first read a few seconds before deciding there is nothing to show. Two exceptions,
     // both of which are screens rather than nothing: her own side, where with no walk this
     // IS where she starts one, and someone with nobody on Be Her Sakhi yet, who gets the
-    // intro explaining what a walk is instead of a screen that closes itself.
-    LaunchedEffect(mine == null && watching == null, sawWalk, owner != null, partner != null) {
-        if (mine == null && watching == null && owner == null && partner != null) {
+    // intro explaining what a walk is instead of a screen that closes itself. A third: her
+    // person's phone is still finding out whether the walk ended with her home, and that
+    // answer is a screen too.
+    LaunchedEffect(mine == null && watching == null, sawWalk, owner != null, partner != null, awaitingEnd, arrival != null) {
+        if (mine == null && watching == null && owner == null && partner != null && !awaitingEnd && arrival == null) {
             if (!sawWalk) delay(6_000)
             onClose()
         }
     }
 
     // Where this phone is, for the map before any walk. From the fix the system already has.
-    val context = LocalContext.current
     var here by remember { mutableStateOf<StayWithMeLocation?>(null) }
     LaunchedEffect(owner?.partnership?.id) {
         if (owner != null) {
@@ -131,17 +223,41 @@ fun StayWithMeLiveLayer(
     }
 
     when {
+        celebration != null -> StayWithMeHomeSafeScreen(
+            moment = celebration,
+            onDone = onClose,
+        )
         mine != null && owner != null -> StayWithMeOwnerLive(
             session = mine,
-            personName = careDisplayName(owner.partnership, isPartnerRole = false),
+            personName = ownerName.orEmpty(),
             now = state.now,
             isBusy = state.isBusy,
             trail = state.mineTrail,
             places = state.places,
             placesLoading = state.placesLoading,
-            onArrive = viewModel::arrive,
+            onArrive = {
+                // Built before the walk is ended, not after: the store drops the walk the
+                // moment the server answers, and this screen has to already be standing
+                // there or it goes out from under the celebration.
+                arrival = StayWithMeHomeSafe(
+                    id = mine.id,
+                    isHer = true,
+                    personName = ownerName.orEmpty(),
+                    selfFace = CareAvatars.selfIndex(context, mine.ownerUserId),
+                    otherFace = faceFor(mine.watcherUserId),
+                    startedAt = mine.startedAt,
+                    endedAt = Clock.System.now(),
+                    metres = trailMetres(state.mineTrail),
+                )
+                arrivalBusySeen = false
+                viewModel.arrive()
+            },
             onExtend = viewModel::extend,
-            onStop = viewModel::stop,
+            onStop = {
+                stopBusySeen = false
+                stopping = true
+                viewModel.stop()
+            },
             onClose = onClose,
             onRefresh = viewModel::refreshMyLocation,
             route = route,
@@ -151,14 +267,15 @@ fun StayWithMeLiveLayer(
             checkInChecking = state.checkInChecking,
             checkInFailed = state.checkInFailed,
             onCheckInOkay = viewModel::confirmCheckIn,
+            otherFaceIndex = faceFor(mine.watcherUserId),
         )
         // Past her time by his own delay, and she has not said she is home. This takes the
         // whole screen with the alarm going, and he has to slide it away. The rule for when
         // is `StayWithMeAlarm`, shared with iOS.
         watching != null && partner != null && state.alarmRaised -> StayWithMeNotReachedScreen(
             session = watching,
-            personName = careDisplayName(partner.partnership, isPartnerRole = true),
-            faceIndex = CareAvatars.indexFor(watching.ownerUserId),
+            personName = partnerName.orEmpty(),
+            faceIndex = faceFor(watching.ownerUserId),
             now = state.now,
             trail = state.watchingTrail,
             onAcknowledged = viewModel::acknowledgeAlarm,
@@ -166,7 +283,7 @@ fun StayWithMeLiveLayer(
         )
         watching != null && partner != null -> StayWithMeWatcherLive(
             session = watching,
-            herName = careDisplayName(partner.partnership, isPartnerRole = true),
+            herName = partnerName.orEmpty(),
             now = state.now,
             places = state.places,
             placesLoading = state.placesLoading,
@@ -176,19 +293,19 @@ fun StayWithMeLiveLayer(
             route = route,
             refreshing = refreshing,
             recenterKey = recenterTick,
+            herFaceIndex = faceFor(watching.ownerUserId),
         )
         // No walk, and this is her own connection: the screen she starts one from, in the same
         // full screen the walk itself uses. The map is the screen and the form sits over it.
         //
         // What a walk is comes first, once. After that the start screen opens straight away.
         owner != null && !introSeen.seen -> StayWithMeIntro(
-            personName = careDisplayName(owner.partnership, isPartnerRole = false),
+            personName = ownerName,
             onPrimary = introSeen::markSeen,
-            onNotNow = onClose,
             onClose = onClose,
         )
         owner != null -> StayWithMeStartLayer(
-            personName = careDisplayName(owner.partnership, isPartnerRole = false),
+            personName = ownerName.orEmpty(),
             here = here,
             isBusy = state.isBusy,
             error = state.error,
@@ -209,7 +326,6 @@ fun StayWithMeLiveLayer(
                 introSeen.markSeen()
                 onAddCarePartner()
             },
-            onNotNow = onClose,
             onClose = onClose,
         )
         else -> Box(
@@ -236,7 +352,6 @@ fun StayWithMeLiveLayer(
 private fun StayWithMeIntro(
     personName: String?,
     onPrimary: () -> Unit,
-    onNotNow: () -> Unit,
     onClose: () -> Unit,
 ) {
     SakhiOnboardingView(
@@ -260,7 +375,7 @@ private fun StayWithMeIntro(
                 detail = if (personName != null) {
                     stringResource(R.string.stay_with_me_intro_point_2_detail, personName)
                 } else {
-                    stringResource(R.string.stay_with_me_intro_no_partner_point_2_detail)
+                    stringResource(R.string.ride_intro_no_partner_point_2_detail)
                 },
             ),
             SakhiOnboardingPoint(
@@ -279,8 +394,8 @@ private fun StayWithMeIntro(
             stringResource(R.string.stay_with_me_intro_no_partner_primary)
         },
         onPrimaryClick = onPrimary,
-        secondaryLabel = stringResource(R.string.stay_with_me_intro_secondary),
-        onSecondaryClick = onNotNow,
+        // No "Not now": no intro screen carries one any more, and the close button is how she
+        // leaves (iOS, Karan 2026-09-18).
         onClose = onClose,
     )
 }
@@ -310,7 +425,7 @@ private fun StayWithMeStartLayer(
         )
         RideTopBar(
             onClose = onClose,
-            freshness = null,
+            chip = null,
             onCallPolice = { dial(context, "112") },
             modifier = Modifier.align(Alignment.TopCenter),
         )

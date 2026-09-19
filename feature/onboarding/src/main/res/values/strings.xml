@@ -104,7 +104,7 @@
     <string name="onboarding_invite_code_copied_title">Code Copied</string>
     <string name="onboarding_invite_code_copied_message">Share it with %1$s.</string>
     <string name="onboarding_invite_share_button">Share</string>
-    <string name="onboarding_invite_cancel">Cancel</string>
+    <string name="onboarding_invite_cancel">Cancel Request</string>
     <string name="onboarding_invite_cancelling">Cancelling...</string>
     <string name="onboarding_invite_clipboard_label">Sakhi invite code</string>
     <string name="onboarding_invite_fallback_partner">your partner</string>
@@ -283,4 +283,18 @@
     <string name="onboarding_host_description_setup_loading">This is the hydration handoff point before the app can route away from onboarding.</string>
     <string name="onboarding_host_description_partner_invite_prompt">This step can stay in the invite flow or switch into the care-upgrade path via a dedicated KMM intent.</string>
     <string name="onboarding_host_description_default">Placeholder content for this KMM-owned step. Visual parity and full field inputs land in the later onboarding UI pass.</string>
+
+    <!-- Parity with iOS BeHerAcceptStep / CareProgressLoadingView / invite share (2026-09-19). -->
+    <string name="onboarding_accept_loading_1">Confirming the connection.</string>
+    <string name="onboarding_accept_loading_2">Building your partner space.</string>
+    <string name="onboarding_accept_loading_3">Syncing her care access.</string>
+    <string name="onboarding_accept_try_again">Try Again</string>
+    <string name="onboarding_accept_use_different_code">Use a Different Code</string>
+    <string name="onboarding_accept_contact_support">Contact Support</string>
+    <string name="onboarding_invite_cancelled_title">Request cancelled</string>
+    <string name="onboarding_invite_cancel_failed_title">Could not cancel request</string>
+    <string name="onboarding_invite_cancel_failed_message">Please check your connection and try again.</string>
+    <string name="onboarding_invite_cancelling_1">Closing this request.</string>
+    <string name="onboarding_invite_cancelling_2">Removing the shared code.</string>
+    <string name="onboarding_invite_cancelling_3">Refreshing My Sakhi.</string>
 </resources>

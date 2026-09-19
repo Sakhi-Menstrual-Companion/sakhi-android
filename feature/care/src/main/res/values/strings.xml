@@ -25,8 +25,8 @@
     <string name="care_moment_log_request_owner">Asked you to log your day</string>
     <string name="care_moment_message_owner">Sent you a message</string>
     <string name="care_moment_joined_owner">%1$s became your Sakhi</string>
-    <string name="care_moments_empty_owner">Whatever %1$s does for you shows up here: a walk home, a logged day, an ask.</string>
-    <string name="care_moments_empty_partner">Whatever you do for her shows up here: a walk home, a logged day.</string>
+    <string name="care_moments_empty_owner">Whatever %1$s does for you shows up here: a ride home, a logged day, an ask.</string>
+    <string name="care_moments_empty_partner">Whatever you do for her shows up here: a ride home, a logged day.</string>
     <string name="care_moment_walk_owner">Stayed with you until you were home</string>
     <string name="care_moment_walk_partner">Stayed with her until she was home</string>
     <string name="care_moment_walk_late_owner">You were past your time, so %1$s was told</string>
@@ -69,8 +69,8 @@
     <string name="care_leave_point_see_owner">%1$s stops seeing your period dates and phase.</string>
     <string name="care_leave_point_walk_partner">She can no longer ask you to stay with her on her way home, and you will not be told if she does not reach.</string>
     <string name="care_leave_point_walk_owner">%1$s can no longer stay with you on your way home, or be told if you do not reach.</string>
-    <string name="care_leave_point_history_partner">The walks you stayed with her for stop showing, for both of you.</string>
-    <string name="care_leave_point_history_owner">The walks %1$s stayed with you for stop showing, for both of you.</string>
+    <string name="care_leave_point_history_partner">The rides you stayed with her for stop showing, for both of you.</string>
+    <string name="care_leave_point_history_owner">The rides %1$s stayed with you for stop showing, for both of you.</string>
     <string name="care_leave_point_again_partner">To connect again, she has to invite you with a new code.</string>
     <string name="care_leave_point_again_owner">You can invite someone again whenever you like.</string>
     <string name="care_leave_cta_partner">Leave her</string>
@@ -364,4 +364,79 @@
     <string name="stay_with_me_intro_no_partner_point_2_detail">Reaching your place ends the walk and lets them know you are there.</string>
     <string name="stay_with_me_intro_no_partner_point_3_detail">Their phone rings, so someone knows before you have to ask.</string>
     <string name="stay_with_me_intro_no_partner_primary">Add a care partner</string>
+
+    <!-- Parity with iOS PartnerDetailView / PartnerHistoryView / CareProgressLoadingView
+         (2026-09-19). Copy is verbatim from the Swift source. -->
+    <string name="care_pronoun_her">Her</string>
+    <string name="care_pronoun_him">Him</string>
+    <string name="care_pronoun_them">Them</string>
+    <string name="care_moments_show_all_a11y">Show all %1$d</string>
+    <string name="care_history_empty_title">Nothing yet</string>
+    <string name="care_history_empty_partner">When you stay with her on her way home, or log a day for her, it shows up here.</string>
+    <string name="care_history_empty_owner">When %1$s stays with you on your way home, or logs a day for you, it shows up here.</string>
+    <string name="care_request_cancelled_title">Request cancelled</string>
+    <string name="care_done">Done</string>
+    <string name="care_ok">OK</string>
+    <string name="care_permissions_failed_title">Couldn\'t update permissions</string>
+    <string name="care_cancel_request_failed_title">Could not cancel request</string>
+    <string name="care_cancel_request_failed_message">Please check your connection and try again.</string>
+    <!-- iOS CareProgressLoadingView stages: the lines cycle under the loading mark. -->
+    <string name="care_loading_syncing_1">Checking your connection.</string>
+    <string name="care_loading_syncing_2">Syncing permissions.</string>
+    <string name="care_loading_syncing_3">Preparing My Sakhi.</string>
+    <string name="care_loading_cancelling_1">Closing this request.</string>
+    <string name="care_loading_cancelling_2">Removing the shared code.</string>
+    <string name="care_loading_cancelling_3">Refreshing My Sakhi.</string>
+    <string name="care_loading_removing_1">Updating your connection.</string>
+    <string name="care_loading_removing_2">Removing shared access.</string>
+    <string name="care_loading_removing_3">Cleaning up your care space.</string>
+    <string name="care_loading_permissions_1">Saving what %1$s can access.</string>
+    <string name="care_loading_permissions_2">Syncing the new permissions.</string>
+    <string name="care_loading_permissions_3">Refreshing their shared view.</string>
+
+    <!-- Stay With Me ride screens (the live walk on both phones, the alarm, "home safe"). Word
+         for word the same as iOS's StayWithMeLiveScreen, WalkBottomPanel and
+         StayWithMeHomeSafeView. Added 2026-09-19 with the `ride_` prefix. -->
+    <string name="ride_stop_reason">Confirm that you want to stop sharing</string>
+    <string name="ride_home_reason">Confirm that you have reached home</string>
+    <string name="ride_she_going_to">She is going to %1$s</string>
+    <string name="ride_location_live">Her location is live</string>
+    <string name="ride_location_not_fresh">Her location is not fresh</string>
+    <string name="ride_person_not_opened">%1$s has not opened it yet</string>
+    <string name="ride_waiting_for_person">Waiting for %1$s</string>
+    <string name="ride_progress_label">Ride progress</string>
+    <string name="ride_progress_value">%1$d percent, %2$s %3$s</string>
+    <string name="ride_privacy_note">Her location is visible to you only while this ride is on.</string>
+    <string name="ride_help_near_you">Help near you</string>
+    <string name="ride_help_near_her">Help near her</string>
+    <string name="ride_updates_you_move">Updates as you move</string>
+    <string name="ride_nothing_close">Nothing found close by yet</string>
+    <string name="ride_directions_hint">Opens directions in Maps</string>
+    <string name="ride_battery_charging">%1$d%%, charging</string>
+    <string name="ride_call_police_hint">Calls 112, the emergency number</string>
+    <string name="ride_get_help_a11y">Get help, call 112</string>
+    <string name="ride_add_15_a11y">Add 15 minutes</string>
+    <string name="ride_panel_show_less">Show less</string>
+    <string name="ride_panel_show_more">Show more</string>
+    <string name="ride_map_whole_way">Show the whole way</string>
+    <string name="ride_map_following_heading">Following your direction</string>
+    <string name="ride_map_following_north">Following you, north up</string>
+    <string name="ride_map_follow_ride">Follow my ride</string>
+    <string name="ride_map_turns_hint">Turns the map with you as you move</string>
+    <string name="ride_intro_no_partner_point_2_detail">Reaching your place ends the walk and tells them you are there.</string>
+    <string name="ride_home_safe_her">You\'re home safe</string>
+    <string name="ride_home_safe_partner">She\'s home safe</string>
+    <string name="ride_home_safe_glad_her">Sakhi is so glad you\'re home safely.</string>
+    <string name="ride_home_safe_glad_partner">Sakhi is so glad she\'s home safely.</string>
+    <string name="ride_home_safe_told">%1$s has been told.</string>
+    <string name="ride_home_safe_thanks">You stayed with her the whole way. Thank you.</string>
+    <string name="ride_home_safe_done">Done</string>
+    <string name="ride_home_safe_stopped_her">Your location is no longer shared.</string>
+    <string name="ride_home_safe_stopped_partner">Her location is no longer shared.</string>
+    <string name="ride_home_safe_stat_ride">Ride</string>
+    <string name="ride_home_safe_stat_distance">Distance</string>
+    <string name="ride_home_safe_stat_reached">Reached</string>
+    <string name="ride_home_safe_stat_home_at">Home at</string>
+    <string name="ride_unit_m">m</string>
+    <string name="ride_unit_km">km</string>
 </resources>
