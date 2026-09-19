@@ -94,6 +94,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -142,6 +143,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Instant
 import team.sakhi.android.designsystem.AppleSystemColors
+import team.sakhi.android.platform.StayWithMeAskDetails
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
 import team.sakhi.android.designsystem.sakhiButtonFill
@@ -182,135 +184,151 @@ import java.util.Date
  * before she taps, that her location and battery will be shared, and that it stops when she
  * marks herself home.
  */
+/**
+ * What she fills in before a walk: where, by when, how often Sakhi asks. Held apart from the
+ * layout so the form can scroll in the panel while the button stays pinned under it.
+ */
+@Stable
+internal class StayWithMeStartState(initialCheckInMinutes: Int) {
+    var minutes by mutableIntStateOf(StayWithMeDurations.DEFAULT_MINUTES)
+    var note by mutableStateOf("")
+    /** Where she is going, once picked from the suggestions. Typed but not picked stays her own words. */
+    var destination by mutableStateOf<StayWithMeDestination?>(null)
+    var suggestions by mutableStateOf<List<StayWithMeDestinationSearch.Suggestion>>(emptyList())
+    var checkInMinutes by mutableIntStateOf(initialCheckInMinutes)
+    var pickingDuration by mutableStateOf(false)
+    var pickingCheckIn by mutableStateOf(false)
+}
+
 @Composable
-internal fun StayWithMeStartSection(
-    personName: String,
-    isBusy: Boolean,
-    error: String?,
-    onStart: (minutes: Int, note: String, destination: StayWithMeDestination?) -> Unit,
-) {
+internal fun rememberStayWithMeStartState(ask: StayWithMeAskDetails? = null): StayWithMeStartState {
     val context = LocalContext.current
-    var minutes by rememberSaveable { mutableStateOf(StayWithMeDurations.DEFAULT_MINUTES) }
-    var note by rememberSaveable { mutableStateOf("") }
-    // Where she is going, once picked from the suggestions. Typed but not picked stays her
-    // own words, the way the field always worked, rather than being guessed into a pin.
-    var destination by remember { mutableStateOf<StayWithMeDestination?>(null) }
-    val search = remember { StayWithMeDestinationSearch(context.applicationContext) }
-    var suggestions by remember { mutableStateOf<List<StayWithMeDestinationSearch.Suggestion>>(emptyList()) }
-    LaunchedEffect(note, destination) {
-        if (destination != null) { suggestions = emptyList(); return@LaunchedEffect }
-        delay(350)
-        suggestions = search.search(note)
-    }
-
-    // Asked at the moment she needs them, never on first open. If she says no to location,
-    // the walk still starts: her person still gets told if she does not reach.
-    var pending by remember { mutableStateOf(false) }
-    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
-        if (pending) onStart(minutes, note, destination)
-        pending = false
-    }
-
-    // iOS's shape, in iOS's order (`StayWithMeCard`): the destination on its own at the top
-    // as a search field, then Reach by and Check in together as two settings rows, then who
-    // is being asked, then the button. Every size here is read off that screen.
     val checkInPreference = koinInject<StayWithMeCheckInPreference>()
-    var checkInMinutes by remember { mutableIntStateOf(checkInPreference.minutes()) }
-    var pickingDuration by remember { mutableStateOf(false) }
-    var pickingCheckIn by remember { mutableStateOf(false) }
-    val reachBy = remember(minutes) { Clock.System.now().plus(minutes.toLong(), DateTimeUnit.MINUTE) }
+    // What her person asked for is already chosen when she opens it: where, and for how long.
+    val state = remember(ask) {
+        StayWithMeStartState(checkInPreference.minutes()).also { fresh ->
+            ask?.destination?.let { place ->
+                fresh.destination = place
+                fresh.note = place.name
+            }
+            ask?.minutes?.let { fresh.minutes = it }
+        }
+    }
+    val search = remember { StayWithMeDestinationSearch(context.applicationContext) }
+    LaunchedEffect(state.note, state.destination) {
+        if (state.destination != null) { state.suggestions = emptyList(); return@LaunchedEffect }
+        delay(350)
+        state.suggestions = search.search(state.note)
+    }
+    return state
+}
 
-    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
-        // 1. Where she is going.
-        val picked = destination
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(58.dp)
-                .background(RideStyle.card, RoundedCornerShape(20.dp))
-                .padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = null,
-                tint = sakhiTertiaryLabel(),
-                modifier = Modifier.size(18.dp),
+/** Where she is going: a search field until a place is picked, then the place with Edit. */
+@Composable
+internal fun StayWithMeDestinationSection(state: StayWithMeStartState) {
+    var note by state::note
+    var destination by state::destination
+    val suggestions = state.suggestions
+    // 1. Where she is going.
+    val picked = destination
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(58.dp)
+            .background(RideStyle.card, RoundedCornerShape(20.dp))
+            .padding(horizontal = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Search,
+            contentDescription = null,
+            tint = sakhiTertiaryLabel(),
+            modifier = Modifier.size(18.dp),
+        )
+        if (picked != null) {
+            Text(
+                text = picked.name,
+                fontSize = 16.sp,
+                color = sakhiLabel(),
+                maxLines = 1,
+                modifier = Modifier.weight(1f),
             )
-            if (picked != null) {
-                Text(
-                    text = picked.name,
-                    fontSize = 16.sp,
-                    color = sakhiLabel(),
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = stringResource(R.string.care_swm_edit),
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = RideStyle.rose,
-                    modifier = Modifier.clickable { destination = null; note = "" },
-                )
-            } else {
-                SakhiTextField(
-                    value = note,
-                    onValueChange = { note = it.take(StayWithMeDurations.MAX_NOTE_LENGTH) },
-                    placeholder = stringResource(R.string.care_swm_search_destination),
-                    modifier = Modifier.weight(1f),
-                )
-            }
+            Text(
+                text = stringResource(R.string.care_swm_edit),
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = RideStyle.rose,
+                modifier = Modifier.clickable { destination = null; note = "" },
+            )
+        } else {
+            SakhiTextField(
+                value = note,
+                onValueChange = { note = it.take(StayWithMeDurations.MAX_NOTE_LENGTH) },
+                placeholder = stringResource(R.string.care_swm_search_destination),
+                modifier = Modifier.weight(1f),
+            )
         }
-        if (picked == null && suggestions.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(RideStyle.card, RoundedCornerShape(20.dp)),
-            ) {
-                suggestions.take(5).forEachIndexed { index, suggestion ->
-                    if (index > 0) SakhiListDivider(startInset = 48.dp)
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                destination = suggestion.destination
-                                note = suggestion.title
-                            }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
-                    ) {
-                        Text(text = suggestion.title, fontSize = 16.sp, color = sakhiLabel(), maxLines = 1)
-                        suggestion.subtitle?.let {
-                            Text(text = it, fontSize = 13.sp, color = sakhiSecondaryLabel(), maxLines = 1)
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(Modifier.height(14.dp))
-
-        // 2. When she should be there, and how often Sakhi asks.
+    }
+    if (picked == null && suggestions.isNotEmpty()) {
+        Spacer(Modifier.height(6.dp))
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(RideStyle.card, RoundedCornerShape(20.dp)),
         ) {
-            SwmSettingRow(
-                icon = Icons.Filled.Schedule,
-                label = stringResource(R.string.care_swm_reach_by_row),
-                value = timeOf(reachBy),
-                expanded = pickingDuration,
-                onClick = { pickingDuration = !pickingDuration; pickingCheckIn = false },
-            )
-            if (pickingDuration) {
-                SwmChoiceRow(
-                    choices = StayWithMeDurations.presetMinutes.map { it to stringResource(R.string.care_swm_minutes_short, it) },
-                    selected = minutes,
-                    onSelect = { minutes = it; pickingDuration = false },
-                )
+            suggestions.take(5).forEachIndexed { index, suggestion ->
+                if (index > 0) SakhiListDivider(startInset = 48.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            destination = suggestion.destination
+                            note = suggestion.title
+                        }
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                ) {
+                    Text(text = suggestion.title, fontSize = 16.sp, color = sakhiLabel(), maxLines = 1)
+                    suggestion.subtitle?.let {
+                        Text(text = it, fontSize = 13.sp, color = sakhiSecondaryLabel(), maxLines = 1)
+                    }
+                }
             }
+        }
+    }
+
+}
+
+/** Reach by and, on her own screen, Check in: two settings rows in one card. */
+@Composable
+internal fun StayWithMeSettingsSection(state: StayWithMeStartState, includeCheckIn: Boolean) {
+    var minutes by state::minutes
+    val checkInPreference = koinInject<StayWithMeCheckInPreference>()
+    var checkInMinutes by state::checkInMinutes
+    var pickingDuration by state::pickingDuration
+    var pickingCheckIn by state::pickingCheckIn
+    val reachBy = remember(minutes) { Clock.System.now().plus(minutes.toLong(), DateTimeUnit.MINUTE) }
+    // 2. When she should be there, and how often Sakhi asks.
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(RideStyle.card, RoundedCornerShape(20.dp)),
+    ) {
+        SwmSettingRow(
+            icon = Icons.Filled.Schedule,
+            label = stringResource(R.string.care_swm_reach_by_row),
+            value = timeOf(reachBy),
+            expanded = pickingDuration,
+            onClick = { pickingDuration = !pickingDuration; pickingCheckIn = false },
+        )
+        if (pickingDuration) {
+            SwmChoiceRow(
+                choices = StayWithMeDurations.presetMinutes.map { it to stringResource(R.string.care_swm_minutes_short, it) },
+                selected = minutes,
+                onSelect = { minutes = it; pickingDuration = false },
+            )
+        }
+        if (includeCheckIn) {
             SakhiListDivider(startInset = 62.dp)
             SwmSettingRow(
                 icon = Icons.Filled.VerifiedUser,
@@ -331,7 +349,30 @@ internal fun StayWithMeStartSection(
                 )
             }
         }
+    }
+}
 
+/**
+ * The card she sets a walk off from, in iOS's order (`StayWithMeCard`): the destination as a
+ * search field, Reach by and Check in as two settings rows, the three numbers, then who is
+ * being asked. When her person has asked, their face and what they said head it. The button
+ * is not in here: it is pinned under the panel by [StayWithMeStartFooter].
+ */
+@Composable
+internal fun StayWithMeStartForm(
+    state: StayWithMeStartState,
+    personName: String,
+    askerFaceIndex: Int?,
+) {
+    val context = LocalContext.current
+    Column(modifier = Modifier.padding(horizontal = 20.dp)) {
+        if (askerFaceIndex != null) {
+            AskHeader(faceIndex = askerFaceIndex)
+            Spacer(Modifier.height(16.dp))
+        }
+        StayWithMeDestinationSection(state)
+        Spacer(Modifier.height(14.dp))
+        StayWithMeSettingsSection(state, includeCheckIn = true)
         Spacer(Modifier.height(18.dp))
 
         // 3. The three numbers, in their own section and in the same component the connected
@@ -391,44 +432,77 @@ internal fun StayWithMeStartSection(
                 )
             }
         }
+        Spacer(Modifier.height(16.dp))
+    }
+}
 
-        Spacer(Modifier.height(18.dp))
-
-        // 5. The button, with the consent line under it.
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(58.dp)
-                .background(RideStyle.pink.copy(alpha = if (isBusy) 0.4f else 1f), CircleShape)
-                .clickable(enabled = !isBusy) {
-                    val missing = requiredPermissions().filterNot { granted(context, it) }
-                    if (missing.isEmpty()) {
-                        onStart(minutes, note, destination)
-                    } else {
-                        pending = true
-                        launcher.launch(missing.toTypedArray())
-                    }
-                },
-            horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (isBusy) {
-                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
-            } else {
-                // iOS puts Sakhi's own mark here, not a heart: `Image("BrandMedia/
-                // sakhiSymbolAccent")` at 20, tinted white.
-                Image(
-                    painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_symbol_accent),
-                    contentDescription = null,
-                    colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White),
-                    modifier = Modifier.size(20.dp),
-                )
-                Text(
-                    text = stringResource(R.string.care_swm_start_button),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                )
+/**
+ * The button that sets her off, pinned at the bottom of the panel with the consent line under
+ * it, or, when her person has asked, the two answers. Also asks for the permissions the walk
+ * needs, at the moment she needs them and never on first open.
+ */
+@Composable
+internal fun StayWithMeStartFooter(
+    state: StayWithMeStartState,
+    personName: String,
+    isBusy: Boolean,
+    error: String?,
+    fromAsk: Boolean,
+    onStart: (minutes: Int, note: String, destination: StayWithMeDestination?) -> Unit,
+    onReject: () -> Unit,
+) {
+    val context = LocalContext.current
+    // If she says no to location, the walk still starts: her person still gets told if she
+    // does not reach.
+    var pending by remember { mutableStateOf(false) }
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        if (pending) onStart(state.minutes, state.note, state.destination)
+        pending = false
+    }
+    val startWalk = {
+        val missing = requiredPermissions().filterNot { granted(context, it) }
+        if (missing.isEmpty()) {
+            onStart(state.minutes, state.note, state.destination)
+        } else {
+            pending = true
+            launcher.launch(missing.toTypedArray())
+        }
+    }
+    Column(
+        modifier = Modifier
+            .navigationBarsPadding()
+            .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 14.dp),
+    ) {
+        if (fromAsk) {
+            AskAnswerButtons(isBusy = isBusy, onReject = onReject, onAccept = startWalk)
+        } else {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(58.dp)
+                    .background(RideStyle.pink.copy(alpha = if (isBusy) 0.4f else 1f), CircleShape)
+                    .clickable(enabled = !isBusy) { startWalk() },
+                horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (isBusy) {
+                    CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                } else {
+                    // iOS puts Sakhi's own mark here, not a heart: `Image("BrandMedia/
+                    // sakhiSymbolAccent")` at 20, tinted white.
+                    Image(
+                        painter = painterResource(team.sakhi.android.ui.R.drawable.sakhi_symbol_accent),
+                        contentDescription = null,
+                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color.White),
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = stringResource(R.string.care_swm_start_button),
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                    )
+                }
             }
         }
 
@@ -451,10 +525,77 @@ internal fun StayWithMeStartSection(
             )
         }
 
-        // The footer her profile ends with, under the button that sets her off, because that
-        // shape already reads as the end of a screen (Karan, 2026-09-18). A smaller gap than
-        // Profile's: this card sits in a panel, not a full page.
-        SakhiConnectFooter(topPadding = SakhiSpacing.space2, bottomPadding = SakhiSpacing.space4)
+    }
+}
+
+/** Who is asking: their face and what they are asking, at the top of the panel. */
+@Composable
+private fun AskHeader(faceIndex: Int) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Image(
+            painter = painterResource(CareAvatars.drawable(faceIndex)),
+            contentDescription = null,
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .background(RideStyle.soft, CircleShape),
+        )
+        Text(
+            text = stringResource(R.string.care_swm_ask_banner),
+            fontSize = 19.sp,
+            lineHeight = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = sakhiLabel(),
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+/** Reject in red, Accept in green, side by side. Accept is the same tap as "Stay with me". */
+@Composable
+private fun AskAnswerButtons(isBusy: Boolean, onReject: () -> Unit, onAccept: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(58.dp)
+                .background(AppleSystemColors.red, CircleShape)
+                .clickable(enabled = !isBusy, onClick = onReject),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(
+                text = stringResource(R.string.care_swm_ask_reject),
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
+            )
+        }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .height(58.dp)
+                .background(AppleSystemColors.green, CircleShape)
+                .clickable(enabled = !isBusy, onClick = onAccept),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (isBusy) {
+                CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+            } else {
+                Text(
+                    text = stringResource(R.string.care_swm_ask_accept),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                )
+            }
+        }
     }
 }
 

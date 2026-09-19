@@ -3,6 +3,8 @@ package team.sakhi.android.feature.care
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.size
 import team.sakhi.staywithme.StayWithMeLocation
+import team.sakhi.android.platform.StayWithMeAskDetails
+import team.sakhi.android.platform.StayWithMeAskInbox
 import team.sakhi.android.platform.StayWithMeLocationService
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -20,6 +22,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -83,6 +89,7 @@ fun StayWithMeLiveLayer(
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val recenterTick by viewModel.recenterTick.collectAsStateWithLifecycle()
     val partnerCard by viewModel.partnerCard.collectAsStateWithLifecycle()
+    val ask by StayWithMeAskInbox.pending.collectAsStateWithLifecycle()
 
     // While this is on screen: re-read the walk, tell her screen her person is looking,
     // and notice a walk that has gone past its time.
@@ -315,9 +322,24 @@ fun StayWithMeLiveLayer(
             here = here,
             isBusy = state.isBusy,
             error = state.error,
-            onClose = onClose,
+            // Leaving without answering leaves the ask unanswered, and the next time she opens
+            // this it is her own walk again.
+            onClose = {
+                StayWithMeAskInbox.clear()
+                onClose()
+            },
             onStart = { minutes, note, destination ->
+                StayWithMeAskInbox.clear()
                 viewModel.start(owner.partnership.id, minutes, note, destination)
+            },
+            ask = ask,
+            askerFaceIndex = ask?.let { faceFor(owner.partnership.partnerId) },
+            onReject = {
+                // Tells the person who asked that no walk was started, and closes at once: she
+                // should not wait on the network to be left alone.
+                viewModel.declineAsk(owner.partnership.id)
+                StayWithMeAskInbox.clear()
+                onClose()
             },
         )
         // Nobody on Be Her Sakhi yet. The same screen still explains what a walk is, and
@@ -416,6 +438,9 @@ private fun StayWithMeIntro(
  * Setting off, full screen: the map is the screen, the way out and Contact Police over it,
  * and everything she fills in in the panel below. The same shape the live walk has and the
  * same one Emergency Assistance has (Karan, 2026-09-13), so the three read as one feature.
+ *
+ * The panel rests at half the screen, as iOS's does (`EmergencySheetDetents.fraction`), so the
+ * map keeps the top half. The button is pinned under it and the form scrolls above.
  */
 @Composable
 private fun StayWithMeStartLayer(
@@ -425,15 +450,22 @@ private fun StayWithMeStartLayer(
     error: String?,
     onClose: () -> Unit,
     onStart: (minutes: Int, note: String, destination: team.sakhi.staywithme.StayWithMeDestination?) -> Unit,
+    ask: StayWithMeAskDetails?,
+    askerFaceIndex: Int?,
+    onReject: () -> Unit,
 ) {
     val context = LocalContext.current
-    Box(modifier = Modifier.fillMaxSize().background(RideStyle.ground)) {
+    val state = rememberStayWithMeStartState(ask)
+    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(RideStyle.ground)) {
+        val restingHeight = maxHeight * 0.5f
+        val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         WalkMap(
             location = here,
             accent = MaterialTheme.colorScheme.primary,
             initial = "",
             modifier = Modifier.fillMaxSize(),
-            bottomPadding = 320.dp,
+            destination = state.destination,
+            bottomPadding = restingHeight + bottomInset,
         )
         RideTopBar(
             onClose = onClose,
@@ -441,33 +473,24 @@ private fun StayWithMeStartLayer(
             onCallPolice = { dial(context, "112") },
             modifier = Modifier.align(Alignment.TopCenter),
         )
-        Surface(
-            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
-            shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
-            color = RideStyle.ground,
-            shadowElevation = 12.dp,
-        ) {
-            Column(
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .verticalScroll(rememberScrollState()),
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(width = 36.dp, height = 5.dp)
-                            .background(RideStyle.hairline, CircleShape),
-                    )
-                }
-                StayWithMeStartSection(
+        RideBottomPanel(
+            restingHeight = restingHeight,
+            fullHeight = maxHeight * 0.9f,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            footer = {
+                StayWithMeStartFooter(
+                    state = state,
                     personName = personName,
                     isBusy = isBusy,
                     error = error,
+                    fromAsk = ask != null,
                     onStart = onStart,
+                    onReject = onReject,
                 )
+            },
+        ) {
+            item(key = "form") {
+                StayWithMeStartForm(state = state, personName = personName, askerFaceIndex = askerFaceIndex)
             }
         }
     }

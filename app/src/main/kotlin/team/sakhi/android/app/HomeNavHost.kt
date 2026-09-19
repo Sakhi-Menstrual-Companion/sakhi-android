@@ -30,13 +30,15 @@ import kotlinx.datetime.LocalDate
 import kotlinx.serialization.Serializable
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
+import team.sakhi.android.platform.StayWithMeAskInbox
+import team.sakhi.android.platform.StayWithMeAskLink
 import team.sakhi.android.ui.SakhiModalSheet
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.android.feature.ai.ChatScreen
 import team.sakhi.android.feature.emergency.EmergencyFlowScreen
 import team.sakhi.android.feature.calendar.CalendarScreen
 import team.sakhi.android.feature.care.CareScreen
-import team.sakhi.android.feature.care.StayWithMeAskSheet
+import team.sakhi.android.feature.care.StayWithMeAskLayer
 import team.sakhi.android.feature.care.StayWithMeLiveLayer
 import team.sakhi.staywithme.StayWithMeStore
 import team.sakhi.android.feature.home.HomeScreen
@@ -110,7 +112,7 @@ private sealed interface HomeOverlaySheet {
     /** A live Stay With Me walk, full screen like Emergency. Also `sakhi://care/stay/{id}`. */
     data object StayWithMe : HomeOverlaySheet
 
-    /** Her person's Stay With Me while she is not on a ride: a sheet, where they can ask her. */
+    /** Her person's Stay With Me while she is not on a ride: the map and the panel where they ask her. */
     data object StayWithMeAsk : HomeOverlaySheet
 }
 
@@ -222,7 +224,12 @@ fun HomeNavHost() {
             is SakhiDeepLink.OpenCareMode -> activeOverlaySheet = HomeOverlaySheet.Care()
             // sakhi://care/stay/{id}, from a Stay With Me notification: straight to the live
             // walk, full screen. The store already holds the walk, so nothing is passed.
-            is SakhiDeepLink.OpenStayWithMe -> activeOverlaySheet = HomeOverlaySheet.StayWithMe
+            is SakhiDeepLink.OpenStayWithMe -> {
+                // Her person asked to stay with her: the screen she starts a walk from opens
+                // with the ask on it, so she can answer it.
+                StayWithMeAskLink.decode(link.sessionId)?.let(StayWithMeAskInbox::markAsked)
+                activeOverlaySheet = HomeOverlaySheet.StayWithMe
+            }
             is SakhiDeepLink.OpenReport -> activeOverlaySheet = HomeOverlaySheet.Profile(initialScreen = ProfileSheetScreen.Reports)
             is SakhiDeepLink.OpenAIChat -> activeOverlaySheet = HomeOverlaySheet.Chat
             is SakhiDeepLink.OpenProfile -> activeOverlaySheet = HomeOverlaySheet.Profile()
@@ -363,11 +370,22 @@ fun HomeNavHost() {
         }
     }
 
+    // Her person's ask is full screen too: the same map and panel her own start screen has.
+    if (activeOverlaySheet == HomeOverlaySheet.StayWithMeAsk) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            StayWithMeAskLayer(
+                onClose = ::dismissOverlaySheet,
+                onOpenLiveWalk = { activeOverlaySheet = HomeOverlaySheet.StayWithMe },
+            )
+        }
+    }
+
     activeOverlaySheet
         ?.takeIf {
             it !is HomeOverlaySheet.Calendar &&
                 it !is HomeOverlaySheet.Emergency &&
-                it != HomeOverlaySheet.StayWithMe
+                it != HomeOverlaySheet.StayWithMe &&
+                it != HomeOverlaySheet.StayWithMeAsk
         }
         ?.let { sheet ->
         SakhiModalSheet(
@@ -406,10 +424,7 @@ fun HomeNavHost() {
                     // Handled above as full-screen layers, never in this sheet host.
                     is HomeOverlaySheet.Emergency -> Unit
                     HomeOverlaySheet.StayWithMe -> Unit
-                    HomeOverlaySheet.StayWithMeAsk -> StayWithMeAskSheet(
-                        onClose = ::dismissOverlaySheet,
-                        onOpenLiveWalk = { activeOverlaySheet = HomeOverlaySheet.StayWithMe },
-                    )
+                    HomeOverlaySheet.StayWithMeAsk -> Unit
                     is HomeOverlaySheet.Profile -> ProfileOverlaySheet(
                         initialScreen = targetSheet.initialScreen,
                         onDismiss = ::dismissOverlaySheet,

@@ -207,7 +207,7 @@
     <string name="care_swm_where_to">WHERE TO</string>
     <string name="care_swm_where_placeholder">Search a place</string>
     <string name="care_swm_ask_button">Ask %1$s to stay</string>
-    <string name="care_swm_consent">%1$s sees your location and battery until you mark yourself home.</string>
+    <string name="care_swm_consent">%1$s sees your location and battery until you\'re home.</string>
     <string name="care_swm_minutes">%1$d min</string>
     <string name="care_swm_one_hour">1 hr</string>
     <string name="care_swm_fallback_person">Your Sakhi</string>
@@ -445,4 +445,7 @@
     <string name="ride_partner_idle_point_title">Shared only when she starts</string>
     <string name="ride_partner_idle_point_detail">Her location is visible to you only while this ride is on.</string>
     <string name="ride_partner_idle_waiting">Waiting for her to start</string>
+    <string name="care_swm_ask_banner">Your Sakhi is requesting to stay with you</string>
+    <string name="care_swm_ask_reject">Reject</string>
+    <string name="care_swm_ask_accept">Accept</string>
 </resources>

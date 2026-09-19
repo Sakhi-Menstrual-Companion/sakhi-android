@@ -11,7 +11,7 @@ import team.sakhi.care.CareStore
 import team.sakhi.notifications.InAppNotification
 import team.sakhi.notifications.InAppNotificationStore
 import team.sakhi.notifications.InboxState
-import team.sakhi.notifications.NotificationRouting
+import team.sakhi.android.platform.StayWithMeAskLink
 import team.sakhi.notifications.SakhiNotification
 import team.sakhi.session.SessionManager
 import team.sakhi.sync.DataMigration
@@ -65,7 +65,7 @@ class NotificationInboxViewModel(
         store.markRead(item.id)
         // Sample rows carry made-up ids, so they only mark themselves read.
         if (inbox.value.isDemo) return null
-        return NotificationRouting.deepLinkUri(item.kind)
+        return StayWithMeAskLink.uriFor(item.kind)
     }
 
     /**

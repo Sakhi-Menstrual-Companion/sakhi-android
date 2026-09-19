@@ -108,7 +108,7 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         StayWithMeNotifications.ensureChannels(applicationContext)
         val presentation = presentation(applicationContext, notification) ?: return
         // Where a tap goes is decided in ONE place, shared with iOS and with the inbox.
-        postPushNotification(applicationContext, presentation, NotificationRouting.deepLinkUri(notification))
+        postPushNotification(applicationContext, presentation, StayWithMeAskLink.uriFor(notification))
     }
 
     /** Every push that says something about a live walk. */
@@ -117,7 +117,8 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
             this is SakhiNotification.StayWithMeExtended ||
             this is SakhiNotification.StayWithMeEnded ||
             this is SakhiNotification.StayWithMeLate ||
-            this is SakhiNotification.StayWithMeAsk
+            this is SakhiNotification.StayWithMeAsk ||
+            this is SakhiNotification.StayWithMeDeclined
 
     private data class PushPresentation(
         val title: String,
@@ -213,6 +214,12 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
             notification.partnershipId,
             context.getString(R.string.platform_push_swm_ask_title, walkName(context, notification.askerName)),
             context.getString(R.string.platform_push_swm_ask_body),
+        )
+        // She turned the ask down. Kept to the fact: nothing was started.
+        is SakhiNotification.StayWithMeDeclined -> walkPresentation(
+            notification.partnershipId + "declined",
+            context.getString(R.string.platform_push_swm_declined_title, walkName(context, notification.ownerName)),
+            context.getString(R.string.platform_push_swm_declined_body),
         )
         is SakhiNotification.FeatureAvailable -> null
         SakhiNotification.Unknown -> null

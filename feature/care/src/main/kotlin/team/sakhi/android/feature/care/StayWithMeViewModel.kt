@@ -355,15 +355,24 @@ class StayWithMeViewModel(
      * Her person asking to stay with her. Sends a question to her phone and nothing else:
      * no walk starts here, because it is her walk to start.
      */
-    fun askToStay(partnershipId: String) {
+    fun askToStay(
+        partnershipId: String,
+        destination: team.sakhi.staywithme.StayWithMeDestination? = null,
+        minutes: Int? = null,
+    ) {
         hapticManager.impact(HapticImpact.MEDIUM)
         viewModelScope.launch {
             // Success needs no toast: the button itself turns into "Waiting for her to
             // start" and then into her walk. Only a failure is worth a word.
-            store.askToStay(partnershipId)
+            store.askToStay(partnershipId, destination, minutes)
                 .onSuccess { followAsk() }
                 .onFailure { _askResult.value = appContext.getString(R.string.care_ask_failed) }
         }
+    }
+
+    /** She turns an ask down. Tells the person who asked and nothing else. */
+    fun declineAsk(partnershipId: String) {
+        viewModelScope.launch { store.declineAsk(partnershipId) }
     }
 
     /** When her person asked, while it still waits on her. Drives the waiting button. */

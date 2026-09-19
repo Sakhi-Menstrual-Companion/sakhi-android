@@ -76,6 +76,8 @@
     <string name="platform_swm_action_arrived">I\'m home</string>
     <string name="platform_push_swm_ask_title">%1$s wants to stay with you</string>
     <string name="platform_push_swm_ask_body">Heading home? Tap to start, and they will see you until you are in.</string>
+    <string name="platform_push_swm_declined_title">%1$s said not now</string>
+    <string name="platform_push_swm_declined_body">No walk was started. You can ask again another time.</string>
     <string name="platform_push_swm_someone">Someone you care for</string>
     <string name="platform_push_swm_started_title">%1$s is heading home</string>
     <string name="platform_push_swm_started_body">She asked you to stay with her. Tap to see her on the map.</string>

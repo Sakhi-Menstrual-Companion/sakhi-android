@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
@@ -31,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import team.sakhi.android.designsystem.sakhiLabel
+import team.sakhi.android.designsystem.sakhiProfileCardBackground
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
@@ -114,50 +116,46 @@ private fun EmergencyCallButton(
     modifier: Modifier = Modifier,
 ) {
     val callDescription = stringResource(R.string.care_swm_help_call_a11y, service.spokenName, service.number)
+    // iOS's `EmergencyCallButton`: a white card, the glyph on a disc of its own colour, the
+    // number and then the name, centred. The Material `surfaceVariant` this used was grey.
     Surface(
         onClick = onClick,
         modifier = modifier.semantics { contentDescription = callDescription },
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = RoundedCornerShape(16.dp),
+        color = sakhiProfileCardBackground(),
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Row(verticalAlignment = Alignment.Top) {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(service.color.copy(alpha = 0.13f), RoundedCornerShape(13.dp)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        imageVector = service.icon,
-                        contentDescription = null,
-                        tint = service.color,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-                Spacer(Modifier.weight(1f))
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(38.dp)
+                    .background(service.color.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
                 Icon(
-                    imageVector = Icons.Filled.Call,
+                    imageVector = service.icon,
                     contentDescription = null,
-                    tint = sakhiTertiaryLabel(),
-                    modifier = Modifier.size(12.dp).padding(top = 2.dp),
+                    tint = service.color,
+                    modifier = Modifier.size(18.dp),
                 )
             }
-            Text(
-                text = service.number,
-                style = MaterialTheme.typography.headlineSmall.copy(
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    text = service.number,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 24.sp,
-                ),
-                color = sakhiLabel(),
-                modifier = Modifier.padding(top = 14.dp),
-            )
-            Text(
-                text = service.name,
-                style = MaterialTheme.typography.bodySmall,
-                color = sakhiSecondaryLabel(),
-                maxLines = 1,
-            )
+                    color = sakhiLabel(),
+                )
+                Text(
+                    text = service.name,
+                    fontSize = 12.sp,
+                    color = sakhiSecondaryLabel(),
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
