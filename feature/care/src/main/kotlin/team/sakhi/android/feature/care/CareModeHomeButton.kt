@@ -90,6 +90,8 @@ fun CareModeHomeButton(
     onOpenWalk: () -> Unit,
     /** Care, for anyone with no walk to open and nobody staying with her yet. */
     onOpenCare: () -> Unit,
+    /** Her person, with no walk live: the sheet where they can ask her to stay with them. */
+    onOpenStayAsk: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -156,10 +158,10 @@ fun CareModeHomeButton(
     // a person with nobody yet. Her person, with no walk live, lands on the screen where they
     // can ask to stay with her (Karan, 2026-09-19).
     val onOpen = {
-        if (walk != null || careState is CareRuntimeState.OwnerConnected || careState is CareRuntimeState.PartnerConnected) {
-            onOpenWalk()
-        } else {
-            onOpenCare()
+        when {
+            walk != null || careState is CareRuntimeState.OwnerConnected -> onOpenWalk()
+            careState is CareRuntimeState.PartnerConnected -> onOpenStayAsk()
+            else -> onOpenCare()
         }
     }
     // The ring moves with her time, so this has to redraw on its own. Every half minute is

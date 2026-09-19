@@ -69,6 +69,11 @@ fun StayWithMeLiveLayer(
      * can explain the walk without ending in a dead button.
      */
     onAddCarePartner: () -> Unit = {},
+    /**
+     * Her person opened this with nothing live, from a notification or a link. There is no
+     * walk to show, so the host swaps this full screen for the sheet where they can ask her.
+     */
+    onPartnerHasNoWalk: () -> Unit = {},
     careViewModel: CareViewModel = koinViewModel(),
     viewModel: StayWithMeViewModel = koinViewModel(),
 ) {
@@ -78,8 +83,6 @@ fun StayWithMeLiveLayer(
     val refreshing by viewModel.refreshing.collectAsStateWithLifecycle()
     val recenterTick by viewModel.recenterTick.collectAsStateWithLifecycle()
     val partnerCard by viewModel.partnerCard.collectAsStateWithLifecycle()
-    val askedAt by viewModel.askedAt.collectAsStateWithLifecycle()
-    val askResult by viewModel.askResult.collectAsStateWithLifecycle()
 
     // While this is on screen: re-read the walk, tell her screen her person is looking,
     // and notice a walk that has gone past its time.
@@ -331,17 +334,12 @@ fun StayWithMeLiveLayer(
             },
             onClose = onClose,
         )
-        // Her person, with nothing live: the screen where they ask to stay with her. Nothing
-        // starts from here, because the walk is hers to start.
-        partner != null && !awaitingEnd -> StayWithMeWatcherIdle(
-            asked = askedAt != null,
-            failed = askResult != null,
-            onAsk = {
-                viewModel.clearAskResult()
-                viewModel.askToStay(partner.partnership.id)
-            },
-            onClose = onClose,
-        )
+        // Her person, opened cold with nothing live: the host puts up the sheet where they can
+        // ask her. Not after a walk that has just ended, which closes this instead.
+        partner != null && !awaitingEnd && !sawWalk -> {
+            LaunchedEffect(Unit) { onPartnerHasNoWalk() }
+            Box(modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground()))
+        }
         else -> Box(
             modifier = Modifier.fillMaxSize().background(sakhiGroupedBackground()),
             contentAlignment = Alignment.Center,
@@ -351,41 +349,6 @@ fun StayWithMeLiveLayer(
             if (!sawWalk) CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
         }
     }
-}
-
-/**
- * Her person's Stay With Me when she is not on a walk: the one thing they can do here is ask.
- * iOS's Care screen carried the same lines on a card; the copy is theirs. It sends a question
- * to her phone and nothing else, and no location is shared until she starts.
- */
-@Composable
-private fun StayWithMeWatcherIdle(
-    asked: Boolean,
-    failed: Boolean,
-    onAsk: () -> Unit,
-    onClose: () -> Unit,
-) {
-    SakhiOnboardingView(
-        icon = Icons.Filled.DirectionsWalk,
-        title = stringResource(R.string.ride_partner_idle_title),
-        message = when {
-            failed -> stringResource(R.string.care_ask_failed)
-            asked -> stringResource(R.string.ride_partner_idle_asked)
-            else -> stringResource(R.string.ride_partner_idle_message)
-        },
-        points = listOf(
-            SakhiOnboardingPoint(
-                icon = Icons.Filled.Map,
-                title = stringResource(R.string.ride_partner_idle_point_title),
-                detail = stringResource(R.string.ride_partner_idle_point_detail),
-            ),
-        ),
-        primaryLabel = stringResource(
-            if (asked) R.string.ride_partner_idle_waiting else R.string.care_ask_to_stay_with_her,
-        ),
-        onPrimaryClick = { if (!asked) onAsk() },
-        onClose = onClose,
-    )
 }
 
 /**

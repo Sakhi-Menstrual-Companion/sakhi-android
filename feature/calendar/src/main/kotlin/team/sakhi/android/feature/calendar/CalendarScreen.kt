@@ -158,6 +158,8 @@ fun CalendarScreen(
      * the same place.
      */
     onOpenWalk: () -> Unit = {},
+    /** Her person's version of the same button, when she is not on a ride: a sheet to ask her. */
+    onOpenStayAsk: () -> Unit = {},
     onLog: (LocalDate) -> Unit = {},
     // Year mode is hoistable so the host can bind it to a sheet detent. iOS ties the
     // two together explicitly -- `HomeCalendarSheet.swift`'s header states
@@ -539,6 +541,10 @@ fun CalendarScreen(
                             onOpenCare = {
                                 hapticManager.selection()
                                 onOpenCare()
+                            },
+                            onOpenStayAsk = {
+                                hapticManager.selection()
+                                onOpenStayAsk()
                             },
                         )
                     },

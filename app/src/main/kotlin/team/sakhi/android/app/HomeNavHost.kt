@@ -36,6 +36,7 @@ import team.sakhi.android.feature.ai.ChatScreen
 import team.sakhi.android.feature.emergency.EmergencyFlowScreen
 import team.sakhi.android.feature.calendar.CalendarScreen
 import team.sakhi.android.feature.care.CareScreen
+import team.sakhi.android.feature.care.StayWithMeAskSheet
 import team.sakhi.android.feature.care.StayWithMeLiveLayer
 import team.sakhi.staywithme.StayWithMeStore
 import team.sakhi.android.feature.home.HomeScreen
@@ -108,6 +109,9 @@ private sealed interface HomeOverlaySheet {
     data class Care(val prefillInviteCode: String? = null) : HomeOverlaySheet
     /** A live Stay With Me walk, full screen like Emergency. Also `sakhi://care/stay/{id}`. */
     data object StayWithMe : HomeOverlaySheet
+
+    /** Her person's Stay With Me while she is not on a ride: a sheet, where they can ask her. */
+    data object StayWithMeAsk : HomeOverlaySheet
 }
 
 private enum class ProfileSheetScreen {
@@ -200,6 +204,9 @@ fun HomeNavHost() {
 
     /** The nearby button on the calendar's bar: the walk when there is one, else starting it. */
     val openWalk = { presentOverlaySheet(HomeOverlaySheet.StayWithMe) }
+
+    /** Her person's version of the same button when she is not on a ride. */
+    val openStayAsk = { presentOverlaySheet(HomeOverlaySheet.StayWithMeAsk) }
 
     // Signed-in deep links resolve here, not in RootNavHost: Care/Reports/Chat/
     // Profile are all routes this graph owns, and Home is guaranteed mounted by
@@ -299,6 +306,7 @@ fun HomeNavHost() {
             },
             onOpenCare = openCare,
             onOpenWalk = openWalk,
+            onOpenStayAsk = openStayAsk,
             onLog = { date -> presentOverlaySheet(HomeOverlaySheet.Logging(initialDate = date)) },
             onDaySelected = homeViewModel::selectDate,
             // Detent and year mode are the same concept on iOS: dragging the sheet
@@ -349,6 +357,8 @@ fun HomeNavHost() {
                 // yet: the same Care screen Home's top-right button opens, where a care
                 // partner is invited.
                 onAddCarePartner = openCare,
+                // Her person, opened cold with nothing live: the sheet where they can ask her.
+                onPartnerHasNoWalk = { activeOverlaySheet = HomeOverlaySheet.StayWithMeAsk },
             )
         }
     }
@@ -396,6 +406,10 @@ fun HomeNavHost() {
                     // Handled above as full-screen layers, never in this sheet host.
                     is HomeOverlaySheet.Emergency -> Unit
                     HomeOverlaySheet.StayWithMe -> Unit
+                    HomeOverlaySheet.StayWithMeAsk -> StayWithMeAskSheet(
+                        onClose = ::dismissOverlaySheet,
+                        onOpenLiveWalk = { activeOverlaySheet = HomeOverlaySheet.StayWithMe },
+                    )
                     is HomeOverlaySheet.Profile -> ProfileOverlaySheet(
                         initialScreen = targetSheet.initialScreen,
                         onDismiss = ::dismissOverlaySheet,

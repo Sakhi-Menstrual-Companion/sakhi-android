@@ -448,8 +448,6 @@ internal fun RideTopBar(
     onCallPolice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val policeLabel = stringResource(R.string.care_swm_alarm_call_police_a11y)
-    val policeHint = stringResource(R.string.ride_call_police_hint)
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -503,34 +501,49 @@ internal fun RideTopBar(
             }
         }
 
-        // 112, opposite the close button. On her side because she might need it; on his because
-        // he might need to make the call for her. Deep rose, so it is never mistaken for the
-        // pink "I'm home".
-        Row(
-            modifier = Modifier
-                .height(40.dp)
-                .background(RideStyle.rose, CircleShape)
-                .clickable(onClick = onCallPolice)
-                .padding(horizontal = 16.dp)
-                .semantics(mergeDescendants = true) { contentDescription = "$policeLabel. $policeHint" },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Phone,
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(13.dp),
-            )
-            Text(
-                text = "112",
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                maxLines = 1,
-                softWrap = false,
-            )
-        }
+        RideCallPoliceButton(onClick = onCallPolice)
+    }
+}
+
+/**
+ * 112, in deep rose so it is never mistaken for the pink "I'm home". On her side because she
+ * might need it; on her person's because they might need to make the call for her.
+ */
+@Composable
+internal fun RideCallPoliceButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    /** A soft tint with deep rose words, for a quiet page. The solid one is for over a map. */
+    light: Boolean = false,
+) {
+    val fill = if (light) RideStyle.rose.copy(alpha = 0.12f) else RideStyle.rose
+    val ink = if (light) RideStyle.rose else Color.White
+    val policeLabel = stringResource(R.string.care_swm_alarm_call_police_a11y)
+    val policeHint = stringResource(R.string.ride_call_police_hint)
+    Row(
+        modifier = modifier
+            .height(40.dp)
+            .background(fill, CircleShape)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp)
+            .semantics(mergeDescendants = true) { contentDescription = "$policeLabel. $policeHint" },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(
+            imageVector = Icons.Filled.Phone,
+            contentDescription = null,
+            tint = ink,
+            modifier = Modifier.size(13.dp),
+        )
+        Text(
+            text = "112",
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = ink,
+            maxLines = 1,
+            softWrap = false,
+        )
     }
 }
 
