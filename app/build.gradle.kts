@@ -89,12 +89,12 @@ android {
         // versionName is the string the user reads. It changes only when the release means
         // something different: 2.0.1 to 2.0.2 for a fix, to 2.1.0 for a feature. The two
         // numbers are independent and are not meant to match each other.
-        versionCode = 5
-        // The two platforms do not carry the same number and are not meant to. iOS
-        // `MARKETING_VERSION` is 2.0.1 (checked in project.pbxproj, 2026-09-18); this note
-        // said 1.0 and was stale. Each store versions on its own, so leave them alone unless
-        // a release deliberately aligns them.
-        versionName = "2.0.2"
+        versionCode = 6
+        // Both stores ship as 2.0.1 (Karan, 2026-09-19): the same number on iOS
+        // (`MARKETING_VERSION`) and here, so one launch reads as one version. versionCode 5
+        // went to Play's internal track on 2026-08-26 as "2.0.2"; the name is free-form and
+        // only the code has to rise, so 6 carries 2.0.1.
+        versionName = "2.0.1"
         // Temporary fallback keeps clean checkouts buildable, but the new
         // Nearby Places map surfaces still need a Maps-authorized runtime key.
         manifestPlaceholders["googleMapsApiKey"] = secret(
