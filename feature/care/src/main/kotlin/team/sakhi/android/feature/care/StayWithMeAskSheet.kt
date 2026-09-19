@@ -1,16 +1,8 @@
 package team.sakhi.android.feature.care
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import team.sakhi.android.designsystem.SakhiRadius
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -221,55 +213,31 @@ fun StayWithMeAskSheet(
 }
 
 /**
- * The ask button once the ask is out: the pink capsule, softened, with a light sweeping across
- * it and a spinner beside the words. Something is happening, so it is not greyed out.
+ * The ask button once the ask is out: the pink capsule, softened, with the words centred and a
+ * spinner at the right. Something is happening, so it is not greyed out, and nothing else moves.
  */
 @Composable
 private fun AskWaitingButton(label: String) {
-    val transition = rememberInfiniteTransition(label = "askWaiting")
-    val sweep by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1500, easing = LinearEasing), RepeatMode.Restart),
-        label = "askWaitingSweep",
-    )
-    val base = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
             .padding(horizontal = SakhiSpacing.space1)
             .clip(RoundedCornerShape(SakhiRadius.full))
-            .drawBehind {
-                drawRect(base)
-                val w = size.width
-                val centre = -w * 0.3f + w * 1.6f * sweep
-                drawRect(
-                    brush = Brush.horizontalGradient(
-                        colors = listOf(Color.Transparent, Color.White.copy(alpha = 0.38f), Color.Transparent),
-                        startX = centre - w * 0.28f,
-                        endX = centre + w * 0.28f,
-                    ),
-                )
-            },
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
         contentAlignment = Alignment.Center,
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            CircularProgressIndicator(
-                color = Color.White,
-                strokeWidth = 2.dp,
-                modifier = Modifier.size(18.dp),
-            )
-            Text(
-                text = label,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                maxLines = 1,
-            )
-        }
+        Text(
+            text = label,
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            maxLines = 1,
+        )
+        CircularProgressIndicator(
+            color = Color.White,
+            strokeWidth = 2.dp,
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 20.dp).size(20.dp),
+        )
     }
 }
