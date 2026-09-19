@@ -456,16 +456,16 @@ private fun StayWithMeStartLayer(
 ) {
     val context = LocalContext.current
     val state = rememberStayWithMeStartState(ask)
-    BoxWithConstraints(modifier = Modifier.fillMaxSize().background(RideStyle.ground)) {
-        val restingHeight = maxHeight * 0.5f
-        val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    Box(modifier = Modifier.fillMaxSize().background(RideStyle.ground)) {
         WalkMap(
             location = here,
             accent = MaterialTheme.colorScheme.primary,
             initial = "",
             modifier = Modifier.fillMaxSize(),
             destination = state.destination,
-            bottomPadding = restingHeight + bottomInset,
+            // Room for the panel below, which is never taller than its own content, so a
+            // fixed fraction is close enough for where the map frames itself.
+            bottomPadding = 320.dp,
         )
         RideTopBar(
             onClose = onClose,
@@ -473,11 +473,26 @@ private fun StayWithMeStartLayer(
             onCallPolice = { dial(context, "112") },
             modifier = Modifier.align(Alignment.TopCenter),
         )
-        RideBottomPanel(
-            restingHeight = restingHeight,
-            fullHeight = maxHeight * 0.9f,
-            modifier = Modifier.align(Alignment.BottomCenter),
-            footer = {
+        // The panel her own screen has always had: it sits at whatever height its content
+        // needs, never a draggable sheet with a long detent to fall into (Karan, 2026-09-19).
+        Surface(
+            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = 40.dp, topEnd = 40.dp),
+            color = RideStyle.ground,
+            shadowElevation = 12.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp, bottom = 12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(modifier = Modifier.size(width = 36.dp, height = 5.dp).background(RideStyle.hairline, CircleShape))
+                }
+                StayWithMeStartForm(state = state, personName = personName, askerFaceIndex = askerFaceIndex)
                 StayWithMeStartFooter(
                     state = state,
                     personName = personName,
@@ -487,10 +502,6 @@ private fun StayWithMeStartLayer(
                     onStart = onStart,
                     onReject = onReject,
                 )
-            },
-        ) {
-            item(key = "form") {
-                StayWithMeStartForm(state = state, personName = personName, askerFaceIndex = askerFaceIndex)
             }
         }
     }
