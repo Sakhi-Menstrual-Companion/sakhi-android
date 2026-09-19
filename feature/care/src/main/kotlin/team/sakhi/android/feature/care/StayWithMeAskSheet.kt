@@ -213,19 +213,20 @@ fun StayWithMeAskSheet(
 }
 
 /**
- * The ask button once the ask is out: the pink capsule, softened, with the words centred and a
- * spinner at the right. Something is happening, so it is not greyed out, and nothing else moves.
+ * The ask button once the ask is out: the same solid pink capsule, unchanged, with a spinner
+ * beside the label. Nothing about the button itself changes, only what it says.
  */
 @Composable
 private fun AskWaitingButton(label: String) {
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(52.dp)
             .padding(horizontal = SakhiSpacing.space1)
             .clip(RoundedCornerShape(SakhiRadius.full))
-            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
-        contentAlignment = Alignment.Center,
+            .background(MaterialTheme.colorScheme.primary),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = label,
@@ -234,10 +235,11 @@ private fun AskWaitingButton(label: String) {
             color = Color.White,
             maxLines = 1,
         )
+        Spacer(Modifier.size(10.dp))
         CircularProgressIndicator(
             color = Color.White,
             strokeWidth = 2.dp,
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 20.dp).size(20.dp),
+            modifier = Modifier.size(18.dp),
         )
     }
 }
