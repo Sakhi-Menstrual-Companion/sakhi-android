@@ -476,7 +476,7 @@
     <string name="profile_privacy_export_failed">Couldn\'t export your data. Please try again.</string>
     <string name="profile_privacy_section_permissions">PERMISSIONS</string>
     <string name="profile_privacy_permission_location">Location Access</string>
-    <string name="profile_privacy_permission_location_subtitle">Used only for emergency SOS</string>
+    <string name="profile_privacy_permission_location_subtitle">Used for Stay With Me and to find help near you</string>
     <string name="profile_privacy_permission_camera">Camera &amp; Microphone</string>
     <string name="profile_privacy_permission_camera_subtitle">Never used by Sakhi</string>
     <string name="profile_privacy_permission_contacts">Contacts</string>

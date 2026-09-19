@@ -68,11 +68,11 @@
     <string name="platform_swm_channel_ongoing_name">Your walk home</string>
     <string name="platform_swm_channel_ongoing_description">Shown while your walk home is being shared</string>
     <string name="platform_swm_ongoing_title">%1$s is with you</string>
-    <string name="platform_swm_ongoing_title_generic">Your Care Mode person is with you</string>
+    <string name="platform_swm_ongoing_title_generic">Your Sakhi is with you</string>
     <string name="platform_swm_ongoing_starting">Starting your walk</string>
     <string name="platform_swm_ongoing_text">Home by %1$s. Tap I\'m home when you reach.</string>
     <string name="platform_swm_ongoing_late">You are past your time. %1$s has been told.</string>
-    <string name="platform_swm_ongoing_late_generic">You are past your time. Your Care Mode person has been told.</string>
+    <string name="platform_swm_ongoing_late_generic">You are past your time. Your Sakhi has been told.</string>
     <string name="platform_swm_action_arrived">I\'m home</string>
     <string name="platform_push_swm_ask_title">%1$s wants to stay with you</string>
     <string name="platform_push_swm_ask_body">Heading home? Tap to start, and they will see you until you are in.</string>

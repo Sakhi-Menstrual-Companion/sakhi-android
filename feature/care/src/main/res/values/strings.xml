@@ -210,7 +210,7 @@
     <string name="care_swm_consent">%1$s sees your location and battery until you mark yourself home.</string>
     <string name="care_swm_minutes">%1$d min</string>
     <string name="care_swm_one_hour">1 hr</string>
-    <string name="care_swm_fallback_person">your Care Mode person</string>
+    <string name="care_swm_fallback_person">Your Sakhi</string>
     <string name="care_swm_title">Stay With Me</string>
     <string name="care_swm_person_with_you">%1$s is with you</string>
     <string name="care_swm_person_asked">%1$s has been asked to stay with you</string>
