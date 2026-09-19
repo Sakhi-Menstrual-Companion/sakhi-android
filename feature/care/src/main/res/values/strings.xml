@@ -439,4 +439,10 @@
     <string name="ride_home_safe_stat_home_at">Home at</string>
     <string name="ride_unit_m">m</string>
     <string name="ride_unit_km">km</string>
+    <string name="ride_partner_idle_title">Stay with her</string>
+    <string name="ride_partner_idle_message">She will get a gentle ask. Nothing is shared until she says yes.</string>
+    <string name="ride_partner_idle_asked">Asked. The moment she starts, her way home shows here.</string>
+    <string name="ride_partner_idle_point_title">Shared only when she starts</string>
+    <string name="ride_partner_idle_point_detail">Her location is visible to you only while this ride is on.</string>
+    <string name="ride_partner_idle_waiting">Waiting for her to start</string>
 </resources>

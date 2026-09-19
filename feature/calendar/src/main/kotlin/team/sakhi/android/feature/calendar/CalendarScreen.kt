@@ -532,9 +532,13 @@ fun CalendarScreen(
                     // none into the walk.
                     leadingSlot = {
                         CareModeHomeButton(
-                            onOpen = {
+                            onOpenWalk = {
                                 hapticManager.selection()
                                 onOpenWalk()
+                            },
+                            onOpenCare = {
+                                hapticManager.selection()
+                                onOpenCare()
                             },
                         )
                     },

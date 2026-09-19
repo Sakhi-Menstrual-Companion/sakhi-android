@@ -86,7 +86,10 @@ import team.sakhi.staywithme.StayWithMeStore
  */
 @Composable
 fun CareModeHomeButton(
-    onOpen: () -> Unit,
+    /** The walk: hers to start or follow, or the one she is watching. */
+    onOpenWalk: () -> Unit,
+    /** Care, for anyone with no walk to open and nobody staying with her yet. */
+    onOpenCare: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -149,6 +152,16 @@ fun CareModeHomeButton(
     }
 
     val walk = mine ?: watching
+    // iOS's `onOpenSakhi`: the walk screen when one is live or someone is connected, Care for
+    // a person with nobody yet. Her person, with no walk live, lands on the screen where they
+    // can ask to stay with her (Karan, 2026-09-19).
+    val onOpen = {
+        if (walk != null || careState is CareRuntimeState.OwnerConnected || careState is CareRuntimeState.PartnerConnected) {
+            onOpenWalk()
+        } else {
+            onOpenCare()
+        }
+    }
     // The ring moves with her time, so this has to redraw on its own. Every half minute is
     // enough to see it move and costs nothing.
     var now by remember { mutableStateOf(stayWithMeStore.now()) }
@@ -182,6 +195,7 @@ fun CareModeHomeButton(
     // pink while she is walking, orange once she is past her time, red once her person has
     // been told. Green was never one of Sakhi's colours, and it said "fine" in a palette
     // where pink already does.
+    val hairlineColor = sakhiSeparator()
     val ringColor = when (phase) {
         StayWithMePhase.GRACE -> RideStyle.late
         StayWithMePhase.LATE -> RideStyle.alert
@@ -199,9 +213,26 @@ fun CareModeHomeButton(
                 },
                 CircleShape,
             )
+            .clip(CircleShape)
             .alpha(if (late) blink else 1f)
             .drawWithContent {
                 drawContent()
+                // The white band that holds the map in, then either the hairline or the ride's
+                // ring: iOS's `HomeNearbyButton`, so the button sits on the page like a sticker.
+                val band = 2.5.dp.toPx()
+                drawCircle(
+                    color = Color.White,
+                    radius = (size.minDimension - band) / 2f,
+                    style = Stroke(width = band),
+                )
+                if (walk == null) {
+                    val hair = 0.5.dp.toPx()
+                    drawCircle(
+                        color = hairlineColor,
+                        radius = (size.minDimension - hair) / 2f,
+                        style = Stroke(width = hair),
+                    )
+                }
                 if (walk != null) {
                     val stroke = 4.dp.toPx()
                     val arcTopLeft = Offset(stroke / 2, stroke / 2)
@@ -238,7 +269,7 @@ fun CareModeHomeButton(
             NearbyMapThumbnail(
                 latitude = here!!.first,
                 longitude = here!!.second,
-                modifier = Modifier.matchParentSize(),
+                modifier = Modifier.matchParentSize().clip(CircleShape),
             )
             // A lite-mode map hands every tap to the Google Maps app, so the button's own
             // click never fires. This sits over it and takes the tap first.
