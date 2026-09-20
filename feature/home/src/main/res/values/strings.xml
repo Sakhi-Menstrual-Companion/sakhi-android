@@ -270,11 +270,6 @@
     <string name="inbox_log_response_declined_body">They would like to keep logging on their own for now.</string>
     <string name="inbox_care_message_title">New message from %1$s</string>
     <string name="inbox_care_message_body">Tap to read it in Care.</string>
-    <string name="inbox_sos_title">Emergency alert</string>
-    <string name="inbox_sos_body">Tap to see the latest.</string>
-    <string name="inbox_nearby_title">Someone nearby needs help</string>
-    <string name="inbox_nearby_body">A Sakhi close to you has asked for something. Can you help?</string>
-    <string name="inbox_nearby_body_distance">About %1$s away. Can you help?</string>
     <string name="inbox_feature_ai_title">Sakhi AI is back</string>
     <string name="inbox_feature_title">Something you asked about is ready</string>
     <string name="inbox_feature_body">Thank you for waiting. You can use it again now.</string>

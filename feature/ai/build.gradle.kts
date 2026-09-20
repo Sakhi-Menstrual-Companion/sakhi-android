@@ -22,8 +22,6 @@ android {
 
 dependencies {
     implementation(project(":core:platform"))
-    // NearbySakhiButton moved here from :feature:ai.
-    implementation(project(":feature:emergency"))
     implementation(project(":feature:reports"))
     implementation(libs.androidx.activity.compose)
     implementation(libs.google.maps.compose)

@@ -387,7 +387,7 @@ internal fun StayWithMeStartForm(
             color = sakhiLabel(),
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
         )
-        EmergencyCallButtons(onCall = { number -> dial(context, number) })
+        HelplineCallButtons(onCall = { number -> dial(context, number) })
 
         Spacer(Modifier.height(18.dp))
 
@@ -822,8 +822,8 @@ internal fun StayWithMeOwnerLive(
             0.dp
         }
 
-        // The map is the whole screen, as on Emergency Assistance. It frames her in the part
-        // the panel leaves uncovered rather than centring her underneath it.
+        // The map is the whole screen. It frames her in the part the panel leaves uncovered
+        // rather than centring her underneath it.
         WalkMap(
             location = location,
             accent = accent,
@@ -977,7 +977,7 @@ internal fun StayWithMeOwnerLive(
                 item(key = "call") {
                     Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                         RideSectionHeader(title = stringResource(R.string.care_swm_call_for_help))
-                        EmergencyCallButtons(onCall = { number -> dial(context, number) })
+                        HelplineCallButtons(onCall = { number -> dial(context, number) })
                     }
                 }
 
@@ -1137,8 +1137,8 @@ private const val OWNER_PANEL_FRACTION = 0.58f
 private const val WATCHER_PANEL_FRACTION = 0.52f
 
 /**
- * The controls over the map, where Emergency Assistance puts them and drawn the same way:
- * a 35dp white disc at the top left, and Contact Police as a white capsule opposite it.
+ * The controls over the map: a 35dp white disc at the top left, and Contact Police as a
+ * white capsule opposite it.
  * The disc carries a cross, because this screen closes rather than steps back. Closing is
  * not stopping: the walk carries on, and Home's ring shows it.
  */
@@ -1396,7 +1396,7 @@ internal fun StayWithMeWatcherLive(
             item(key = "call") {
                 Column(modifier = Modifier.padding(horizontal = 20.dp)) {
                     RideSectionHeader(title = stringResource(R.string.care_swm_call_for_help))
-                    EmergencyCallButtons(onCall = { number -> dial(context, number) })
+                    HelplineCallButtons(onCall = { number -> dial(context, number) })
                 }
             }
 

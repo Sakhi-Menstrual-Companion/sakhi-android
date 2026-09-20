@@ -39,7 +39,7 @@ import team.sakhi.android.designsystem.sakhiTertiaryLabel
 /**
  * 112, 108 and 181, as three buttons that are read by their picture.
  *
- * The exact counterpart of iOS's `EmergencyCallButtons.swift`, down to the colours and the
+ * The exact counterpart of iOS's `HelplineCallButtons.swift`, down to the colours and the
  * layout, because the two apps must not disagree about what an emergency looks like.
  *
  * In an emergency nobody reads (Karan, 2026-09-16). These are found by their picture first:
@@ -59,26 +59,26 @@ import team.sakhi.android.designsystem.sakhiTertiaryLabel
  * Each button only opens the dialler with the number filled in. Sakhi never places a call.
  */
 @Composable
-internal fun EmergencyCallButtons(
+internal fun HelplineCallButtons(
     onCall: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val services = listOf(
-        EmergencyService(
+        HelplineService(
             number = "112",
             name = stringResource(R.string.care_swm_help_police),
             spokenName = stringResource(R.string.care_swm_help_police),
             icon = Icons.Filled.Security,
             color = PoliceBlue,
         ),
-        EmergencyService(
+        HelplineService(
             number = "108",
             name = stringResource(R.string.care_swm_help_ambulance),
             spokenName = stringResource(R.string.care_swm_help_ambulance),
             icon = Icons.Filled.LocalHospital,
             color = AmbulanceRed,
         ),
-        EmergencyService(
+        HelplineService(
             number = "181",
             name = stringResource(R.string.care_swm_help_women),
             spokenName = stringResource(R.string.care_swm_women_helpline),
@@ -92,7 +92,7 @@ internal fun EmergencyCallButtons(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         services.forEach { service ->
-            EmergencyCallButton(
+            HelplineCallButton(
                 service = service,
                 onClick = { onCall(service.number) },
                 modifier = Modifier.weight(1f),
@@ -101,7 +101,7 @@ internal fun EmergencyCallButtons(
     }
 }
 
-internal data class EmergencyService(
+internal data class HelplineService(
     val number: String,
     val name: String,
     val spokenName: String,
@@ -110,13 +110,13 @@ internal data class EmergencyService(
 )
 
 @Composable
-private fun EmergencyCallButton(
-    service: EmergencyService,
+private fun HelplineCallButton(
+    service: HelplineService,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val callDescription = stringResource(R.string.care_swm_help_call_a11y, service.spokenName, service.number)
-    // iOS's `EmergencyCallButton`: a white card, the glyph on a disc of its own colour, the
+    // iOS's `HelplineCallButton`: a white card, the glyph on a disc of its own colour, the
     // number and then the name, centred. The Material `surfaceVariant` this used was grey.
     Surface(
         onClick = onClick,

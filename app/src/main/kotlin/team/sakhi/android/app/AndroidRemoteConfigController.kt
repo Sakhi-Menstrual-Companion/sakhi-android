@@ -30,8 +30,7 @@ import team.sakhi.session.SessionManager
  *  - signing in or out, because that changes who the caller is
  *
  * There is no polling. A flag flipping under a woman mid-flow -- a screen vanishing while
- * she is using it -- is worse than her getting the change a few minutes later, and one of
- * the things behind these flags is Emergency Assistance.
+ * she is using it -- is worse than her getting the change a few minutes later.
  */
 class AndroidRemoteConfigController(
     private val application: Application,

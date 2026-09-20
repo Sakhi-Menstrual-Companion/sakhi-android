@@ -128,8 +128,7 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
          * care and cycle push now renders the same generic line, so they share one id and
          * collapse into a single "something is waiting" row instead of stacking up as a
          * column of identical notifications, which would leak volume even though it no
-         * longer leaks content. The two emergency cases keep their own ids: those must
-         * never replace one another, and an SOS must never be replaced by anything.
+         * longer leaks content.
          */
         val notificationId: Int,
         /** Walk notifications go on their own high-importance channel; see StayWithMeNotifications. */
@@ -138,7 +137,7 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
     )
 
     /**
-     * Everything except Emergency Assistance renders as the same generic line. See the
+     * Care, cycle, and removed-feature pushes render as the same generic line. See the
      * comment on `platform_push_care_update` in strings.xml for why the per-type copy
      * that used to live here was removed: it put the partner's name and the health fact
      * itself on the lock screen, from a payload the server had deliberately sent silent.
@@ -155,26 +154,13 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
         is SakhiNotification.LogRequestResponse,
         is SakhiNotification.NewCareMessage,
         is SakhiNotification.PeriodReminder,
+        is SakhiNotification.Sos,
+        is SakhiNotification.EmergencyRequestReceived,
         SakhiNotification.LoggingReminder,
         -> PushPresentation(
             title = context.getString(R.string.platform_notification_app_name),
             body = context.getString(R.string.platform_push_care_update),
             notificationId = CARE_UPDATE_NOTIFICATION_ID,
-        )
-        is SakhiNotification.Sos -> PushPresentation(
-            title = context.getString(R.string.platform_notification_app_name),
-            body = context.getString(R.string.platform_push_sos),
-            notificationId = SOS_NOTIFICATION_ID,
-        )
-        // The one deliberate exception to the generic rule. Safe on a lock screen because
-        // the wording names nobody and locates nobody: she learns the spot after she
-        // accepts, not before.
-        is SakhiNotification.EmergencyRequestReceived -> PushPresentation(
-            title = context.getString(R.string.platform_push_emergency_nearby_title),
-            body = context.getString(R.string.platform_push_emergency_nearby_body),
-            // Keyed on the request so two women asking at once produce two rows rather
-            // than one silently replacing the other.
-            notificationId = notification.requestId.hashCode(),
         )
         // Sent as a visible FCM alert, which the system draws itself while the app is in the
         // background. In the foreground nothing is drawn, exactly as before this type had a
@@ -242,8 +228,6 @@ class SakhiFirebaseMessagingService : FirebaseMessagingService() {
 
         /** Shared by every generic care/cycle push so they collapse into one row. */
         private const val CARE_UPDATE_NOTIFICATION_ID = 1001
-        private const val SOS_NOTIFICATION_ID = 1002
-
         internal suspend fun cacheAndMaybeRegisterToken(
             token: String,
             kvStore: PlatformKeyValueStore,

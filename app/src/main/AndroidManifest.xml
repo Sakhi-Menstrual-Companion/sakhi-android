@@ -12,9 +12,8 @@
     <uses-permission android:name="android.permission.health.READ_STEPS" />
     <uses-permission android:name="android.permission.health.READ_BASAL_BODY_TEMPERATURE" />
     <!-- Nearby Places (AI Chat) — only used when the user asks about nearby
-         safe places; matches iOS's location usage scope (emergency SOS +
-         safe-places search), not continuous tracking. Coarse is sufficient
-         for a 2km nearby-search radius. -->
+         safe places, not continuous tracking. Coarse is sufficient for a 2km
+         nearby-search radius. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <!-- Invite-a-Care-Partner onboarding flow (InviteContactAccess/InvitePickContact

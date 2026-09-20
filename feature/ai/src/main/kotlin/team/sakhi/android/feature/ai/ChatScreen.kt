@@ -182,9 +182,6 @@ import team.sakhi.android.designsystem.sakhiSecondaryLabel
 fun ChatScreen(
     viewModel: ChatViewModel = koinViewModel(),
     onClose: () -> Unit = {},
-    // The map button opens Emergency Assistance, matching iOS's `SakhiAIInputBar`. The
-    // host owns the navigation so this module does not have to depend on :feature:emergency.
-    onOpenEmergency: () -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val messages = uiState.displayMessages
@@ -253,24 +250,9 @@ fun ChatScreen(
         viewModel.consumeSharePdf()
     }
 
-    // The header's Nearby capsule is hidden (see ChatHeader), so its count and coordinate
-    // are no longer read here. The refresh itself stays: it is what keeps the count warm for
-    // Emergency Assistance, and it mirrors iOS's `await nearbyCount.refreshIfAlreadyAllowed()`
-    // in the chat's `.task`, a no-op unless location is already granted, so it cannot raise a
-    // prompt from here.
-    LaunchedEffect(Unit) { viewModel.refreshNearbyCountIfAlreadyAllowed() }
-
     // No location permission request from this screen, matching iOS.
-    //
-    // iOS only ever calls `nearbyCount.refreshIfAlreadyAllowed()` here and says why on the
-    // line itself: "No-op unless location is already granted, so this cannot raise a
-    // permission prompt from the chat screen." Android was launching an
-    // ACCESS_COARSE_LOCATION request straight out of the chat, which is a permission dialog
-    // iOS never shows here — a woman opening the AI chat to ask a question was being asked
-    // for her location before she had typed anything.
-    //
-    // If nearby places are ever needed again, the permission must be asked for where the
-    // user chose that feature, not on entry to chat.
+    // Nearby places ask only when the user sends a location-intent message, not on entry to
+    // chat.
 
     // What Sakhi is, once, before the first message. The same template Care and Stay With
     // Me open on. Gated on a flag kept on this device, so it shows once and then never
@@ -386,7 +368,6 @@ fun ChatScreen(
                             isLocked = uiState.reportSession != null,
                             onTextChanged = viewModel::onInputChanged,
                             onSend = viewModel::sendCurrentMessage,
-                            onOpenEmergency = onOpenEmergency,
                         )
                     },
                 )
@@ -922,15 +903,6 @@ private fun ChatHeader(
                 }
             }
 
-            // A close button, NOT iOS's nearby-Sakhis capsule.
-            //
-            // iOS puts `nearbySakhiButton` here and relies on the sheet's grabber to close
-            // (`headerBar` is `[identity block] Spacer nearbySakhiButton`). Karan's call on
-            // 2026-09-12 was to hide the capsule here and give this corner an X instead.
-            //
-            // The capsule itself is NOT deleted: `NearbySakhiButton` still exists and is
-            // still the way into Emergency Assistance from elsewhere. Only this one
-            // placement is gone, so putting it back is a matter of restoring this call.
             CloseButton(onClick = onClose)
         }
 
@@ -1608,7 +1580,6 @@ private fun ChatInputBar(
     isLocked: Boolean,
     onTextChanged: (String) -> Unit,
     onSend: () -> Unit,
-    onOpenEmergency: () -> Unit,
 ) {
     val placeholders = if (isPartnerMode) chatPartnerPlaceholders else chatPlaceholders
     val focusedPlaceholder = stringResource(
@@ -1669,17 +1640,6 @@ private fun ChatInputBar(
         // iOS `HStack(alignment: .bottom, spacing: DS.Spacing.s)` = 12, not 8.
         horizontalArrangement = Arrangement.spacedBy(SakhiSpacing.space3),
     ) {
-        // No Emergency / location control here, because iOS has none.
-        //
-        // Android carried an `Icons.Filled.Place` IconButton opening Emergency Assistance,
-        // with a comment claiming iOS "puts the same control in the same place
-        // (`SakhiAIInputBar`'s `mappin.circle.fill`)". That is not so: iOS's
-        // `SakhiAIInputBar.swift` contains a text field and a send button and nothing else —
-        // it has no `mappin`, no Place icon and no Emergency entry point anywhere in the
-        // file. On iOS, Emergency is reached from the header, not the input bar.
-        //
-        // Do not add it back here without checking the iOS file first.
-
         // iOS builds this as a ZStack over a RoundedRectangle, not a Material TextField.
         // That difference is the whole size problem: Material's `TextField` carries a 56dp
         // minimum height and its own internal padding, so the field towered over the 36dp

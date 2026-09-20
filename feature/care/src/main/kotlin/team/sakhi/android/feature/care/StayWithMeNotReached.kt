@@ -194,7 +194,7 @@ internal fun StayWithMeNotReachedScreen(
                         modifier = Modifier.padding(start = 4.dp),
                     )
                     Spacer(Modifier.height(10.dp))
-                    EmergencyCallButtons(onCall = { number -> dial(context, number) })
+                    HelplineCallButtons(onCall = { number -> dial(context, number) })
                     Spacer(Modifier.height(18.dp))
                     Text(
                         text = stringResource(R.string.care_swm_alarm_disclaimer),

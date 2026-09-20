@@ -15,7 +15,6 @@ import team.sakhi.android.feature.ai.aiFeatureModule
 import team.sakhi.android.feature.auth.authFeatureModule
 import team.sakhi.android.feature.calendar.calendarFeatureModule
 import team.sakhi.android.feature.care.careFeatureModule
-import team.sakhi.android.feature.emergency.emergencyFeatureModule
 import team.sakhi.android.feature.home.homeFeatureModule
 import team.sakhi.android.feature.logging.loggingFeatureModule
 import team.sakhi.android.feature.onboarding.onboardingFeatureModule
@@ -80,8 +79,8 @@ class SakhiApplication : Application() {
 
         // Who this app is, for Google's application-restricted Maps keys. The Places web
         // service refuses such a key outright unless the request carries `X-Android-Package`
-        // and `X-Android-Cert`, which is why Emergency Assistance's safe-places list was
-        // empty on every build while the map beside it drew fine off the same key.
+        // and `X-Android-Cert`, so send the app identity with places requests as well as
+        // the map SDK calls.
         // Read off the installed package rather than a build constant, so debug and release
         // each send their own signature and neither can go stale.
         BuildConfigProvider.APP_PACKAGE_NAME = packageName
@@ -102,7 +101,6 @@ class SakhiApplication : Application() {
                 calendarFeatureModule,
                 loggingFeatureModule,
                 careFeatureModule,
-                emergencyFeatureModule,
                 aiFeatureModule,
                 reportsFeatureModule,
                 recommendationsFeatureModule,

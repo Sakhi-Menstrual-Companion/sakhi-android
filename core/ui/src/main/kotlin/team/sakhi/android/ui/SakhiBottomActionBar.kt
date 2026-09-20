@@ -132,9 +132,8 @@ fun SakhiBottomActionBar(
      * Replaces the calendar icon in the leading slot.
      *
      * iOS declares this slot as `@ViewBuilder let calendarButton`, defaulting to
-     * `EmptyView()`, and the calendar sheet fills it with `HomeNearbyButton` -- the little
-     * live map that is the way into Emergency Assistance. Android had a hardcoded calendar
-     * icon there and no way to reach Emergency from the bar at all.
+     * `EmptyView()`, and the calendar sheet fills it with the same leading action Home
+     * uses for Stay With Me. Android had a hardcoded calendar icon there.
      */
     leadingSlot: (@Composable () -> Unit)? = null,
     /**

@@ -1437,17 +1437,6 @@
 
     <issue
         id="UnusedResources"
-        message="The resource `R.string.chat_open_emergency` appears to be unused"
-        errorLine1="    &lt;string name=&quot;chat_open_emergency&quot;>Ask a Sakhi nearby for help&lt;/string>"
-        errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="../feature/ai/src/main/res/values/strings.xml"
-            line="11"
-            column="13"/>
-    </issue>
-
-    <issue
-        id="UnusedResources"
         message="The resource `R.string.recommendations_refresh` appears to be unused"
         errorLine1="    &lt;string name=&quot;recommendations_refresh&quot;>Refresh&lt;/string>"
         errorLine2="            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
@@ -1939,17 +1928,6 @@
             file="../feature/profile/src/main/res/values/strings.xml"
             line="885"
             column="13"/>
-    </issue>
-
-    <issue
-        id="TypographyDashes"
-        message="Replace &quot;--&quot; with an &quot;em dash&quot; character (—, &amp;#8212;) ?"
-        errorLine1="    &lt;string name=&quot;platform_push_sos&quot;>Emergency alert -- tap to open&lt;/string>"
-        errorLine2="                                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~">
-        <location
-            file="src/main/res/values/strings.xml"
-            line="22"
-            column="38"/>
     </issue>
 
     <issue

@@ -36,7 +36,6 @@ import team.sakhi.android.platform.AndroidLocationProvider
 import team.sakhi.android.platform.AndroidWidgetSnapshotManager
 import team.sakhi.android.ui.ToastManager
 import team.sakhi.android.platform.DeviceLocation
-import team.sakhi.emergency.EmergencyStore
 import team.sakhi.localdb.SakhiPhaseALocalStore
 import team.sakhi.localdb.SharedLocalRecordCodec
 import team.sakhi.models.AICardType
@@ -214,10 +213,6 @@ class ChatViewModelTest {
         locationProvider: AndroidLocationProvider = mockk {
             every { hasPermission() } returns false
         },
-        // emergencyStore was added to ChatViewModel when NearbySakhiButton landed, and
-        // this factory was never updated to match. None of these tests exercise the
-        // emergency path, so a relaxed mock is enough.
-        emergencyStore: EmergencyStore = mockk(relaxed = true),
         hapticManager: AndroidHapticManager = mockk(relaxed = true),
         widgetSnapshotManager: AndroidWidgetSnapshotManager = mockk(relaxed = true),
         localStore: SakhiPhaseALocalStore = mockk {
@@ -238,7 +233,6 @@ class ChatViewModelTest {
         reportPdfExporter,
         safePlaceRanker,
         locationProvider,
-        emergencyStore,
         hapticManager,
         widgetSnapshotManager,
         localStore,

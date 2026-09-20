@@ -43,7 +43,6 @@ import androidx.compose.material.icons.rounded.Mail
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.NotificationsNone
 import androidx.compose.material.icons.rounded.People
-import androidx.compose.material.icons.rounded.VolunteerActivism
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Place
@@ -77,7 +76,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Date
-import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.AppleSystemColors
 import team.sakhi.android.designsystem.SakhiSpacing
@@ -536,15 +534,9 @@ private fun rowCopy(kind: SakhiNotification): RowCopy {
             stringResource(R.string.inbox_care_message_title, name(kind.senderName)),
             stringResource(R.string.inbox_care_message_body),
         )
-        is SakhiNotification.Sos -> RowCopy(
-            stringResource(R.string.inbox_sos_title),
-            stringResource(R.string.inbox_sos_body),
-        )
-        is SakhiNotification.EmergencyRequestReceived -> RowCopy(
-            stringResource(R.string.inbox_nearby_title),
-            kind.distanceBucketMeters?.let { stringResource(R.string.inbox_nearby_body_distance, formatDistance(it)) }
-                ?: stringResource(R.string.inbox_nearby_body),
-        )
+        is SakhiNotification.Sos,
+        is SakhiNotification.EmergencyRequestReceived,
+        -> RowCopy(stringResource(R.string.inbox_generic_title), stringResource(R.string.inbox_generic_body))
         is SakhiNotification.FeatureAvailable -> RowCopy(
             if (kind.feature.contains("ai", ignoreCase = true)) {
                 stringResource(R.string.inbox_feature_ai_title)
@@ -608,8 +600,9 @@ private fun rowLook(kind: SakhiNotification): RowLook {
             RowLook(Icons.Rounded.Info, AppleSystemColors.indigo)
         }
         is SakhiNotification.NewCareMessage -> RowLook(Icons.Rounded.ChatBubble, pink)
-        is SakhiNotification.Sos -> RowLook(Icons.Rounded.Warning, AppleSystemColors.red)
-        is SakhiNotification.EmergencyRequestReceived -> RowLook(Icons.Rounded.VolunteerActivism, AppleSystemColors.orange)
+        is SakhiNotification.Sos,
+        is SakhiNotification.EmergencyRequestReceived,
+        -> RowLook(Icons.Rounded.Notifications, pink)
         is SakhiNotification.FeatureAvailable -> RowLook(Icons.Rounded.AutoAwesome, AppleSystemColors.indigo)
         is SakhiNotification.StayWithMeStarted,
         is SakhiNotification.StayWithMeExtended,
@@ -639,14 +632,6 @@ private fun formatTime(epochMillis: Long): String {
     val context = LocalContext.current
     return remember(epochMillis) { DateFormat.getTimeFormat(context).format(Date(epochMillis)) }
 }
-
-private fun formatDistance(meters: Int): String =
-    if (meters >= 1000) {
-        val km = meters / 1000.0
-        if (km % 1.0 == 0.0) "${km.toInt()} km" else String.format(Locale.getDefault(), "%.1f km", km)
-    } else {
-        "$meters m"
-    }
 
 private val CardRadius = 16.dp
 private val IconSize = 40.dp

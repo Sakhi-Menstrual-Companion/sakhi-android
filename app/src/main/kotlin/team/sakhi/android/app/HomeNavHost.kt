@@ -35,7 +35,6 @@ import team.sakhi.android.platform.StayWithMeAskLink
 import team.sakhi.android.ui.SakhiModalSheet
 import team.sakhi.android.ui.SheetSurface
 import team.sakhi.android.feature.ai.ChatScreen
-import team.sakhi.android.feature.emergency.EmergencyFlowScreen
 import team.sakhi.android.feature.calendar.CalendarScreen
 import team.sakhi.android.feature.care.CareScreen
 import team.sakhi.android.feature.care.StayWithMeAskLayer
@@ -95,21 +94,11 @@ private sealed interface HomeOverlaySheet {
     data object Chat : HomeOverlaySheet
     /** The in-app inbox behind Home's bell. Also `sakhi://notifications`. */
     data object Notifications : HomeOverlaySheet
-    // Emergency Assistance. `deepLinkRequestId` is set when arriving from a
-    // sakhi://emergency/{id} link or an SOS notification, so the flow restores that
-    // session instead of starting a fresh request.
-    data class Emergency(
-        val deepLinkRequestId: String? = null,
-        // True when arriving from a nearby-request push: land straight on the responder
-        // inbox rather than on "what do you need", because she was asked to help, not
-        // asked what she needs.
-        val openResponderInbox: Boolean = false,
-    ) : HomeOverlaySheet
     // Non-null when opened for a specific date other than today -- e.g. Calendar's
     // own "Log" button/quick-log menu, matching iOS's real per-date `calendarLogVM`.
     data class Logging(val initialDate: LocalDate? = null) : HomeOverlaySheet
     data class Care(val prefillInviteCode: String? = null) : HomeOverlaySheet
-    /** A live Stay With Me walk, full screen like Emergency. Also `sakhi://care/stay/{id}`. */
+    /** A live Stay With Me walk. Also `sakhi://care/stay/{id}`. */
     data object StayWithMe : HomeOverlaySheet
 
     /** Her person's Stay With Me while she is not on a ride: the map and the panel where they ask her. */
@@ -233,16 +222,10 @@ fun HomeNavHost() {
             is SakhiDeepLink.OpenReport -> activeOverlaySheet = HomeOverlaySheet.Profile(initialScreen = ProfileSheetScreen.Reports)
             is SakhiDeepLink.OpenAIChat -> activeOverlaySheet = HomeOverlaySheet.Chat
             is SakhiDeepLink.OpenProfile -> activeOverlaySheet = HomeOverlaySheet.Profile()
-            // Emergency Assistance now exists on Android, so this routes for real. The
-            // session id comes from sakhi://emergency/{id} or the SOS notification that
-            // SakhiFirebaseMessagingService turns into that same link; an empty one is
-            // left to open a fresh request rather than trying to restore nothing.
-            is SakhiDeepLink.OpenEmergency ->
-                activeOverlaySheet = HomeOverlaySheet.Emergency(
-                    deepLinkRequestId = link.sessionId.ifBlank { null },
-                )
-            SakhiDeepLink.OpenEmergencyResponderInbox ->
-                activeOverlaySheet = HomeOverlaySheet.Emergency(openResponderInbox = true)
+            // Emergency Assistance has been removed. Old links and pushes now only open the app.
+            is SakhiDeepLink.OpenEmergency,
+            SakhiDeepLink.OpenEmergencyResponderInbox,
+            -> Unit
             is SakhiDeepLink.OpenNotifications -> {
                 // Sample rows, for checking the design on a phone. Debug builds only.
                 if (link.demo && BuildConfig.DEBUG) inboxStore.showDemo()
@@ -306,11 +289,6 @@ fun HomeNavHost() {
     ) { expanded, setExpanded ->
         CalendarScreen(
             onAskSakhi = { presentOverlaySheet(HomeOverlaySheet.Chat) },
-            // The nearby button in the calendar's bottom bar, matching iOS's
-            // `HomeCalendarSheet` -> `HomeNearbyButton` -> `.fullScreenCover`.
-            onOpenEmergency = { openInbox ->
-                presentOverlaySheet(HomeOverlaySheet.Emergency(openResponderInbox = openInbox))
-            },
             onOpenCare = openCare,
             onOpenWalk = openWalk,
             onOpenStayAsk = openStayAsk,
@@ -330,32 +308,8 @@ fun HomeNavHost() {
         )
     }
 
-    // Emergency Assistance is FULL SCREEN, not a sheet.
-    //
-    // Both of iOS's presentation sites use `.fullScreenCover` -- `RootView` for the deep
-    // link and SOS notification, and `SakhiAIChatView` for the Nearby button. Routing it
-    // through the shared modal-sheet lane left Home visible above it and gave it a sheet's
-    // rounded top, which is a different presentation from the one iOS ships. It also owns
-    // its own map-plus-sheet layout internally (`BottomSheetScaffold`), exactly as iOS's
-    // `EmergencyFlowView` owns its map and `EmergencySheetContent`; that inner sheet is the
-    // one that is meant to look like a sheet, not the screen containing it.
-    (activeOverlaySheet as? HomeOverlaySheet.Emergency)?.let { emergency ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            FeatureAccessGate(
-                feature = AppFeature.EMERGENCY_ASSISTANCE,
-                onBack = ::dismissOverlaySheet,
-            ) {
-                EmergencyFlowScreen(
-                    onClose = ::dismissOverlaySheet,
-                    deepLinkRequestId = emergency.deepLinkRequestId,
-                    openResponderInbox = emergency.openResponderInbox,
-                )
-            }
-        }
-    }
-
-    // A live walk is full screen too, for the same reason Emergency is: the map is the
-    // screen, not a pane inside a sheet over Home. Its own layout carries the panel.
+    // A live walk is full screen: the map is the screen, not a pane inside a sheet over
+    // Home. Its own layout carries the panel.
     if (activeOverlaySheet == HomeOverlaySheet.StayWithMe) {
         Box(modifier = Modifier.fillMaxSize()) {
             StayWithMeLiveLayer(
@@ -383,7 +337,6 @@ fun HomeNavHost() {
     activeOverlaySheet
         ?.takeIf {
             it !is HomeOverlaySheet.Calendar &&
-                it !is HomeOverlaySheet.Emergency &&
                 it != HomeOverlaySheet.StayWithMe &&
                 it != HomeOverlaySheet.StayWithMeAsk
         }
@@ -422,7 +375,6 @@ fun HomeNavHost() {
             ) { targetSheet ->
                 when (targetSheet) {
                     // Handled above as full-screen layers, never in this sheet host.
-                    is HomeOverlaySheet.Emergency -> Unit
                     HomeOverlaySheet.StayWithMe -> Unit
                     HomeOverlaySheet.StayWithMeAsk -> Unit
                     is HomeOverlaySheet.Profile -> ProfileOverlaySheet(
@@ -468,7 +420,6 @@ fun HomeNavHost() {
                     ) {
                         ChatScreen(
                             onClose = ::dismissOverlaySheet,
-                            onOpenEmergency = { activeOverlaySheet = HomeOverlaySheet.Emergency() },
                         )
                     }
                     is HomeOverlaySheet.Logging -> LoggingSheet(

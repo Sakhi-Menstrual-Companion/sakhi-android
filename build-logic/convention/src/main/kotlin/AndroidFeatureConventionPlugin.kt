@@ -18,7 +18,7 @@ import team.sakhi.buildlogic.configureLibraryLint
  * modules before this plugin existed, so declaring them here removes real duplication rather
  * than inventing a shared surface. Deliberately NOT included:
  *
- *  - `:core:platform` — in 10 of 11, so `:feature:emergency` and friends still ask for it.
+ *  - `:core:platform` — used by most features, but still declared only where needed.
  *  - `kermit` — only 3 of 11 actually log.
  *  - roborazzi / screenshot testing — only 4 of 11 opted in, and it is a per-module choice.
  *

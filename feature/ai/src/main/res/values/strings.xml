@@ -8,7 +8,6 @@
     <string name="chat_title">Sakhi</string>
     <string name="chat_online">online</string>
     <string name="chat_open_nearby_places">Open nearby places</string>
-    <string name="chat_open_emergency">Ask a Sakhi nearby for help</string>
     <string name="chat_header_accessibility_label">Sakhi AI chat</string>
     <string name="chat_header_accessibility_online">Online</string>
     <string name="chat_header_accessibility_last_seen_today_at">Last seen today at %1$s</string>

@@ -245,7 +245,9 @@ fun RootNavHost() {
                 forcedOnboardingDeepLink = ForcedOnboardingDeepLink(flowId = "newUser")
                 AndroidDeepLinkManager.consume(pending.id)
             }
-            is SakhiDeepLink.OpenEmergency -> AndroidDeepLinkManager.consume(pending.id)
+            is SakhiDeepLink.OpenEmergency,
+            SakhiDeepLink.OpenEmergencyResponderInbox,
+            -> AndroidDeepLinkManager.consume(pending.id)
             SakhiDeepLink.Unknown -> AndroidDeepLinkManager.consume(pending.id)
             else -> Unit
         }
@@ -637,4 +639,3 @@ private fun SplashPlaceholder(
         phase = lastPhase,
     )
 }
-

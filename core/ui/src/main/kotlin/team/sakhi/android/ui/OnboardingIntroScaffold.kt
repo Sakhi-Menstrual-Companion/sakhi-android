@@ -32,12 +32,11 @@ import team.sakhi.android.designsystem.rememberSakhiFlingBehavior
 import team.sakhi.android.designsystem.sakhiSecondaryLabel
 
 /**
- * The introduction page used across the app: account onboarding's universal intro, and
- * Emergency Assistance's three-page intro.
+ * The introduction page used across the app.
  *
- * These lived privately inside `feature:onboarding` until Emergency needed the same
- * screen. Rather than transcribe them a second time they moved here, so there is one
- * definition of what an intro page looks like and the two features cannot drift apart.
+ * These lived privately inside `feature:onboarding` until another onboarding-shaped flow
+ * needed the same screen. Rather than transcribe them a second time they moved here, so
+ * there is one definition of what an intro page looks like.
  *
  * Layout, top to bottom: a large title, an optional line of subtitle, a scrolling
  * content block, and [SakhiFooter] pinned at the bottom. The footer is what keeps the

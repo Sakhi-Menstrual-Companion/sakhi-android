@@ -9,8 +9,6 @@ android {
 
 dependencies {
     implementation(project(":core:platform"))
-    // the bottom bar's leading slot is the Emergency entry point.
-    implementation(project(":feature:emergency"))
     // The bottom bar's leading slot is Care Mode, and it draws what is live for her walk.
     implementation(project(":feature:care"))
     implementation(project(":feature:logging"))

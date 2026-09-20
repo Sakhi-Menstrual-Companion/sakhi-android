@@ -1,0 +1,92 @@
+Emergency Assistance removal report
+
+Deleted files
+- feature/emergency/build.gradle.kts
+- feature/emergency/src/main/AndroidManifest.xml
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyAskButton.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyAvatarCatalog.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyComponents.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyFeatureModule.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyFeedbackStep.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyFlowScreen.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyIncomingRequests.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyIso8601.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyMap.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyMyProfileSheet.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyNearbyPlaces.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyNearbySakhisStep.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyOnboarding.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyPinRenderer.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyPlaceDetail.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyPlaceStyle.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyProfileDetailSheet.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyRequestSteps.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyRequestedProfile.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencySessionStep.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyUserMarker.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyViewModel.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/EmergencyWaitingStep.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/HomeEmergencyButton.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/NearbySakhiButton.kt
+- feature/emergency/src/main/kotlin/team/sakhi/android/feature/emergency/SakhiAvatarPreference.kt
+- feature/emergency/src/main/res/values/strings.xml
+- feature/emergency/src/test/kotlin/team/sakhi/android/feature/emergency/screenshot/EmergencyOnboardingParityTest.kt
+- feature/care/src/main/kotlin/team/sakhi/android/feature/care/EmergencyCallButtons.kt, renamed to HelplineCallButtons.kt for Stay With Me.
+
+Changed files and why
+- settings.gradle.kts: removed :feature:emergency from the included projects.
+- app/build.gradle.kts: removed the app dependency on :feature:emergency.
+- app/lint-baseline.xml: removed baseline entries for emergency resources that no longer exist.
+- app/src/main/AndroidManifest.xml: updated the coarse-location comment to describe nearby places only, not emergency SOS.
+- app/src/main/kotlin/team/sakhi/android/app/AndroidRemoteConfigController.kt: removed stale Emergency Assistance comment.
+- app/src/main/kotlin/team/sakhi/android/app/HomeNavHost.kt: removed Emergency overlay state, FeatureAccessGate, EmergencyFlowScreen presentation, Calendar and Chat entry points; old emergency deep links now only open the app.
+- app/src/main/kotlin/team/sakhi/android/app/RootNavHost.kt: consumes old emergency deep links while signed out so they do not remain pending.
+- app/src/main/kotlin/team/sakhi/android/app/SakhiApplication.kt: removed emergencyFeatureModule from Koin startup and updated stale Places comment.
+- build-logic/convention/src/main/kotlin/AndroidFeatureConventionPlugin.kt: removed stale :feature:emergency comment.
+- core/platform/src/main/kotlin/team/sakhi/android/platform/AndroidLocationProvider.kt: removed stale Emergency helper wording from a geocoding comment.
+- core/platform/src/main/kotlin/team/sakhi/android/platform/SakhiFirebaseMessagingService.kt: changed SOS and EmergencyRequestReceived pushes to the generic Sakhi notification presentation.
+- core/platform/src/main/res/values/strings.xml: removed SOS and nearby-emergency push strings; updated the generic push comment.
+- core/ui/src/main/kotlin/team/sakhi/android/ui/OnboardingIntroScaffold.kt: removed stale Emergency intro comment.
+- core/ui/src/main/kotlin/team/sakhi/android/ui/OnboardingShell.kt: removed stale Emergency intro comment.
+- core/ui/src/main/kotlin/team/sakhi/android/ui/SakhiBottomActionBar.kt: updated leading-slot comments to describe Stay With Me instead of Emergency.
+- feature/ai/build.gradle.kts: removed dependency on :feature:emergency.
+- feature/ai/src/main/kotlin/team/sakhi/android/feature/ai/AiFeatureModule.kt: stopped injecting EmergencyStore into ChatViewModel.
+- feature/ai/src/main/kotlin/team/sakhi/android/feature/ai/ChatScreen.kt: removed onOpenEmergency plumbing and stale nearby-Sakhis capsule comments; nearby places remain intact.
+- feature/ai/src/main/kotlin/team/sakhi/android/feature/ai/ChatViewModel.kt: removed EmergencyStore, nearbyAvailableCount, nearbyCoordinate and refreshNearbyCountIfAlreadyAllowed.
+- feature/ai/src/main/res/values/strings.xml: removed chat_open_emergency.
+- feature/ai/src/test/kotlin/team/sakhi/android/feature/ai/ChatViewModelTest.kt: updated the ViewModel factory after removing EmergencyStore.
+- feature/calendar/build.gradle.kts: removed dependency on :feature:emergency.
+- feature/calendar/src/main/kotlin/team/sakhi/android/feature/calendar/CalendarScreen.kt: removed onOpenEmergency and the hidden EmergencyStore/location nearby-count probe; Stay With Me leading button remains.
+- feature/calendar/src/test/kotlin/team/sakhi/android/feature/calendar/screenshot/CalendarScreenshotTest.kt: removed mocks used only by the deleted calendar emergency probe.
+- feature/care/build.gradle.kts: updated stale map dependency comment.
+- feature/care/src/main/kotlin/team/sakhi/android/feature/care/HelplineCallButtons.kt: renamed the Stay With Me helpline buttons from EmergencyCallButtons and renamed its internal service/button types.
+- feature/care/src/main/kotlin/team/sakhi/android/feature/care/StayWithMe.kt: updated call sites to HelplineCallButtons and removed stale Emergency Assistance comments.
+- feature/care/src/main/kotlin/team/sakhi/android/feature/care/StayWithMeLiveLayer.kt: removed stale Emergency Assistance comments.
+- feature/care/src/main/kotlin/team/sakhi/android/feature/care/StayWithMeNotReached.kt: updated call site to HelplineCallButtons.
+- feature/care/src/main/res/values/strings.xml: updated comment to reference HelplineCallButtons.
+- feature/home/src/main/kotlin/team/sakhi/android/feature/home/inbox/NotificationInboxScreen.kt: changed SOS and EmergencyRequestReceived inbox rows to generic rows and removed the emergency distance formatter.
+- feature/home/src/main/res/values/strings.xml: removed SOS and nearby-emergency inbox strings.
+- feature/profile/src/main/res/values/strings.xml: rewrote privacy, terms, safety, FAQ and credit copy away from helpers/emergency assistance and toward Stay With Me / Be Her Sakhi.
+- .codex-emergency-removal-report.txt: this report.
+
+SakhiCore
+- No SakhiCore change was needed.
+- /Users/karanpersonal/Documents/Sakhi/02-Platforms/00-Shared/SakhiCore was left untouched; `git status --short --branch` there reported `## master...origin/master`.
+
+Verification
+- Static checks run:
+  - `git diff --check` passed.
+  - Grep checks found no remaining source references to the Android emergency module, EmergencyFlowScreen, emergencyFeatureModule, EmergencyStore/emergencyStore, onOpenEmergency, EmergencyCallButtons, NearbySakhiButton, HomeEmergencyButton, or deleted emergency resources.
+- Required process check:
+  - `ps aux | grep -i gradle | grep -v grep` could not run in this sandbox: `operation not permitted`.
+  - `pgrep -fl '[gG]radle|GradleDaemon|java.*gradle'` also could not read the process list: `Cannot get process list`.
+- Compile attempts:
+  - `./gradlew :app:compileDebugKotlin` did not reach compilation. Gradle wrapper failed to create `/Users/karanpersonal/.gradle/wrapper/dists/gradle-8.7-all/aan3ydargesu18aqyqjwhr3pc/gradle-8.7-all.zip.lck`: `Operation not permitted`.
+  - `GRADLE_USER_HOME=/private/tmp/sakhi-gradle-home ./gradlew :app:compileDebugKotlin` did not reach compilation. The writable Gradle home needed to download Gradle and failed because network DNS for `services.gradle.org` is blocked.
+  - `GRADLE_USER_HOME=/private/tmp/sakhi-gradle-home GRADLE_RO_DEP_CACHE=/Users/karanpersonal/.gradle/caches /Users/karanpersonal/.gradle/wrapper/dists/gradle-8.7-all/aan3ydargesu18aqyqjwhr3pc/gradle-8.7/bin/gradle :app:compileDebugKotlin` did not reach compilation. Gradle failed with `java.net.SocketException: Operation not permitted`.
+
+Unfinished or uncertain
+- I could not verify compilation because the sandbox blocks the normal Gradle cache lock and also blocks network/socket access for a writable Gradle home. No test task was run.
+- I could not make the requested local commit because staging failed: `git add -A` could not create `.git/index.lock` (`Operation not permitted`). The workspace allows file edits, but `.git` is read-only in this sandbox.
+- Branch note: the session started on `karan/feat/emergency-home-signal`, but a read-only reflog check now shows an external checkout to `master` at `2026-09-20 16:59:53 +0530`. I did not run a checkout or branch switch before that. I tried to restore `karan/feat/emergency-home-signal` with `git switch karan/feat/emergency-home-signal`, but it failed for the same `.git/index.lock` permission reason.
+- Generated/untracked build output under feature/emergency/build was not touched; the tracked module source and Gradle inclusion were removed.

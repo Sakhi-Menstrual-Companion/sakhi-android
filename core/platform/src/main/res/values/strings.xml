@@ -20,15 +20,9 @@
          being opened. Android was rebuilding a visible notification from that same silent
          payload and putting the detail back on the lock screen.
 
-         Emergency Assistance below is the one deliberate exception, and its wording
-         identifies nobody and locates nobody. -->
+         Removed-feature pushes use the same generic wording too, so an old payload cannot
+         put stale product behavior back on the lock screen. -->
     <string name="platform_push_care_update">Something new is waiting for you in Sakhi</string>
-    <string name="platform_push_sos">Emergency alert -- tap to open</string>
-    <!-- Nearby-request push. Deliberately identifies nobody and locates nobody, so it is
-         safe on a lock screen. The detail lives behind the responder inbox, which is
-         authorised. -->
-    <string name="platform_push_emergency_nearby_title">Someone nearby needs help</string>
-    <string name="platform_push_emergency_nearby_body">A Sakhi close to you has asked for something. Can you help?</string>
     <string name="platform_health_connect_not_available">Health Connect is not available on this device.</string>
     <string name="platform_health_connect_not_supported">Health Connect is not supported on this device.</string>
     <string name="platform_health_connect_access_not_granted">Health Connect access was not granted.</string>

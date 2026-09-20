@@ -237,8 +237,7 @@ class AndroidLocationProvider private constructor(
     // prose version of either.
     //
     // The field-selection rules below are shared behaviour living in two places. Worth
-    // moving into SakhiCore alongside the other Emergency helpers, taking a small
-    // platform-supplied address struct.
+    // moving into SakhiCore with a small platform-supplied address struct.
 
     private var geocodedFor: DeviceLocation? = null
     private var lastArea: String? = null

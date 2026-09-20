@@ -206,11 +206,10 @@ dependencies {
     implementation(project(":feature:calendar"))
     implementation(project(":feature:logging"))
     implementation(project(":feature:care"))
-    implementation(project(":feature:emergency"))
     implementation(project(":feature:ai"))
     implementation(project(":feature:reports"))
     implementation(project(":feature:recommendations"))
-    // All 10 feature modules are now real and wired.
+    // All shipping feature modules are now real and wired.
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

@@ -21,11 +21,8 @@ import team.sakhi.android.designsystem.sakhiPageBackgroundBrush
  * header, and the shared [SakhiNavBar] carrying back or close.
  *
  * Extracted from `OnboardingFlowHost`, which is the definition of what these screens look
- * like. Emergency Assistance's own three-page intro used to re-declare the same Column by
- * hand, and had already drifted from it in ways Karan spotted on a device: no top
- * safe-area inset, so its close button sat roughly 24dp higher than every account
- * onboarding step's, and a white page under a white card instead of the pink ground the
- * rest of the flow has. Both flows now render through this, so that cannot happen again.
+ * like. Keeping this shared prevents onboarding-shaped flows from drifting in safe-area
+ * insets, nav placement, or the pink ground under the card.
  *
  * @param showChrome false for a step that owns its own header, or a full-screen loading
  *   state with no way back -- the top gap and nav bar are both suppressed together.

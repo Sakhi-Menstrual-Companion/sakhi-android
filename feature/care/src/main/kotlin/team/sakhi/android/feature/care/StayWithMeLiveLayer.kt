@@ -59,8 +59,8 @@ import team.sakhi.staywithme.StayWithMeSession
 /**
  * A live Stay With Me walk, full screen, for whichever side of it this phone is on.
  *
- * The host shows this instead of the Care sheet whenever a walk is live, the same way it
- * shows Emergency Assistance: the map is the screen, not a pane inside a sheet over Home.
+ * The host shows this instead of the Care sheet whenever a walk is live: the map is the
+ * screen, not a pane inside a sheet over Home.
  * Opened from Home's Care button, from the walk notification, or the moment she starts one.
  *
  * It closes itself when the walk ends, from either phone, so nobody is left looking at a
@@ -436,8 +436,7 @@ private fun StayWithMeIntro(
 
 /**
  * Setting off, full screen: the map is the screen, the way out and Contact Police over it,
- * and everything she fills in in the panel below. The same shape the live walk has and the
- * same one Emergency Assistance has (Karan, 2026-09-13), so the three read as one feature.
+ * and everything she fills in in the panel below. The same shape the live walk has.
  *
  * The panel rests at half the screen, as iOS's does (`EmergencySheetDetents.fraction`), so the
  * map keeps the top half. The button is pinned under it and the form scrolls above.
