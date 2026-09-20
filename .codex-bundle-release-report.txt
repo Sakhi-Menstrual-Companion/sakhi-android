@@ -1,0 +1,138 @@
+Sakhi Android bundleRelease dry-run report
+Generated: 2026-09-20
+Working tree: /Users/karanpersonal/Documents/Sakhi/02-Platforms/02-Android
+Branch: master
+
+Summary
+-------
+bundleRelease succeeded.
+
+Command run:
+./gradlew :app:bundleRelease
+
+Result:
+BUILD SUCCESSFUL in 3m 46s
+393 actionable tasks: 13 executed, 380 up-to-date
+
+No source fix was made and no commit was created. The only notable build warning was an
+R8 warning from an existing consumer ProGuard rule:
+/Users/karanpersonal/Documents/Sakhi/02-Platforms/00-Shared/SakhiCore/build/intermediates/consumer_proguard_dir/release/exportReleaseConsumerProguardFiles/lib0/proguard.txt:39:12-19:
+R8: The type "<1>$*" is used in a field rule. The characters in this type are legal
+for the JVM, but unlikely to originate from a source language. Maybe this is not the
+rule you are looking for.
+
+Gradle daemon handling
+----------------------
+Checked running Gradle processes with:
+ps aux | grep -i gradle
+
+Active Gradle daemons/workers were present, so I ran:
+./gradlew --stop
+
+Result:
+Stopping Daemon(s)
+2 Daemons stopped
+
+Bundle artifact
+---------------
+Path:
+/Users/karanpersonal/Documents/Sakhi/02-Platforms/02-Android/app/build/outputs/bundle/release/app-release.aab
+
+Size:
+31,620,886 bytes
+30M as reported by ls -lh
+
+Important signing caveat
+------------------------
+This is a release-type dry-run artifact, not an upload-ready release artifact.
+The real release keystore is still missing:
+/Users/karanpersonal/Documents/Sakhi/02-Platforms/02-Android/keystore/sakhi-release.jks
+
+The keystore directory itself is absent on this machine. Because app/build.gradle.kts
+falls back to the debug signing config when releaseKeystoreFile does not exist, this
+successful bundle is expected to be debug-signed.
+
+Still needed before this bundle could actually be uploaded:
+- Restore/provide the real upload keystore at keystore/sakhi-release.jks.
+- Provide the matching RELEASE_KEYSTORE_PASSWORD, RELEASE_KEYSTORE_ALIAS, and
+  RELEASE_KEY_PASSWORD secrets.
+- Rebuild :app:bundleRelease with the real keystore present.
+- Then perform the normal Play upload/release checks with that real signed bundle.
+
+16 KB native-library page-alignment check
+-----------------------------------------
+Command run from /Users/karanpersonal/Documents/Sakhi/01-HQ:
+python3 01-AI/tools/check_aab_alignment.py /Users/karanpersonal/Documents/Sakhi/02-Platforms/02-Android/app/build/outputs/bundle/release/app-release.aab
+
+Full output:
+app-release.aab
+
+library                                            arch      min PT_LOAD align
+---------------------------------------------------------------------------------
+base/lib/arm64-v8a/libandroidx.graphics.path.so    64-bit    16384
+base/lib/arm64-v8a/libsqliteJni.so                 64-bit    16384
+base/lib/arm64-v8a/libtensorflowlite_jni.so        64-bit    16384
+base/lib/armeabi-v7a/libandroidx.graphics.path.so  32-bit    16384
+base/lib/armeabi-v7a/libsqliteJni.so               32-bit    16384
+base/lib/armeabi-v7a/libtensorflowlite_jni.so      32-bit    16384
+base/lib/x86/libandroidx.graphics.path.so          32-bit    16384
+base/lib/x86/libsqliteJni.so                       32-bit    16384
+base/lib/x86/libtensorflowlite_jni.so              32-bit    16384
+base/lib/x86_64/libandroidx.graphics.path.so       64-bit    16384
+base/lib/x86_64/libsqliteJni.so                    64-bit    16384
+base/lib/x86_64/libtensorflowlite_jni.so           64-bit    16384
+
+PASS. Every 64-bit library is aligned to 16384.
+
+Bundle listing sanity check
+---------------------------
+Command run:
+unzip -l app/build/outputs/bundle/release/app-release.aab | head -40
+
+Output:
+Archive:  app/build/outputs/bundle/release/app-release.aab
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+       56  01-01-1981 01:01   BUNDLE-METADATA/com.android.tools.build.gradle/app-metadata.properties
+    28382  01-01-1981 01:01   BUNDLE-METADATA/com.android.tools.build.libraries/dependencies.pb
+104551083  01-01-1981 01:01   BUNDLE-METADATA/com.android.tools.build.obfuscation/proguard.map
+     7569  01-01-1981 01:01   BUNDLE-METADATA/com.android.tools.build.profiles/baseline.prof
+      952  01-01-1981 01:01   BUNDLE-METADATA/com.android.tools.build.profiles/baseline.profm
+      628  01-01-1981 01:01   BundleConfig.pb
+  8657016  01-01-1981 01:01   base/dex/classes.dex
+    10096  01-01-1981 01:01   base/lib/arm64-v8a/libandroidx.graphics.path.so
+  1932216  01-01-1981 01:01   base/lib/arm64-v8a/libsqliteJni.so
+  4475256  01-01-1981 01:01   base/lib/arm64-v8a/libtensorflowlite_jni.so
+     7252  01-01-1981 01:01   base/lib/armeabi-v7a/libandroidx.graphics.path.so
+  1516324  01-01-1981 01:01   base/lib/armeabi-v7a/libsqliteJni.so
+  2641764  01-01-1981 01:01   base/lib/armeabi-v7a/libtensorflowlite_jni.so
+     9284  01-01-1981 01:01   base/lib/x86/libandroidx.graphics.path.so
+  2040616  01-01-1981 01:01   base/lib/x86/libsqliteJni.so
+  6589064  01-01-1981 01:01   base/lib/x86/libtensorflowlite_jni.so
+    10760  01-01-1981 01:01   base/lib/x86_64/libandroidx.graphics.path.so
+  2030848  01-01-1981 01:01   base/lib/x86_64/libsqliteJni.so
+  6272848  01-01-1981 01:01   base/lib/x86_64/libtensorflowlite_jni.so
+    35180  01-01-1981 01:01   base/manifest/AndroidManifest.xml
+       85  01-01-1981 01:01   base/native.pb
+      230  01-01-1981 01:01   base/res/anim-v21/fragment_fast_out_extra_slow_in.xml
+      549  01-01-1981 01:01   base/res/anim/abc_fade_in.xml
+      549  01-01-1981 01:01   base/res/anim/abc_fade_out.xml
+     1458  01-01-1981 01:01   base/res/anim/abc_grow_fade_in_from_bottom.xml
+      650  01-01-1981 01:01   base/res/anim/abc_popup_enter.xml
+      650  01-01-1981 01:01   base/res/anim/abc_popup_exit.xml
+     1458  01-01-1981 01:01   base/res/anim/abc_shrink_fade_out_from_bottom.xml
+      555  01-01-1981 01:01   base/res/anim/abc_slide_in_bottom.xml
+      556  01-01-1981 01:01   base/res/anim/abc_slide_in_top.xml
+      555  01-01-1981 01:01   base/res/anim/abc_slide_out_bottom.xml
+      556  01-01-1981 01:01   base/res/anim/abc_slide_out_top.xml
+      536  01-01-1981 01:01   base/res/anim/abc_tooltip_enter.xml
+      536  01-01-1981 01:01   base/res/anim/abc_tooltip_exit.xml
+     2923  01-01-1981 01:01   base/res/anim/btn_checkbox_to_checked_box_inner_merged_animation.xml
+     5501  01-01-1981 01:01   base/res/anim/btn_checkbox_to_checked_box_outer_merged_animation.xml
+     2495  01-01-1981 01:01   base/res/anim/btn_checkbox_to_checked_icon_null_animation.xml
+
+Sanity-check note:
+The bundle listing looks structurally normal. It contains bundle metadata,
+BundleConfig.pb, base/dex/classes.dex, native libraries for the expected ABIs,
+base/manifest/AndroidManifest.xml, base/native.pb, and resources. Nothing in the
+first 40 entries looked obviously wrong.
