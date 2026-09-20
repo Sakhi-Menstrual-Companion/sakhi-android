@@ -76,6 +76,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Date
+import java.util.Locale
 import org.koin.androidx.compose.koinViewModel
 import team.sakhi.android.designsystem.AppleSystemColors
 import team.sakhi.android.designsystem.SakhiSpacing
