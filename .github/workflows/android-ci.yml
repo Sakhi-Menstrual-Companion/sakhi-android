@@ -80,7 +80,7 @@ jobs:
         # SakhiCore:1.0.0 from Maven Central. Pre-existing, unrelated to app correctness -
         # assembleDebug and test below are what this job is actually verifying. Filed as a
         # separate gap: 2026-09-20-Android-Parity-Release-Plan.md.
-        run: ./gradlew build -x assembleBenchmarkRelease -x testBenchmarkReleaseUnitTest -x lintBenchmarkRelease
+        run: ./gradlew build -x :app:mergeBenchmarkReleaseNativeLibs
 
       - name: Android unit tests
         working-directory: 02-Platforms/02-Android
