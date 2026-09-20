@@ -72,16 +72,16 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Gradle build
-        working-directory: 02-Platforms/02-Android
-        # Excludes the benchmark variant: it needs team.sakhi:SakhiCore published as a real
-        # Maven artifact for that build type, which the composite build here does not do
-        # (only debug/release get automatic substitution), so it fails trying to resolve
-        # SakhiCore:1.0.0 from Maven Central. Pre-existing, unrelated to app correctness -
-        # assembleDebug and test below are what this job is actually verifying. Filed as a
-        # separate gap: 2026-09-20-Android-Parity-Release-Plan.md.
-        run: ./gradlew build -x :app:mergeBenchmarkReleaseNativeLibs
-
+      # No generic `./gradlew build` step: `build` = `assemble` + `check` across every
+      # variant, including `benchmarkRelease`, and that variant's whole compile classpath
+      # can't resolve team.sakhi:SakhiCore (the composite build only substitutes it for
+      # debug/release, not benchmark) - tried excluding one benchmark task at a time
+      # (mergeBenchmarkReleaseNativeLibs, then minifyBenchmarkReleaseWithR8) and it kept
+      # surfacing the next one down the same broken classpath. `test` below only runs
+      # test tasks that actually exist (Gradle confirmed testBenchmarkReleaseUnitTest does
+      # not), so it's unaffected. assembleDebug and jvmTest give real compile/test coverage
+      # without ever touching the benchmark variant. Pre-existing gap, unrelated to app
+      # correctness - see 2026-09-20-Android-Parity-Release-Plan.md.
       - name: Android unit tests
         working-directory: 02-Platforms/02-Android
         run: ./gradlew test
