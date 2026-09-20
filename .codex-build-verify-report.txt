@@ -1,0 +1,52 @@
+Codex build verification report
+Date: 2026-09-20
+Repository: /Users/karanpersonal/Documents/Sakhi/02-Platforms/02-Android
+Branch: master
+
+Initial checks
+- Ran `git log --oneline -8`.
+  Recent history at start:
+  - caccf55 CI: drop the generic 'gradlew build' step, it only chased the benchmark gap
+  - ea53571 CI: fix the benchmark-exclusion task name
+  - 8338c41 CI: skip the benchmark variant in the generic build step
+  - ec6a99c Release 2.0.2, versionCode 7
+  - 36838cb Stage Play Store screenshots, reused from the iPhone store set
+  - 5078893 CI: check out SakhiCore and the prediction engine as siblings
+  - 60886b7 Remove Emergency Assistance from Android, keep Stay With Me as it is
+  - 26f9c57 Enable parallel sync for Gradle 9.4+
+- Ran `git status --short`; the tree was clean.
+- Ran `ps aux | grep -i '[g]radle'`; only idle Gradle/Kotlin daemon processes were visible, not an active build.
+- Ran `./gradlew --stop`; Gradle reported that one daemon was stopped.
+
+Build and test commands
+- `./gradlew :app:assembleDebug`
+  First run failed with a real compile error:
+  `feature/home/src/main/kotlin/team/sakhi/android/feature/home/inbox/NotificationInboxScreen.kt:625:58 Unresolved reference 'Locale'.`
+  This was not a SakhiCore/composite-build dependency-resolution issue.
+- `./gradlew :app:assembleDebug`
+  Rerun after the fix succeeded:
+  `BUILD SUCCESSFUL in 37s`
+  `351 actionable tasks: 24 executed, 327 up-to-date`
+- `./gradlew test`
+  Succeeded:
+  `BUILD SUCCESSFUL in 7m 35s`
+  `1045 actionable tasks: 329 executed, 56 from cache, 660 up-to-date`
+  The run emitted existing warnings, including Compose test API deprecations, Android API deprecations, KMM expect/actual beta warnings, and Gradle 9 compatibility deprecation notice. None failed the build.
+- `./gradlew :SakhiCore:jvmTest`
+  Succeeded:
+  `BUILD SUCCESSFUL in 1m`
+  `11 actionable tasks: 6 executed, 5 up-to-date`
+  The run emitted KMM expect/actual beta warnings only.
+
+Fix made
+- Added the missing `java.util.Locale` import to `NotificationInboxScreen.kt`.
+- Reason: Emergency Assistance removal/cleanup left the notification inbox date formatting code using `Locale.getDefault()` without importing `Locale`, causing debug compilation to fail.
+- This did not add Emergency Assistance code back; it only fixed the surviving inbox date formatting compile dependency.
+
+Commits created
+- 44f9240 Fix notification inbox date formatting compile
+
+Unresolved
+- No unresolved build or test failures remain from this verification.
+- The requested local verification answer is: yes, after commit 44f9240, `:app:assembleDebug`, `./gradlew test`, and `:SakhiCore:jvmTest` all pass locally with the real sibling SakhiCore composite build present.
+- I did not run plain `./gradlew build`, per instruction. No push to origin was performed. `.github/workflows/android-ci.yml` was not touched.
