@@ -34,8 +34,34 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
+      # settings.gradle.kts includes SakhiCore and the prediction engine as composite
+      # builds by relative path (../00-Shared/SakhiCore, ../00-Shared/02-Prediction-Engine),
+      # matching the sibling-folder layout every dev machine has under 02-Platforms/. A
+      # plain single-repo checkout leaves those paths missing and the build fails before
+      # touching a single Kotlin file. So all three repos are checked out side by side
+      # here, in the same tree shape, and every later step runs from inside 02-Android.
+      #
+      # REPO_CHECKOUT_TOKEN is Karan's own token (already scoped to these private repos),
+      # reused rather than a fresh deploy key. Read-only for this workflow either way
+      # (`permissions: contents: read` above).
+      - name: Checkout sakhi-android
         uses: actions/checkout@v4
+        with:
+          path: 02-Platforms/02-Android
+
+      - name: Checkout SakhiCore
+        uses: actions/checkout@v4
+        with:
+          repository: Sakhi-Menstrual-Companion/sakhi-core
+          token: ${{ secrets.REPO_CHECKOUT_TOKEN }}
+          path: 02-Platforms/00-Shared/SakhiCore
+
+      - name: Checkout prediction engine
+        uses: actions/checkout@v4
+        with:
+          repository: Sakhi-Menstrual-Companion/sakhi-prediction-engine
+          token: ${{ secrets.REPO_CHECKOUT_TOKEN }}
+          path: 02-Platforms/00-Shared/02-Prediction-Engine
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -47,15 +73,19 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
 
       - name: Gradle build
+        working-directory: 02-Platforms/02-Android
         run: ./gradlew build
 
       - name: Android unit tests
+        working-directory: 02-Platforms/02-Android
         run: ./gradlew test
 
       - name: Assemble debug app
+        working-directory: 02-Platforms/02-Android
         run: ./gradlew :app:assembleDebug
 
       - name: SakhiCore jvmTest
+        working-directory: 02-Platforms/02-Android
         run: |
           # Composite-build task name may need to be trued up once the scaffold lands.
           ./gradlew :SakhiCore:jvmTest
