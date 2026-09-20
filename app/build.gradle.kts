@@ -89,12 +89,14 @@ android {
         // versionName is the string the user reads. It changes only when the release means
         // something different: 2.0.1 to 2.0.2 for a fix, to 2.1.0 for a feature. The two
         // numbers are independent and are not meant to match each other.
-        versionCode = 6
-        // Both stores ship as 2.0.1 (Karan, 2026-09-19): the same number on iOS
-        // (`MARKETING_VERSION`) and here, so one launch reads as one version. versionCode 5
-        // went to Play's internal track on 2026-08-26 as "2.0.2"; the name is free-form and
-        // only the code has to rise, so 6 carries 2.0.1.
-        versionName = "2.0.1"
+        versionCode = 7
+        // This release carries real feature work past 2.0.1: Emergency Assistance removed
+        // (matching iOS's fcc5c081), Stay With Me's ask/decline flow, notification scoping,
+        // and the rest of what landed on `master` between 2026-09-17 and 2026-09-20 (see
+        // `01-HQ/05-Engineering/App-Store/2026-09-20-Android-Parity-Release-Plan.md`). That
+        // is a real change, not a republish, so the name moves too: 2.0.1 to 2.0.2, matching
+        // iOS's next tag. versionCode 6 carried 2.0.1.
+        versionName = "2.0.2"
         // Temporary fallback keeps clean checkouts buildable, but the new
         // Nearby Places map surfaces still need a Maps-authorized runtime key.
         manifestPlaceholders["googleMapsApiKey"] = secret(
