@@ -74,7 +74,13 @@ jobs:
 
       - name: Gradle build
         working-directory: 02-Platforms/02-Android
-        run: ./gradlew build
+        # Excludes the benchmark variant: it needs team.sakhi:SakhiCore published as a real
+        # Maven artifact for that build type, which the composite build here does not do
+        # (only debug/release get automatic substitution), so it fails trying to resolve
+        # SakhiCore:1.0.0 from Maven Central. Pre-existing, unrelated to app correctness -
+        # assembleDebug and test below are what this job is actually verifying. Filed as a
+        # separate gap: 2026-09-20-Android-Parity-Release-Plan.md.
+        run: ./gradlew build -x assembleBenchmarkRelease -x testBenchmarkReleaseUnitTest -x lintBenchmarkRelease
 
       - name: Android unit tests
         working-directory: 02-Platforms/02-Android
