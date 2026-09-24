@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -464,13 +463,14 @@ private fun SakhiCalendarDayCell(
         if (day.hasLogDetail) {
             Box(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
+                    // Measured from the middle of the cell, not its bottom edge, so the
+                    // dot keeps the same gap from the day whatever is drawn around it.
+                    .align(Alignment.Center)
                     // `offset` rather than padding: it moves where the dot DRAWS without
-                    // changing what the cell measures, so the extra clearance below the
-                    // today ring costs nothing in row height. Growing the cell instead
-                    // spread the grid and pushed the month's last week off the sheet.
-                    .offset(y = CalendarLogDotOffsetY)
-                    .padding(bottom = CalendarLogDotBottomInset)
+                    // changing what the cell measures, so the clearance below the ring
+                    // costs nothing in row height. Growing the cell instead spread the
+                    // grid and pushed the month's last week off the sheet.
+                    .offset(y = calendarLogDotOffset(clearingRing = day.isSelected))
                     .size(CalendarLogDotSize)
                     .background(
                         // Always the brand pink, including on a day she also logged a period
@@ -492,18 +492,36 @@ private data class SakhiCalendarWeekRows(
 
 // Back to the original height. Growing this to make room under the ring for the log dot
 // spread the rows apart and pushed the last week of the month off the bottom of the
-// sheet -- six rows multiply every dp added here. The dot's clearance comes from a
-// slightly smaller today ring instead, which costs no layout.
+// sheet -- six rows multiply every dp added here. The dot's clearance comes from
+// `calendarLogDotOffset`, which draws into the row gap and costs no layout.
 private val calendarCellHeight = SakhiSpacing.space10 + SakhiSpacing.space1 * 2
 private val CalendarDayFontSize = 15.sp
 /** The one predicted-period fill, past or future. Mirrors iOS's `DS.CalendarStyle`. */
 private const val PredictedPeriodFillAlpha = 0.16f
 
 private val CalendarLogDotSize = 4.dp
-private val CalendarLogDotBottomInset = 1.dp
-private val CalendarLogDotOffsetY = 8.dp
-/** iOS `DS.CalendarStyle.logDotGap`. */
-private val yearGridLogDotGap = 3.dp
+/** iOS `DS.CalendarStyle.logDotGap`. The same clear space in both grids. */
+private val CalendarLogDotGap = 3.dp
+
+/**
+ * Where the "she logged something" dot sits: [CalendarLogDotGap] below whatever is actually
+ * drawn around that day, which is the selection ring on the selected day and the plain day
+ * circle on every other one.
+ *
+ * Ports iOS `SakhiCalendarView.logDotOffset(clearingRing:)`. It has to be measured per day
+ * rather than once for the grid: the ring reaches 5.25dp further out than the circle, so no
+ * single offset clears both. Clearing the ring everywhere left the dot floating a long way
+ * under every unselected day, and hugging the circle everywhere put it on the ring of the
+ * selected one.
+ *
+ * Only one day carries the ring at a time, so only that day's dot moves.
+ */
+private fun calendarLogDotOffset(clearingRing: Boolean): Dp {
+    val ringOuterRadius = calendarRingSize / 2 + calendarRingStroke / 2
+    val circleRadius = calendarDotSize / 2
+    val clears = if (clearingRing) ringOuterRadius else circleRadius
+    return clears + CalendarLogDotGap + CalendarLogDotSize / 2
+}
 private val calendarDotSize = SakhiSpacing.space8 + SakhiSpacing.space1 / 2
 // iOS `SakhiCalendarView` day cell: the ring is `dotSize + 8`, where
 // `dotSize = min(cellHeight - 10, 36)`. The Calendar tab uses the view's default
@@ -541,6 +559,6 @@ private val yearGridMultiSelectHintSize = 34.dp
 // stroke and vanished into it on the selected day. iOS `YearDayCell.logDotOffset` is this
 // same sum.
 private val yearGridLogDotOffsetY =
-    yearGridRingSize / 2 + yearGridRingStroke / 2 + yearGridLogDotGap + CalendarLogDotSize / 2
+    yearGridRingSize / 2 + yearGridRingStroke / 2 + CalendarLogDotGap + CalendarLogDotSize / 2
 private val yearGridFontSize = 14.sp
 private const val disabledSemanticOpacity = 0.68f
