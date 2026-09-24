@@ -1734,21 +1734,38 @@ private fun interpolate(from: LatLng?, to: LatLng?, fraction: Float): LatLng? {
  * Her face on the map, inside a white ring, the way iOS's `WalkRidePuck` draws it. Forty
  * across like the glyph marker it replaces, so the map's framing does not change.
  */
-private fun faceMarkerBitmap(context: Context, faceIndex: Int, ringColor: Int): Bitmap {
+internal fun faceMarkerBitmap(
+    context: Context,
+    faceIndex: Int,
+    ringColor: Int,
+    /**
+     * The marker's width in dp. The walk screen draws it at the original 44; the Stay With Me
+     * button on Home draws the same marker much smaller, so the two screens agree on what a
+     * person looks like on a map (iOS does the same with `WalkFaceMarker(size:)`).
+     *
+     * The rim and the inset scale with it, so 44 renders exactly as it always did.
+     */
+    sizeDp: Float = FACE_MARKER_DEFAULT_DP,
+): Bitmap {
     val density = context.resources.displayMetrics.density
-    val size = (44 * density).toInt()
+    val size = (sizeDp * density).toInt()
+    val scale = sizeDp / FACE_MARKER_DEFAULT_DP
+    // A rim that scales all the way down disappears; below this the face loses its edge
+    // against light tiles, which is the whole point of the rim.
+    val rim = maxOf(1.5f, 2.5f * scale) * density
+    val insetPx = maxOf(2f, 3.5f * scale) * density
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
     val radius = size / 2f
     canvas.drawCircle(radius, radius, radius, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ringColor })
-    canvas.drawCircle(radius, radius, radius - 2.5f * density, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE })
+    canvas.drawCircle(radius, radius, radius - rim, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE })
     val face = androidx.core.content.ContextCompat.getDrawable(context, CareAvatars.drawable(faceIndex))
     if (face != null) {
-        val inset = (3.5f * density).toInt()
+        val inset = insetPx.toInt()
         face.setBounds(inset, inset, size - inset, size - inset)
         val saved = canvas.save()
         val clip = android.graphics.Path().apply {
-            addCircle(radius, radius, radius - 3.5f * density, android.graphics.Path.Direction.CW)
+            addCircle(radius, radius, radius - insetPx, android.graphics.Path.Direction.CW)
         }
         canvas.clipPath(clip)
         face.draw(canvas)
@@ -1756,6 +1773,9 @@ private fun faceMarkerBitmap(context: Context, faceIndex: Int, ringColor: Int): 
     }
     return bitmap
 }
+
+/** The size the walk screen has always drawn a face marker at. */
+internal const val FACE_MARKER_DEFAULT_DP = 44f
 
 /** Where she is going: a disc with a house in it, as iOS draws the destination. */
 private fun homeMarkerBitmap(context: Context, color: Int): Bitmap {

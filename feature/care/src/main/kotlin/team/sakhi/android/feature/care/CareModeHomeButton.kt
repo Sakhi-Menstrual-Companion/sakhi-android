@@ -1,11 +1,15 @@
 package team.sakhi.android.feature.care
 
+import com.google.android.gms.maps.CameraUpdateFactory
 import com.google.android.gms.maps.GoogleMapOptions
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
 import com.google.android.gms.maps.model.CameraPosition
 import com.google.android.gms.maps.model.LatLng
 import com.google.maps.android.compose.GoogleMap
 import com.google.maps.android.compose.MapProperties
 import com.google.maps.android.compose.MapUiSettings
+import com.google.maps.android.compose.Marker
+import com.google.maps.android.compose.rememberMarkerState
 import com.google.maps.android.compose.rememberCameraPositionState
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.StrokeCap
@@ -24,6 +28,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiLightPink
 import androidx.compose.ui.res.painterResource
@@ -51,6 +56,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.sin
 import kotlinx.coroutines.delay
 import team.sakhi.android.platform.StayWithMeLocationService
 import team.sakhi.session.SessionManager
@@ -265,54 +273,126 @@ fun CareModeHomeButton(
             .semantics { contentDescription = name ?: "Care Mode" },
         contentAlignment = Alignment.Center,
     ) {
-        // The map under everything, when there is a fix to draw. iOS puts its own map
-        // tiles here; this is the same idea with the map Android has.
-        if (here != null) {
-            NearbyMapThumbnail(
-                latitude = here!!.first,
-                longitude = here!!.second,
-                modifier = Modifier.matchParentSize().clip(CircleShape),
-            )
-            // A lite-mode map hands every tap to the Google Maps app, so the button's own
-            // click never fires. This sits over it and takes the tap first.
-            Box(Modifier.matchParentSize().clickable(onClick = onOpen))
-        }
-        when {
-            pair != null -> HomeButtonFace(avatarIndex = pair.first)
-            name != null -> Text(
-                text = name.take(1).uppercase(),
-                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.primary,
-            )
-            else -> Icon(
-                imageVector = Icons.Filled.PersonAddAlt,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp),
-            )
+        // The map under everything, always. With a fix it is her own surroundings; without
+        // one it is the stand-in, so the button is a map rather than an empty disc before
+        // anyone has been asked for location (iOS `HomeNearbyButton`, Karan 2026-09-24).
+        //
+        // What keeps the stand-in honest is that nothing on it is offered as her: no user
+        // dot, no faces planted on it as map markers, and it does not move. It reads as the
+        // texture behind a button, not a picture of the street she is standing on. If a
+        // marker is ever added here, that reasoning goes with it.
+        NearbyMapThumbnail(
+            latitude = here?.first ?: STAND_IN_LATITUDE,
+            longitude = here?.second ?: STAND_IN_LONGITUDE,
+            zoom = if (here != null) LIVE_MAP_ZOOM else STAND_IN_MAP_ZOOM,
+            // Only her real surroundings tour, and only once she has someone. The stand-in
+            // never moves and never carries a marker.
+            tourFaces = pair.takeIf { here != null },
+            ringColor = MaterialTheme.colorScheme.primary.toArgb(),
+            modifier = Modifier.matchParentSize().clip(CircleShape),
+        )
+        // A lite-mode map hands every tap to the Google Maps app, so the button's own
+        // click never fires. This sits over it and takes the tap first.
+        Box(Modifier.matchParentSize().clickable(onClick = onOpen))
+        // Only before there is a fix. Once the map is her real surroundings iOS draws
+        // nothing over it, because the tiles are the button in that state.
+        if (here == null) {
+            when {
+                // The two of them are what this button is about, and two faces say nothing
+                // at all about where she is standing.
+                pair != null -> Row(horizontalArrangement = Arrangement.spacedBy((-8).dp)) {
+                    HomeButtonFace(avatarIndex = pair.first)
+                    HomeButtonFace(avatarIndex = pair.second)
+                }
+                name != null -> Text(
+                    text = name.take(1).uppercase(),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                else -> Icon(
+                    imageVector = Icons.Filled.PersonAddAlt,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
     }
 }
 
 /**
- * The map tiles behind the button: where she is, still, and not touchable.
+ * The map tiles behind the button: where she is, and the two of them on it.
  *
- * Lite mode on purpose. This is a 46dp picture of a street corner, not a map anyone pans,
- * and a full map view in a bottom bar costs a surface and a frame budget for nothing.
+ * With [tourFaces] it does what iOS's `HomeMapThumbnail` does: settles onto one face, lifts,
+ * travels to the other, settles again, and round for as long as the button is on screen. The
+ * markers are `faceMarkerBitmap`, the same marker the walk itself draws, so a face means the
+ * same thing in both places.
+ *
+ * Without [tourFaces] it stays in lite mode: a still picture of a street corner, which is all
+ * the stand-in is and all a button needs when there is nobody to tour. Lite mode cannot move
+ * a camera at all, so the tour is the one reason to pay for a real map view here.
  */
 @Composable
 private fun NearbyMapThumbnail(
     latitude: Double,
     longitude: Double,
+    zoom: Float,
     modifier: Modifier = Modifier,
+    tourFaces: Pair<Int, Int>? = null,
+    ringColor: Int = 0,
 ) {
     val position = rememberCameraPositionState {
-        this.position = CameraPosition.fromLatLngZoom(LatLng(latitude, longitude), 15f)
+        this.position = CameraPosition.fromLatLngZoom(LatLng(latitude, longitude), zoom)
     }
+    val facePoints = remember(latitude, longitude, tourFaces) {
+        tourFaces?.let {
+            listOf(
+                offsetMetres(latitude, longitude, FACE_RADIUS_METRES, bearingDegrees = 90.0),
+                offsetMetres(latitude, longitude, FACE_RADIUS_METRES, bearingDegrees = 210.0),
+            )
+        }.orEmpty()
+    }
+
+    // Only while the button is actually on screen. A camera animating behind a backgrounded
+    // Home is a frame budget and a battery spent on something nobody is looking at.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    if (facePoints.size == 2) {
+        LaunchedEffect(facePoints) {
+            lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                var index = 0
+                while (true) {
+                    // Settle onto this one.
+                    position.animate(
+                        CameraUpdateFactory.newCameraPosition(
+                            CameraPosition.fromLatLngZoom(facePoints[index], TOUR_CLOSE_ZOOM),
+                        ),
+                        TOUR_ZOOM_IN_MS,
+                    )
+                    delay(TOUR_HOLD_MS.toLong())
+                    // Lift, so the next leg reads as travel rather than a cut.
+                    position.animate(
+                        CameraUpdateFactory.newCameraPosition(
+                            CameraPosition.fromLatLngZoom(facePoints[index], TOUR_MID_ZOOM),
+                        ),
+                        TOUR_ZOOM_OUT_MS,
+                    )
+                    val next = (index + 1) % facePoints.size
+                    position.animate(
+                        CameraUpdateFactory.newCameraPosition(
+                            CameraPosition.fromLatLngZoom(facePoints[next], TOUR_MID_ZOOM),
+                        ),
+                        TOUR_TRAVEL_MS,
+                    )
+                    index = next
+                }
+            }
+        }
+    }
+
     GoogleMap(
         modifier = modifier,
         cameraPositionState = position,
-        googleMapOptionsFactory = { GoogleMapOptions().liteMode(true) },
+        googleMapOptionsFactory = { GoogleMapOptions().liteMode(facePoints.size != 2) },
         properties = MapProperties(mapStyleOptions = null),
         uiSettings = MapUiSettings(
             compassEnabled = false,
@@ -324,8 +404,77 @@ private fun NearbyMapThumbnail(
             zoomControlsEnabled = false,
             zoomGesturesEnabled = false,
         ),
-    )
+    ) {
+        if (facePoints.size == 2 && tourFaces != null) {
+            val context = LocalContext.current
+            val faces = listOf(tourFaces.first, tourFaces.second)
+            faces.forEachIndexed { i, faceIndex ->
+                val icon = remember(faceIndex, ringColor) {
+                    BitmapDescriptorFactory.fromBitmap(
+                        faceMarkerBitmap(context, faceIndex, ringColor, sizeDp = TOUR_FACE_MARKER_DP),
+                    )
+                }
+                Marker(
+                    state = rememberMarkerState(position = facePoints[i]),
+                    icon = icon,
+                    anchor = Offset(0.5f, 0.5f),
+                    zIndex = 1f,
+                )
+            }
+        }
+    }
 }
+
+/**
+ * How far the two faces sit from the middle, and how close the camera comes to one.
+ *
+ * iOS works in camera *distance* and then shows only the middle third of its map, so its
+ * 7,000m close camera reads as roughly 2,300m of visible ground. These zoom levels are that
+ * visible span across a 46dp circle, which is why they look far closer than iOS's numbers.
+ */
+private const val FACE_RADIUS_METRES = 1_250.0
+private const val TOUR_CLOSE_ZOOM = 13.0f
+private const val TOUR_MID_ZOOM = 12.5f
+private const val TOUR_FACE_MARKER_DP = 20f
+
+// iOS `HomeMapThumbnail`: zoom in, hold, lift, travel, and round again.
+private const val TOUR_ZOOM_IN_MS = 2_200
+private const val TOUR_HOLD_MS = 900
+private const val TOUR_ZOOM_OUT_MS = 1_200
+private const val TOUR_TRAVEL_MS = 1_900
+
+/**
+ * A point [metres] away from (lat, lon) on the given bearing. Plane approximation, which is
+ * exact enough over the kilometre or so these faces sit apart.
+ */
+private fun offsetMetres(
+    latitude: Double,
+    longitude: Double,
+    metres: Double,
+    bearingDegrees: Double,
+): LatLng {
+    val bearing = bearingDegrees * PI / 180.0
+    val dLat = (metres * cos(bearing)) / 111_320.0
+    val dLon = (metres * sin(bearing)) / (111_320.0 * cos(latitude * PI / 180.0))
+    return LatLng(latitude + dLat, longitude + dLon)
+}
+
+/**
+ * Greater Noida. Somewhere that draws like a city and says nothing about her, for the map
+ * behind the button before location has been allowed. iOS `HomeNearbyButton.standInCoordinate`.
+ */
+private const val STAND_IN_LATITUDE = 28.4595
+private const val STAND_IN_LONGITUDE = 77.0266
+
+/**
+ * Close in on purpose. Pulled back, the tiles letter the region's name across themselves, and
+ * half a place name behind a 46dp button reads as a mistake. At this range there are only
+ * blocks and roads, which is safe here precisely because they are not her streets.
+ */
+private const val STAND_IN_MAP_ZOOM = 13f
+
+/** Her own surroundings, once there is a fix. */
+private const val LIVE_MAP_ZOOM = 15f
 
 /**
  * How often Home re-asks whether a walk is live. Half a minute: this is a button, not the
