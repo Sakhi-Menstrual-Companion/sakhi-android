@@ -16,9 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Code
-import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Language
@@ -63,7 +61,6 @@ import team.sakhi.android.designsystem.sakhiSystemBackground
 import team.sakhi.android.designsystem.sakhiTertiaryLabel
 
 private const val WEBSITE_URL = "https://sakhi.rachna.co"
-private const val INSTAGRAM_URL = "https://instagram.com/sakhi.app"
 
 /** Ports iOS `AboutView.swift`: story/team/licenses navigation, connect links, share, app info. */
 @Composable
@@ -75,8 +72,6 @@ fun AboutScreen(
     val context = LocalContext.current
     val hapticManager = koinInject<AndroidHapticManager>()
     val uiState by contentViewModel.uiState.collectAsState()
-    val instagramUrl = uiState.siteSettings?.socialLinks?.instagram?.takeIf { !it.isNullOrBlank() } ?: INSTAGRAM_URL
-    val feedbackEmail = uiState.siteSettings?.contactEmail?.takeIf { !it.isNullOrBlank() } ?: SakhiContact.EMAIL
     val playStoreWebUrl = remember(context) { playStoreWebUrl(context) }
     val shareBody = stringResource(R.string.profile_about_share_body, playStoreWebUrl)
     val shareChooserTitle = stringResource(R.string.profile_about_share_action)
@@ -133,18 +128,6 @@ fun AboutScreen(
                         icon = Icons.Filled.Language,
                         isExternal = true,
                         onClick = { openUrl(context, WEBSITE_URL) },
-                    ),
-                    AboutActionRow(
-                        title = stringResource(R.string.profile_about_instagram),
-                        icon = Icons.Filled.CameraAlt,
-                        isExternal = true,
-                        onClick = { openUrl(context, instagramUrl) },
-                    ),
-                    AboutActionRow(
-                        title = stringResource(R.string.profile_about_send_feedback),
-                        icon = Icons.Filled.Email,
-                        isExternal = true,
-                        onClick = { openUrl(context, "mailto:$feedbackEmail?subject=Sakhi%20Feedback") },
                     ),
                     AboutActionRow(
                         title = stringResource(R.string.profile_about_rate_play_store),

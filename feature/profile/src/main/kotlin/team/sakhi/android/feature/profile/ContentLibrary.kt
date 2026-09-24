@@ -432,19 +432,14 @@ object ContentLibrary {
             section(titleResId = R.string.profile_content_section_credits_core_development_team, items = listOf(
                 textItem(titleResId = R.string.profile_content_item_credits_karan_kumar_lead_developer_and_designer, bodyResId = R.string.profile_content_item_body_credits_karan_kumar_lead_developer_and_designer),
             )),
-            section(titleResId = R.string.profile_content_section_credits_research_and_strategy, items = listOf(
-                textItem(titleResId = R.string.profile_content_item_credits_arpita_gupta_lead_researcher_and_business_strategist, bodyResId = R.string.profile_content_item_body_credits_arpita_gupta_lead_researcher_and_business_strategist),
-            )),
-            section(titleResId = R.string.profile_content_section_credits_founding_contributors, style = ContentSectionStyle.CARDS, items = listOf(
-                cardItem(titleResId = R.string.profile_content_item_credits_aman_prakash, bodyResId = R.string.profile_content_item_body_credits_aman_prakash),
-                cardItem(titleResId = R.string.profile_content_item_credits_shweta_kumari, bodyResId = R.string.profile_content_item_body_credits_shweta_kumari),
+            section(titleResId = R.string.profile_content_section_credits_founding_patron, items = listOf(
+                textItem(titleResId = R.string.profile_content_item_credits_galgotias_university, bodyResId = R.string.profile_content_item_body_credits_galgotias_university),
             )),
             section(titleResId = R.string.profile_content_section_credits_mentorship_and_guidance, items = listOf(
                 textItem(titleResId = R.string.profile_content_item_credits_dr_shruti_sachdeva_project_mentor_and_guiding_force, bodyResId = R.string.profile_content_item_body_credits_dr_shruti_sachdeva_project_mentor_and_guiding_force),
             )),
             section(titleResId = R.string.profile_content_section_credits_special_acknowledgments, style = ContentSectionStyle.CARDS, items = listOf(
                 cardItem(titleResId = R.string.profile_content_item_credits_academic_support, bodyResId = R.string.profile_content_item_body_credits_academic_support),
-                cardItem(titleResId = R.string.profile_content_item_credits_healthcare_professional_advisory, bodyResId = R.string.profile_content_item_body_credits_healthcare_professional_advisory),
                 cardItem(titleResId = R.string.profile_content_item_credits_beta_testing_community, bodyResId = R.string.profile_content_item_body_credits_beta_testing_community),
                 cardItem(titleResId = R.string.profile_content_item_credits_open_source_community, bodyResId = R.string.profile_content_item_body_credits_open_source_community),
             )),
