@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -103,6 +104,15 @@ fun SakhiOnboardingView(
     onClose: (() -> Unit)? = null,
     navTitle: String? = null,
     drawsBackground: Boolean = true,
+    /**
+     * Draw the top bar even with no [onClose], so the screen's mark sits where it sits on
+     * every other intro. Ports iOS `SakhiOnboardingView(keepsTopBar:)`, which Force Update
+     * uses: it has no way out, but a screen whose content starts higher than every other
+     * intro reads as a different app.
+     */
+    keepsTopBar: Boolean = false,
+    /** The trailing action in that bar. iOS `topTrailing`; Force Update puts support here. */
+    topTrailing: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val background = if (drawsBackground) {
         Modifier.background(sakhiSoftPinkPageBrush())
@@ -122,8 +132,12 @@ fun SakhiOnboardingView(
             .windowInsetsPadding(WindowInsets.safeDrawing)
             .consumeWindowInsets(WindowInsets.safeDrawing),
     ) {
-        if (onClose != null) {
-            SakhiNavBar(onClose = onClose, title = navTitle)
+        if (onClose != null || keepsTopBar) {
+            SakhiNavBar(
+                onClose = onClose,
+                title = navTitle,
+                trailing = topTrailing ?: {},
+            )
         }
 
         // Centred in whatever room is left, not pinned under the top bar: on a tall phone a

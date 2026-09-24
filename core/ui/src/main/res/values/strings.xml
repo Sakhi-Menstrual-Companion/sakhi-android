@@ -15,7 +15,7 @@
     <string name="no_internet_alert_restored_title">You\'re back online</string>
     <string name="no_internet_alert_restored_message">Your connection is back. Please try again.</string>
     <string name="force_update_contact_support">Contact support</string>
-    <string name="force_update_update_now">Update Now</string>
+    <string name="force_update_update_now">Update Sakhi</string>
     <string name="calendar_a11y_today">today</string>
     <string name="calendar_a11y_selected">selected</string>
     <string name="calendar_a11y_period_day">period day</string>
@@ -118,13 +118,12 @@
       remote `title` and `message` still come from `app_update_policies`; these say what
       the update is for, which the remote copy never had room to.
     -->
-    <string name="force_update_point_1_title">Your days are safe</string>
-    <string name="force_update_point_1_detail">Everything you have logged stays on your phone, and comes back as soon as the new version opens.</string>
-    <string name="force_update_point_2_title">A few minutes at most</string>
-    <string name="force_update_point_2_detail">Update Now opens the Play Store on Sakhi\'s page, and you come straight back here.</string>
-    <string name="force_update_point_3_title">If it will not update</string>
-    <string name="force_update_point_3_detail">Contact support is at the bottom of this screen, and we would be glad to help.</string>
-    <string name="force_update_contact_support_action">Contact support</string>
+    <string name="force_update_point_1_title">Sakhi has grown smarter</string>
+    <string name="force_update_point_1_detail">Better predictions, better answers, and Stay With Me for the way home.</string>
+    <string name="force_update_point_2_title">Everything of yours comes along</string>
+    <string name="force_update_point_2_detail">Your logs, your cycle and your settings stay exactly as they are.</string>
+    <string name="force_update_point_3_title">About a minute</string>
+    <string name="force_update_point_3_detail">The Play Store does the rest, and Sakhi opens right back here.</string>
     <!--
       The offline explainer, rebuilt on the app's intro template. The title is unchanged;
       the long single paragraph it used to carry is now the message plus three points, so

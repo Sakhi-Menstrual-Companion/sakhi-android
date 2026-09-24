@@ -1,13 +1,18 @@
 package team.sakhi.android.ui
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 
 /**
  * Non-dismissable gate -- port of iOS `ForceUpdateView`. Shown in place of the app's normal
@@ -23,8 +28,12 @@ import androidx.compose.ui.res.stringResource
  * is quick, and there is a person if it goes wrong.
  *
  * NO close button, deliberately. There is nothing behind this screen to go back to, and a
- * cross that does nothing is worse than no cross. Support moved from a bare icon in the top
- * corner to the secondary action, where every other way out in the app lives.
+ * cross that does nothing is worse than no cross. The bar is still drawn, empty on the left,
+ * so the screen starts at the same height as every other intro instead of reading as a
+ * different app.
+ *
+ * Support sits in the top right, the one other door on this screen, matching iOS
+ * `UpdateView.supportButton` (Karan, 2026-09-20).
  */
 @Composable
 fun ForceUpdateScreen(
@@ -35,30 +44,40 @@ fun ForceUpdateScreen(
     modifier: Modifier = Modifier,
 ) {
     SakhiOnboardingView(
-        icon = Icons.Filled.SystemUpdate,
+        icon = Icons.Filled.AutoAwesome,
         title = title,
         message = message,
         points = listOf(
             SakhiOnboardingPoint(
-                icon = Icons.Filled.Lock,
+                icon = Icons.Filled.AutoAwesome,
                 title = stringResource(R.string.force_update_point_1_title),
                 detail = stringResource(R.string.force_update_point_1_detail),
             ),
             SakhiOnboardingPoint(
-                icon = Icons.Filled.Schedule,
+                icon = Icons.Filled.Favorite,
                 title = stringResource(R.string.force_update_point_2_title),
                 detail = stringResource(R.string.force_update_point_2_detail),
             ),
             SakhiOnboardingPoint(
-                icon = Icons.Filled.Headphones,
+                icon = Icons.Filled.Schedule,
                 title = stringResource(R.string.force_update_point_3_title),
                 detail = stringResource(R.string.force_update_point_3_detail),
             ),
         ),
         primaryLabel = stringResource(R.string.force_update_update_now),
         onPrimaryClick = onUpdateClick,
-        secondaryLabel = stringResource(R.string.force_update_contact_support_action),
-        onSecondaryClick = onSupportClick,
         modifier = modifier,
+        keepsTopBar = true,
+        topTrailing = {
+            val supportLabel = stringResource(R.string.force_update_contact_support)
+            IconButton(onClick = onSupportClick) {
+                Icon(
+                    imageVector = Icons.Filled.Headphones,
+                    contentDescription = supportLabel,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+        },
     )
 }
